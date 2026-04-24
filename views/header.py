@@ -1,0 +1,22 @@
+import streamlit as st
+
+from config import LOGO_SRC
+from auth import current_nome, current_role
+from data import get_store
+
+
+def render_header():
+    store    = get_store()
+    upd      = store.get("ultima_atualizacao") or "—"
+    logo     = f'<img src="{LOGO_SRC}" style="height:28px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:#7cc243">InChurch</span>'
+    role_tag = '<span style="background:rgba(124,194,67,.2);color:#7cc243;font-size:11px;padding:3px 10px;border-radius:12px;font-weight:700;margin-left:8px">ADMIN</span>' if current_role() == "admin" else ""
+    st.markdown(f"""
+    <div style="background:#181c26;border-bottom:1px solid #2a2f42;padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,.15)">
+      <div style="display:flex;align-items:center;gap:10px">{logo}<span style="color:#8b94a5;font-size:14px;font-weight:500">· Cobranças</span></div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:13px;color:#8b94a5;background:#1e2333;padding:6px 14px;border-radius:20px;border:1px solid #2a2f42">Atualizado: {upd}</span>
+        <span style="font-size:13px;background:#1e2333;border:1px solid #2a2f42;border-radius:20px;padding:6px 14px;display:inline-flex;align-items:center;gap:8px;font-weight:500">
+          <span style="width:8px;height:8px;background:#7cc243;border-radius:50%;display:inline-block"></span>{current_nome()}{role_tag}
+        </span>
+      </div>
+    </div>""", unsafe_allow_html=True)

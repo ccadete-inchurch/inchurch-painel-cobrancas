@@ -1,0 +1,26 @@
+# Ambiente virtual
+.venv/
+venv/
+env/
+
+# Cache e dados locais
+cache_dados.json
+__pycache__/
+*.pyc
+*.pyo
+
+# Credenciais e segredos
+.env
+*.json
+!package.json
+
+# Streamlit
+.streamlit/secrets.toml
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
