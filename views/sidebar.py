@@ -36,9 +36,10 @@ def render_sidebar():
             st.session_state["page"] = key_page
             st.rerun()
 
-    nav_item("Inadimplência", "dashboard")
-    nav_item("Regularizados", "historico")
-    nav_item("Cliente",       "cliente")
+    nav_item("Inadimplência",      "dashboard")
+    nav_item("Próximas Cobranças", "proximas")
+    nav_item("Regularizados",      "historico")
+    nav_item("Cliente",            "cliente")
 
     st.sidebar.markdown(f"""
     <div style="position:fixed;bottom:0;width:218px;padding:16px 20px;border-top:1px solid #1e2333;background:#13161f">

@@ -12,7 +12,7 @@ from auth import is_logged, current_role
 from data import get_store, carregar_cache_local
 from views import (
     render_sidebar, render_header, tela_login, tela_importar,
-    _render_dashboard, _render_historico, _render_cliente,
+    _render_dashboard, _render_historico, _render_cliente, _render_proximas,
 )
 
 st.markdown(CSS, unsafe_allow_html=True)
@@ -32,6 +32,8 @@ def tela_principal():
         _render_historico(store)
     elif page == "cliente":
         _render_cliente(store, clientes)
+    elif page == "proximas":
+        _render_proximas(store, clientes)
 
 
 def main():

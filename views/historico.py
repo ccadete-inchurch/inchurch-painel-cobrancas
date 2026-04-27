@@ -17,21 +17,26 @@ def _render_historico(store):
         return
 
     df_reg = pd.DataFrame(reg)
-    df_reg["valor_fmt"] = df_reg["valor"].apply(fmt_moeda_plain)
-    df_reg["tipo_fmt"]  = df_reg["tipo"].map({"auto": "🟢 Automático", "manual": "🔵 Manual"})
+    df_reg["valor_fmt"]  = df_reg["valor"].apply(fmt_moeda_plain)
+    df_reg["tipo_fmt"]   = df_reg["tipo"].map({"auto": "🟢 Automático", "manual": "🔵 Manual"})
+    df_reg["status_fmt"] = df_reg["inativo"].apply(lambda x: "INATIVO" if x else "") if "inativo" in df_reg.columns else ""
 
     st.dataframe(
-        df_reg[["data", "nome", "cnpj", "valor_fmt", "atendente", "tipo_fmt"]].rename(columns={
-            "data":      "Data",
-            "nome":      "Cliente",
-            "cnpj":      "CNPJ",
-            "valor_fmt": "Valor",
-            "atendente": "Atendente",
-            "tipo_fmt":  "Tipo",
+        df_reg[["data", "nome", "cnpj", "valor_fmt", "atendente", "tipo_fmt", "status_fmt"]].rename(columns={
+            "data":       "Data",
+            "nome":       "Cliente",
+            "cnpj":       "CNPJ",
+            "valor_fmt":  "Valor",
+            "atendente":  "Atendente",
+            "tipo_fmt":   "Tipo",
+            "status_fmt": "Situação",
         }),
         use_container_width=True,
         hide_index=True,
-        column_config={"Data": st.column_config.TextColumn(width="small")},
+        column_config={
+            "Data":     st.column_config.TextColumn(width="small"),
+            "Situação": st.column_config.TextColumn(width="small"),
+        },
     )
 
     st.markdown(

@@ -53,7 +53,6 @@ STATUS_OPTS = {
     "🟡 Contactado":     "contacted",
     "🟠 Prometeu pagar": "promise",
     "🔵 Negociando":     "negotiating",
-    "✅ Regularizado":   "paid",
 }
 # Rótulo da pill → chave interna  (usado no filtro do dashboard)
 STATUS_FILTER_MAP = {
@@ -104,7 +103,7 @@ section[data-testid="stSidebar"] .stButton>button:hover{
 .metric-card{background:#181c26;border:1px solid #1e2333;border-radius:14px;padding:20px 22px;box-shadow:0 1px 6px rgba(0,0,0,.15);transition:box-shadow .2s}
 .metric-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.25)}
 .metric-label{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:#8b94a5;margin-bottom:10px;font-weight:600}
-.metric-value{font-family:'Syne',sans-serif;font-size:30px;font-weight:800;line-height:1;letter-spacing:-1px}
+.metric-value{font-family:'DM Sans',sans-serif;font-size:28px;font-weight:700;line-height:1;letter-spacing:0;font-variant-numeric:tabular-nums}
 .metric-sub{font-size:11px;color:#6b7280;margin-top:8px;letter-spacing:0.2px}
 
 /* ── Badges ── */

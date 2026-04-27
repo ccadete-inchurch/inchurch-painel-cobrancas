@@ -40,25 +40,113 @@ def fetch_cobrancas_competencia():
     query = """
     SELECT
         c.id_sacado_sac as codigo,
+        c.id_recebimento_recb as id_recebimento,
         c.st_nome_sac as nome,
         c.st_cgc_sac as cnpj,
         c.st_telefone_sac as telefone,
         c.vl_total_recb as valor,
-        c.dt_vencimento_recb as vencimento,
-        c.comp_nm_quantidade_comp as parcelas,
+        FORMAT_TIMESTAMP('%Y-%m-%d', c.dt_vencimento_recb) as vencimento,
         c.fl_status_recb as status,
-        u.nm_grupo as grupo
+        u.nm_grupo as grupo,
+        p.parcelas_em_atraso as parcelas,
+        CASE WHEN ac.id_sacado_sac IS NOT NULL THEN TRUE ELSE FALSE END as tem_acordo,
+        CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END as inativo
     FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
-    LEFT JOIN `business-intelligence-467516.Splgc.vw-splgc-clientes_unificada` u
-        ON c.id_sacado_sac = u.id_sacado_sac
+    LEFT JOIN (
+        SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(grupo) AS nm_grupo
+        FROM `business-intelligence-467516.Splgc.vw-splgc-clientes_unificada`
+        GROUP BY id_sacado_sac
+    ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
+    LEFT JOIN (
+        SELECT id_sacado_sac, COUNT(DISTINCT id_recebimento_recb) as parcelas_em_atraso
+        FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
+        WHERE fl_status_recb = '0'
+        GROUP BY id_sacado_sac
+    ) p ON c.id_sacado_sac = p.id_sacado_sac
+    LEFT JOIN (
+        SELECT DISTINCT id_sacado_sac
+        FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
+        WHERE comp_st_conta_cont = '1.2.13'
+          AND fl_status_recb = '0'
+    ) ac ON c.id_sacado_sac = ac.id_sacado_sac
     WHERE c.fl_status_recb = '0'
-        AND c.dt_desativacao_sac IS NULL
     ORDER BY c.vl_total_recb DESC
     """
     try:
         return client.query(query).to_dataframe()
     except Exception as e:
         st.error(f"Erro ao puxar dados de competência: {e}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600)
+def fetch_historico_atrasos(cliente_id: str) -> pd.DataFrame:
+    client = get_bq_client()
+    if not client:
+        return pd.DataFrame()
+    query = f"""
+    WITH em_atraso AS (
+      SELECT DISTINCT id_recebimento_recb, dt_vencimento_recb, vl_total_recb, 'atraso' AS situacao
+      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
+      WHERE fl_status_recb = '0'
+        AND id_sacado_sac = '{cliente_id}'
+        AND dt_vencimento_recb <= CURRENT_TIMESTAMP()
+    ),
+    pago AS (
+      SELECT DISTINCT id_recebimento_recb, dt_vencimento_recb, vl_total_recb, 'pago' AS situacao
+      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+      WHERE fl_status_recb = '1'
+        AND id_sacado_sac = '{cliente_id}'
+        AND dt_vencimento_recb >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 365 DAY)
+        AND dt_vencimento_recb <= CURRENT_TIMESTAMP()
+    )
+    SELECT
+      FORMAT_TIMESTAMP('%Y-%m', dt_vencimento_recb) AS mes,
+      COUNTIF(situacao = 'atraso') AS parcelas_atraso,
+      COUNTIF(situacao = 'pago')   AS parcelas_pagas,
+      ROUND(SUM(CASE WHEN situacao = 'atraso' THEN vl_total_recb ELSE 0 END), 2) AS valor_atraso,
+      ROUND(SUM(CASE WHEN situacao = 'pago'   THEN vl_total_recb ELSE 0 END), 2) AS valor_pago
+    FROM (SELECT * FROM em_atraso UNION ALL SELECT * FROM pago)
+    GROUP BY 1
+    ORDER BY 1 ASC
+    """
+    try:
+        return client.query(query).to_dataframe()
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600)
+def fetch_proximas_cobracas(days: int = 30) -> pd.DataFrame:
+    client = get_bq_client()
+    if not client:
+        return pd.DataFrame()
+    query = f"""
+    SELECT
+        c.id_sacado_sac                                      AS codigo,
+        MAX(c.st_nome_sac)                                        AS nome,
+        MAX(c.st_cgc_sac)                                         AS cnpj,
+        MAX(c.st_telefone_sac)                                    AS telefone,
+        MAX(c.vl_total_recb)                                      AS valor,
+        FORMAT_TIMESTAMP('%Y-%m-%d', MAX(c.dt_vencimento_recb))   AS vencimento,
+        MAX(u.nm_grupo)                                           AS grupo,
+        MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
+    FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
+    LEFT JOIN (
+        SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(grupo) AS nm_grupo
+        FROM `business-intelligence-467516.Splgc.vw-splgc-clientes_unificada`
+        GROUP BY id_sacado_sac
+    ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
+    WHERE c.fl_status_recb    = '0'
+      AND c.dt_vencimento_recb > CURRENT_TIMESTAMP()
+      AND c.dt_vencimento_recb <= TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)
+    GROUP BY c.id_sacado_sac, c.id_recebimento_recb
+    ORDER BY MAX(c.dt_vencimento_recb) ASC
+    """
+    try:
+        return client.query(query).to_dataframe()
+    except Exception as e:
+        st.error(f"Erro ao puxar próximas cobranças: {e}")
         return pd.DataFrame()
 
 
@@ -74,13 +162,13 @@ def fetch_cobrancas_liquidacao():
         st_cgc_sac as cnpj,
         st_telefone_sac as telefone,
         vl_total_recb as valor,
-        dt_vencimento_recb as vencimento,
+        FORMAT_TIMESTAMP('%Y-%m-%d', dt_vencimento_recb) as vencimento,
         comp_nm_quantidade_comp as parcelas,
-        dt_liquidacao_recb as data_liquidacao,
-        fl_status_recb as status
+        FORMAT_TIMESTAMP('%Y-%m-%d', dt_liquidacao_recb) as data_liquidacao,
+        fl_status_recb as status,
+        CASE WHEN dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END as inativo
     FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
     WHERE fl_status_recb = '1'
-        AND dt_desativacao_sac IS NULL
     ORDER BY dt_liquidacao_recb DESC
     """
     try:
@@ -93,6 +181,7 @@ def fetch_cobrancas_liquidacao():
 # ── Processamento ─────────────────────────────────────────────────────────────
 
 def processar_dados_bigquery():
+    fetch_proximas_cobracas.clear()
     store          = get_store()
     df_competencia = fetch_cobrancas_competencia()
     df_liquidacao  = fetch_cobrancas_liquidacao()
@@ -106,27 +195,36 @@ def processar_dados_bigquery():
         codigo = str(row["codigo"])
 
         try:
-            vencimento = pd.to_datetime(row["vencimento"]).strftime("%d/%m/%Y") if pd.notna(row["vencimento"]) else ""
+            venc_raw = row["vencimento"]
+            if pd.notna(venc_raw) and venc_raw:
+                vencimento = datetime.strptime(str(venc_raw)[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+            else:
+                vencimento = ""
         except Exception:
             vencimento = ""
 
         dias_atraso = calc_dias(vencimento) if vencimento else None
 
         if codigo in clientes_dict:
-            cobranca_item = {
-                "valor":       float(row["valor"])   if pd.notna(row["valor"])   else 0.0,
-                "vencimento":  vencimento,
-                "dias_atraso": dias_atraso,
-                "parcelas":    int(row["parcelas"])  if pd.notna(row["parcelas"]) else 0,
-                "status":      str(row["status"] or ""),
-            }
-            clientes_dict[codigo]["_cobracas"].append(cobranca_item)
-
-            if dias_atraso and dias_atraso > 0:
-                clientes_dict[codigo]["valor"] += float(row["valor"]) if pd.notna(row["valor"]) else 0.0
-                atual_min = clientes_dict[codigo].get("_min_atraso")
-                if atual_min is None or dias_atraso < atual_min:
-                    clientes_dict[codigo]["_min_atraso"] = dias_atraso
+            id_receb = str(row.get("id_recebimento") or "")
+            ids_vistos = clientes_dict[codigo]["_ids_recebimento"]
+            if id_receb and id_receb not in ids_vistos:
+                ids_vistos.add(id_receb)
+                cobranca_item = {
+                    "id_recebimento": id_receb,
+                    "valor":          float(row["valor"])   if pd.notna(row["valor"])   else 0.0,
+                    "vencimento":     vencimento,
+                    "dias_atraso":    dias_atraso,
+                    "status":         str(row["status"] or ""),
+                }
+                clientes_dict[codigo]["_cobracas"].append(cobranca_item)
+                if dias_atraso and dias_atraso > 0:
+                    clientes_dict[codigo]["valor"] += float(row["valor"]) if pd.notna(row["valor"]) else 0.0
+                    atual_min = clientes_dict[codigo].get("_min_atraso")
+                    if atual_min is None or dias_atraso < atual_min:
+                        clientes_dict[codigo]["_min_atraso"] = dias_atraso
+            if row.get("tem_acordo"):
+                clientes_dict[codigo]["_tem_acordo"] = True
 
             if dias_atraso and (
                 clientes_dict[codigo]["dias_atraso"] is None
@@ -138,25 +236,30 @@ def processar_dados_bigquery():
             dias_atraso_num = dias_atraso if (dias_atraso and dias_atraso > 0) else None
             valor_devedor   = float(row["valor"]) if pd.notna(row["valor"]) and dias_atraso and dias_atraso > 0 else 0.0
 
+            id_receb = str(row.get("id_recebimento") or "")
             clientes_dict[codigo] = {
-                "id":          codigo,
-                "cod":         codigo,
-                "nome":        str(row["nome"]     or ""),
-                "cnpj":        str(row["cnpj"]     or ""),
-                "telefone":    str(row["telefone"] or ""),
-                "valor":       valor_devedor,
-                "vencimento":  vencimento,
-                "dias_atraso": dias_atraso_num,
-                "_min_atraso": dias_atraso_num,
-                "_novo":       False,
-                "_atualizado": False,
-                "_grupo":      str(row.get("grupo", "") or "—"),
-                "_cobracas":   [{
-                    "valor":       float(row["valor"])  if pd.notna(row["valor"])  else 0.0,
-                    "vencimento":  vencimento,
-                    "dias_atraso": dias_atraso,
-                    "parcelas":    int(row["parcelas"]) if pd.notna(row["parcelas"]) else 0,
-                    "status":      str(row["status"] or ""),
+                "id":               codigo,
+                "cod":              codigo,
+                "nome":             str(row["nome"]     or ""),
+                "cnpj":             str(row["cnpj"]     or ""),
+                "telefone":         str(row["telefone"] or ""),
+                "valor":            valor_devedor,
+                "vencimento":       vencimento,
+                "dias_atraso":      dias_atraso_num,
+                "parcelas":         int(row["parcelas"]) if pd.notna(row["parcelas"]) else 0,
+                "_min_atraso":      dias_atraso_num,
+                "_novo":            False,
+                "_atualizado":      False,
+                "_grupo":           str(row.get("grupo", "") or "—"),
+                "_tem_acordo":      bool(row.get("tem_acordo", False)),
+                "_inativo":         bool(row.get("inativo", False)),
+                "_ids_recebimento": {id_receb} if id_receb else set(),
+                "_cobracas":        [{
+                    "id_recebimento": id_receb,
+                    "valor":          float(row["valor"])  if pd.notna(row["valor"])  else 0.0,
+                    "vencimento":     vencimento,
+                    "dias_atraso":    dias_atraso,
+                    "status":         str(row["status"] or ""),
                 }],
             }
 
@@ -164,13 +267,16 @@ def processar_dados_bigquery():
         oldest = c.get("dias_atraso") or 0
         newest = c.get("_min_atraso") or 0
         c["_nova_cobranca"] = (oldest > 30 and 0 < newest <= 30)
+        c["parcelas"] = len([x for x in c["_cobracas"] if x.get("dias_atraso") and x["dias_atraso"] > 0])
+        c.pop("_ids_recebimento", None)
 
     clientes = [c for c in clientes_dict.values() if c["valor"] > 0]
 
     historico_regularizados = []
     for _, row in df_liquidacao.iterrows():
         try:
-            data_liq = pd.to_datetime(row["data_liquidacao"]).strftime("%d/%m/%Y") if pd.notna(row["data_liquidacao"]) else date.today().strftime("%d/%m/%Y")
+            liq_raw  = row["data_liquidacao"]
+            data_liq = datetime.strptime(str(liq_raw)[:10], "%Y-%m-%d").strftime("%d/%m/%Y") if pd.notna(liq_raw) and liq_raw else date.today().strftime("%d/%m/%Y")
         except Exception:
             data_liq = date.today().strftime("%d/%m/%Y")
 
@@ -182,6 +288,7 @@ def processar_dados_bigquery():
             "atendente": "Sistema (BigQuery)",
             "data":      data_liq,
             "tipo":      "auto",
+            "inativo":   bool(row.get("inativo", False)),
         })
 
     store["clientes"]           = clientes
@@ -314,6 +421,7 @@ def salvar_cache_local():
                 "clientes":           store["clientes"],
                 "regularizados":      store["regularizados"],
                 "ultima_atualizacao": store["ultima_atualizacao"],
+                "historico":          store.get("historico", {}),
             }, f, indent=2, ensure_ascii=False)
         return True
     except Exception:
@@ -331,6 +439,7 @@ def carregar_cache_local():
         store["clientes"]           = data.get("clientes",           [])
         store["regularizados"]      = data.get("regularizados",      [])
         store["ultima_atualizacao"] = data.get("ultima_atualizacao", "")
+        store["historico"]          = data.get("historico",          {})
         return True
     except Exception:
         return False

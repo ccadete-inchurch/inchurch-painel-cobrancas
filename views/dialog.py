@@ -19,9 +19,11 @@ def dialog_editar(eid):
     # Cabeçalho informativo
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Cliente</div><div class="dialog-info-value" style="font-size:16px">{cliente["nome"]}</div><div style="font-size:12px;color:#8b94a5;margin-top:3px">{cliente.get("cnpj","—")}</div></div>', unsafe_allow_html=True)
+        inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if cliente.get("_inativo") else ""
+        st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Cliente</div><div class="dialog-info-value" style="font-size:16px">{cliente["nome"]}{inativo_badge}</div><div style="font-size:12px;color:#8b94a5;margin-top:3px">{cliente.get("cnpj","—")}</div></div>', unsafe_allow_html=True)
     with c2:
-        st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Saldo em aberto</div><div class="dialog-info-value" style="font-size:16px;color:#7cc243">{fmt_moeda_plain(cliente["valor"])}</div><div style="font-size:12px;color:#8b94a5;margin-top:3px">{len(cliente.get("_cobracas",[]))} cobranças</div></div>', unsafe_allow_html=True)
+        parcelas = cliente.get("parcelas", len(cliente.get("_cobracas", [])))
+        st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Saldo em aberto</div><div class="dialog-info-value" style="font-size:16px;color:#7cc243">{fmt_moeda_plain(cliente["valor"])}</div><div style="font-size:12px;color:#8b94a5;margin-top:3px">{parcelas} parcela{"s" if parcelas != 1 else ""} em atraso</div></div>', unsafe_allow_html=True)
     with c3:
         st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Vencimento</div><div class="dialog-info-value" style="font-size:16px">{cliente.get("vencimento","—")}</div><div style="font-size:12px;color:#8b94a5;margin-top:3px">{dias_html(cliente.get("dias_atraso"))}</div></div>', unsafe_allow_html=True)
     with c4:
@@ -35,12 +37,11 @@ def dialog_editar(eid):
     if cobracas_inad:
         for cob in cobracas_inad:
             with st.container(border=True):
-                c1, c2, c3, c4, c5 = st.columns(5)
+                c1, c2, c3, c4 = st.columns(4)
                 with c1: st.markdown(f"**Valor:** {fmt_moeda_plain(cob['valor'])}")
                 with c2: st.markdown(f"**Vencimento:** {cob['vencimento']}")
                 with c3: st.markdown(f"**Atraso:** {cob['dias_atraso']}d")
-                with c4: st.markdown(f"**Competências:** {cob['parcelas']}x")
-                with c5: st.markdown('<span style="background:#ff5555;color:#fff;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600">INADIMPLENTE</span>', unsafe_allow_html=True)
+                with c4: st.markdown('<span style="background:#ff5555;color:#fff;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600">INADIMPLENTE</span>', unsafe_allow_html=True)
     else:
         st.info("Nenhuma cobrança em atraso")
 
@@ -80,8 +81,7 @@ def dialog_editar(eid):
     b1, b2 = st.columns(2)
     with b1:
         if st.button("💾 Salvar alterações", width="stretch"):
-            prev = h.get("status", "pending")
-            new  = STATUS_OPTS[status_sel]
+            new = STATUS_OPTS[status_sel]
             save_hist(eid, {
                 "status":      new,
                 "lastContact": last_contact.strftime("%d/%m/%Y"),
@@ -90,16 +90,6 @@ def dialog_editar(eid):
                 "notes":       notes,
                 "atendente":   current_nome(),
             })
-            if new == "paid" and prev != "paid":
-                store["regularizados"].append({
-                    "id":        eid,
-                    "nome":      cliente["nome"],
-                    "cnpj":      cliente.get("cnpj", ""),
-                    "valor":     cliente["valor"],
-                    "atendente": current_nome(),
-                    "data":      date.today().strftime("%d/%m/%Y"),
-                    "tipo":      "manual",
-                })
             st.toast(f"✅ {cliente['nome']} salvo!", icon="✅")
             st.rerun()
     with b2:

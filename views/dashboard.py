@@ -89,8 +89,9 @@ def _render_dashboard(store, clientes, role):
                     h.get("atendente", ""), c["nome"], c.get("cnpj", ""), c["valor"],
                     c.get("parcelas", ""), c.get("vencimento", ""), c.get("dias_atraso", ""),
                     sl.get(h.get("status", "pending"), ""), h.get("lastContact", ""), h.get("notes", ""),
+                    "Sim" if c.get("_tem_acordo") else "Não",
                 ])
-            df_exp = pd.DataFrame(rows, columns=["Atendente","Nome","CNPJ","Saldo","Competências","Vencimento","Dias Atraso","Status","Último Contato","Observações"])
+            df_exp = pd.DataFrame(rows, columns=["Atendente","Nome","CNPJ","Saldo","Competências","Vencimento","Dias Atraso","Status","Último Contato","Observações","Acordo"])
             st.download_button(
                 "⬇ CSV",
                 df_exp.to_csv(index=False).encode("utf-8-sig"),
@@ -110,13 +111,22 @@ def _render_dashboard(store, clientes, role):
         ordenar = st.selectbox("Ordenar", list(SORT_MAP.keys()), label_visibility="collapsed", key="fordenar")
 
     st.markdown('<div style="margin:6px 0 4px"></div>', unsafe_allow_html=True)
-    fp1, fp2, fp3 = st.columns([3, 1.2, 1.2])
+    fp1, fp2, fp3, fp4 = st.columns([3, 1.2, 1.2, 1.2])
     with fp1:
         pill_status = st.pills("Status", ["Todos", "Sem contato", "Contactado", "Prometeu pagar", "Negociando"], default="Todos", key="fpills")
     with fp2:
         filtro_atraso = st.selectbox("Atraso", ["Todos os atrasos", "1-30 dias", "31-60 dias", "61-90 dias", "+90 dias"], label_visibility="collapsed", key="fatraso")
     with fp3:
         filtro_valor = st.selectbox("Valor", ["Todos os valores", "Até R$500", "R$500-R$2k", "R$2k-R$5k", "Acima R$5k"], label_visibility="collapsed", key="fvalor")
+    with fp4:
+        filtro_acordo = st.selectbox("Acordo", ["Todos", "Com acordo", "Sem acordo"], label_visibility="collapsed", key="facordo")
+
+    grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
+    fg1, fg2, _, _ = st.columns([1.5, 1.5, 1.5, 1.5])
+    with fg1:
+        filtro_grupo = st.selectbox("Grupo", ["Todos os grupos"] + grupos_disp, label_visibility="collapsed", key="fgrupo")
+    with fg2:
+        filtro_situacao = st.selectbox("Situação", ["Todos", "Apenas ativos", "Apenas inativos"], label_visibility="collapsed", key="fsituacao")
 
     filtro_status = pill_status or "Todos"
 
@@ -153,6 +163,18 @@ def _render_dashboard(store, clientes, role):
         df = df[(df["valor"] > 2000) & (df["valor"] <= 5000)]
     elif filtro_valor == "Acima R$5k":
         df = df[df["valor"] > 5000]
+    if filtro_acordo != "Todos":
+        tem_acordo = df["_tem_acordo"].fillna(False).astype(bool) if "_tem_acordo" in df.columns else pd.Series(False, index=df.index)
+        if filtro_acordo == "Com acordo":
+            df = df[tem_acordo]
+        elif filtro_acordo == "Sem acordo":
+            df = df[~tem_acordo]
+    if filtro_grupo != "Todos os grupos" and "_grupo" in df.columns:
+        df = df[df["_grupo"] == filtro_grupo]
+    if filtro_situacao == "Apenas ativos" and "_inativo" in df.columns:
+        df = df[~df["_inativo"].fillna(False).astype(bool)]
+    elif filtro_situacao == "Apenas inativos" and "_inativo" in df.columns:
+        df = df[df["_inativo"].fillna(False).astype(bool)]
 
     sort_col_name, sort_asc = SORT_MAP[ordenar]
     if sort_col_name in df.columns:
@@ -211,6 +233,8 @@ def _render_dashboard(store, clientes, role):
                 '<span class="tag-novo">NOVO</span>'                 if row.get("_novo")          else "",
                 '<span class="tag-upd">ATUALIZADO</span>'           if row.get("_atualizado")    else "",
                 '<span class="tag-nova-cob">+ Nova cobrança</span>' if row.get("_nova_cobranca") else "",
+                '<span style="background:#4f7cff;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">ACORDO</span>'  if row.get("_tem_acordo") else "",
+                '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("_inativo")    else "",
             ])
             obs_icon  = ' <span style="color:#5fa3ff;font-size:12px;font-weight:700">●</span>' if str(row["_notes"] or "") else ""
             row_bl    = "border-left:4px solid rgba(239,68,68,.6);" if is_top else ""

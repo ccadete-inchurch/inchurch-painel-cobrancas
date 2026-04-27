@@ -2,6 +2,8 @@ from datetime import date
 import pandas as pd
 
 from auth import current_uid, get_store
+from pathlib import Path
+import json
 
 
 # ── Datas ─────────────────────────────────────────────────────────────────────
@@ -102,3 +104,18 @@ def save_hist(cid, data):
     if uid not in store["historico"]:
         store["historico"][uid] = {}
     store["historico"][uid][cid] = data
+    _persistir_historico(store)
+
+
+def _persistir_historico(store):
+    cache_file = Path(__file__).parent / "cache_dados.json"
+    if not cache_file.exists():
+        return
+    try:
+        with open(cache_file, "r", encoding="utf-8") as f:
+            cache = json.load(f)
+        cache["historico"] = store.get("historico", {})
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(cache, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
