@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -8,26 +8,33 @@ from google.cloud import bigquery
 
 from config import MAP_COB, MAP_INAD, DIAS_SEM_CONTATO
 from auth import get_store, current_nome
-from helpers import calc_dias, parse_date_br, get_col, get_hist
+from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel
 
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
 
+_BQ_PROJECT = "business-intelligence-467516"
+_BQ_DATASET  = "Splgc"
+_HIST_TABLE  = f"{_BQ_PROJECT}.{_BQ_DATASET}.painel_historico"
+
+
 @st.cache_resource
 def get_bq_client():
     try:
-        return bigquery.Client(project="business-intelligence-467516")
+        if "gcp_service_account" in st.secrets:
+            from google.oauth2 import service_account
+            credentials = service_account.Credentials.from_service_account_info(
+                dict(st.secrets["gcp_service_account"]),
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
+            return bigquery.Client(project=_BQ_PROJECT, credentials=credentials)
+        return bigquery.Client(project=_BQ_PROJECT)
     except Exception as e:
         st.error(f"❌ Erro de autenticação com BigQuery: {str(e)}")
         st.markdown("""
-        **Para configurar a autenticação com Google Cloud:**
-
-        1. Abra o terminal/prompt de comando
-        2. Execute: `gcloud auth application-default login`
-        3. Faça login com sua conta Google
-        4. Reinicie o Streamlit
-
-        [Mais informações](https://cloud.google.com/docs/authentication/external/set-up-adc)
+        **Para configurar a autenticação:**
+        - **Local**: `gcloud auth application-default login`
+        - **Streamlit Cloud**: configure `st.secrets["gcp_service_account"]`
         """)
         return None
 
@@ -43,7 +50,7 @@ def fetch_cobrancas_competencia():
         c.id_recebimento_recb as id_recebimento,
         c.st_nome_sac as nome,
         c.st_cgc_sac as cnpj,
-        c.st_telefone_sac as telefone,
+        COALESCE(NULLIF(cli.st_fax_sac, ''), c.st_telefone_sac) as telefone,
         c.vl_total_recb as valor,
         FORMAT_TIMESTAMP('%Y-%m-%d', c.dt_vencimento_recb) as vencimento,
         c.fl_status_recb as status,
@@ -57,6 +64,11 @@ def fetch_cobrancas_competencia():
         FROM `business-intelligence-467516.Splgc.vw-splgc-clientes_unificada`
         GROUP BY id_sacado_sac
     ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
+    LEFT JOIN (
+        SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(st_fax_sac) AS st_fax_sac
+        FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
+        GROUP BY id_sacado_sac
+    ) cli ON CAST(c.id_sacado_sac AS STRING) = cli.id_sacado_sac
     LEFT JOIN (
         SELECT id_sacado_sac, COUNT(DISTINCT id_recebimento_recb) as parcelas_em_atraso
         FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
@@ -126,7 +138,7 @@ def fetch_proximas_cobracas(days: int = 30) -> pd.DataFrame:
         c.id_sacado_sac                                      AS codigo,
         MAX(c.st_nome_sac)                                        AS nome,
         MAX(c.st_cgc_sac)                                         AS cnpj,
-        MAX(c.st_telefone_sac)                                    AS telefone,
+        MAX(COALESCE(NULLIF(cli.st_fax_sac, ''), c.st_telefone_sac)) AS telefone,
         MAX(c.vl_total_recb)                                      AS valor,
         FORMAT_TIMESTAMP('%Y-%m-%d', MAX(c.dt_vencimento_recb))   AS vencimento,
         MAX(u.nm_grupo)                                           AS grupo,
@@ -137,6 +149,11 @@ def fetch_proximas_cobracas(days: int = 30) -> pd.DataFrame:
         FROM `business-intelligence-467516.Splgc.vw-splgc-clientes_unificada`
         GROUP BY id_sacado_sac
     ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
+    LEFT JOIN (
+        SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(st_fax_sac) AS st_fax_sac
+        FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
+        GROUP BY id_sacado_sac
+    ) cli ON CAST(c.id_sacado_sac AS STRING) = cli.id_sacado_sac
     WHERE c.fl_status_recb    = '0'
       AND c.dt_vencimento_recb > CURRENT_TIMESTAMP()
       AND c.dt_vencimento_recb <= TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)
@@ -151,25 +168,59 @@ def fetch_proximas_cobracas(days: int = 30) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=3600)
+def fetch_historico_meses_bulk() -> pd.DataFrame:
+    client = get_bq_client()
+    if not client:
+        return pd.DataFrame()
+    query = """
+    WITH meses AS (
+        -- Faturas ainda em atraso com vencimento nos últimos 12 meses
+        SELECT DISTINCT id_sacado_sac, FORMAT_TIMESTAMP('%Y-%m', dt_vencimento_recb) AS mes
+        FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
+        WHERE fl_status_recb = '0'
+          AND dt_vencimento_recb >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 365 DAY)
+          AND dt_vencimento_recb <= CURRENT_TIMESTAMP()
+
+        UNION DISTINCT
+
+        -- Faturas pagas com atraso (liquidação após vencimento) nos últimos 12 meses
+        SELECT DISTINCT id_sacado_sac, FORMAT_TIMESTAMP('%Y-%m', dt_vencimento_recb) AS mes
+        FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+        WHERE fl_status_recb = '1'
+          AND dt_liquidacao_recb > dt_vencimento_recb
+          AND dt_vencimento_recb >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 365 DAY)
+          AND dt_vencimento_recb <= CURRENT_TIMESTAMP()
+    )
+    SELECT
+        CAST(id_sacado_sac AS STRING) AS id_sacado_sac,
+        COUNT(DISTINCT mes) AS meses_em_atraso
+    FROM meses
+    GROUP BY id_sacado_sac
+    """
+    try:
+        return client.query(query).to_dataframe()
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600)
 def fetch_cobrancas_liquidacao():
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
     query = """
     SELECT
-        id_sacado_sac as codigo,
-        st_nome_sac as nome,
-        st_cgc_sac as cnpj,
-        st_telefone_sac as telefone,
-        vl_total_recb as valor,
-        FORMAT_TIMESTAMP('%Y-%m-%d', dt_vencimento_recb) as vencimento,
-        comp_nm_quantidade_comp as parcelas,
-        FORMAT_TIMESTAMP('%Y-%m-%d', dt_liquidacao_recb) as data_liquidacao,
-        fl_status_recb as status,
-        CASE WHEN dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END as inativo
+        id_sacado_sac                                              AS codigo,
+        MAX(st_nome_sac)                                          AS nome,
+        MAX(st_cgc_sac)                                           AS cnpj,
+        MAX(vl_total_recb)                                        AS valor,
+        FORMAT_TIMESTAMP('%Y-%m-%d', MAX(dt_liquidacao_recb))     AS data_liquidacao,
+        MAX(CASE WHEN dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
     FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
     WHERE fl_status_recb = '1'
-    ORDER BY dt_liquidacao_recb DESC
+    GROUP BY id_sacado_sac, id_recebimento_recb
+    HAVING MAX(vl_total_recb) > 0
+    ORDER BY MAX(dt_liquidacao_recb) DESC
     """
     try:
         return client.query(query).to_dataframe()
@@ -178,15 +229,95 @@ def fetch_cobrancas_liquidacao():
         return pd.DataFrame()
 
 
+# ── Historico de atendimento no BigQuery ─────────────────────────────────────
+
+def ensure_historico_table():
+    """Cria a tabela painel_historico no BQ se não existir."""
+    client = get_bq_client()
+    if not client:
+        return
+    schema = [
+        bigquery.SchemaField("uid",            "STRING",    mode="REQUIRED"),
+        bigquery.SchemaField("cliente_id",     "STRING",    mode="REQUIRED"),
+        bigquery.SchemaField("historico_json", "STRING"),
+        bigquery.SchemaField("updated_at",     "TIMESTAMP"),
+    ]
+    table = bigquery.Table(_HIST_TABLE, schema=schema)
+    try:
+        client.create_table(table, exists_ok=True)
+    except Exception:
+        pass
+
+
+def load_historico_from_bq():
+    """Carrega todo o historico do usuário logado do BQ para o session_state."""
+    from auth import current_uid, get_store as _get_store
+    uid = current_uid()
+    if not uid:
+        return
+    client = get_bq_client()
+    if not client:
+        return
+    ensure_historico_table()
+    query = """
+    SELECT cliente_id, historico_json
+    FROM (
+        SELECT cliente_id, historico_json,
+               ROW_NUMBER() OVER (PARTITION BY cliente_id ORDER BY updated_at DESC) AS rn
+        FROM `{table}`
+        WHERE uid = @uid
+    )
+    WHERE rn = 1
+    """.format(table=_HIST_TABLE)
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("uid", "STRING", uid)]
+    )
+    try:
+        df = client.query(query, job_config=job_config).to_dataframe()
+        store = _get_store()
+        if uid not in store["historico"]:
+            store["historico"][uid] = {}
+        for _, row in df.iterrows():
+            try:
+                store["historico"][uid][row["cliente_id"]] = json.loads(row["historico_json"])
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def save_hist_to_bq(uid: str, cid: str, data: dict):
+    """Persiste uma entrada do historico no BQ (append; leitura sempre pega a mais recente)."""
+    client = get_bq_client()
+    if not client:
+        return
+    rows = [{
+        "uid":            uid,
+        "cliente_id":     cid,
+        "historico_json": json.dumps(data, ensure_ascii=False),
+        "updated_at":     datetime.now(timezone.utc).isoformat(),
+    }]
+    try:
+        client.insert_rows_json(_HIST_TABLE, rows)
+    except Exception:
+        pass
+
+
 # ── Processamento ─────────────────────────────────────────────────────────────
 
 def processar_dados_bigquery():
     fetch_cobrancas_competencia.clear()
     fetch_cobrancas_liquidacao.clear()
     fetch_proximas_cobracas.clear()
+    fetch_historico_meses_bulk.clear()
     store          = get_store()
     df_competencia = fetch_cobrancas_competencia()
     df_liquidacao  = fetch_cobrancas_liquidacao()
+    df_hist_meses  = fetch_historico_meses_bulk()
+    hist_meses = {}
+    if not df_hist_meses.empty:
+        for _, row in df_hist_meses.iterrows():
+            hist_meses[str(row["id_sacado_sac"])] = int(row["meses_em_atraso"])
 
     if df_competencia.empty:
         return [], 0
@@ -244,7 +375,7 @@ def processar_dados_bigquery():
                 "cod":              codigo,
                 "nome":             str(row["nome"]     or ""),
                 "cnpj":             str(row["cnpj"]     or ""),
-                "telefone":         str(row["telefone"] or ""),
+                "telefone":         fmt_tel(row["telefone"]),
                 "valor":            valor_devedor,
                 "vencimento":       vencimento,
                 "dias_atraso":      dias_atraso_num,
@@ -270,6 +401,7 @@ def processar_dados_bigquery():
         newest = c.get("_min_atraso") or 0
         c["_nova_cobranca"] = (oldest > 30 and 0 < newest <= 30)
         c["parcelas"] = len([x for x in c["_cobracas"] if x.get("dias_atraso") and x["dias_atraso"] > 0])
+        c["_meses_atraso"] = hist_meses.get(c["id"], 0)
         c.pop("_ids_recebimento", None)
 
     clientes = [c for c in clientes_dict.values() if c["valor"] > 0]

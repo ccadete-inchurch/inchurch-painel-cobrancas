@@ -2,16 +2,37 @@ import hashlib
 import streamlit as st
 
 
+def _usuarios_do_secrets():
+    """Carrega usuários do st.secrets se disponível, senão usa credenciais de dev."""
+    try:
+        usuarios_secrets = st.secrets.get("usuarios", {})
+        if usuarios_secrets:
+            usuarios = {}
+            for _, u in usuarios_secrets.items():
+                uid = hashlib.md5(u["email"].encode()).hexdigest()
+                usuarios[uid] = {
+                    "nome":       u["nome"],
+                    "email":      u["email"],
+                    "senha_hash": u["senha_hash"],
+                    "role":       u.get("role", "atendente"),
+                }
+            return usuarios
+    except Exception:
+        pass
+    # Fallback para desenvolvimento local
+    uid = hashlib.md5("teste@inchurch.com.br".encode()).hexdigest()
+    return {uid: {
+        "nome":       "Administrador",
+        "email":      "teste@inchurch.com.br",
+        "senha_hash": hashlib.sha256("admin".encode()).hexdigest(),
+        "role":       "admin",
+    }}
+
+
 def get_store():
     if "store" not in st.session_state:
-        uid = hashlib.md5("teste@inchurch.com.br".encode()).hexdigest()
         st.session_state["store"] = {
-            "usuarios": {uid: {
-                "nome":       "Administrador",
-                "email":      "teste@inchurch.com.br",
-                "senha_hash": hashlib.sha256("admin".encode()).hexdigest(),
-                "role":       "admin",
-            }},
+            "usuarios":           _usuarios_do_secrets(),
             "clientes":           [],
             "historico":          {},
             "regularizados":      [],

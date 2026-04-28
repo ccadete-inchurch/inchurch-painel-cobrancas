@@ -9,7 +9,7 @@ st.set_page_config(
 
 from config import CSS
 from auth import is_logged, current_role
-from data import get_store, carregar_cache_local
+from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq
 from views import (
     render_sidebar, render_header, tela_login, tela_importar,
     _render_dashboard, _render_historico, _render_cliente, _render_proximas,
@@ -43,11 +43,22 @@ def main():
         tela_login()
         return
 
-    if not get_store()["clientes"]:
+    store = get_store()
+
+    # Carrega clientes: primeiro tenta cache local, depois BQ automaticamente
+    if not store["clientes"]:
         carregar_cache_local()
+    if not store["clientes"]:
+        with st.spinner("Carregando dados do BigQuery..."):
+            processar_dados_bigquery()
+
+    # Carrega historico de atendimento do BQ uma vez por sessão
+    if not st.session_state.get("_historico_loaded"):
+        load_historico_from_bq()
+        st.session_state["_historico_loaded"] = True
 
     tela = st.session_state.get("tela", "principal")
-    if not get_store()["clientes"] or tela == "importar":
+    if not store["clientes"] or tela == "importar":
         tela_importar()
     else:
         st.session_state["tela"] = "principal"

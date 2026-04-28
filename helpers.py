@@ -6,6 +6,14 @@ from pathlib import Path
 import json
 
 
+# ── Telefone ──────────────────────────────────────────────────────────────────
+
+def fmt_tel(valor) -> str:
+    if not valor:
+        return "—"
+    return str(valor).split(";")[0].strip() or "—"
+
+
 # ── Datas ─────────────────────────────────────────────────────────────────────
 
 def calc_dias(venc):
@@ -104,6 +112,11 @@ def save_hist(cid, data):
     if uid not in store["historico"]:
         store["historico"][uid] = {}
     store["historico"][uid][cid] = data
+    try:
+        from data import save_hist_to_bq
+        save_hist_to_bq(uid, cid, data)
+    except Exception:
+        pass
     _persistir_historico(store)
 
 
