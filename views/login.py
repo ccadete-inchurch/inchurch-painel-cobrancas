@@ -1,7 +1,32 @@
+import base64
+import json
+
 import streamlit as st
+from streamlit_oauth import OAuth2Component
 
 from config import LOGO_SRC
-from auth import login
+from auth import login, login_google
+
+_AUTHORIZE_URL    = "https://accounts.google.com/o/oauth2/auth"
+_TOKEN_URL        = "https://oauth2.googleapis.com/token"
+_REVOKE_TOKEN_URL = "https://oauth2.googleapis.com/revoke"
+
+
+def _google_oauth_component():
+    try:
+        g = st.secrets["google"]
+        return OAuth2Component(
+            g["client_id"], g["client_secret"],
+            _AUTHORIZE_URL, _TOKEN_URL, _TOKEN_URL, _REVOKE_TOKEN_URL,
+        ), g["redirect_uri"]
+    except Exception:
+        return None, None
+
+
+def _decode_id_token(token: str) -> dict:
+    payload = token.split(".")[1]
+    payload += "=" * (-len(payload) % 4)
+    return json.loads(base64.urlsafe_b64decode(payload))
 
 
 def tela_login():
@@ -27,6 +52,33 @@ def tela_login():
         </div>
         """, unsafe_allow_html=True)
 
+        # ── Google OAuth ──────────────────────────────────────────────────────
+        oauth2, redirect_uri = _google_oauth_component()
+        if oauth2:
+            result = oauth2.authorize_button(
+                name="Continuar com Google",
+                icon="https://www.google.com/favicon.ico",
+                redirect_uri=redirect_uri,
+                scope="openid email profile",
+                key="google_oauth",
+                extras_params={"prompt": "select_account"},
+                use_container_width=True,
+            )
+            if result and "token" in result:
+                try:
+                    info  = _decode_id_token(result["token"]["id_token"])
+                    email = info.get("email", "")
+                    nome  = info.get("name", email)
+                    if login_google(email, nome):
+                        st.rerun()
+                    else:
+                        st.error(f"Acesso não autorizado para {email}.")
+                except Exception as e:
+                    st.error(f"Erro ao processar login Google: {e}")
+
+            st.markdown('<div style="display:flex;align-items:center;gap:12px;margin:16px 0"><div style="flex:1;height:1px;background:#2a2f42"></div><span style="color:#4b5563;font-size:12px">ou</span><div style="flex:1;height:1px;background:#2a2f42"></div></div>', unsafe_allow_html=True)
+
+        # ── E-mail / senha ────────────────────────────────────────────────────
         with st.form("login_form"):
             st.markdown("""
             <style>

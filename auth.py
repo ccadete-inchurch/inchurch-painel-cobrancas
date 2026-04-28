@@ -57,6 +57,19 @@ def login(email, senha):
     return False
 
 
+def login_google(email: str, nome: str) -> bool:
+    """Cria sessão para usuário autenticado via Google, se o e-mail for autorizado."""
+    for uid, u in get_store()["usuarios"].items():
+        if u["email"].lower() == email.lower():
+            st.session_state.update({
+                "user_uid":  uid,
+                "user_nome": u["nome"],
+                "user_role": u["role"],
+            })
+            return True
+    return False
+
+
 def is_logged():    return "user_uid" in st.session_state
 def current_uid():  return st.session_state.get("user_uid",  "")
 def current_nome(): return st.session_state.get("user_nome", "")
