@@ -14,7 +14,7 @@ from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel
 # ── BigQuery ──────────────────────────────────────────────────────────────────
 
 _BQ_PROJECT = "business-intelligence-467516"
-_BQ_DATASET  = "Splgc"
+_BQ_DATASET  = "inadimplencia_painel_cobrancas"
 _HIST_TABLE  = f"{_BQ_PROJECT}.{_BQ_DATASET}.painel_historico"
 
 
