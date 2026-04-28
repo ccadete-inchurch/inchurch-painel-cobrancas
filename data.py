@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -427,7 +427,7 @@ def processar_dados_bigquery():
 
     store["clientes"]           = clientes
     store["regularizados"]      = historico_regularizados
-    store["ultima_atualizacao"] = datetime.now().strftime("%d/%m/%Y %H:%M")
+    store["ultima_atualizacao"] = datetime.now(timezone(timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M")
     salvar_cache_local()
 
     return clientes, len(historico_regularizados)
@@ -513,7 +513,7 @@ def importar_planilhas(f_cob, f_inad):
         })
 
     store["clientes"]           = clientes
-    store["ultima_atualizacao"] = datetime.now().strftime("%d/%m/%Y %H:%M")
+    store["ultima_atualizacao"] = datetime.now(timezone(timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M")
     return clientes, sum(c["_novo"] for c in clientes), sum(c["_atualizado"] for c in clientes), len(removidos)
 
 
