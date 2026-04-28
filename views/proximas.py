@@ -106,12 +106,19 @@ def _render_proximas(_store, _clientes):
 
     st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
 
+    # ── Paginação ─────────────────────────────────────────────────────────────
+    PAGE_SIZE  = 100
+    total_f    = len(rows)
+    total_pg   = max(1, -(-total_f // PAGE_SIZE))
+    page       = max(1, min(st.session_state.get("proximas_page", 1), total_pg))
+    rows_page  = rows[(page - 1) * PAGE_SIZE : page * PAGE_SIZE]
+
     # ── Tabela ────────────────────────────────────────────────────────────────
     col_w = [3, 1.5, 1.5, 1.2, 1.5]
     hdrs  = ["Cliente", "Valor", "Vencimento", "Dias p/ vencer", "Grupo"]
 
     hdr_cells = "".join(
-        f'<div style="flex:{w};padding:14px 14px;font-size:11px;text-transform:uppercase;'
+        f'<div style="flex:{w};padding:14px 14px;font-size:12px;text-transform:uppercase;'
         f'letter-spacing:1.2px;color:#8b94a5;font-weight:700;white-space:nowrap;min-width:0">{h}</div>'
         for w, h in zip(col_w, hdrs)
     )
@@ -130,8 +137,8 @@ def _render_proximas(_store, _clientes):
         )
         return
 
-    n = len(rows)
-    for i, row in enumerate(rows):
+    n = len(rows_page)
+    for i, row in enumerate(rows_page):
         d = row["dias_restantes"]
         cor_d = "#ef4444" if d <= 7 else ("#f59e0b" if d <= 15 else "#2dd36f")
 
@@ -141,15 +148,15 @@ def _render_proximas(_store, _clientes):
             st.markdown(
                 f'<div style="padding:12px 14px">'
                 f'<div style="margin-bottom:2px">{inativo_badge}</div>'
-                f'<div style="font-weight:600;font-size:13px;color:#e8eaf0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{row["nome"]}</div>'
-                f'<div style="font-size:11px;color:#6b7280;margin-top:2px">{row["cnpj"]}</div>'
+                f'<div style="font-weight:600;font-size:16px;color:#e8eaf0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{row["nome"]}</div>'
+                f'<div style="font-size:13px;color:#6b7280;margin-top:2px">{row["cnpj"]}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
         with rcols[1]:
-            st.markdown(f'<div style="padding:12px 14px;font-size:13px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:15px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
         with rcols[2]:
-            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{row["vencimento"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:15px;color:#8b94a5">{row["vencimento"]}</div>', unsafe_allow_html=True)
         with rcols[3]:
             st.markdown(
                 f'<div style="padding:12px 14px">'
@@ -159,14 +166,28 @@ def _render_proximas(_store, _clientes):
                 unsafe_allow_html=True,
             )
         with rcols[4]:
-            st.markdown(f'<div style="padding:12px 14px;font-size:12px;color:#8b94a5">{row["grupo"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:14px;color:#8b94a5">{row["grupo"]}</div>', unsafe_allow_html=True)
 
         if i < n - 1:
             st.markdown('<div style="height:0.5px;background:#2a2f42;margin:0"></div>', unsafe_allow_html=True)
 
     st.markdown(
         f'<div style="background:#1e2333;border:1px solid #2a2f42;border-top:none;'
-        f'border-radius:0 0 12px 12px;padding:10px 16px;font-size:12px;color:#6b7280">'
-        f'{n} cobranças</div>',
+        f'border-radius:0 0 12px 12px;padding:10px 16px;display:flex;justify-content:space-between;font-size:12px;color:#6b7280">'
+        f'<span>Mostrando {(page-1)*PAGE_SIZE+1}–{min(page*PAGE_SIZE, total_f)} de {total_f} cobranças</span>'
+        f'<span>Página {page} de {total_pg}</span></div>',
         unsafe_allow_html=True,
     )
+
+    if total_pg > 1:
+        pc1, pc2, pc3 = st.columns([1, 2, 1])
+        with pc1:
+            if st.button("← Anterior", key="prox_prev", disabled=(page <= 1), width="stretch"):
+                st.session_state["proximas_page"] = page - 1
+                st.rerun()
+        with pc2:
+            st.markdown(f'<div style="text-align:center;color:#6b7280;font-size:12px;padding-top:6px">Página {page} de {total_pg}</div>', unsafe_allow_html=True)
+        with pc3:
+            if st.button("Próxima →", key="prox_next", disabled=(page >= total_pg), width="stretch"):
+                st.session_state["proximas_page"] = page + 1
+                st.rerun()

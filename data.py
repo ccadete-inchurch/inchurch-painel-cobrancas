@@ -181,6 +181,8 @@ def fetch_cobrancas_liquidacao():
 # ── Processamento ─────────────────────────────────────────────────────────────
 
 def processar_dados_bigquery():
+    fetch_cobrancas_competencia.clear()
+    fetch_cobrancas_liquidacao.clear()
     fetch_proximas_cobracas.clear()
     store          = get_store()
     df_competencia = fetch_cobrancas_competencia()

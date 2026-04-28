@@ -75,7 +75,7 @@ else:
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap');
-html,body,[class*="css"]{font-family:'DM Sans',sans-serif!important;background:#0f1117!important;color:#e8eaf0!important;font-size:15px!important}
+html,body,[class*="css"]{font-family:'DM Sans',sans-serif!important;background:#0f1117!important;color:#e8eaf0!important;font-size:18px!important}
 #MainMenu,footer,header{visibility:hidden}
 .block-container{padding-top:0!important;padding-bottom:1.5rem!important;max-width:100%!important;padding-left:2rem!important;padding-right:2rem!important}
 
@@ -102,9 +102,9 @@ section[data-testid="stSidebar"] .stButton>button:hover{
 /* ── Cards de métrica ── */
 .metric-card{background:#181c26;border:1px solid #1e2333;border-radius:14px;padding:20px 22px;box-shadow:0 1px 6px rgba(0,0,0,.15);transition:box-shadow .2s}
 .metric-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.25)}
-.metric-label{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:#8b94a5;margin-bottom:10px;font-weight:600}
-.metric-value{font-family:'DM Sans',sans-serif;font-size:28px;font-weight:700;line-height:1;letter-spacing:0;font-variant-numeric:tabular-nums}
-.metric-sub{font-size:11px;color:#6b7280;margin-top:8px;letter-spacing:0.2px}
+.metric-label{font-size:14px;text-transform:uppercase;letter-spacing:1.2px;color:#8b94a5;margin-bottom:10px;font-weight:600}
+.metric-value{font-family:'DM Sans',sans-serif;font-size:34px;font-weight:700;line-height:1;letter-spacing:0;font-variant-numeric:tabular-nums}
+.metric-sub{font-size:13px;color:#6b7280;margin-top:8px;letter-spacing:0.2px}
 
 /* ── Badges ── */
 .badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600}
@@ -119,7 +119,7 @@ section[data-testid="stSidebar"] .stButton>button:hover{
 .tag-nova-cob{background:rgba(79,124,255,.18);color:#5fa3ff;font-size:10px;padding:2px 7px;border-radius:5px;font-weight:700;margin-right:3px}
 
 /* ── Atraso chips ── */
-.da{padding:3px 9px;border-radius:6px;font-size:12px;font-weight:700;display:inline-block}
+.da{padding:3px 9px;border-radius:6px;font-size:14px;font-weight:700;display:inline-block}
 .da-ok{background:rgba(45,211,111,.12);color:#2dd36f}
 .da-30{background:rgba(255,184,77,.12);color:#ffb84d}
 .da-60{background:rgba(255,152,0,.12);color:#ff9800}
@@ -130,21 +130,21 @@ section[data-testid="stSidebar"] .stButton>button:hover{
 .pend-card{background:#181c26;border:1px solid #1e2333;border-radius:10px;padding:14px 16px;margin-bottom:8px}
 
 /* ── Botões globais ── */
-.stButton>button{background:#1e2333!important;color:#e8eaf0!important;font-weight:600!important;border:1px solid #2a2f42!important;border-radius:8px!important;font-size:13px!important;padding:0.4rem 1rem!important;transition:all 0.18s!important;box-shadow:none!important}
+.stButton>button{background:#1e2333!important;color:#e8eaf0!important;font-weight:600!important;border:1px solid #2a2f42!important;border-radius:8px!important;font-size:15px!important;padding:0.5rem 1.1rem!important;transition:all 0.18s!important;box-shadow:none!important}
 .stButton>button:hover{background:#2a2f42!important;border-color:#3d4460!important;transform:none!important;box-shadow:none!important}
 button[kind="primary"]{background:#7cc243!important;color:#0f1117!important;border:none!important;font-weight:700!important}
 button[kind="primary"]:hover{background:#8fd44e!important}
 
 /* ── Inputs ── */
-.stTextInput input,.stTextArea textarea{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:13px!important;padding:0.55rem 0.8rem!important}
+.stTextInput input,.stTextArea textarea{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
 .stTextInput input:focus,.stTextArea textarea:focus{border-color:#7cc243!important;box-shadow:0 0 0 2px rgba(124,194,67,.15)!important}
-.stTextInput label,.stTextArea label,.stSelectbox label,.stDateInput label{color:#6b7280!important;font-size:11px!important;text-transform:uppercase!important;letter-spacing:0.8px!important;font-weight:600!important}
+.stTextInput label,.stTextArea label,.stSelectbox label,.stDateInput label{color:#6b7280!important;font-size:13px!important;text-transform:uppercase!important;letter-spacing:0.8px!important;font-weight:600!important}
 div[data-baseweb="select"]>div{background:#181c26!important;border-color:#1e2333!important;border-radius:8px!important}
-div[data-baseweb="select"] span{color:#e8eaf0!important;font-size:13px!important}
+div[data-baseweb="select"] span{color:#e8eaf0!important;font-size:15px!important}
 div[data-baseweb="popover"],div[data-baseweb="menu"]{background:#181c26!important;border:1px solid #2a2f42!important;border-radius:10px!important}
-div[data-baseweb="menu"] li{color:#e8eaf0!important;font-size:13px!important}
+div[data-baseweb="menu"] li{color:#e8eaf0!important;font-size:15px!important}
 div[data-baseweb="menu"] li:hover{background:#1e2333!important}
-.stDateInput input{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:13px!important;padding:0.55rem 0.8rem!important}
+.stDateInput input{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
 
 /* ── Expander ── */
 .streamlit-expanderHeader{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:10px!important;font-size:13px!important;font-weight:600!important}

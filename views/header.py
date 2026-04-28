@@ -8,7 +8,7 @@ from data import get_store
 def render_header():
     store    = get_store()
     upd      = store.get("ultima_atualizacao") or "—"
-    logo     = f'<img src="{LOGO_SRC}" style="height:28px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:#7cc243">InChurch</span>'
+    logo     = f'<img src="{LOGO_SRC}" style="height:28px;object-fit:contain;opacity:0.75;filter:brightness(1.2)">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:#7cc243">InChurch</span>'
     role_tag = '<span style="background:rgba(124,194,67,.2);color:#7cc243;font-size:11px;padding:3px 10px;border-radius:12px;font-weight:700;margin-left:8px">ADMIN</span>' if current_role() == "admin" else ""
     st.markdown(f"""
     <div style="background:#181c26;border-bottom:1px solid #2a2f42;padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,.15)">

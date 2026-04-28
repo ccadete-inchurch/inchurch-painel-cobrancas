@@ -12,6 +12,13 @@ from views.dialog import dialog_editar
 
 
 def _render_dashboard(store, clientes, role):
+    from auth import current_nome
+    nome = current_nome() or "usuário"
+    st.markdown(
+        f'<div style="font-family:\'Segoe UI\',sans-serif;font-size:32px;font-weight:700;color:#e8eaf0;margin-bottom:20px">Bem vindo(a), {nome}!</div>',
+        unsafe_allow_html=True,
+    )
+
     # ── Métricas ──────────────────────────────────────────────────────────────
     total = len(clientes)
     pending = contacted = promise = 0
@@ -35,7 +42,7 @@ def _render_dashboard(store, clientes, role):
         with col:
             st.markdown(
                 f'<div class="metric-card"><div class="metric-label">{label}</div>'
-                f'<div class="metric-value" style="color:{cor}">{val:,}</div>'
+                f'<div class="metric-value" style="color:{cor};font-size:32px">{val:,}</div>'
                 f'<div class="metric-sub">{sub}</div></div>',
                 unsafe_allow_html=True,
             )
@@ -207,7 +214,7 @@ def _render_dashboard(store, clientes, role):
     hdrs_t   = ["Cliente", "Saldo", "Atraso", "Telefone", "Grupo", "Último Contato"] + ([""] if has_edit else [])
 
     hdr_cells = "".join(
-        f'<div style="flex:{w};padding:14px 14px;font-size:11px;text-transform:uppercase;'
+        f'<div style="flex:{w};padding:14px 14px;font-size:12px;text-transform:uppercase;'
         f'letter-spacing:1.2px;color:#8b94a5;font-weight:700;white-space:nowrap;min-width:0">{h}</div>'
         for w, h in zip(col_w, hdrs_t)
     )
@@ -246,21 +253,21 @@ def _render_dashboard(store, clientes, role):
                 st.markdown(
                     f'<div style="padding:12px 12px;{row_bg}{row_bl}">'
                     f'<div style="margin-bottom:3px">{tags}</div>'
-                    f'<div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:#e8eaf0">{row["nome"]}{obs_icon}</div>'
-                    f'<div style="color:#8b94a5;font-size:11px;margin-top:2px;font-weight:500">{row.get("cnpj","")}{atend_tag}</div>'
+                    f'<div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;color:#e8eaf0">{row["nome"]}{obs_icon}</div>'
+                    f'<div style="color:#8b94a5;font-size:13px;margin-top:2px;font-weight:500">{row.get("cnpj","")}{atend_tag}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
             with rcols[1]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:13px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:15px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
             with rcols[2]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:12px">{dias_html(row.get("dias_atraso"))}</div>', unsafe_allow_html=True)
             with rcols[3]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:12px;color:#8b94a5">{row.get("telefone","—")}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5">{row.get("telefone","—")}</div>', unsafe_allow_html=True)
             with rcols[4]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:12px;color:#8b94a5">{row.get("_grupo","—")}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5">{row.get("_grupo","—")}</div>', unsafe_allow_html=True)
             with rcols[5]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:12px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
             if has_edit:
                 with rcols[6]:
                     if st.button("✏", key=f"edit_{row['id']}_{ridx}", width="stretch", help=f"Editar {row['nome']}"):
