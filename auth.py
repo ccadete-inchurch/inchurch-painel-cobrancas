@@ -58,16 +58,29 @@ def login(email, senha):
 
 
 def login_google(email: str, nome: str) -> bool:
-    """Cria sessão para usuário autenticado via Google, se o e-mail for autorizado."""
+    """Permite qualquer @inchurch.com.br; admins definidos em [usuarios] no secrets."""
+    import hashlib
+    email_lower = email.lower()
+    allowed_domain = st.secrets.get("google", {}).get("allowed_domain", "inchurch.com.br")
+    if not email_lower.endswith(f"@{allowed_domain}"):
+        return False
+    # Verifica se há configuração específica (para role admin)
     for uid, u in get_store()["usuarios"].items():
-        if u["email"].lower() == email.lower():
+        if u["email"].lower() == email_lower:
             st.session_state.update({
                 "user_uid":  uid,
                 "user_nome": u["nome"],
                 "user_role": u["role"],
             })
             return True
-    return False
+    # Usuário inchurch genérico — atendente
+    uid = hashlib.md5(email_lower.encode()).hexdigest()
+    st.session_state.update({
+        "user_uid":  uid,
+        "user_nome": nome,
+        "user_role": "atendente",
+    })
+    return True
 
 
 def is_logged():    return "user_uid" in st.session_state
