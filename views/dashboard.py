@@ -11,6 +11,18 @@ from data import calcular_pendencias
 from views.dialog import dialog_editar
 
 
+def _reset_filtros():
+    from config import SORT_MAP as _SM
+    st.session_state["fpills"]    = "Todos"
+    st.session_state["fordenar"]  = list(_SM.keys())[0]
+    st.session_state["fgrupo"]    = "Todos"
+    st.session_state["fsituacao"] = "Todos"
+    st.session_state["fatraso"]   = "Todos"
+    st.session_state["fvalor"]    = "Todos"
+    st.session_state["facordo"]   = "Todos"
+    st.session_state["busca"]     = ""
+
+
 def _render_dashboard(store, clientes, role):
     from auth import current_nome
     nome = current_nome() or "usuário"
@@ -129,16 +141,7 @@ def _render_dashboard(store, clientes, role):
     with sb1:
         busca = st.text_input("Buscar", placeholder="🔍  Buscar por nome ou CNPJ...", label_visibility="collapsed", key="busca")
     with sb2:
-        if st.button("✕ Limpar filtros", width="stretch"):
-            st.session_state["fpills"]   = "Todos"
-            st.session_state["fordenar"] = list(SORT_MAP.keys())[0]
-            st.session_state["fgrupo"]   = "Todos"
-            st.session_state["fsituacao"] = "Todos"
-            st.session_state["fatraso"]  = "Todos"
-            st.session_state["fvalor"]   = "Todos"
-            st.session_state["facordo"]  = "Todos"
-            st.session_state["busca"]    = ""
-            st.rerun()
+        st.button("✕ Limpar filtros", on_click=_reset_filtros, width="stretch")
 
     filtro_status = pill_status or "Todos"
 
