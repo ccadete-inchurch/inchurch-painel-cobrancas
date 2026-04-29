@@ -138,16 +138,3 @@ def tela_login():
         except Exception:
             pass
 
-        st.markdown('<div style="display:flex;align-items:center;gap:12px;margin:16px 0"><div style="flex:1;height:1px;background:#2a2f42"></div><span style="color:#4b5563;font-size:12px">ou</span><div style="flex:1;height:1px;background:#2a2f42"></div></div>', unsafe_allow_html=True)
-
-        # ── E-mail / senha ────────────────────────────────────────────────────
-        with st.form("login_form"):
-            st.markdown('<style>div[data-testid="stForm"]{background:transparent!important;border:none!important;padding:0!important}</style>', unsafe_allow_html=True)
-            email = st.text_input("E-mail", placeholder="seu@inchurch.com.br")
-            senha = st.text_input("Senha", type="password", placeholder="••••••••")
-            st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
-            if st.form_submit_button("Entrar", width="stretch"):
-                if login(email, senha):
-                    st.rerun()
-                else:
-                    st.error("E-mail ou senha incorretos.")
