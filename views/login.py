@@ -85,14 +85,19 @@ def tela_login():
     _handle_google_callback()
 
     # ── CSS global + painel esquerdo fixo ─────────────────────────────────────
-    st.markdown("""
+    _logo_html = (
+        f'<img src="{LOGO_SRC}" style="height:56px;object-fit:contain">'
+        if LOGO_SRC else
+        '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:30px;color:#7cc243;letter-spacing:-0.5px">InChurch</span>'
+    )
+    st.markdown(f"""
     <style>
-    html,body{background:#0f1117!important}
-    .stApp{background:#0f1117!important}
+    html,body{{background:#0f1117!important}}
+    .stApp{{background:#0f1117!important}}
     header,[data-testid="stToolbar"],[data-testid="stDecoration"],
-    [data-testid="stStatusWidget"]{display:none!important}
-    [data-testid="stAppViewBlockContainer"],.main .block-container{
-        padding-top:0!important;padding-bottom:0!important}
+    [data-testid="stStatusWidget"]{{display:none!important}}
+    [data-testid="stAppViewBlockContainer"],.main .block-container{{
+        padding-top:0!important;padding-bottom:0!important}}
     </style>
 
     <div style="position:fixed;left:0;top:0;width:50%;height:100vh;
@@ -107,10 +112,7 @@ def tela_login():
       <div style="position:absolute;top:22%;left:-70px;width:200px;height:200px;
                   border-radius:50%;border:1px solid rgba(124,194,67,0.06)"></div>
 
-      <div>
-        <span style="font-family:Syne,sans-serif;font-weight:800;font-size:22px;
-                     color:#7cc243;letter-spacing:-0.5px">InChurch</span>
-      </div>
+      <div>{_logo_html}</div>
 
       <div>
         <div style="display:inline-flex;align-items:center;gap:7px;
@@ -148,7 +150,7 @@ def tela_login():
         </div>
       </div>
 
-      <div style="font-size:12px;color:#374151">© 2025 InChurch · Uso interno</div>
+      <div style="font-size:14px;color:#6b7280">© 2026 InChurch · Uso interno</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -158,15 +160,13 @@ def tela_login():
         st.markdown('<div style="height:28vh"></div>', unsafe_allow_html=True)
         st.markdown("""
         <div style="padding:0 48px 0 36px">
-          <p style="font-size:12px;color:#4b5563;text-transform:uppercase;
-                    letter-spacing:2px;font-weight:600;margin:0 0 10px">Acesso restrito</p>
-          <h2 style="font-size:30px;font-weight:800;color:#f1f5f9;margin:0 0 10px;
-                     letter-spacing:-0.5px;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
+          <h2 style="font-size:42px;font-weight:800;color:#f1f5f9;margin:0 0 14px;
+                     letter-spacing:-1px;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
             Bem-vindo
           </h2>
-          <p style="font-size:14px;color:#6b7280;margin:0 0 36px;line-height:1.6">
+          <p style="font-size:17px;color:#6b7280;margin:0 0 36px;line-height:1.6">
             Use sua conta <span style="color:#7cc243;font-weight:600">@inchurch.com.br</span>
-            para acessar o painel.
+            para acessar o painel de cobranças.
           </p>
         </div>
         """, unsafe_allow_html=True)

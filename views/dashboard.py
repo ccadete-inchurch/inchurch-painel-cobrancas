@@ -115,25 +115,25 @@ def _render_dashboard(store, clientes, role):
     with fb:
         busca = st.text_input("Buscar", placeholder="Buscar por nome ou CNPJ...", label_visibility="collapsed", key="busca")
     with fs:
-        ordenar = st.selectbox("Ordenar", list(SORT_MAP.keys()), label_visibility="collapsed", key="fordenar")
+        ordenar = st.selectbox("Ordenar por", list(SORT_MAP.keys()), key="fordenar")
 
     st.markdown('<div style="margin:6px 0 4px"></div>', unsafe_allow_html=True)
     fp1, fp2, fp3, fp4 = st.columns([3, 1.2, 1.2, 1.2])
     with fp1:
         pill_status = st.pills("Status", ["Todos", "Sem contato", "Contactado", "Prometeu pagar", "Negociando"], default="Todos", key="fpills")
     with fp2:
-        filtro_atraso = st.selectbox("Atraso", ["Todos os atrasos", "1-30 dias", "31-60 dias", "61-90 dias", "+90 dias"], label_visibility="collapsed", key="fatraso")
+        filtro_atraso = st.selectbox("Dias de atraso", ["Todos", "1-30 dias", "31-60 dias", "61-90 dias", "+90 dias"], key="fatraso")
     with fp3:
-        filtro_valor = st.selectbox("Valor", ["Todos os valores", "Até R$500", "R$500-R$2k", "R$2k-R$5k", "Acima R$5k"], label_visibility="collapsed", key="fvalor")
+        filtro_valor = st.selectbox("Valor em aberto", ["Todos", "Até R$500", "R$500-R$2k", "R$2k-R$5k", "Acima R$5k"], key="fvalor")
     with fp4:
-        filtro_acordo = st.selectbox("Acordo", ["Todos", "Com acordo", "Sem acordo"], label_visibility="collapsed", key="facordo")
+        filtro_acordo = st.selectbox("Acordo", ["Todos", "Com acordo", "Sem acordo"], key="facordo")
 
     grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
     fg1, fg2, _, _ = st.columns([1.5, 1.5, 1.5, 1.5])
     with fg1:
-        filtro_grupo = st.selectbox("Grupo", ["Todos os grupos"] + grupos_disp, label_visibility="collapsed", key="fgrupo")
+        filtro_grupo = st.selectbox("Grupo", ["Todos os grupos"] + grupos_disp, key="fgrupo")
     with fg2:
-        filtro_situacao = st.selectbox("Situação", ["Todos", "Apenas ativos", "Apenas inativos"], label_visibility="collapsed", key="fsituacao")
+        filtro_situacao = st.selectbox("Situação", ["Todos", "Apenas ativos", "Apenas inativos"], key="fsituacao")
 
     filtro_status = pill_status or "Todos"
 
