@@ -117,35 +117,35 @@ def tela_login():
       <div>
         <div style="display:inline-flex;align-items:center;gap:7px;
                     background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
-                    color:#7cc243;font-size:11px;font-weight:700;letter-spacing:1.5px;
-                    text-transform:uppercase;padding:5px 14px;border-radius:20px;margin-bottom:32px">
-          <div style="width:6px;height:6px;border-radius:50%;background:#7cc243"></div>Financeiro
+                    color:#7cc243;font-size:13px;font-weight:700;letter-spacing:1.5px;
+                    text-transform:uppercase;padding:6px 16px;border-radius:20px;margin-bottom:36px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#7cc243"></div>Financeiro
         </div>
-        <h1 style="font-size:44px;font-weight:800;color:#f1f5f9;line-height:1.1;margin:0 0 18px;
-                   letter-spacing:-1.5px;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
+        <h1 style="font-size:64px;font-weight:800;color:#f1f5f9;line-height:1.05;margin:0 0 24px;
+                   letter-spacing:-2px;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
           Painel de<br><span style="color:#7cc243">Cobranças</span>
         </h1>
-        <p style="font-size:15px;color:#6b7280;line-height:1.7;margin:0 0 48px;max-width:320px">
+        <p style="font-size:20px;color:#6b7280;line-height:1.7;margin:0 0 52px;max-width:380px">
           Gestão de inadimplência em tempo real com histórico de atendimento e carteira completa.
         </p>
-        <div style="display:flex;flex-direction:column;gap:18px">
-          <div style="display:flex;align-items:center;gap:14px">
-            <div style="width:34px;height:34px;border-radius:9px;flex-shrink:0;
+        <div style="display:flex;flex-direction:column;gap:22px">
+          <div style="display:flex;align-items:center;gap:16px">
+            <div style="width:40px;height:40px;border-radius:10px;flex-shrink:0;
                         background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
-                        display:flex;align-items:center;justify-content:center;font-size:15px">📊</div>
-            <span style="color:#9ca3af;font-size:14px">Carteira atualizada diariamente via BigQuery</span>
+                        display:flex;align-items:center;justify-content:center;font-size:18px">📊</div>
+            <span style="color:#9ca3af;font-size:17px">Carteira atualizada diariamente via BigQuery</span>
           </div>
-          <div style="display:flex;align-items:center;gap:14px">
-            <div style="width:34px;height:34px;border-radius:9px;flex-shrink:0;
+          <div style="display:flex;align-items:center;gap:16px">
+            <div style="width:40px;height:40px;border-radius:10px;flex-shrink:0;
                         background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
-                        display:flex;align-items:center;justify-content:center;font-size:15px">💬</div>
-            <span style="color:#9ca3af;font-size:14px">Histórico de contatos e negociações por cliente</span>
+                        display:flex;align-items:center;justify-content:center;font-size:18px">💬</div>
+            <span style="color:#9ca3af;font-size:17px">Histórico de contatos e negociações por cliente</span>
           </div>
-          <div style="display:flex;align-items:center;gap:14px">
-            <div style="width:34px;height:34px;border-radius:9px;flex-shrink:0;
+          <div style="display:flex;align-items:center;gap:16px">
+            <div style="width:40px;height:40px;border-radius:10px;flex-shrink:0;
                         background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
-                        display:flex;align-items:center;justify-content:center;font-size:15px">🔔</div>
-            <span style="color:#9ca3af;font-size:14px">Alertas de próximas cobranças e vencimentos</span>
+                        display:flex;align-items:center;justify-content:center;font-size:18px">🔔</div>
+            <span style="color:#9ca3af;font-size:17px">Alertas de próximas cobranças e vencimentos</span>
           </div>
         </div>
       </div>
