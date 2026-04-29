@@ -130,8 +130,14 @@ def _render_dashboard(store, clientes, role):
         busca = st.text_input("Buscar", placeholder="🔍  Buscar por nome ou CNPJ...", label_visibility="collapsed", key="busca")
     with sb2:
         if st.button("✕ Limpar filtros", width="stretch"):
-            for k in ["fpills", "fordenar", "fgrupo", "fsituacao", "fatraso", "fvalor", "facordo", "busca"]:
-                st.session_state.pop(k, None)
+            st.session_state["fpills"]   = "Todos"
+            st.session_state["fordenar"] = list(SORT_MAP.keys())[0]
+            st.session_state["fgrupo"]   = "Todos"
+            st.session_state["fsituacao"] = "Todos"
+            st.session_state["fatraso"]  = "Todos"
+            st.session_state["fvalor"]   = "Todos"
+            st.session_state["facordo"]  = "Todos"
+            st.session_state["busca"]    = ""
             st.rerun()
 
     filtro_status = pill_status or "Todos"
