@@ -37,36 +37,6 @@ def tela_principal():
 
 
 def main():
-    # Handle Google OAuth popup callback before anything else (avoids BQ loading in popup)
-    _code = st.query_params.get("code")
-    _state = st.query_params.get("state", "")
-    if _code and _state == "popup":
-        import streamlit.components.v1 as _components
-        import urllib.parse as _urlparse
-        parent_url = f"/?code={_urlparse.quote(str(_code), safe='')}"
-        _components.html(f"""
-        <html><body style="background:#181c26;color:#e8eaf0;font-family:sans-serif;padding:40px;text-align:center">
-        <p id="msg">Autenticando...</p>
-        <script>
-        var _url = '{parent_url}';
-        try {{
-            // popup foi aberto pelo iframe do botão → parent.opener = iframe botão → .parent = janela principal
-            window.parent.opener.parent.location.href = _url;
-            setTimeout(function(){{ window.parent.close(); }}, 500);
-        }} catch(e) {{
-            try {{
-                // fallback: opener é a janela principal diretamente
-                window.parent.opener.location.href = _url;
-                setTimeout(function(){{ window.parent.close(); }}, 500);
-            }} catch(e2) {{
-                document.getElementById('msg').textContent = 'Autenticado! Pode fechar esta janela.';
-            }}
-        }}
-        </script>
-        </body></html>
-        """, height=300)
-        st.stop()
-
     render_sidebar()
 
     if not is_logged():

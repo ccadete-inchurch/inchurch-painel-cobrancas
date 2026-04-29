@@ -97,18 +97,16 @@ def tela_login():
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Botão Google (popup) ──────────────────────────────────────────────
+        # ── Botão Google (redirect na aba atual) ─────────────────────────────
         try:
             g        = st.secrets["google"]
-            auth_url = _build_auth_url(g["client_id"], g["redirect_uri"], state="popup")
+            auth_url = _build_auth_url(g["client_id"], g["redirect_uri"])
             components.html(f"""
             <html><body style="margin:0;padding:0;background:transparent">
             <script>
             var _AUTH_URL = '{auth_url}';
             function _openGoogle() {{
-                var w=480,h=560,x=Math.round(screen.width/2-240),y=Math.round(screen.height/2-280);
-                var win = window.open(_AUTH_URL,'google_oauth','width='+w+',height='+h+',left='+x+',top='+y+',scrollbars=yes,resizable=yes');
-                if (!win) {{ window.top.location.href = _AUTH_URL; }}
+                window.top.location.href = _AUTH_URL;
             }}
             </script>
             <button onclick="_openGoogle()" style="
