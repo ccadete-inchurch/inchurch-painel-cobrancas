@@ -37,6 +37,28 @@ def tela_principal():
 
 
 def main():
+    # Handle Google OAuth popup callback before anything else (avoids BQ loading in popup)
+    _code = st.query_params.get("code")
+    _state = st.query_params.get("state", "")
+    if _code and _state == "popup":
+        import streamlit.components.v1 as _components
+        import urllib.parse as _urlparse
+        parent_url = f"/?code={_urlparse.quote(str(_code), safe='')}"
+        _components.html(f"""
+        <html><body style="background:#181c26;color:#e8eaf0;font-family:sans-serif;padding:20px;text-align:center">
+        <p>Autenticando...</p>
+        <script>
+        try {{
+            window.opener.location.href = '{parent_url}';
+            setTimeout(function(){{ window.close(); }}, 300);
+        }} catch(e) {{
+            window.location.href = '{parent_url}';
+        }}
+        </script>
+        </body></html>
+        """, height=200)
+        st.stop()
+
     render_sidebar()
 
     if not is_logged():
