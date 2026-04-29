@@ -71,6 +71,14 @@ if _logo_path.exists():
 else:
     LOGO_SRC = ""
 
+_logo2_path = Path(__file__).parent / "inchurch2.png"
+if _logo2_path.exists():
+    with open(_logo2_path, "rb") as _f:
+        LOGO2_B64 = base64.b64encode(_f.read()).decode()
+    LOGO2_SRC = f"data:image/png;base64,{LOGO2_B64}"
+else:
+    LOGO2_SRC = LOGO_SRC
+
 # ── CSS global ────────────────────────────────────────────────────────────────
 CSS = """
 <style>
@@ -100,9 +108,9 @@ section[data-testid="stSidebar"] .stButton>button:hover{
 }
 
 /* ── Cards de métrica ── */
-.metric-card{background:#181c26;border:1px solid #1e2333;border-radius:14px;padding:20px 22px;box-shadow:0 1px 6px rgba(0,0,0,.15);transition:box-shadow .2s}
+.metric-card{background:#181c26;border:1px solid #1e2333;border-radius:14px;padding:20px 22px;box-shadow:0 1px 6px rgba(0,0,0,.15);transition:box-shadow .2s;min-height:130px;display:flex;flex-direction:column;justify-content:space-between}
 .metric-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.25)}
-.metric-label{font-size:14px;text-transform:uppercase;letter-spacing:1.2px;color:#8b94a5;margin-bottom:10px;font-weight:600}
+.metric-label{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:#8b94a5;margin-bottom:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .metric-value{font-family:'DM Sans',sans-serif;font-size:34px;font-weight:700;line-height:1;letter-spacing:0;font-variant-numeric:tabular-nums}
 .metric-sub{font-size:13px;color:#6b7280;margin-top:8px;letter-spacing:0.2px}
 
