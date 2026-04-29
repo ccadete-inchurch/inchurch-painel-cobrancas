@@ -22,13 +22,14 @@ _GOOGLE_ICON = (
 )
 
 
-def _build_auth_url(client_id: str, redirect_uri: str) -> str:
+def _build_auth_url(client_id: str, redirect_uri: str, state: str = "normal") -> str:
     return _AUTH_URL + "?" + urllib.parse.urlencode({
         "client_id":     client_id,
         "redirect_uri":  redirect_uri,
         "response_type": "code",
         "scope":         "openid email profile",
         "prompt":        "select_account",
+        "state":         state,
     })
 
 
@@ -96,25 +97,32 @@ def tela_login():
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Botão Google ──────────────────────────────────────────────────────
+        # ── Botão Google (popup) ──────────────────────────────────────────────
         try:
             g        = st.secrets["google"]
-            auth_url = _build_auth_url(g["client_id"], g["redirect_uri"])
-            st.markdown("""
-            <style>
-            div[data-testid="stLinkButton"] > a {
-                background-color:#1e2333!important;border:1px solid #2a2f42!important;
-                color:#e8eaf0!important;border-radius:8px!important;
-                font-size:14px!important;font-weight:500!important;
-                display:flex!important;justify-content:center!important;align-items:center!important;gap:10px!important;
-            }
-            div[data-testid="stLinkButton"] > a:hover {
-                background-color:#252b3b!important;border-color:#3d4460!important;
-            }
-            div[data-testid="stLinkButton"] p {color:#e8eaf0!important;font-size:14px!important;font-weight:500!important;}
-            </style>
-            """, unsafe_allow_html=True)
-            st.link_button(f"Continuar com Google", auth_url, use_container_width=True)
+            auth_url = _build_auth_url(g["client_id"], g["redirect_uri"], state="popup")
+            components.html(f"""
+            <html><body style="margin:0;padding:0;background:transparent">
+            <script>
+            var _AUTH_URL = '{auth_url}';
+            function _openGoogle() {{
+                var w=480,h=560,x=Math.round(screen.width/2-240),y=Math.round(screen.height/2-280);
+                var win = window.open(_AUTH_URL,'google_oauth','width='+w+',height='+h+',left='+x+',top='+y+',scrollbars=yes,resizable=yes');
+                if (!win) {{ window.top.location.href = _AUTH_URL; }}
+            }}
+            </script>
+            <button onclick="_openGoogle()" style="
+                width:100%;padding:11px 16px;border-radius:8px;
+                background:#1e2333;border:1px solid #2a2f42;
+                color:#e8eaf0;font-size:14px;font-weight:500;cursor:pointer;
+                display:flex;align-items:center;justify-content:center;gap:10px;
+                font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box;
+            " onmouseover="this.style.background='#252b3b';this.style.borderColor='#3d4460'"
+               onmouseout="this.style.background='#1e2333';this.style.borderColor='#2a2f42'">
+                {_GOOGLE_ICON} Continuar com Google
+            </button>
+            </body></html>
+            """, height=52)
         except Exception:
             pass
 
