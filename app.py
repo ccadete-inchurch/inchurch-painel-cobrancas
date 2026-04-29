@@ -48,7 +48,18 @@ def main():
     # Carrega clientes: primeiro tenta cache local, depois BQ automaticamente
     if not store["clientes"]:
         carregar_cache_local()
-    if not store["clientes"]:
+
+    # Força atualização do BQ se não há dados ou o cache é de um dia anterior
+    ultima = store.get("ultima_atualizacao", "")
+    cache_desatualizado = True
+    if ultima:
+        try:
+            from datetime import date as _date
+            cache_desatualizado = datetime.strptime(ultima[:10], "%d/%m/%Y").date() < _date.today()
+        except Exception:
+            pass
+
+    if not store["clientes"] or cache_desatualizado:
         with st.spinner("Carregando dados do BigQuery..."):
             processar_dados_bigquery()
 
