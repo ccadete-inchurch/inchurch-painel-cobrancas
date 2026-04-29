@@ -35,13 +35,24 @@ def dialog_editar(eid):
     st.markdown("### 📋 Cobranças Inadimplentes")
     cobracas_inad = sorted([c for c in cliente.get("_cobracas", []) if c["dias_atraso"] and c["dias_atraso"] > 0], key=lambda c: c["dias_atraso"])
     if cobracas_inad:
-        for cob in cobracas_inad:
+        visiveis = cobracas_inad[:3]
+        extras   = cobracas_inad[3:]
+        for cob in visiveis:
             with st.container(border=True):
                 c1, c2, c3, c4 = st.columns(4)
                 with c1: st.markdown(f"**Valor:** {fmt_moeda_plain(cob['valor'])}")
                 with c2: st.markdown(f"**Vencimento:** {cob['vencimento']}")
                 with c3: st.markdown(f"**Atraso:** {cob['dias_atraso']}d")
                 with c4: st.markdown('<span style="background:#ff5555;color:#fff;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600">INADIMPLENTE</span>', unsafe_allow_html=True)
+        if extras:
+            with st.expander(f"Ver mais {len(extras)} parcela{'s' if len(extras) > 1 else ''}"):
+                for cob in extras:
+                    with st.container(border=True):
+                        c1, c2, c3, c4 = st.columns(4)
+                        with c1: st.markdown(f"**Valor:** {fmt_moeda_plain(cob['valor'])}")
+                        with c2: st.markdown(f"**Vencimento:** {cob['vencimento']}")
+                        with c3: st.markdown(f"**Atraso:** {cob['dias_atraso']}d")
+                        with c4: st.markdown('<span style="background:#ff5555;color:#fff;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600">INADIMPLENTE</span>', unsafe_allow_html=True)
     else:
         st.info("Nenhuma cobrança em atraso")
 
@@ -61,11 +72,14 @@ def dialog_editar(eid):
             value=datetime.strptime(h["lastContact"], "%d/%m/%Y").date() if h.get("lastContact") else date.today(),
         )
     with d2:
-        retorno = st.date_input(
-            "Agendar Retorno",
-            value=datetime.strptime(h["retorno"], "%d/%m/%Y").date() if h.get("retorno") else None,
-            min_value=date.today(),
-        )
+        tem_retorno = st.checkbox("Agendar retorno", value=bool(h.get("retorno")))
+        retorno = None
+        if tem_retorno:
+            retorno = st.date_input(
+                "Data de retorno",
+                value=datetime.strptime(h["retorno"], "%d/%m/%Y").date() if h.get("retorno") else date.today(),
+                label_visibility="collapsed",
+            )
 
     promise_date = None
     if STATUS_OPTS[status_sel] == "promise":
