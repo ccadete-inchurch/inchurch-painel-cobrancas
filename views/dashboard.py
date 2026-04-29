@@ -15,7 +15,7 @@ def _render_dashboard(store, clientes, role):
     from auth import current_nome
     nome = current_nome() or "usuário"
     st.markdown(
-        f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;font-weight:800;color:#e8eaf0;margin-bottom:24px;letter-spacing:-1.5px;line-height:1.1">Bem-vindo(a), {nome}!</div>',
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;font-weight:800;color:#e8eaf0;margin-top:32px;margin-bottom:32px;letter-spacing:-1.5px;line-height:1.1">Bem-vindo(a), {nome}!</div>',
         unsafe_allow_html=True,
     )
 
@@ -78,10 +78,7 @@ def _render_dashboard(store, clientes, role):
         st.markdown("---")
 
     # ── Barra de ações ────────────────────────────────────────────────────────
-    th, ta, tb = st.columns([6, 1, 1])
-    with th:
-        upd = store.get("ultima_atualizacao") or "—"
-        st.markdown(f'<div style="padding-top:6px;font-size:13px;color:#4b5563">Última atualização: <span style="color:#6b7280">{upd}</span></div>', unsafe_allow_html=True)
+    _, ta, tb = st.columns([6, 1, 1])
     with ta:
         if st.button("↑ Atualizar", width="stretch", help="Recarregar dados do BigQuery"):
             st.session_state["tela"] = "importar"
