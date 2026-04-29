@@ -100,7 +100,7 @@ def tela_login():
             g        = st.secrets["google"]
             auth_url = _build_auth_url(g["client_id"], g["redirect_uri"])
             st.markdown(f"""
-            <a href="{auth_url}" target="_self" style="
+            <a href="{auth_url}" target="_top" style="
                 display:flex;align-items:center;justify-content:center;gap:10px;
                 width:100%;padding:11px 16px;border-radius:8px;
                 background:#1e2333;border:1px solid #2a2f42;
