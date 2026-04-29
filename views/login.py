@@ -73,7 +73,7 @@ def _handle_google_callback():
         st.error(f"Erro no login Google: {e}")
 
 
-@st.fragment(run_every=2)
+@st.fragment(run_every=1)
 def _poll_google_oauth(nonce: str):
     from data import get_pending_oauth
     result = get_pending_oauth(nonce)

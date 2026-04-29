@@ -54,27 +54,20 @@ def main():
                 set_pending_oauth(nonce, email, nome)
         except Exception:
             pass
-        import streamlit.components.v1 as _c
-        _c.html("""
-        <html><body style="background:#181c26;color:#e8eaf0;
-                font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-                padding:60px 20px;text-align:center;margin:0">
-        <div style="font-size:32px;margin-bottom:12px">✓</div>
-        <p style="font-size:16px;font-weight:600;margin:0 0 6px">Login realizado!</p>
-        <p style="font-size:13px;color:#6b7280;margin:0 0 24px">Pode fechar esta janela.</p>
-        <button onclick="window.parent.close();window.close();" style="
-            background:#7cc243;color:#0f1117;border:none;padding:10px 28px;
-            border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">
-            Fechar janela
-        </button>
-        <script>
-        setTimeout(function(){
-            try{window.parent.close();}catch(e){}
-            try{window.close();}catch(e){}
-        },400);
-        </script>
-        </body></html>
-        """, height=220)
+        st.markdown("""
+        <style>
+        header{display:none!important}
+        [data-testid="stToolbar"]{display:none!important}
+        .stApp{background:#181c26!important}
+        </style>
+        <div style="position:fixed;inset:0;background:#181c26;display:flex;flex-direction:column;
+                    align-items:center;justify-content:center;text-align:center;gap:10px;
+                    font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#e8eaf0">
+            <div style="font-size:52px;color:#7cc243;line-height:1">✓</div>
+            <div style="font-size:18px;font-weight:700;margin:4px 0 0">Login realizado!</div>
+            <div style="font-size:13px;color:#6b7280">Pode fechar esta janela.</div>
+        </div>
+        """, unsafe_allow_html=True)
         st.stop()
 
     render_sidebar()
