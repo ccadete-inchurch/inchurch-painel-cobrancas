@@ -125,7 +125,7 @@ def tela_login():
                    letter-spacing:-1.5px;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
           Painel de<br><span style="color:#7cc243">Cobranças</span>
         </h1>
-        <p style="font-size:26px;color:#6b7280;line-height:1.6;margin:0 0 52px;max-width:420px">
+        <p style="font-size:20px;color:#6b7280;line-height:1.7;margin:0 0 52px;max-width:400px">
           Gestão de inadimplência em tempo real com histórico de atendimento e carteira completa.
         </p>
         <div style="display:flex;flex-direction:column;gap:24px">
