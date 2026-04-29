@@ -133,15 +133,15 @@ def _render_dashboard(store, clientes, role):
     with fc4:
         filtro_atraso = st.selectbox("Dias de atraso", ["Todos", "1-30 dias", "31-60 dias", "61-90 dias", "+90 dias"], key="fatraso")
     with fc5:
-        filtro_valor = st.selectbox("Valor em aberto", ["Todos", "Até R$500", "R$500-R$2k", "R$2k-R$5k", "Acima R$5k"], key="fvalor")
+        filtro_valor = st.selectbox("Valor em aberto", ["Todos", "≤ R$500", "R$500–2k", "R$2k–5k", "> R$5k"], key="fvalor")
     with fc6:
         filtro_acordo = st.selectbox("Acordo", ["Todos", "Com acordo", "Sem acordo"], key="facordo")
 
-    sb1, sb2 = st.columns([5, 1])
+    sb1, sb2 = st.columns([5, 1], vertical_alignment="bottom")
     with sb1:
-        busca = st.text_input("Buscar", placeholder="🔍  Buscar por nome ou CNPJ...", label_visibility="collapsed", key="busca")
+        busca = st.text_input("Buscar", placeholder="Buscar por nome do cliente, CNPJ ou código do sacado...", label_visibility="collapsed", key="busca")
     with sb2:
-        st.button("✕ Limpar filtros", on_click=_reset_filtros, width="stretch")
+        st.button("✕ Limpar", on_click=_reset_filtros, width="stretch")
 
     filtro_status = pill_status or "Todos"
 
@@ -158,7 +158,8 @@ def _render_dashboard(store, clientes, role):
     df = df[df["_status"] != "paid"]
 
     if busca:
-        mask = df.apply(lambda r: busca.lower() in str(r.get("nome", "")).lower() or busca.lower() in str(r.get("cnpj", "")).lower(), axis=1)
+        b = busca.lower()
+        mask = df.apply(lambda r: b in str(r.get("nome", "")).lower() or b in str(r.get("cnpj", "")).lower() or b in str(r.get("id", "")).lower(), axis=1)
         df = df[mask]
     if filtro_status != "Todos":
         df = df[df["_status"] == STATUS_FILTER_MAP.get(filtro_status, "pending")]
@@ -170,13 +171,13 @@ def _render_dashboard(store, clientes, role):
         df = df[df["dias_atraso"].apply(lambda d: d is not None and 61 <= d <= 90)]
     elif filtro_atraso == "+90 dias":
         df = df[df["dias_atraso"].apply(lambda d: d is not None and d > 90)]
-    if filtro_valor == "Até R$500":
+    if filtro_valor == "≤ R$500":
         df = df[df["valor"] <= 500]
-    elif filtro_valor == "R$500-R$2k":
+    elif filtro_valor == "R$500–2k":
         df = df[(df["valor"] > 500) & (df["valor"] <= 2000)]
-    elif filtro_valor == "R$2k-R$5k":
+    elif filtro_valor == "R$2k–5k":
         df = df[(df["valor"] > 2000) & (df["valor"] <= 5000)]
-    elif filtro_valor == "Acima R$5k":
+    elif filtro_valor == "> R$5k":
         df = df[df["valor"] > 5000]
     if filtro_acordo != "Todos":
         tem_acordo = df["_tem_acordo"].fillna(False).astype(bool) if "_tem_acordo" in df.columns else pd.Series(False, index=df.index)
