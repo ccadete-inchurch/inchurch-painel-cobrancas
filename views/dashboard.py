@@ -15,7 +15,7 @@ def _render_dashboard(store, clientes, role):
     from auth import current_nome
     nome = current_nome() or "usuário"
     st.markdown(
-        f'<div style="font-family:\'Segoe UI\',sans-serif;font-size:32px;font-weight:700;color:#e8eaf0;margin-bottom:20px">Bem vindo(a), {nome}!</div>',
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;font-weight:800;color:#e8eaf0;margin-bottom:24px;letter-spacing:-1.5px;line-height:1.1">Bem-vindo(a), {nome}!</div>',
         unsafe_allow_html=True,
     )
 
@@ -111,29 +111,24 @@ def _render_dashboard(store, clientes, role):
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
     # ── Filtros ───────────────────────────────────────────────────────────────
-    fb, fs = st.columns([4, 2])
-    with fb:
-        busca = st.text_input("Buscar", placeholder="Buscar por nome ou CNPJ...", label_visibility="collapsed", key="busca")
-    with fs:
-        ordenar = st.selectbox("Ordenar por", list(SORT_MAP.keys()), key="fordenar")
-
-    st.markdown('<div style="margin:6px 0 4px"></div>', unsafe_allow_html=True)
-    fp1, fp2, fp3, fp4 = st.columns([3, 1.2, 1.2, 1.2])
-    with fp1:
-        pill_status = st.pills("Status", ["Todos", "Sem contato", "Contactado", "Prometeu pagar", "Negociando"], default="Todos", key="fpills")
-    with fp2:
-        filtro_atraso = st.selectbox("Dias de atraso", ["Todos", "1-30 dias", "31-60 dias", "61-90 dias", "+90 dias"], key="fatraso")
-    with fp3:
-        filtro_valor = st.selectbox("Valor em aberto", ["Todos", "Até R$500", "R$500-R$2k", "R$2k-R$5k", "Acima R$5k"], key="fvalor")
-    with fp4:
-        filtro_acordo = st.selectbox("Acordo", ["Todos", "Com acordo", "Sem acordo"], key="facordo")
+    pill_status = st.pills("Status", ["Todos", "Sem contato", "Contactado", "Prometeu pagar", "Negociando"], default="Todos", key="fpills")
 
     grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
-    fg1, fg2, _, _ = st.columns([1.5, 1.5, 1.5, 1.5])
-    with fg1:
+    fc1, fc2, fc3, fc4, fc5, fc6 = st.columns(6)
+    with fc1:
+        ordenar = st.selectbox("Ordenar por", list(SORT_MAP.keys()), key="fordenar")
+    with fc2:
         filtro_grupo = st.selectbox("Grupo", ["Todos os grupos"] + grupos_disp, key="fgrupo")
-    with fg2:
+    with fc3:
         filtro_situacao = st.selectbox("Situação", ["Todos", "Apenas ativos", "Apenas inativos"], key="fsituacao")
+    with fc4:
+        filtro_atraso = st.selectbox("Dias de atraso", ["Todos", "1-30 dias", "31-60 dias", "61-90 dias", "+90 dias"], key="fatraso")
+    with fc5:
+        filtro_valor = st.selectbox("Valor em aberto", ["Todos", "Até R$500", "R$500-R$2k", "R$2k-R$5k", "Acima R$5k"], key="fvalor")
+    with fc6:
+        filtro_acordo = st.selectbox("Acordo", ["Todos", "Com acordo", "Sem acordo"], key="facordo")
+
+    busca = st.text_input("Buscar", placeholder="Buscar por nome ou CNPJ...", label_visibility="collapsed", key="busca")
 
     filtro_status = pill_status or "Todos"
 
