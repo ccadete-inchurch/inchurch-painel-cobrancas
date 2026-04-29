@@ -111,11 +111,11 @@ def _render_dashboard(store, clientes, role):
     pill_status = st.pills("Status", ["Todos", "Sem contato", "Contactado", "Prometeu pagar", "Negociando"], default="Todos", key="fpills")
 
     grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
-    fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.5, 1.4, 1, 1.2, 1.3, 1])
+    fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.6, 1.3, 1.1, 1.2, 1.4, 1.3])
     with fc1:
         ordenar = st.selectbox("Ordenar por", list(SORT_MAP.keys()), key="fordenar")
     with fc2:
-        filtro_grupo = st.selectbox("Grupo", ["Todos os grupos"] + grupos_disp, key="fgrupo")
+        filtro_grupo = st.selectbox("Grupo", ["Todos"] + grupos_disp, key="fgrupo")
     with fc3:
         filtro_situacao = st.selectbox("Situação", ["Todos", "Apenas ativos", "Apenas inativos"], key="fsituacao")
     with fc4:
@@ -168,7 +168,7 @@ def _render_dashboard(store, clientes, role):
             df = df[tem_acordo]
         elif filtro_acordo == "Sem acordo":
             df = df[~tem_acordo]
-    if filtro_grupo != "Todos os grupos" and "_grupo" in df.columns:
+    if filtro_grupo != "Todos" and "_grupo" in df.columns:
         df = df[df["_grupo"] == filtro_grupo]
     if filtro_situacao == "Apenas ativos" and "_inativo" in df.columns:
         df = df[~df["_inativo"].fillna(False).astype(bool)]
