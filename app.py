@@ -56,12 +56,25 @@ def main():
             pass
         import streamlit.components.v1 as _c
         _c.html("""
-        <html><body style="background:#181c26;color:#e8eaf0;font-family:sans-serif;
-                           padding:60px 20px;text-align:center">
-        <p style="font-size:16px">Autenticando...</p>
-        <script>window.parent.close();</script>
+        <html><body style="background:#181c26;color:#e8eaf0;
+                font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+                padding:60px 20px;text-align:center;margin:0">
+        <div style="font-size:32px;margin-bottom:12px">✓</div>
+        <p style="font-size:16px;font-weight:600;margin:0 0 6px">Login realizado!</p>
+        <p style="font-size:13px;color:#6b7280;margin:0 0 24px">Pode fechar esta janela.</p>
+        <button onclick="window.parent.close();window.close();" style="
+            background:#7cc243;color:#0f1117;border:none;padding:10px 28px;
+            border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">
+            Fechar janela
+        </button>
+        <script>
+        setTimeout(function(){
+            try{window.parent.close();}catch(e){}
+            try{window.close();}catch(e){}
+        },400);
+        </script>
         </body></html>
-        """, height=200)
+        """, height=220)
         st.stop()
 
     render_sidebar()
