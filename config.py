@@ -149,7 +149,6 @@ button[kind="primary"]:hover{background:#8fd44e!important}
 .stTextInput label,.stTextArea label,.stSelectbox label,.stDateInput label{color:#6b7280!important;font-size:13px!important;text-transform:uppercase!important;letter-spacing:0.8px!important;font-weight:600!important}
 div[data-baseweb="select"]>div{background:#181c26!important;border-color:#1e2333!important;border-radius:8px!important}
 div[data-baseweb="select"] span{color:#e8eaf0!important;font-size:12px!important}
-div[data-baseweb="select"]>div{padding-left:8px!important;padding-right:4px!important}
 div[data-baseweb="popover"],div[data-baseweb="menu"]{background:#181c26!important;border:1px solid #2a2f42!important;border-radius:10px!important}
 div[data-baseweb="menu"] li{color:#e8eaf0!important;font-size:13px!important}
 div[data-baseweb="menu"] li:hover{background:#1e2333!important}

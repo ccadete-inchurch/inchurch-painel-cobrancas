@@ -125,7 +125,14 @@ def _render_dashboard(store, clientes, role):
     with fc6:
         filtro_acordo = st.selectbox("Acordo", ["Todos", "Com acordo", "Sem acordo"], key="facordo")
 
-    busca = st.text_input("Buscar", placeholder="Buscar por nome ou CNPJ...", label_visibility="collapsed", key="busca")
+    sb1, sb2 = st.columns([5, 1])
+    with sb1:
+        busca = st.text_input("Buscar", placeholder="🔍  Buscar por nome ou CNPJ...", label_visibility="collapsed", key="busca")
+    with sb2:
+        if st.button("✕ Limpar filtros", width="stretch"):
+            for k in ["fpills", "fordenar", "fgrupo", "fsituacao", "fatraso", "fvalor", "facordo", "busca"]:
+                st.session_state.pop(k, None)
+            st.rerun()
 
     filtro_status = pill_status or "Todos"
 
