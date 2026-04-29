@@ -133,19 +133,19 @@ def tela_login():
             <div style="width:44px;height:44px;border-radius:10px;flex-shrink:0;
                         background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
                         display:flex;align-items:center;justify-content:center;font-size:20px">📊</div>
-            <span style="color:#9ca3af;font-size:22px">Carteira atualizada diariamente via BigQuery</span>
+            <span style="color:#9ca3af;font-size:17px">Carteira atualizada diariamente via BigQuery</span>
           </div>
           <div style="display:flex;align-items:center;gap:18px">
             <div style="width:44px;height:44px;border-radius:10px;flex-shrink:0;
                         background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
                         display:flex;align-items:center;justify-content:center;font-size:20px">💬</div>
-            <span style="color:#9ca3af;font-size:22px">Histórico de contatos e negociações por cliente</span>
+            <span style="color:#9ca3af;font-size:17px">Histórico de contatos e negociações por cliente</span>
           </div>
           <div style="display:flex;align-items:center;gap:18px">
             <div style="width:44px;height:44px;border-radius:10px;flex-shrink:0;
                         background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
                         display:flex;align-items:center;justify-content:center;font-size:20px">🔔</div>
-            <span style="color:#9ca3af;font-size:22px">Alertas de próximas cobranças e vencimentos</span>
+            <span style="color:#9ca3af;font-size:17px">Alertas de próximas cobranças e vencimentos</span>
           </div>
         </div>
       </div>
