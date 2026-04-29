@@ -100,20 +100,21 @@ def tela_login():
         try:
             g        = st.secrets["google"]
             auth_url = _build_auth_url(g["client_id"], g["redirect_uri"])
-            components.html(f"""
-            <a href="{auth_url}" target="_top" style="
-                display:flex;align-items:center;justify-content:center;gap:10px;
-                width:100%;padding:11px 16px;border-radius:8px;
-                background:#1e2333;border:1px solid #2a2f42;
-                color:#e8eaf0;font-size:14px;font-weight:500;
-                text-decoration:none;font-family:sans-serif;
-                box-sizing:border-box;
-            " onmouseover="this.style.background='#252b3b';this.style.borderColor='#3d4460'"
-               onmouseout="this.style.background='#1e2333';this.style.borderColor='#2a2f42'">
-                {_GOOGLE_ICON}
-                Continuar com Google
-            </a>
-            """, height=50)
+            st.markdown("""
+            <style>
+            div[data-testid="stLinkButton"] > a {
+                background-color:#1e2333!important;border:1px solid #2a2f42!important;
+                color:#e8eaf0!important;border-radius:8px!important;
+                font-size:14px!important;font-weight:500!important;
+                display:flex!important;justify-content:center!important;align-items:center!important;gap:10px!important;
+            }
+            div[data-testid="stLinkButton"] > a:hover {
+                background-color:#252b3b!important;border-color:#3d4460!important;
+            }
+            div[data-testid="stLinkButton"] p {color:#e8eaf0!important;font-size:14px!important;font-weight:500!important;}
+            </style>
+            """, unsafe_allow_html=True)
+            st.link_button(f"Continuar com Google", auth_url, use_container_width=True)
         except Exception:
             pass
 
