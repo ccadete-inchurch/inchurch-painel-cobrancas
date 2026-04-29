@@ -42,7 +42,7 @@ def render_sidebar():
     nav_item("Cliente",            "cliente")
 
     st.sidebar.markdown(f"""
-    <div style="position:fixed;bottom:0;width:218px;padding:16px 20px;border-top:1px solid #1e2333;background:#13161f">
+    <div style="position:fixed;bottom:0;width:248px;padding:16px 20px;border-top:1px solid #1e2333;background:#13161f">
         <div style="font-size:12px;color:#e8eaf0;font-weight:600">{current_nome()}</div>
         <div style="font-size:10px;color:#4b5563;margin-top:2px;text-transform:uppercase;letter-spacing:.8px">{current_role()}</div>
     </div>

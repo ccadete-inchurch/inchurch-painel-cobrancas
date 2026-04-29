@@ -80,8 +80,8 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif!important;background:#
 .block-container{padding-top:0!important;padding-bottom:1.5rem!important;max-width:100%!important;padding-left:2rem!important;padding-right:2rem!important}
 
 /* ── Sidebar ── */
-section[data-testid="stSidebar"]{background:#13161f!important;border-right:1px solid #1e2333!important;min-width:220px!important;width:220px!important;transform:translateX(0)!important;display:block!important;visibility:visible!important;opacity:1!important;position:relative!important;z-index:100!important}
-section[data-testid="stSidebar"] > div:first-child{width:220px!important;padding:0!important;display:block!important}
+section[data-testid="stSidebar"]{background:#13161f!important;border-right:1px solid #1e2333!important;min-width:250px!important;width:250px!important;transform:translateX(0)!important;display:block!important;visibility:visible!important;opacity:1!important;position:relative!important;z-index:100!important}
+section[data-testid="stSidebar"] > div:first-child{width:250px!important;padding:0!important;display:block!important}
 [data-testid="collapsedControl"]{display:none!important;visibility:hidden!important}
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"]{display:none!important}
 section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]{display:none!important}
