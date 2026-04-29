@@ -9,7 +9,7 @@ def render_header():
     store    = get_store()
     upd      = store.get("ultima_atualizacao") or "—"
     role_tag  = '<span style="background:rgba(124,194,67,.2);color:#7cc243;font-size:11px;padding:3px 10px;border-radius:12px;font-weight:700;margin-left:8px">ADMIN</span>' if current_role() == "admin" else ""
-    logo_html = f'<img src="{LOGO_SRC}" style="height:28px;object-fit:contain;filter:grayscale(1) brightness(3);opacity:0.65">' if LOGO_SRC else ""
+    logo_html = '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:22px;color:transparent;-webkit-text-stroke:1.5px rgba(255,255,255,0.75);letter-spacing:-0.5px">InChurch</span>'
     st.markdown(f"""
     <div style="background:#181c26;border-bottom:1px solid #2a2f42;padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,.15)">
       <div style="display:flex;align-items:center;gap:10px">{logo_html}<span style="color:#4b5563;font-size:13px;font-weight:500">Cobranças</span></div>

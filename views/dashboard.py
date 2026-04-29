@@ -111,13 +111,15 @@ def _render_dashboard(store, clientes, role):
     pill_status = st.pills("Status", ["Todos", "Sem contato", "Contactado", "Prometeu pagar", "Negociando"], default="Todos", key="fpills")
 
     grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
-    fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.6, 1.3, 1.1, 1.2, 1.4, 1.3])
+    fc1, fc2, fc3 = st.columns(3)
     with fc1:
         ordenar = st.selectbox("Ordenar por", list(SORT_MAP.keys()), key="fordenar")
     with fc2:
         filtro_grupo = st.selectbox("Grupo", ["Todos"] + grupos_disp, key="fgrupo")
     with fc3:
         filtro_situacao = st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], key="fsituacao")
+
+    fc4, fc5, fc6 = st.columns(3)
     with fc4:
         filtro_atraso = st.selectbox("Dias de atraso", ["Todos", "1-30 dias", "31-60 dias", "61-90 dias", "+90 dias"], key="fatraso")
     with fc5:
