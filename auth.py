@@ -13,7 +13,7 @@ def _usuarios_do_secrets():
                 usuarios[uid] = {
                     "nome":       u["nome"],
                     "email":      u["email"],
-                    "senha_hash": u["senha_hash"],
+                    "senha_hash": u.get("senha_hash", ""),
                     "role":       u.get("role", "atendente"),
                 }
             return usuarios
@@ -58,13 +58,8 @@ def login(email, senha):
 
 
 def login_google(email: str, nome: str) -> bool:
-    """Permite qualquer @inchurch.com.br; admins definidos em [usuarios] no secrets."""
-    import hashlib
+    """Permite apenas emails cadastrados em [usuarios] no secrets.toml."""
     email_lower = email.lower()
-    allowed_domain = st.secrets.get("google", {}).get("allowed_domain", "inchurch.com.br")
-    if not email_lower.endswith(f"@{allowed_domain}"):
-        return False
-    # Verifica se há configuração específica (para role admin)
     for uid, u in get_store()["usuarios"].items():
         if u["email"].lower() == email_lower:
             st.session_state.update({
@@ -73,14 +68,7 @@ def login_google(email: str, nome: str) -> bool:
                 "user_role": u["role"],
             })
             return True
-    # Usuário inchurch genérico — atendente
-    uid = hashlib.md5(email_lower.encode()).hexdigest()
-    st.session_state.update({
-        "user_uid":  uid,
-        "user_nome": nome,
-        "user_role": "atendente",
-    })
-    return True
+    return False
 
 
 def is_logged():    return "user_uid" in st.session_state
