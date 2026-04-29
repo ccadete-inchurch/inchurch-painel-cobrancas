@@ -15,7 +15,7 @@ def _render_dashboard(store, clientes, role):
     from auth import current_nome
     nome = current_nome() or "usuário"
     st.markdown(
-        f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;font-weight:800;color:#e8eaf0;margin-top:32px;margin-bottom:32px;letter-spacing:-1.5px;line-height:1.1">Bem-vindo(a), {nome}!</div>',
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:44px;font-weight:800;color:#e8eaf0;margin-top:32px;margin-bottom:48px;letter-spacing:-1.5px;line-height:1.1">Bem-vindo(a), {nome}!</div>',
         unsafe_allow_html=True,
     )
 
