@@ -75,7 +75,7 @@ else:
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap');
-html,body,[class*="css"]{font-family:'DM Sans',sans-serif!important;background:#0f1117!important;color:#e8eaf0!important;font-size:18px!important}
+html,body,[class*="css"]{font-family:'DM Sans',sans-serif!important;background:#0f1117!important;color:#e8eaf0!important;font-size:20px!important}
 #MainMenu,footer,header{visibility:hidden}
 .block-container{padding-top:0!important;padding-bottom:1.5rem!important;max-width:100%!important;padding-left:2rem!important;padding-right:2rem!important}
 
