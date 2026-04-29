@@ -111,21 +111,19 @@ def _render_dashboard(store, clientes, role):
     pill_status = st.pills("Status", ["Todos", "Sem contato", "Contactado", "Prometeu pagar", "Negociando"], default="Todos", key="fpills")
 
     grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
-    fc1, fc2, fc3 = st.columns(3)
+    fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.6, 1.3, 1.1, 1.2, 1.4, 1.3])
     with fc1:
         ordenar = st.selectbox("Ordenar por", list(SORT_MAP.keys()), key="fordenar")
     with fc2:
         filtro_grupo = st.selectbox("Grupo", ["Todos"] + grupos_disp, key="fgrupo")
     with fc3:
         filtro_situacao = st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], key="fsituacao")
-
-    fc4, fc5, fc6 = st.columns(3)
     with fc4:
-        filtro_atraso = st.selectbox("Dias de atraso", ["Todos", "1-30 dias", "31-60 dias", "61-90 dias", "+90 dias"], key="fatraso")
+        filtro_atraso = st.selectbox("Dias de atraso", ["Todos", "1-30 d", "31-60 d", "61-90 d", "+90 d"], key="fatraso")
     with fc5:
-        filtro_valor = st.selectbox("Valor em aberto", ["Todos", "Até R$500", "R$500-R$2k", "R$2k-R$5k", "Acima R$5k"], key="fvalor")
+        filtro_valor = st.selectbox("Valor em aberto", ["Todos", "≤ R$500", "R$500-2k", "R$2k-5k", "> R$5k"], key="fvalor")
     with fc6:
-        filtro_acordo = st.selectbox("Acordo", ["Todos", "Com acordo", "Sem acordo"], key="facordo")
+        filtro_acordo = st.selectbox("Acordo", ["Todos", "Com", "Sem"], key="facordo")
 
     busca = st.text_input("Buscar", placeholder="Buscar por nome ou CNPJ...", label_visibility="collapsed", key="busca")
 
@@ -148,27 +146,27 @@ def _render_dashboard(store, clientes, role):
         df = df[mask]
     if filtro_status != "Todos":
         df = df[df["_status"] == STATUS_FILTER_MAP.get(filtro_status, "pending")]
-    if filtro_atraso == "1-30 dias":
+    if filtro_atraso == "1-30 d":
         df = df[df["dias_atraso"].apply(lambda d: d is not None and 1 <= d <= 30)]
-    elif filtro_atraso == "31-60 dias":
+    elif filtro_atraso == "31-60 d":
         df = df[df["dias_atraso"].apply(lambda d: d is not None and 31 <= d <= 60)]
-    elif filtro_atraso == "61-90 dias":
+    elif filtro_atraso == "61-90 d":
         df = df[df["dias_atraso"].apply(lambda d: d is not None and 61 <= d <= 90)]
-    elif filtro_atraso == "+90 dias":
+    elif filtro_atraso == "+90 d":
         df = df[df["dias_atraso"].apply(lambda d: d is not None and d > 90)]
-    if filtro_valor == "Até R$500":
+    if filtro_valor == "≤ R$500":
         df = df[df["valor"] <= 500]
-    elif filtro_valor == "R$500-R$2k":
+    elif filtro_valor == "R$500-2k":
         df = df[(df["valor"] > 500) & (df["valor"] <= 2000)]
-    elif filtro_valor == "R$2k-R$5k":
+    elif filtro_valor == "R$2k-5k":
         df = df[(df["valor"] > 2000) & (df["valor"] <= 5000)]
-    elif filtro_valor == "Acima R$5k":
+    elif filtro_valor == "> R$5k":
         df = df[df["valor"] > 5000]
     if filtro_acordo != "Todos":
         tem_acordo = df["_tem_acordo"].fillna(False).astype(bool) if "_tem_acordo" in df.columns else pd.Series(False, index=df.index)
-        if filtro_acordo == "Com acordo":
+        if filtro_acordo == "Com":
             df = df[tem_acordo]
-        elif filtro_acordo == "Sem acordo":
+        elif filtro_acordo == "Sem":
             df = df[~tem_acordo]
     if filtro_grupo != "Todos" and "_grupo" in df.columns:
         df = df[df["_grupo"] == filtro_grupo]
