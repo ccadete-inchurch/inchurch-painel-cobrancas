@@ -33,7 +33,7 @@ def dialog_editar(eid):
 
     # Cobranças inadimplentes
     st.markdown("### 📋 Cobranças Inadimplentes")
-    cobracas_inad = [c for c in cliente.get("_cobracas", []) if c["dias_atraso"] and c["dias_atraso"] > 0]
+    cobracas_inad = sorted([c for c in cliente.get("_cobracas", []) if c["dias_atraso"] and c["dias_atraso"] > 0], key=lambda c: c["dias_atraso"])
     if cobracas_inad:
         for cob in cobracas_inad:
             with st.container(border=True):
