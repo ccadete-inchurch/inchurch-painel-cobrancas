@@ -76,8 +76,8 @@ def main():
     cache_desatualizado = True
     if ultima:
         try:
-            from datetime import date as _date
-            cache_desatualizado = datetime.strptime(ultima[:10], "%d/%m/%Y").date() < _date.today()
+            from datetime import datetime as _datetime, date as _date
+            cache_desatualizado = _datetime.strptime(ultima[:10], "%d/%m/%Y").date() < _date.today()
         except Exception:
             pass
 
