@@ -399,8 +399,8 @@ def processar_dados_bigquery():
     for c in clientes_dict.values():
         oldest = c.get("dias_atraso") or 0
         newest = c.get("_min_atraso") or 0
-        c["_nova_cobranca"] = (oldest > 30 and 0 < newest <= 30)
         c["parcelas"] = len([x for x in c["_cobracas"] if x.get("dias_atraso") and x["dias_atraso"] > 0])
+        c["_nova_cobranca"] = (c["parcelas"] > 1 and 0 < newest <= 30)
         c["_meses_atraso"] = hist_meses.get(c["id"], 0)
         c.pop("_ids_recebimento", None)
 
