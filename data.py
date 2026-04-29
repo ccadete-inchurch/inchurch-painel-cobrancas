@@ -1,6 +1,24 @@
 import json
+import time
 from datetime import datetime, date, timezone, timedelta
 from pathlib import Path
+
+# ── OAuth popup: armazenamento temporário compartilhado entre sessões ─────────
+_pending_oauth: dict = {}
+
+def set_pending_oauth(nonce: str, email: str, nome: str) -> None:
+    cutoff = time.time() - 120
+    for k in list(_pending_oauth):
+        if _pending_oauth[k]["ts"] < cutoff:
+            del _pending_oauth[k]
+    _pending_oauth[nonce] = {"email": email, "nome": nome, "ts": time.time()}
+
+def get_pending_oauth(nonce: str) -> dict | None:
+    entry = _pending_oauth.get(nonce)
+    if entry and (time.time() - entry["ts"]) < 60:
+        del _pending_oauth[nonce]
+        return entry
+    return None
 
 import pandas as pd
 import streamlit as st

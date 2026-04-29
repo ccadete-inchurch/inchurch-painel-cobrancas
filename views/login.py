@@ -1,5 +1,6 @@
 import base64
 import json
+import secrets as _secrets
 import urllib.parse
 
 import requests
@@ -72,6 +73,14 @@ def _handle_google_callback():
         st.error(f"Erro no login Google: {e}")
 
 
+@st.fragment(run_every=2)
+def _poll_google_oauth(nonce: str):
+    from data import get_pending_oauth
+    result = get_pending_oauth(nonce)
+    if result and login_google(result["email"], result["nome"]):
+        st.rerun()
+
+
 def tela_login():
     _handle_google_callback()
 
@@ -97,26 +106,35 @@ def tela_login():
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Botão Google (redirect na aba atual) ─────────────────────────────
+        # ── Botão Google (popup) ──────────────────────────────────────────────
         try:
-            g        = st.secrets["google"]
-            auth_url = _build_auth_url(g["client_id"], g["redirect_uri"])
-            auth_url_html = auth_url.replace("&", "&amp;")
+            g = st.secrets["google"]
+            if "oauth_nonce" not in st.session_state:
+                st.session_state["oauth_nonce"] = _secrets.token_hex(16)
+            nonce    = st.session_state["oauth_nonce"]
+            auth_url = _build_auth_url(g["client_id"], g["redirect_uri"], state=f"popup_{nonce}")
             components.html(f"""
             <html><body style="margin:0;padding:0;background:transparent">
-            <a href="{auth_url_html}" target="_top" style="
-                display:flex;align-items:center;justify-content:center;gap:10px;
+            <script>
+            var _U = '{auth_url}';
+            function _go() {{
+                var w=480,h=560,x=Math.round(screen.width/2-240),y=Math.round(screen.height/2-280);
+                window.open(_U,'_google_oauth','width='+w+',height='+h+',left='+x+',top='+y+',scrollbars=yes');
+            }}
+            </script>
+            <button onclick="_go()" style="
                 width:100%;padding:11px 16px;border-radius:8px;
                 background:#1e2333;border:1px solid #2a2f42;
                 color:#e8eaf0;font-size:14px;font-weight:500;cursor:pointer;
-                text-decoration:none;box-sizing:border-box;
-                font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+                display:flex;align-items:center;justify-content:center;gap:10px;
+                font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box;
             " onmouseover="this.style.background='#252b3b';this.style.borderColor='#3d4460'"
                onmouseout="this.style.background='#1e2333';this.style.borderColor='#2a2f42'">
                 {_GOOGLE_ICON} Continuar com Google
-            </a>
+            </button>
             </body></html>
             """, height=52)
+            _poll_google_oauth(nonce)
         except Exception:
             pass
 

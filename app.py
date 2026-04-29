@@ -37,6 +37,33 @@ def tela_principal():
 
 
 def main():
+    # Popup OAuth callback: processa o código e fecha o popup
+    _code  = st.query_params.get("code")
+    _state = st.query_params.get("state", "")
+    if _code and isinstance(_state, str) and _state.startswith("popup_"):
+        nonce = _state[len("popup_"):]
+        try:
+            from views.login import _exchange_code, _decode_id_token
+            g   = st.secrets["google"]
+            tok = _exchange_code(_code, g["client_id"], g["client_secret"], g["redirect_uri"])
+            if "id_token" in tok:
+                info  = _decode_id_token(tok["id_token"])
+                email = info.get("email", "")
+                nome  = info.get("name", email)
+                from data import set_pending_oauth
+                set_pending_oauth(nonce, email, nome)
+        except Exception:
+            pass
+        import streamlit.components.v1 as _c
+        _c.html("""
+        <html><body style="background:#181c26;color:#e8eaf0;font-family:sans-serif;
+                           padding:60px 20px;text-align:center">
+        <p style="font-size:16px">Autenticando...</p>
+        <script>window.parent.close();</script>
+        </body></html>
+        """, height=200)
+        st.stop()
+
     render_sidebar()
 
     if not is_logged():
