@@ -69,7 +69,7 @@ def fetch_cobrancas_competencia():
         c.st_nome_sac as nome,
         c.st_cgc_sac as cnpj,
         COALESCE(NULLIF(cli.st_fax_sac, ''), c.st_telefone_sac) as telefone,
-        c.vl_total_recb as valor,
+        c.comp_valor as valor,
         FORMAT_TIMESTAMP('%Y-%m-%d', c.dt_vencimento_recb) as vencimento,
         c.fl_status_recb as status,
         u.nm_grupo as grupo,
@@ -100,7 +100,7 @@ def fetch_cobrancas_competencia():
           AND fl_status_recb = '0'
     ) ac ON c.id_sacado_sac = ac.id_sacado_sac
     WHERE c.fl_status_recb = '0'
-    ORDER BY c.vl_total_recb DESC
+    ORDER BY c.comp_valor DESC
     """
     try:
         return client.query(query).to_dataframe()
@@ -116,14 +116,14 @@ def fetch_historico_atrasos(cliente_id: str) -> pd.DataFrame:
         return pd.DataFrame()
     query = f"""
     WITH em_atraso AS (
-      SELECT DISTINCT id_recebimento_recb, dt_vencimento_recb, vl_total_recb, 'atraso' AS situacao
+      SELECT DISTINCT id_recebimento_recb, dt_vencimento_recb, comp_valor, 'atraso' AS situacao
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
       WHERE fl_status_recb = '0'
         AND id_sacado_sac = '{cliente_id}'
         AND dt_vencimento_recb <= CURRENT_TIMESTAMP()
     ),
     pago AS (
-      SELECT DISTINCT id_recebimento_recb, dt_vencimento_recb, vl_total_recb, 'pago' AS situacao
+      SELECT DISTINCT id_recebimento_recb, dt_vencimento_recb, comp_valor, 'pago' AS situacao
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
       WHERE fl_status_recb = '1'
         AND id_sacado_sac = '{cliente_id}'
@@ -134,8 +134,8 @@ def fetch_historico_atrasos(cliente_id: str) -> pd.DataFrame:
       FORMAT_TIMESTAMP('%Y-%m', dt_vencimento_recb) AS mes,
       COUNTIF(situacao = 'atraso') AS parcelas_atraso,
       COUNTIF(situacao = 'pago')   AS parcelas_pagas,
-      ROUND(SUM(CASE WHEN situacao = 'atraso' THEN vl_total_recb ELSE 0 END), 2) AS valor_atraso,
-      ROUND(SUM(CASE WHEN situacao = 'pago'   THEN vl_total_recb ELSE 0 END), 2) AS valor_pago
+      ROUND(SUM(CASE WHEN situacao = 'atraso' THEN comp_valor ELSE 0 END), 2) AS valor_atraso,
+      ROUND(SUM(CASE WHEN situacao = 'pago'   THEN comp_valor ELSE 0 END), 2) AS valor_pago
     FROM (SELECT * FROM em_atraso UNION ALL SELECT * FROM pago)
     GROUP BY 1
     ORDER BY 1 ASC
@@ -157,7 +157,7 @@ def fetch_proximas_cobracas(days: int = 30) -> pd.DataFrame:
         MAX(c.st_nome_sac)                                        AS nome,
         MAX(c.st_cgc_sac)                                         AS cnpj,
         MAX(COALESCE(NULLIF(cli.st_fax_sac, ''), c.st_telefone_sac)) AS telefone,
-        MAX(c.vl_total_recb)                                      AS valor,
+        MAX(c.comp_valor)                                      AS valor,
         FORMAT_TIMESTAMP('%Y-%m-%d', MAX(c.dt_vencimento_recb))   AS vencimento,
         MAX(u.nm_grupo)                                           AS grupo,
         MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
@@ -231,13 +231,13 @@ def fetch_cobrancas_liquidacao():
         id_sacado_sac                                              AS codigo,
         MAX(st_nome_sac)                                          AS nome,
         MAX(st_cgc_sac)                                           AS cnpj,
-        MAX(vl_total_recb)                                        AS valor,
+        MAX(comp_valor)                                        AS valor,
         FORMAT_TIMESTAMP('%Y-%m-%d', MAX(dt_liquidacao_recb))     AS data_liquidacao,
         MAX(CASE WHEN dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
     FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
     WHERE fl_status_recb = '1'
     GROUP BY id_sacado_sac, id_recebimento_recb
-    HAVING MAX(vl_total_recb) > 0
+    HAVING MAX(comp_valor) > 0
     ORDER BY MAX(dt_liquidacao_recb) DESC
     """
     try:
