@@ -203,7 +203,7 @@ def _render_dashboard(store, clientes, role):
     # ── Tabela ────────────────────────────────────────────────────────────────
     has_edit = (role != "gestor")
     col_w    = [3, 1.5, 1, 1, 1.5, 1.5, 1.5] + ([0.8] if has_edit else [])
-    hdrs_t   = ["Cliente", "Saldo", "Atraso", "Histórico", "Telefone", "Grupo", "Último Contato"] + ([""] if has_edit else [])
+    hdrs_t   = ["Cliente", "Saldo devedor", "Atraso", "Histórico", "Telefone", "Grupo", "Último Contato"] + ([""] if has_edit else [])
 
     hdr_cells = "".join(
         f'<div style="flex:{w};padding:14px 14px;font-size:12px;text-transform:uppercase;'
