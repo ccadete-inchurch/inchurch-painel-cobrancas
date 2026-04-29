@@ -71,6 +71,14 @@ if _logo_path.exists():
 else:
     LOGO_SRC = ""
 
+_svg_path = Path(__file__).parent / "inchurch-logo-svg.svg"
+if _svg_path.exists():
+    with open(_svg_path, "rb") as _f:
+        SVG_B64 = base64.b64encode(_f.read()).decode()
+    SVG_LOGO_SRC = f"data:image/svg+xml;base64,{SVG_B64}"
+else:
+    SVG_LOGO_SRC = ""
+
 # ── CSS global ────────────────────────────────────────────────────────────────
 CSS = """
 <style>
