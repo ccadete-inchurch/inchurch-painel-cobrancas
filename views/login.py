@@ -84,57 +84,123 @@ def _poll_google_oauth(nonce: str):
 def tela_login():
     _handle_google_callback()
 
+    # ── CSS global + painel esquerdo fixo ─────────────────────────────────────
     st.markdown("""
     <style>
-    html,body,[class*="css"]{background:#181c26!important}
-    div[data-testid="stForm"] .stFormSubmitButton button{background:#7cc243!important;color:#0f1117!important;font-weight:600!important;border:none!important;font-size:14px!important;letter-spacing:0.2px!important}
-    div[data-testid="stForm"] .stFormSubmitButton button:hover{background:#8fd44e!important}
+    html,body{background:#0f1117!important}
+    .stApp{background:#0f1117!important}
+    header,[data-testid="stToolbar"],[data-testid="stDecoration"],
+    [data-testid="stStatusWidget"]{display:none!important}
+    [data-testid="stAppViewBlockContainer"],.main .block-container{
+        padding-top:0!important;padding-bottom:0!important}
     </style>
+
+    <div style="position:fixed;left:0;top:0;width:50%;height:100vh;
+                background:linear-gradient(155deg,#080c12 0%,#0e1520 55%,#0b1708 100%);
+                border-right:1px solid rgba(124,194,67,0.12);
+                display:flex;flex-direction:column;justify-content:space-between;
+                padding:52px 64px;z-index:50;overflow:hidden">
+      <div style="position:absolute;bottom:-110px;right:-110px;width:400px;height:400px;
+                  border-radius:50%;border:1px solid rgba(124,194,67,0.07)"></div>
+      <div style="position:absolute;bottom:-50px;right:-50px;width:220px;height:220px;
+                  border-radius:50%;border:1px solid rgba(124,194,67,0.11)"></div>
+      <div style="position:absolute;top:22%;left:-70px;width:200px;height:200px;
+                  border-radius:50%;border:1px solid rgba(124,194,67,0.06)"></div>
+
+      <div>
+        <span style="font-family:Syne,sans-serif;font-weight:800;font-size:22px;
+                     color:#7cc243;letter-spacing:-0.5px">InChurch</span>
+      </div>
+
+      <div>
+        <div style="display:inline-flex;align-items:center;gap:7px;
+                    background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
+                    color:#7cc243;font-size:11px;font-weight:700;letter-spacing:1.5px;
+                    text-transform:uppercase;padding:5px 14px;border-radius:20px;margin-bottom:32px">
+          <div style="width:6px;height:6px;border-radius:50%;background:#7cc243"></div>Financeiro
+        </div>
+        <h1 style="font-size:44px;font-weight:800;color:#f1f5f9;line-height:1.1;margin:0 0 18px;
+                   letter-spacing:-1.5px;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
+          Painel de<br><span style="color:#7cc243">Cobranças</span>
+        </h1>
+        <p style="font-size:15px;color:#6b7280;line-height:1.7;margin:0 0 48px;max-width:320px">
+          Gestão de inadimplência em tempo real com histórico de atendimento e carteira completa.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="width:34px;height:34px;border-radius:9px;flex-shrink:0;
+                        background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
+                        display:flex;align-items:center;justify-content:center;font-size:15px">📊</div>
+            <span style="color:#9ca3af;font-size:14px">Carteira atualizada diariamente via BigQuery</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="width:34px;height:34px;border-radius:9px;flex-shrink:0;
+                        background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
+                        display:flex;align-items:center;justify-content:center;font-size:15px">💬</div>
+            <span style="color:#9ca3af;font-size:14px">Histórico de contatos e negociações por cliente</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="width:34px;height:34px;border-radius:9px;flex-shrink:0;
+                        background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
+                        display:flex;align-items:center;justify-content:center;font-size:15px">🔔</div>
+            <span style="color:#9ca3af;font-size:14px">Alertas de próximas cobranças e vencimentos</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size:12px;color:#374151">© 2025 InChurch · Uso interno</div>
+    </div>
     """, unsafe_allow_html=True)
 
-    _, col, _ = st.columns([1, 1.1, 1])
-    with col:
-        logo_html = f'<img src="{LOGO_SRC}" style="height:48px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:24px;color:#7cc243">InChurch</span>'
-        st.markdown(f"""
-        <div style="margin-top:80px;margin-bottom:36px;text-align:center">
-            {logo_html}
-            <div style="margin-top:24px;display:flex;align-items:center;gap:12px;justify-content:center">
-                <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,#2a2f42)"></div>
-                <div style="font-size:13px;color:#4b5563;text-transform:uppercase;letter-spacing:3px;white-space:nowrap;font-weight:500">Painel de Cobrança</div>
-                <div style="flex:1;height:1px;background:linear-gradient(90deg,#2a2f42,transparent)"></div>
-            </div>
+    # ── Lado direito: área de login ────────────────────────────────────────────
+    _, right = st.columns(2)
+    with right:
+        st.markdown('<div style="height:28vh"></div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="padding:0 48px 0 36px">
+          <p style="font-size:12px;color:#4b5563;text-transform:uppercase;
+                    letter-spacing:2px;font-weight:600;margin:0 0 10px">Acesso restrito</p>
+          <h2 style="font-size:30px;font-weight:800;color:#f1f5f9;margin:0 0 10px;
+                     letter-spacing:-0.5px;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
+            Bem-vindo
+          </h2>
+          <p style="font-size:14px;color:#6b7280;margin:0 0 36px;line-height:1.6">
+            Use sua conta <span style="color:#7cc243;font-weight:600">@inchurch.com.br</span>
+            para acessar o painel.
+          </p>
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Botão Google (popup) ──────────────────────────────────────────────
-        try:
-            g = st.secrets["google"]
-            if "oauth_nonce" not in st.session_state:
-                st.session_state["oauth_nonce"] = _secrets.token_hex(16)
-            nonce    = st.session_state["oauth_nonce"]
-            auth_url = _build_auth_url(g["client_id"], g["redirect_uri"], state=f"popup_{nonce}")
-            components.html(f"""
-            <html><body style="margin:0;padding:0;background:transparent">
-            <script>
-            var _U = '{auth_url}';
-            function _go() {{
-                var w=480,h=560,x=Math.round(screen.width/2-240),y=Math.round(screen.height/2-280);
-                window.open(_U,'_google_oauth','width='+w+',height='+h+',left='+x+',top='+y+',scrollbars=yes');
-            }}
-            </script>
-            <button onclick="_go()" style="
-                width:100%;padding:11px 16px;border-radius:8px;
-                background:#1e2333;border:1px solid #2a2f42;
-                color:#e8eaf0;font-size:14px;font-weight:500;cursor:pointer;
-                display:flex;align-items:center;justify-content:center;gap:10px;
-                font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box;
-            " onmouseover="this.style.background='#252b3b';this.style.borderColor='#3d4460'"
-               onmouseout="this.style.background='#1e2333';this.style.borderColor='#2a2f42'">
-                {_GOOGLE_ICON} Continuar com Google
-            </button>
-            </body></html>
-            """, height=52)
-            _poll_google_oauth(nonce)
-        except Exception:
-            pass
+        _, btn_col, _ = st.columns([0.18, 1, 0.18])
+        with btn_col:
+            try:
+                g = st.secrets["google"]
+                if "oauth_nonce" not in st.session_state:
+                    st.session_state["oauth_nonce"] = _secrets.token_hex(16)
+                nonce    = st.session_state["oauth_nonce"]
+                auth_url = _build_auth_url(g["client_id"], g["redirect_uri"], state=f"popup_{nonce}")
+                components.html(f"""
+                <html><body style="margin:0;padding:0;background:transparent">
+                <script>
+                var _U = '{auth_url}';
+                function _go() {{
+                    var w=480,h=560,x=Math.round(screen.width/2-240),y=Math.round(screen.height/2-280);
+                    window.open(_U,'_google_oauth','width='+w+',height='+h+',left='+x+',top='+y+',scrollbars=yes');
+                }}
+                </script>
+                <button onclick="_go()" style="
+                    width:100%;padding:13px 16px;border-radius:10px;
+                    background:#1e2333;border:1px solid #2a2f42;
+                    color:#e8eaf0;font-size:14px;font-weight:500;cursor:pointer;
+                    display:flex;align-items:center;justify-content:center;gap:10px;
+                    font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box;
+                " onmouseover="this.style.background='#252b3b';this.style.borderColor='#3d4460'"
+                   onmouseout="this.style.background='#1e2333';this.style.borderColor='#2a2f42'">
+                    {_GOOGLE_ICON} Continuar com Google
+                </button>
+                </body></html>
+                """, height=56)
+                _poll_google_oauth(nonce)
+            except Exception:
+                pass
 
