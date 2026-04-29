@@ -71,14 +71,6 @@ if _logo_path.exists():
 else:
     LOGO_SRC = ""
 
-_logo2_path = Path(__file__).parent / "inchurch2.png"
-if _logo2_path.exists():
-    with open(_logo2_path, "rb") as _f:
-        LOGO2_B64 = base64.b64encode(_f.read()).decode()
-    LOGO2_SRC = f"data:image/png;base64,{LOGO2_B64}"
-else:
-    LOGO2_SRC = LOGO_SRC
-
 # ── CSS global ────────────────────────────────────────────────────────────────
 CSS = """
 <style>

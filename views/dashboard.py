@@ -117,7 +117,7 @@ def _render_dashboard(store, clientes, role):
     with fc2:
         filtro_grupo = st.selectbox("Grupo", ["Todos"] + grupos_disp, key="fgrupo")
     with fc3:
-        filtro_situacao = st.selectbox("Situação", ["Todos", "Apenas ativos", "Apenas inativos"], key="fsituacao")
+        filtro_situacao = st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], key="fsituacao")
     with fc4:
         filtro_atraso = st.selectbox("Dias de atraso", ["Todos", "1-30 dias", "31-60 dias", "61-90 dias", "+90 dias"], key="fatraso")
     with fc5:
@@ -170,9 +170,9 @@ def _render_dashboard(store, clientes, role):
             df = df[~tem_acordo]
     if filtro_grupo != "Todos" and "_grupo" in df.columns:
         df = df[df["_grupo"] == filtro_grupo]
-    if filtro_situacao == "Apenas ativos" and "_inativo" in df.columns:
+    if filtro_situacao == "Ativos" and "_inativo" in df.columns:
         df = df[~df["_inativo"].fillna(False).astype(bool)]
-    elif filtro_situacao == "Apenas inativos" and "_inativo" in df.columns:
+    elif filtro_situacao == "Inativos" and "_inativo" in df.columns:
         df = df[df["_inativo"].fillna(False).astype(bool)]
 
     sort_col_name, sort_asc = SORT_MAP[ordenar]
