@@ -101,24 +101,20 @@ def tela_login():
         try:
             g        = st.secrets["google"]
             auth_url = _build_auth_url(g["client_id"], g["redirect_uri"])
+            auth_url_html = auth_url.replace("&", "&amp;")
             components.html(f"""
             <html><body style="margin:0;padding:0;background:transparent">
-            <script>
-            var _AUTH_URL = '{auth_url}';
-            function _openGoogle() {{
-                window.top.location.href = _AUTH_URL;
-            }}
-            </script>
-            <button onclick="_openGoogle()" style="
+            <a href="{auth_url_html}" target="_top" style="
+                display:flex;align-items:center;justify-content:center;gap:10px;
                 width:100%;padding:11px 16px;border-radius:8px;
                 background:#1e2333;border:1px solid #2a2f42;
                 color:#e8eaf0;font-size:14px;font-weight:500;cursor:pointer;
-                display:flex;align-items:center;justify-content:center;gap:10px;
-                font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box;
+                text-decoration:none;box-sizing:border-box;
+                font-family:-apple-system,BlinkMacSystemFont,sans-serif;
             " onmouseover="this.style.background='#252b3b';this.style.borderColor='#3d4460'"
                onmouseout="this.style.background='#1e2333';this.style.borderColor='#2a2f42'">
                 {_GOOGLE_ICON} Continuar com Google
-            </button>
+            </a>
             </body></html>
             """, height=52)
         except Exception:
