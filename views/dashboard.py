@@ -255,7 +255,7 @@ def _render_dashboard(store, clientes, role):
             row_bl    = "border-left:4px solid rgba(239,68,68,.6);" if is_top else ""
             row_bg    = "background:rgba(239,68,68,.04);"           if is_top else ""
 
-            rcols = st.columns(col_w)
+            rcols = st.columns(col_w, vertical_alignment="center")
             with rcols[0]:
                 atend_tag = f'<span style="font-size:11px;color:#8b94a5;margin-left:4px;font-weight:500">· {row["_atendente"]}</span>' if row["_atendente"] else ""
                 st.markdown(
