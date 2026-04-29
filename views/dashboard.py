@@ -207,8 +207,7 @@ def _render_dashboard(store, clientes, role):
     page    = max(1, min(st.session_state.get("page_num", 1), total_pg))
     df_page = df.iloc[(page - 1) * PAGE_SIZE : page * PAGE_SIZE]
 
-    sort_icons     = {"dias_atraso": "Atraso", "valor": "Saldo", "nome": "Cliente"}
-    sort_active    = f'{sort_icons.get(sort_col_name, "")} {"↑" if sort_asc else "↓"}'
+    sort_active = ordenar
     st.markdown(
         f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
         f'<span style="font-size:14px;color:#6b7280"><b style="color:#e8eaf0;font-size:15px">{total_f}</b> clientes encontrados</span>'
@@ -220,7 +219,7 @@ def _render_dashboard(store, clientes, role):
     # ── Tabela ────────────────────────────────────────────────────────────────
     has_edit = (role != "gestor")
     col_w    = [3, 1.5, 1, 1, 1.5, 1.5, 1.5] + ([0.8] if has_edit else [])
-    hdrs_t   = ["Cliente", "Saldo devedor", "Atraso", "Histórico", "Telefone", "Grupo", "Último Contato"] + ([""] if has_edit else [])
+    hdrs_t   = ["Cliente", "Saldo devedor", "Atraso em dias", "Histórico", "Telefone", "Grupo", "Último Contato"] + ([""] if has_edit else [])
 
     hdr_cells = "".join(
         f'<div style="flex:{w};padding:14px 14px;font-size:12px;text-transform:uppercase;'
@@ -262,31 +261,31 @@ def _render_dashboard(store, clientes, role):
                 st.markdown(
                     f'<div style="padding:12px 12px;{row_bg}{row_bl}">'
                     f'<div style="margin-bottom:3px">{tags}</div>'
-                    f'<div style="font-weight:600;font-size:16px;color:#e8eaf0;line-height:1.3">{row["nome"]}{obs_icon}</div>'
-                    f'<div style="color:#8b94a5;font-size:13px;margin-top:2px;font-weight:500">{row.get("cnpj","")}{atend_tag}</div>'
+                    f'<div style="font-weight:600;font-size:18px;color:#e8eaf0;line-height:1.3">{row["nome"]}{obs_icon}</div>'
+                    f'<div style="color:#8b94a5;font-size:15px;margin-top:2px;font-weight:500">{row.get("cnpj","")}{atend_tag}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
             with rcols[1]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:15px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:17px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
             with rcols[2]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:12px">{dias_html(row.get("dias_atraso"))}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px">{dias_html(row.get("dias_atraso"))}</div>', unsafe_allow_html=True)
             with rcols[3]:
                 m = int(row.get("_meses_atraso") or 0)
                 cor_m = "#ef4444" if m >= 9 else ("#f97316" if m >= 5 else "#f59e0b")
                 st.markdown(
                     f'<div style="padding:12px 12px">'
-                    f'<span style="color:{cor_m};font-weight:700;font-size:14px">{m}</span>'
-                    f'<span style="color:#8b94a5;font-size:13px">/12</span>'
+                    f'<span style="color:{cor_m};font-weight:700;font-size:16px">{m}</span>'
+                    f'<span style="color:#8b94a5;font-size:14px">/12</span>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
             with rcols[4]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5">{row.get("telefone","—")}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row.get("telefone","—")}</div>', unsafe_allow_html=True)
             with rcols[5]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5">{row.get("_grupo","—")}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row.get("_grupo","—")}</div>', unsafe_allow_html=True)
             with rcols[6]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
             if has_edit:
                 with rcols[7]:
                     if st.button("✏", key=f"edit_{row['id']}_{ridx}", width="stretch", help=f"Editar {row['nome']}"):

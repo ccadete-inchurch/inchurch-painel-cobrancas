@@ -127,7 +127,7 @@ section[data-testid="stSidebar"] .stButton>button:hover{
 .tag-nova-cob{background:rgba(79,124,255,.18);color:#5fa3ff;font-size:10px;padding:2px 7px;border-radius:5px;font-weight:700;margin-right:3px}
 
 /* ── Atraso chips ── */
-.da{padding:3px 9px;border-radius:6px;font-size:14px;font-weight:700;display:inline-block}
+.da{padding:3px 9px;border-radius:6px;font-size:16px;font-weight:700;display:inline-block}
 .da-ok{background:rgba(45,211,111,.12);color:#2dd36f}
 .da-30{background:rgba(255,184,77,.12);color:#ffb84d}
 .da-60{background:rgba(255,152,0,.12);color:#ff9800}
