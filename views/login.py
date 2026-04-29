@@ -4,6 +4,7 @@ import urllib.parse
 
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 from config import LOGO_SRC
 from auth import login, login_google
@@ -99,20 +100,20 @@ def tela_login():
         try:
             g        = st.secrets["google"]
             auth_url = _build_auth_url(g["client_id"], g["redirect_uri"])
-            st.markdown(f"""
+            components.html(f"""
             <a href="{auth_url}" target="_top" style="
                 display:flex;align-items:center;justify-content:center;gap:10px;
                 width:100%;padding:11px 16px;border-radius:8px;
                 background:#1e2333;border:1px solid #2a2f42;
                 color:#e8eaf0;font-size:14px;font-weight:500;
-                text-decoration:none;margin-bottom:4px;
-                transition:border-color .15s,background .15s;
+                text-decoration:none;font-family:sans-serif;
+                box-sizing:border-box;
             " onmouseover="this.style.background='#252b3b';this.style.borderColor='#3d4460'"
                onmouseout="this.style.background='#1e2333';this.style.borderColor='#2a2f42'">
                 {_GOOGLE_ICON}
                 Continuar com Google
             </a>
-            """, unsafe_allow_html=True)
+            """, height=50)
         except Exception:
             pass
 
