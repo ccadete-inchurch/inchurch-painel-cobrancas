@@ -45,7 +45,7 @@ def _render_dashboard(store, clientes, role):
 
     s1, s2, s3, s4, s5 = st.columns(5)
     for col, label, val, cor, sub in [
-        (s1, "Total Inadimplentes", total,     "#e8eaf0", "clientes ativos"),
+        (s1, "Total Clientes",       total,     "#e8eaf0", "na carteira"),
         (s2, "Não Contactados",     pending,   "#ef4444", "aguardando contato"),
         (s3, "Contactados",         contacted, "#f59e0b", "em acompanhamento"),
         (s4, "Promessas",           promise,   "#f97316", "aguardando pagamento"),

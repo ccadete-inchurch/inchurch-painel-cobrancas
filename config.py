@@ -24,10 +24,10 @@ MAP_INAD = {
 
 # ── Ordenação da tabela ───────────────────────────────────────────────────────
 SORT_MAP = {
-    "↓ Maior atraso": ("dias_atraso", False),
-    "↑ Menor atraso": ("dias_atraso", True),
-    "↓ Maior saldo":  ("valor",       False),
-    "↑ Menor saldo":  ("valor",       True),
+    "↑ Maior atraso": ("dias_atraso", False),
+    "↓ Menor atraso": ("dias_atraso", True),
+    "↑ Maior saldo":  ("valor",       False),
+    "↓ Menor saldo":  ("valor",       True),
     "Nome A→Z":       ("nome",        True),
     "Nome Z→A":       ("nome",        False),
 }
