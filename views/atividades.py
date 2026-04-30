@@ -143,18 +143,15 @@ def _render_atividades(store, clientes, role):
     # ── Separar por coluna ────────────────────────────────────────────────────
     acordos   = [(s, a, c, h) for s, a, c, h in fila if "urgente" in a]
     ligar_msg = [(s, a, c, h) for s, a, c, h in fila if "ligar" in a and "mensagem" in a and "urgente" not in a]
-    so_ligar  = [(s, a, c, h) for s, a, c, h in fila if a == ["ligar"]]
     so_msg    = [(s, a, c, h) for s, a, c, h in fila if a == ["mensagem"]]
     aguardar  = [(s, a, c, h) for s, a, c, h in fila if not a]
 
     colunas = [
         ("🔥 Urgente",        acordos,   "#ff5555"),
         ("📞 Ligar + 💬 Msg", ligar_msg, "#f59e0b"),
-        ("📞 Ligar",          so_ligar,  "#7cc243"),
         ("💬 Mensagem",       so_msg,    "#5fa3ff"),
-        ("✓ Aguardar",        aguardar,  "#4b5563"),
+        ("⏳ Aguardar",       aguardar,  "#4b5563"),
     ]
-    colunas = [(t, i, cor) for t, i, cor in colunas if i or t != "✓ Aguardar"]
 
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
