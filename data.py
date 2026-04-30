@@ -545,8 +545,9 @@ def calcular_score(cliente, hist) -> int:
         score += 20
     if dias_atraso > 15:
         score += 15
-    if (cliente.get("parcelas") or 1) > 1:
-        score += 50
+    parcelas = int(cliente.get("parcelas") or 1)
+    if parcelas > 1:
+        score += (parcelas - 1) * 50
     return int(score)
 
 
