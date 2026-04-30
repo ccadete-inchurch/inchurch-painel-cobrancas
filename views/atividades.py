@@ -31,9 +31,12 @@ def _render_card(score, acoes, c, role, idx):
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:5px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
     cor = _score_cor(score)
 
+    acordo_badge = '<span style="background:rgba(245,158,11,.18);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">Acordo vencido</span>' if "urgente" in acoes else ""
+    acordo_row   = f'<div style="margin-bottom:6px">{acordo_badge}</div>' if acordo_badge else ""
     st.markdown(
         f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
         f'padding:14px 16px;margin-bottom:10px;border-top:3px solid {cor}">'
+        f'{acordo_row}'
         f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
         f'<div style="font-weight:700;font-size:14px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
         f'{c["nome"]}{inativo_badge}'
@@ -147,7 +150,7 @@ def _render_atividades(store, clientes, role):
     aguardar  = [(s, a, c, h) for s, a, c, h in fila if not a]
 
     colunas = [
-        ("📋 Acordo",         acordos,   "#ff5555"),
+        ("🔥 Urgente",        acordos,   "#ff5555"),
         ("📞 Ligar + 💬 Msg", ligar_msg, "#f59e0b"),
         ("📞 Ligar",          so_ligar,  "#7cc243"),
         ("💬 Mensagem",       so_msg,    "#5fa3ff"),
