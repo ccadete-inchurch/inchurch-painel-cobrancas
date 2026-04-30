@@ -36,6 +36,7 @@ def render_sidebar():
             st.session_state["page"] = key_page
             st.rerun()
 
+    nav_item("Atividades",          "atividades")
     nav_item("Inadimplência",      "dashboard")
     nav_item("Próximas Cobranças", "proximas")
     nav_item("Regularizados",      "historico")

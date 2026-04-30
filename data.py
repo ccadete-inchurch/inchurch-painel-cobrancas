@@ -536,6 +536,57 @@ def importar_planilhas(f_cob, f_inad):
     return clientes, sum(c["_novo"] for c in clientes), sum(c["_atualizado"] for c in clientes), len(removidos)
 
 
+def calcular_score(cliente, hist) -> int:
+    score = 0
+    score += float(cliente.get("valor", 0)) / 100
+    dias_atraso = cliente.get("dias_atraso") or 0
+    score += dias_atraso
+    last = hist.get("lastContact", "")
+    if last:
+        try:
+            dt = datetime.strptime(last, "%d/%m/%Y").date()
+            score += max((date.today() - dt).days, 0) * 2
+        except Exception:
+            score += 60
+    else:
+        score += 60
+    if cliente.get("_tem_acordo"):
+        score += 20
+    if dias_atraso > 15:
+        score += 15
+    if (cliente.get("parcelas") or 1) > 1:
+        score += 50
+    return int(score)
+
+
+def recomendar_acao(cliente, hist) -> list[str]:
+    dias_atraso = cliente.get("dias_atraso") or 0
+    last = hist.get("lastContact", "")
+    dias_sem_contato = None
+    if last:
+        try:
+            dt = datetime.strptime(last, "%d/%m/%Y").date()
+            dias_sem_contato = max((date.today() - dt).days, 0)
+        except Exception:
+            pass
+
+    if dias_sem_contato is not None and dias_sem_contato <= 2:
+        return []
+
+    if cliente.get("_tem_acordo") and dias_atraso >= 7:
+        return ["ligar", "mensagem", "urgente"]
+
+    if 15 <= dias_atraso <= 25 and (dias_sem_contato is None or dias_sem_contato >= 3):
+        return ["ligar", "mensagem"]
+
+    acoes = []
+    if dias_atraso >= 7:
+        acoes.append("ligar")
+    if dias_atraso >= 5:
+        acoes.append("mensagem")
+    return acoes
+
+
 def calcular_pendencias(clientes):
     pendencias = []
     hoje       = date.today()

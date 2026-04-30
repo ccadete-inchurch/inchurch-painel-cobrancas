@@ -6,4 +6,5 @@ from views.dialog    import dialog_editar
 from views.dashboard import _render_dashboard
 from views.historico import _render_historico
 from views.cliente   import _render_cliente
-from views.proximas  import _render_proximas
+from views.proximas   import _render_proximas
+from views.atividades import _render_atividades
