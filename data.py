@@ -322,13 +322,23 @@ def load_mensagens_from_bq():
         return (p[:2] + p[-8:]) if len(p) >= 10 else p
 
     # Garante que _n8n_hoje sempre existe mesmo em caso de falha
-    st.session_state.setdefault("_n8n_hoje", {"mensagens": 0, "ligacoes": 0, "atendidas": 0})
+    _zero = {"mensagens": 0, "ligacoes": 0, "atendidas": 0}
+    st.session_state.setdefault("_n8n_hoje", {
+        "total":           {**_zero},
+        "Priscila Oliveira": {**_zero},
+        "Ana Carolina":      {**_zero},
+    })
 
     client = get_bq_client()
     if not client:
         return
+    _INSTANCIA_NOME = {
+        "priscila": "Priscila Oliveira",
+        "adriely":  "Ana Carolina",
+    }
+
     query = f"""
-    SELECT telefone, message, created_at
+    SELECT telefone, message, created_at, instancia
     FROM `{_N8N_TABLE}`
     WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
     ORDER BY created_at ASC
@@ -340,18 +350,22 @@ def load_mensagens_from_bq():
 
     _BRT = timezone(timedelta(hours=-3))
     hoje = datetime.now(_BRT).date()
-    status_map      = {}
-    concluida_ts    = {}
-    msgs_hoje       = set()
-    ligacoes_hoje   = 0
-    atendidas_hoje  = 0
+    status_map   = {}
+    concluida_ts = {}
+    # métricas do dia: total + por atendente
+    msgs_hoje    = {"total": set(), "Priscila Oliveira": set(), "Ana Carolina": set()}
+    lig_hoje     = {"total": 0, "Priscila Oliveira": 0, "Ana Carolina": 0}
+    atend_hoje   = {"total": 0, "Priscila Oliveira": 0, "Ana Carolina": 0}
 
     for _, row in df.iterrows():
         chave = _norm(str(row.get("telefone") or ""))
         if not chave:
             continue
-        msg = str(row.get("message") or "").lower()
-        ts  = row.get("created_at")
+        msg       = str(row.get("message") or "").lower()
+        ts        = row.get("created_at")
+        inst_raw  = str(row.get("instancia") or "").strip().lower()
+        atendente = _INSTANCIA_NOME.get(inst_raw, "total_only")
+
         try:
             if ts is not None and str(ts) != "NaT":
                 if hasattr(ts, "tz_convert"):
@@ -365,13 +379,19 @@ def load_mensagens_from_bq():
         except Exception:
             ts_date = None
 
-        # ── Métricas do dia (apenas mensagens de hoje) ─────────────────────────
+        # ── Métricas do dia ────────────────────────────────────────────────────
         if ts_date == hoje:
-            msgs_hoje.add(chave)
+            msgs_hoje["total"].add(chave)
+            if atendente in msgs_hoje:
+                msgs_hoje[atendente].add(chave)
             if any(p in msg for p in _MSG_PRE_LIGACAO):
-                ligacoes_hoje += 1
+                lig_hoje["total"] += 1
+                if atendente in lig_hoje:
+                    lig_hoje[atendente] += 1
             if "além da ligação" in msg:
-                atendidas_hoje += 1
+                atend_hoje["total"] += 1
+                if atendente in atend_hoje:
+                    atend_hoje[atendente] += 1
 
         # ── Status por telefone (última ocorrência relevante) ──────────────────
         if any(p in msg for p in _MSG_CONCLUIDA):
@@ -399,12 +419,24 @@ def load_mensagens_from_bq():
         except Exception:
             pass
 
-    st.session_state["_msg_status"]       = status_map
+    st.session_state["_msg_status"]        = status_map
     st.session_state["_msg_concluida_dias"] = concluida_dias
     st.session_state["_n8n_hoje"] = {
-        "mensagens": len(msgs_hoje),
-        "ligacoes":  ligacoes_hoje,
-        "atendidas": atendidas_hoje,
+        "total": {
+            "mensagens": len(msgs_hoje["total"]),
+            "ligacoes":  lig_hoje["total"],
+            "atendidas": atend_hoje["total"],
+        },
+        "Priscila Oliveira": {
+            "mensagens": len(msgs_hoje["Priscila Oliveira"]),
+            "ligacoes":  lig_hoje["Priscila Oliveira"],
+            "atendidas": atend_hoje["Priscila Oliveira"],
+        },
+        "Ana Carolina": {
+            "mensagens": len(msgs_hoje["Ana Carolina"]),
+            "ligacoes":  lig_hoje["Ana Carolina"],
+            "atendidas": atend_hoje["Ana Carolina"],
+        },
     }
 
 

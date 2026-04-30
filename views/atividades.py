@@ -104,40 +104,53 @@ def _render_atividades(store, clientes, role):
     )
 
     # ── Progresso do dia ──────────────────────────────────────────────────────
-    n8n = st.session_state.get("_n8n_hoje", {"mensagens": 0, "ligacoes": 0, "atendidas": 0})
-    n_msg      = n8n["mensagens"]
-    n_lig      = n8n["ligacoes"]
-    n_atend    = n8n["atendidas"]
+    _zero = {"mensagens": 0, "ligacoes": 0, "atendidas": 0}
+    n8n = st.session_state.get("_n8n_hoje", {"total": _zero, "Priscila Oliveira": _zero, "Ana Carolina": _zero})
+    # compatibilidade com formato antigo (dict plano)
+    if "mensagens" in n8n:
+        n8n = {"total": n8n, "Priscila Oliveira": _zero, "Ana Carolina": _zero}
     meta_msg, meta_lig, meta_atend = 50, 30, 15
 
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        pct = min(int(n_msg / meta_msg * 100), 100)
+    def _metric_row(dados, label_atendente, cor_nome):
+        n_msg   = dados.get("mensagens", 0)
+        n_lig   = dados.get("ligacoes",  0)
+        n_atend = dados.get("atendidas", 0)
         st.markdown(
-            f'<div class="metric-card"><div class="metric-label">Mensagens Enviadas</div>'
-            f'<div class="metric-value" style="color:#5fa3ff;font-size:32px">{n_msg}<span style="font-size:18px;color:#6b7280">/{meta_msg}</span></div>'
-            f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
-            f'<div style="background:#5fa3ff;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+            f'<div style="font-size:13px;font-weight:700;color:{cor_nome};margin-bottom:6px">{label_atendente}</div>',
             unsafe_allow_html=True,
         )
-    with m2:
-        pct = min(int(n_lig / meta_lig * 100), 100)
-        st.markdown(
-            f'<div class="metric-card"><div class="metric-label">Ligações Realizadas</div>'
-            f'<div class="metric-value" style="color:#f59e0b;font-size:32px">{n_lig}<span style="font-size:18px;color:#6b7280">/{meta_lig}</span></div>'
-            f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
-            f'<div style="background:#f59e0b;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
-            unsafe_allow_html=True,
-        )
-    with m3:
-        pct = min(int(n_atend / meta_atend * 100), 100)
-        st.markdown(
-            f'<div class="metric-card"><div class="metric-label">Ligações Atendidas</div>'
-            f'<div class="metric-value" style="color:#7cc243;font-size:32px">{n_atend}<span style="font-size:18px;color:#6b7280">/{meta_atend}</span></div>'
-            f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
-            f'<div style="background:#7cc243;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
-            unsafe_allow_html=True,
-        )
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            pct = min(int(n_msg / meta_msg * 100), 100)
+            st.markdown(
+                f'<div class="metric-card"><div class="metric-label">Mensagens Enviadas</div>'
+                f'<div class="metric-value" style="color:#5fa3ff;font-size:32px">{n_msg}<span style="font-size:18px;color:#6b7280">/{meta_msg}</span></div>'
+                f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
+                f'<div style="background:#5fa3ff;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+                unsafe_allow_html=True,
+            )
+        with m2:
+            pct = min(int(n_lig / meta_lig * 100), 100)
+            st.markdown(
+                f'<div class="metric-card"><div class="metric-label">Ligações Realizadas</div>'
+                f'<div class="metric-value" style="color:#f59e0b;font-size:32px">{n_lig}<span style="font-size:18px;color:#6b7280">/{meta_lig}</span></div>'
+                f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
+                f'<div style="background:#f59e0b;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+                unsafe_allow_html=True,
+            )
+        with m3:
+            pct = min(int(n_atend / meta_atend * 100), 100)
+            st.markdown(
+                f'<div class="metric-card"><div class="metric-label">Ligações Atendidas</div>'
+                f'<div class="metric-value" style="color:#7cc243;font-size:32px">{n_atend}<span style="font-size:18px;color:#6b7280">/{meta_atend}</span></div>'
+                f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
+                f'<div style="background:#7cc243;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+                unsafe_allow_html=True,
+            )
+
+    _metric_row(n8n.get("Priscila Oliveira", _zero), "Priscila Oliveira", "#5fa3ff")
+    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+    _metric_row(n8n.get("Ana Carolina", _zero), "Ana Carolina", "#a78bfa")
 
     st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
 
