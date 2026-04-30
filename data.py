@@ -231,13 +231,14 @@ def fetch_cobrancas_liquidacao():
         id_sacado_sac                                              AS codigo,
         MAX(st_nome_sac)                                          AS nome,
         MAX(st_cgc_sac)                                           AS cnpj,
-        MAX(comp_valor)                                        AS valor,
+        SUM(comp_valor)                                           AS valor,
         FORMAT_TIMESTAMP('%Y-%m-%d', MAX(dt_liquidacao_recb))     AS data_liquidacao,
         MAX(CASE WHEN dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
     FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
     WHERE fl_status_recb = '1'
+      AND dt_liquidacao_recb <= CURRENT_TIMESTAMP()
     GROUP BY id_sacado_sac, id_recebimento_recb
-    HAVING MAX(comp_valor) > 0
+    HAVING SUM(comp_valor) > 0
     ORDER BY MAX(dt_liquidacao_recb) DESC
     """
     try:
