@@ -51,7 +51,7 @@ def _render_card(score, acoes, c, role, idx):
         f'</div>'
         f'<div style="font-size:12px;color:#6b7280;line-height:1.6">'
         f'📞 {c.get("telefone","—")}<br>'
-        f'<span style="color:#e8eaf0;font-weight:600">&#9679;</span> {c.get("_grupo","—")}'
+        f'<span style="color:#6b7280">Grupo:</span> <span style="color:#e8eaf0">{c.get("_grupo","—")}</span>'
         f'</div>'
         f'</div>',
         unsafe_allow_html=True,
@@ -142,7 +142,7 @@ def _render_atividades(store, clientes, role):
 
     colunas = [
         ("🔥 URGENTE",             acordos,   "#ff5555"),
-        ("Ligação + Mensagem",     ligar_msg, "#f59e0b"),
+        ("📞 Ligação + 💬 Mensagem", ligar_msg, "#f59e0b"),
         ("💬 MENSAGEM",            so_msg,    "#5fa3ff"),
         ("⏳ AGUARDAR",            aguardar,  "#4b5563"),
     ]
