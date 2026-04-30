@@ -538,16 +538,30 @@ def importar_planilhas(f_cob, f_inad):
 
 def calcular_score(cliente, hist) -> int:
     score = 0
+
+    # Receita total / 100
     score += float(cliente.get("valor", 0)) / 100
-    dias_atraso = cliente.get("dias_atraso") or 0
-    score += dias_atraso
+
+    # +1 por dia em atraso (soma de todas as cobranças)
+    cobracas = [c for c in cliente.get("_cobracas", []) if (c.get("dias_atraso") or 0) > 0]
+    if cobracas:
+        score += sum(int(c.get("dias_atraso") or 0) for c in cobracas)
+        score += sum(15 for c in cobracas if int(c.get("dias_atraso") or 0) > 15)
+    else:
+        dias_atraso = cliente.get("dias_atraso") or 0
+        score += dias_atraso
+        if dias_atraso > 15:
+            score += 15
+
+    # Acordo pendente → flat +20
     if cliente.get("_tem_acordo"):
         score += 20
-    if dias_atraso > 15:
-        score += 15
+
+    # +50 por receita adicional
     parcelas = int(cliente.get("parcelas") or 1)
     if parcelas > 1:
         score += (parcelas - 1) * 50
+
     return int(score)
 
 
