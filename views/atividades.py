@@ -51,7 +51,7 @@ def _render_card(score, acoes, c, role, idx):
         f'</div>'
         f'<div style="font-size:12px;color:#6b7280;line-height:1.6">'
         f'📞 {c.get("telefone","—")}<br>'
-        f'<span style="color:#e8eaf0">👥</span> {c.get("_grupo","—")}'
+        f'<span style="color:#e8eaf0;font-weight:600">&#9679;</span> {c.get("_grupo","—")}'
         f'</div>'
         f'</div>',
         unsafe_allow_html=True,
