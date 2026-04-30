@@ -575,9 +575,6 @@ def recomendar_acao(cliente, hist) -> list[str]:
     if cliente.get("_tem_acordo") and dias >= 7:
         return ["ligar", "mensagem", "urgente"]
 
-    if 15 <= dias <= 25:
-        return ["ligar", "mensagem"]
-
     acoes = []
     if dias >= 7:
         acoes.append("ligar")
