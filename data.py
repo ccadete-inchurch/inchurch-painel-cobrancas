@@ -542,16 +542,16 @@ def calcular_score(cliente, hist) -> int:
     # Receita total / 100
     score += float(cliente.get("valor", 0)) / 100
 
-    # +1 por dia em atraso (soma de todas as cobranças)
+    # +1 por dia de atraso (maior atraso do cliente)
+    dias_atraso = cliente.get("dias_atraso") or 0
+    score += dias_atraso
+
+    # +15 por receita acima de 15 dias (cumulativo)
     cobracas = [c for c in cliente.get("_cobracas", []) if (c.get("dias_atraso") or 0) > 0]
     if cobracas:
-        score += sum(int(c.get("dias_atraso") or 0) for c in cobracas)
         score += sum(15 for c in cobracas if int(c.get("dias_atraso") or 0) > 15)
-    else:
-        dias_atraso = cliente.get("dias_atraso") or 0
-        score += dias_atraso
-        if dias_atraso > 15:
-            score += 15
+    elif dias_atraso > 15:
+        score += 15
 
     # Acordo pendente → flat +20
     if cliente.get("_tem_acordo"):
