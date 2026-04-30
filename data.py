@@ -36,7 +36,7 @@ _BQ_DATASET  = "inadimplencia_painel_cobrancas"
 _HIST_TABLE  = f"{_BQ_PROJECT}.{_BQ_DATASET}.painel_historico"
 _N8N_TABLE   = f"{_BQ_PROJECT}.N8N.n8nfinchatbot_historico_atendente"
 
-_MSG_CONCLUIDA    = ("agradecemos o pagamento", "além da ligação")
+_MSG_CONCLUIDA    = ("além da ligação",)
 _MSG_NAO_ATENDIDA = ("não estava disponível",)
 _MSG_PRE_LIGACAO  = ("vou te ligar em instantes",)
 
