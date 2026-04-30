@@ -46,17 +46,18 @@ _ICON_GROUP = (
 
 def _render_card(score, acoes, c, role, idx):
     cor = _score_cor(score)
-    inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:5px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
-    acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:5px;vertical-align:middle">ACORDO VENCIDO</span>' if "urgente" in acoes else ""
+    inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
+    acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if "urgente" in acoes else ""
 
     st.markdown(
         f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
         f'padding:14px 16px;margin-bottom:10px;border-top:2px solid {cor}99">'
         f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
         f'<div style="font-weight:700;font-size:17px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
-        f'{c["nome"]}{inativo_badge}{acordo_badge}'
-        f'<div style="font-size:11px;color:#9ca3af;font-weight:400;margin-top:4px">'
-        f'{c.get("cnpj","—")} · ID {c.get("id","—")}'
+        f'{c["nome"]}'
+        f'<div style="font-size:11px;color:#9ca3af;font-weight:400;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
+        f'<span>{c.get("cnpj","—")} · ID {c.get("id","—")}</span>'
+        f'{inativo_badge}{acordo_badge}'
         f'</div>'
         f'</div>'
         f'<div style="text-align:right;flex-shrink:0">'
@@ -162,16 +163,22 @@ def _render_atividades(store, clientes, role):
     so_msg    = [(s, a, c, h) for s, a, c, h in fila if a == ["mensagem"]]
     aguardar  = [(s, a, c, h) for s, a, c, h in fila if not a]
 
-    _h_fire = '<svg width="14" height="14" viewBox="0 0 24 24" fill="#7cc243" style="vertical-align:middle;margin-right:6px"><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z"/></svg>'
-    _h_phone = '<svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" style="vertical-align:middle;margin-right:5px"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>'
-    _h_msg  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="#5fa3ff" style="vertical-align:middle;margin-right:5px"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>'
-    _h_wait = '<svg width="13" height="13" viewBox="0 0 24 24" fill="#6b7280" style="vertical-align:middle;margin-right:6px"><path d="M6 2v6l4 4-4 4v6h12v-6l-4-4 4-4V2H6zm10 14.5V20H8v-3.5l4-4 4 4zm-4-5l-4-4V4h8v3.5l-4 4z"/></svg>'
+    def _svg(path, color, size=13, ml=0, mr=6):
+        return (f'<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="{color}" '
+                f'style="flex-shrink:0;margin-left:{ml}px;margin-right:{mr}px">'
+                f'<path d="{path}"/></svg>')
+
+    _fire  = _svg("M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z", "#7cc243", 14)
+    _phone = _svg("M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z", "#f59e0b")
+    _env   = _svg("M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z", "#5fa3ff")
+    _wait  = _svg("M6 2v6l4 4-4 4v6h12v-6l-4-4 4-4V2H6zm10 14.5V20H8v-3.5l4-4 4 4zm-4-5l-4-4V4h8v3.5l-4 4z", "#6b7280")
+    _dot   = '<span style="color:#374151;margin:0 6px;font-weight:300">·</span>'
 
     colunas = [
-        (f'{_h_fire}URGENTE',                                   acordos,   "#7cc243"),
-        (f'{_h_phone}LIGAÇÃO <span style="color:#4b5563;font-weight:400;margin:0 6px">·</span>{_h_msg}MENSAGEM', ligar_msg, "#f59e0b"),
-        (f'{_h_msg}MENSAGEM',                                   so_msg,    "#5fa3ff"),
-        (f'{_h_wait}AGUARDAR',                                  aguardar,  "#4b5563"),
+        (f'{_fire}URGENTE',                          acordos,   "#7cc243"),
+        (f'{_phone}LIGAÇÃO{_dot}{_env}MENSAGEM',     ligar_msg, "#f59e0b"),
+        (f'{_env}MENSAGEM',                          so_msg,    "#5fa3ff"),
+        (f'{_wait}AGUARDAR',                         aguardar,  "#4b5563"),
     ]
 
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
@@ -182,7 +189,7 @@ def _render_atividades(store, clientes, role):
             st.markdown(
                 f'<div style="background:#1e2333;border-radius:10px 10px 0 0;padding:12px 16px;'
                 f'margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-                f'<span style="font-size:15px;font-weight:800;color:#e8eaf0;text-transform:uppercase;letter-spacing:0.5px">{titulo}</span>'
+                f'<span style="display:inline-flex;align-items:center;font-size:15px;font-weight:800;color:#e8eaf0;letter-spacing:0.5px">{titulo}</span>'
                 f'<span style="background:#2a2f42;color:#e8eaf0;font-size:16px;font-weight:800;'
                 f'padding:2px 10px;border-radius:10px">{len(itens)}</span>'
                 f'</div>',
