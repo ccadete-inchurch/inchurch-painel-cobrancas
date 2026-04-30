@@ -112,16 +112,21 @@ def _render_atividades(store, clientes, role):
     fila.sort(key=lambda x: x[0], reverse=True)
 
     # ── Filtros ───────────────────────────────────────────────────────────────
-    fa, fb, fc = st.columns([3, 1.2, 1.2])
+    grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
+    fa, fb, fc, fd = st.columns([2.5, 1.3, 1.3, 1.3])
     with fa:
         mostrar = st.radio("Exibir", ["Com ação", "Todos"], horizontal=True, label_visibility="collapsed")
     with fb:
-        filtro_inativo = st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], label_visibility="collapsed")
+        filtro_grupo = st.selectbox("Grupo", ["Todos"] + grupos_disp, label_visibility="collapsed")
     with fc:
+        filtro_inativo = st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], label_visibility="collapsed")
+    with fd:
         busca = st.text_input("Buscar", placeholder="Nome ou CNPJ...", label_visibility="collapsed")
 
     if mostrar == "Com ação":
         fila = [(s, a, c, h) for s, a, c, h in fila if a]
+    if filtro_grupo != "Todos":
+        fila = [(s, a, c, h) for s, a, c, h in fila if c.get("_grupo") == filtro_grupo]
     if filtro_inativo == "Ativos":
         fila = [(s, a, c, h) for s, a, c, h in fila if not c.get("_inativo")]
     elif filtro_inativo == "Inativos":
