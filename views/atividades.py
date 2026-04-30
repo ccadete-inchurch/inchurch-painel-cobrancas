@@ -28,18 +28,16 @@ def _score_cor(score: int) -> str:
 
 
 def _render_card(score, acoes, c, role, idx):
-    inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:5px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
     cor = _score_cor(score)
+    inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:5px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
+    acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:5px;vertical-align:middle">ACORDO VENCIDO</span>' if "urgente" in acoes else ""
 
-    acordo_badge = '<span style="background:#4f7cff;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">ACORDO VENCIDO</span>' if "urgente" in acoes else ""
-    acordo_row   = f'<div style="margin-bottom:6px">{acordo_badge}</div>' if acordo_badge else ""
     st.markdown(
         f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
         f'padding:14px 16px;margin-bottom:10px;border-top:3px solid {cor}">'
-        f'{acordo_row}'
         f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
         f'<div style="font-weight:700;font-size:17px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
-        f'{c["nome"]}{inativo_badge}'
+        f'{c["nome"]}{inativo_badge}{acordo_badge}'
         f'<div style="font-size:11px;color:#6b7280;font-weight:400;margin-top:2px">'
         f'{c.get("cnpj","—")} · ID {c.get("id","—")}</div>'
         f'</div>'
@@ -117,18 +115,14 @@ def _render_atividades(store, clientes, role):
 
     # ── Filtros ───────────────────────────────────────────────────────────────
     grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
-    fa, fb, fc, fd = st.columns([2.5, 1.3, 1.3, 1.3])
+    fa, fb, fc = st.columns([1.3, 1.3, 2])
     with fa:
-        mostrar = st.radio("Exibir", ["Com ação", "Todos"], horizontal=True, label_visibility="collapsed")
-    with fb:
         filtro_grupo = st.selectbox("Grupo", ["Todos"] + grupos_disp, label_visibility="collapsed")
-    with fc:
+    with fb:
         filtro_inativo = st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], label_visibility="collapsed")
-    with fd:
+    with fc:
         busca = st.text_input("Buscar", placeholder="Nome ou CNPJ...", label_visibility="collapsed")
 
-    if mostrar == "Com ação":
-        fila = [(s, a, c, h) for s, a, c, h in fila if a]
     if filtro_grupo != "Todos":
         fila = [(s, a, c, h) for s, a, c, h in fila if c.get("_grupo") == filtro_grupo]
     if filtro_inativo == "Ativos":
@@ -147,10 +141,10 @@ def _render_atividades(store, clientes, role):
     aguardar  = [(s, a, c, h) for s, a, c, h in fila if not a]
 
     colunas = [
-        ("🔥 Urgente",        acordos,   "#ff5555"),
-        ("📞 Ligar + 💬 Msg", ligar_msg, "#f59e0b"),
-        ("💬 Mensagem",       so_msg,    "#5fa3ff"),
-        ("⏳ Aguardar",       aguardar,  "#4b5563"),
+        ("🔥 URGENTE",             acordos,   "#ff5555"),
+        ("Ligação + Mensagem",     ligar_msg, "#f59e0b"),
+        ("💬 MENSAGEM",            so_msg,    "#5fa3ff"),
+        ("⏳ AGUARDAR",            aguardar,  "#4b5563"),
     ]
 
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
@@ -159,11 +153,11 @@ def _render_atividades(store, clientes, role):
     for col, (titulo, itens, cor) in zip(cols, colunas):
         with col:
             st.markdown(
-                f'<div style="background:#1e2333;border-radius:10px 10px 0 0;padding:10px 14px;'
-                f'border-top:3px solid {cor};margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-                f'<span style="font-size:13px;font-weight:700;color:#e8eaf0">{titulo}</span>'
-                f'<span style="background:{cor}22;color:{cor};font-size:11px;font-weight:700;'
-                f'padding:2px 8px;border-radius:10px">{len(itens)}</span>'
+                f'<div style="background:#1e2333;border-radius:10px 10px 0 0;padding:12px 16px;'
+                f'margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
+                f'<span style="font-size:15px;font-weight:800;color:#e8eaf0;text-transform:uppercase;letter-spacing:0.5px">{titulo}</span>'
+                f'<span style="background:#2a2f42;color:#e8eaf0;font-size:16px;font-weight:800;'
+                f'padding:2px 10px;border-radius:10px">{len(itens)}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
