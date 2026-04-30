@@ -337,6 +337,7 @@ def load_mensagens_from_bq():
         "adriely":  "Ana Carolina",
     }
 
+    # Tenta buscar com instancia; se a coluna não existir, cai para query sem ela
     query = f"""
     SELECT telefone, message, created_at, instancia
     FROM `{_N8N_TABLE}`
@@ -346,7 +347,16 @@ def load_mensagens_from_bq():
     try:
         df = client.query(query).to_dataframe()
     except Exception:
-        return
+        try:
+            query_fallback = f"""
+            SELECT telefone, message, created_at
+            FROM `{_N8N_TABLE}`
+            WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+            ORDER BY created_at ASC
+            """
+            df = client.query(query_fallback).to_dataframe()
+        except Exception:
+            return
 
     _BRT = timezone(timedelta(hours=-3))
     hoje = datetime.now(_BRT).date()
@@ -363,7 +373,7 @@ def load_mensagens_from_bq():
             continue
         msg       = str(row.get("message") or "").lower()
         ts        = row.get("created_at")
-        inst_raw  = str(row.get("instancia") or "").strip().lower()
+        inst_raw  = str(row.get("instancia") or "").strip().lower() if "instancia" in df.columns else ""
         atendente = _INSTANCIA_NOME.get(inst_raw, "total_only")
 
         try:
