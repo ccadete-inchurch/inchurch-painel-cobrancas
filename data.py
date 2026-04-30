@@ -338,7 +338,8 @@ def load_mensagens_from_bq():
     except Exception:
         return
 
-    hoje = date.today()
+    _BRT = timezone(timedelta(hours=-3))
+    hoje = datetime.now(_BRT).date()
     status_map      = {}
     concluida_ts    = {}
     msgs_hoje       = set()
@@ -352,7 +353,15 @@ def load_mensagens_from_bq():
         msg = str(row.get("message") or "").lower()
         ts  = row.get("created_at")
         try:
-            ts_date = ts.date() if ts is not None and not str(ts) == "NaT" else None
+            if ts is not None and str(ts) != "NaT":
+                if hasattr(ts, "tz_convert"):
+                    ts_date = ts.tz_convert(_BRT).date()
+                elif hasattr(ts, "astimezone"):
+                    ts_date = ts.astimezone(_BRT).date()
+                else:
+                    ts_date = ts.date()
+            else:
+                ts_date = None
         except Exception:
             ts_date = None
 
