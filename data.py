@@ -566,18 +566,22 @@ def calcular_score(cliente, hist) -> int:
 
 
 def recomendar_acao(cliente, hist) -> list[str]:
-    dias_atraso = cliente.get("dias_atraso") or 0
+    cobracas = [c for c in cliente.get("_cobracas", []) if (c.get("dias_atraso") or 0) > 0]
+    if cobracas:
+        dias = min(int(c.get("dias_atraso") or 0) for c in cobracas)
+    else:
+        dias = cliente.get("dias_atraso") or 0
 
-    if cliente.get("_tem_acordo") and dias_atraso >= 7:
+    if cliente.get("_tem_acordo") and dias >= 7:
         return ["ligar", "mensagem", "urgente"]
 
-    if 15 <= dias_atraso <= 25:
+    if 15 <= dias <= 25:
         return ["ligar", "mensagem"]
 
     acoes = []
-    if dias_atraso >= 7:
+    if dias >= 7:
         acoes.append("ligar")
-    if dias_atraso >= 5:
+    if dias >= 5:
         acoes.append("mensagem")
     return acoes
 
