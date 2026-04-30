@@ -134,8 +134,8 @@ def _render_atividades(store, clientes, role):
     fila_pg  = fila[(page - 1) * PAGE_SIZE : page * PAGE_SIZE]
 
     # ── Header da tabela ──────────────────────────────────────────────────────
-    col_w  = [0.7, 2.5, 1.2, 1, 1.8] + ([0.6] if role != "gestor" else [])
-    hdrs   = ["Score", "Cliente", "Saldo", "Atraso", "Ação"] + ([""] if role != "gestor" else [])
+    col_w  = [0.7, 2.5, 1.2, 1, 1.2, 1.2, 1.8] + ([0.6] if role != "gestor" else [])
+    hdrs   = ["Score", "Cliente", "Saldo", "Atraso", "Telefone", "Grupo", "Ação"] + ([""] if role != "gestor" else [])
     hdr_cells = "".join(
         f'<div style="flex:{w};padding:12px 14px;font-size:12px;text-transform:uppercase;'
         f'letter-spacing:1.2px;color:#8b94a5;font-weight:700;white-space:nowrap">{h}</div>'
@@ -199,13 +199,17 @@ def _render_atividades(store, clientes, role):
                     unsafe_allow_html=True,
                 )
             with rcols[4]:
+                st.markdown(f'<div style="padding:12px 14px;font-size:15px;color:#8b94a5">{c.get("telefone","—")}</div>', unsafe_allow_html=True)
+            with rcols[5]:
+                st.markdown(f'<div style="padding:12px 14px;font-size:15px;color:#8b94a5">{c.get("_grupo","—")}</div>', unsafe_allow_html=True)
+            with rcols[6]:
                 st.markdown(
                     f'<div style="padding:12px 14px;display:flex;gap:6px;flex-wrap:wrap">'
                     f'{_acao_html(acoes)}</div>',
                     unsafe_allow_html=True,
                 )
             if role != "gestor":
-                with rcols[5]:
+                with rcols[7]:
                     if st.button("✏", key=f"atv_edit_{c['id']}_{ridx}", width="stretch", help=f"Editar {c['nome']}"):
                         dialog_editar(c["id"])
 
