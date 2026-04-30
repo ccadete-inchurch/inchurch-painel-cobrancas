@@ -47,8 +47,6 @@ def _render_card(score, acoes, c, role, idx):
         f'<div style="font-size:20px;font-weight:800;color:{cor};line-height:1">{score}</div>'
         f'<div style="font-size:9px;color:#6b7280">pts</div>'
         f'</div></div>'
-        f'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'
-        f'{_acao_badge(acoes)}</div>'
         f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
         f'<span style="font-size:13px;font-weight:600;color:#e8eaf0">{fmt_moeda_plain(c["valor"])}</span>'
         f'{dias_html(c.get("dias_atraso"))}'
