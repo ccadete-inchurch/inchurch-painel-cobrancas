@@ -191,13 +191,17 @@ def _render_atividades(store, clientes, role):
             return "concluida"
         if msg_st == "tentar_novamente":
             return "tentar_novamente"
-        # Só precisava de mensagem e ela foi enviada → concluída
-        if "ligar" not in acoes and msg_st in ("mensagem", "ligacao_pendente"):
-            return "concluida"
-        if "ligar" in acoes:
-            return "ligacao"
+        # Mensagem já foi enviada pelo n8n
+        if msg_st in ("mensagem", "ligacao_pendente"):
+            if "ligar" not in acoes:
+                return "concluida"   # só precisava de mensagem → concluída
+            else:
+                return "ligacao"     # mensagem feita, agora precisa ligar
+        # Sem contato ainda → precisa de mensagem primeiro
         if "mensagem" in acoes:
             return "mensagem"
+        if "ligar" in acoes:
+            return "ligacao"
         return "aguardar"
 
     acordos = []; ligacao = []; so_msg = []; tentar_nov = []; concluida = []; aguardar = []
