@@ -103,7 +103,7 @@ def _render_atividades(store, clientes, role):
     )
 
     # ── Filtro rápido ─────────────────────────────────────────────────────────
-    fa, fb = st.columns([3, 1])
+    fa, fb, fc = st.columns([3, 1.2, 1])
     with fa:
         mostrar = st.radio(
             "Exibir",
@@ -112,10 +112,16 @@ def _render_atividades(store, clientes, role):
             label_visibility="collapsed",
         )
     with fb:
+        filtro_inativo = st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], label_visibility="collapsed")
+    with fc:
         busca = st.text_input("Buscar", placeholder="Nome ou CNPJ...", label_visibility="collapsed")
 
     if mostrar == "Com ação hoje":
         fila = [(s, a, c, h) for s, a, c, h in fila if a]
+    if filtro_inativo == "Ativos":
+        fila = [(s, a, c, h) for s, a, c, h in fila if not c.get("_inativo")]
+    elif filtro_inativo == "Inativos":
+        fila = [(s, a, c, h) for s, a, c, h in fila if c.get("_inativo")]
     if busca:
         b    = busca.lower()
         fila = [(s, a, c, h) for s, a, c, h in fila
@@ -175,7 +181,9 @@ def _render_atividades(store, clientes, role):
                 sem_contato_txt = f'sem contato há {dias_sem}d' if dias_sem is not None else 'nunca contatado'
                 st.markdown(
                     f'<div style="padding:12px 14px">'
-                    f'<div style="font-weight:600;font-size:16px;color:#e8eaf0">{c["nome"]}</div>'
+                    f'<div style="font-weight:600;font-size:16px;color:#e8eaf0">{c["nome"]}'
+                    f'{"<span style=\\"background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle\\">INATIVO</span>" if c.get("_inativo") else ""}'
+                    f'</div>'
                     f'<div style="font-size:13px;color:#6b7280;margin-top:2px">{c.get("cnpj","—")} · {sem_contato_txt}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
