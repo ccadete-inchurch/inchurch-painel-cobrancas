@@ -321,6 +321,9 @@ def load_mensagens_from_bq():
             p = p[2:]
         return (p[:2] + p[-8:]) if len(p) >= 10 else p
 
+    # Garante que _n8n_hoje sempre existe mesmo em caso de falha
+    st.session_state.setdefault("_n8n_hoje", {"mensagens": 0, "ligacoes": 0, "atendidas": 0})
+
     client = get_bq_client()
     if not client:
         return
@@ -337,7 +340,7 @@ def load_mensagens_from_bq():
 
     hoje = date.today()
     status_map      = {}
-    concluida_ts    = {}   # phone → último timestamp de ligação bem-sucedida
+    concluida_ts    = {}
     msgs_hoje       = set()
     ligacoes_hoje   = 0
     atendidas_hoje  = 0
@@ -348,7 +351,10 @@ def load_mensagens_from_bq():
             continue
         msg = str(row.get("message") or "").lower()
         ts  = row.get("created_at")
-        ts_date = ts.date() if hasattr(ts, "date") else None
+        try:
+            ts_date = ts.date() if ts is not None and not str(ts) == "NaT" else None
+        except Exception:
+            ts_date = None
 
         # ── Métricas do dia (apenas mensagens de hoje) ─────────────────────────
         if ts_date == hoje:
