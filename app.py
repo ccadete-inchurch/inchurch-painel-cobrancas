@@ -104,12 +104,10 @@ def main():
         load_historico_from_bq()
         st.session_state["_historico_loaded"] = True
 
-    # Carrega mensagens n8n — recarrega a cada 5 minutos para métricas atualizadas
-    import time as _time
-    _ultima_msg = st.session_state.get("_mensagens_ts", 0)
-    if _time.time() - _ultima_msg > 300:
+    # Carrega mensagens n8n na primeira vez (status dos clientes)
+    if not st.session_state.get("_mensagens_loaded"):
         load_mensagens_from_bq()
-        st.session_state["_mensagens_ts"] = _time.time()
+        st.session_state["_mensagens_loaded"] = True
 
     tela = st.session_state.get("tela", "principal")
     if not store["clientes"] or tela == "importar":
