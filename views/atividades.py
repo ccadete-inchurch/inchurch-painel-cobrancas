@@ -51,7 +51,7 @@ def _render_card(score, acoes, c, role, idx):
 
     st.markdown(
         f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
-        f'padding:14px 16px;margin-bottom:10px;border-top:2px solid {cor}44">'
+        f'padding:14px 16px;margin-bottom:10px;border-top:2px solid {cor}99">'
         f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
         f'<div style="font-weight:700;font-size:17px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
         f'{c["nome"]}{inativo_badge}{acordo_badge}'
@@ -162,11 +162,16 @@ def _render_atividades(store, clientes, role):
     so_msg    = [(s, a, c, h) for s, a, c, h in fila if a == ["mensagem"]]
     aguardar  = [(s, a, c, h) for s, a, c, h in fila if not a]
 
+    _h_fire = '<svg width="14" height="14" viewBox="0 0 24 24" fill="#7cc243" style="vertical-align:middle;margin-right:6px"><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z"/></svg>'
+    _h_phone = '<svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" style="vertical-align:middle;margin-right:5px"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>'
+    _h_msg  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="#5fa3ff" style="vertical-align:middle;margin-right:5px"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>'
+    _h_wait = '<svg width="13" height="13" viewBox="0 0 24 24" fill="#6b7280" style="vertical-align:middle;margin-right:6px"><path d="M6 2v6l4 4-4 4v6h12v-6l-4-4 4-4V2H6zm10 14.5V20H8v-3.5l4-4 4 4zm-4-5l-4-4V4h8v3.5l-4 4z"/></svg>'
+
     colunas = [
-        ("🔥 URGENTE",             acordos,   "#ff5555"),
-        ("📞 Ligação + 💬 Mensagem", ligar_msg, "#f59e0b"),
-        ("💬 MENSAGEM",            so_msg,    "#5fa3ff"),
-        ("⏳ AGUARDAR",            aguardar,  "#4b5563"),
+        (f'{_h_fire}URGENTE',                       acordos,   "#7cc243"),
+        (f'{_h_phone}LIGAÇÃO + {_h_msg}MENSAGEM',   ligar_msg, "#f59e0b"),
+        (f'{_h_msg}MENSAGEM',                       so_msg,    "#5fa3ff"),
+        (f'{_h_wait}AGUARDAR',                      aguardar,  "#4b5563"),
     ]
 
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
