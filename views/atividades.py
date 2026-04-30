@@ -192,6 +192,9 @@ def _render_atividades(store, clientes, role):
             return "concluida"
         if msg_st == "tentar_novamente":
             return "tentar_novamente"
+        # Só precisava de mensagem e ela foi enviada → concluída
+        if "ligar" not in acoes and msg_st in ("mensagem", "ligacao_pendente"):
+            return "concluida"
         if "ligar" in acoes:
             return "ligacao"
         if "mensagem" in acoes:
