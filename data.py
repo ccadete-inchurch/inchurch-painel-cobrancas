@@ -425,19 +425,12 @@ def processar_dados_bigquery():
     clientes = [c for c in clientes_dict.values() if c["valor"] > 0]
 
     historico_regularizados = []
-    hoje = date.today()
     for _, row in df_liquidacao.iterrows():
         try:
             liq_raw  = row["data_liquidacao"]
-            if pd.notna(liq_raw) and liq_raw:
-                data_liq_date = datetime.strptime(str(liq_raw)[:10], "%Y-%m-%d").date()
-                if data_liq_date > hoje:
-                    continue  # ignora pagamentos com data futura
-                data_liq = data_liq_date.strftime("%d/%m/%Y")
-            else:
-                data_liq = hoje.strftime("%d/%m/%Y")
+            data_liq = datetime.strptime(str(liq_raw)[:10], "%Y-%m-%d").strftime("%d/%m/%Y") if pd.notna(liq_raw) and liq_raw else date.today().strftime("%d/%m/%Y")
         except Exception:
-            data_liq = hoje.strftime("%d/%m/%Y")
+            data_liq = date.today().strftime("%d/%m/%Y")
 
         historico_regularizados.append({
             "id":        str(row["codigo"]),
