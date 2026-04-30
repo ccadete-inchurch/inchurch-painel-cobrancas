@@ -311,8 +311,9 @@ def load_historico_from_bq():
 
 
 def load_mensagens_from_bq():
-    """Lê mensagens n8n dos últimos 30 dias e armazena status de ligação por telefone."""
+    """Lê mensagens n8n dos últimos 30 dias, detecta status de ligação e computa métricas do dia."""
     import re
+    from datetime import timezone as _tz
 
     def _norm(phone: str) -> str:
         p = re.sub(r'\D', '', phone or '')
@@ -324,7 +325,7 @@ def load_mensagens_from_bq():
     if not client:
         return
     query = f"""
-    SELECT telefone, message
+    SELECT telefone, message, created_at
     FROM `{_N8N_TABLE}`
     WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
     ORDER BY created_at ASC
@@ -334,25 +335,62 @@ def load_mensagens_from_bq():
     except Exception:
         return
 
-    status_map = {}
+    hoje = date.today()
+    status_map      = {}
+    concluida_ts    = {}   # phone → último timestamp de ligação bem-sucedida
+    msgs_hoje       = set()
+    ligacoes_hoje   = 0
+    atendidas_hoje  = 0
+
     for _, row in df.iterrows():
         chave = _norm(str(row.get("telefone") or ""))
         if not chave:
             continue
         msg = str(row.get("message") or "").lower()
+        ts  = row.get("created_at")
+        ts_date = ts.date() if hasattr(ts, "date") else None
+
+        # ── Métricas do dia (apenas mensagens de hoje) ─────────────────────────
+        if ts_date == hoje:
+            msgs_hoje.add(chave)
+            if any(p in msg for p in _MSG_PRE_LIGACAO):
+                ligacoes_hoje += 1
+            if "além da ligação" in msg:
+                atendidas_hoje += 1
+
+        # ── Status por telefone (última ocorrência relevante) ──────────────────
         if any(p in msg for p in _MSG_CONCLUIDA):
             status_map[chave] = "concluida"
+            if ts is not None:
+                concluida_ts[chave] = ts
         elif any(p in msg for p in _MSG_NAO_ATENDIDA):
             if status_map.get(chave) != "concluida":
                 status_map[chave] = "tentar_novamente"
         elif any(p in msg for p in _MSG_PRE_LIGACAO):
-            if status_map.get(chave) not in ("concluida", "tentar_novamente"):
+            # Reagendamento: sobrescreve tentar_novamente com nova tentativa
+            if status_map.get(chave) != "concluida":
                 status_map[chave] = "ligacao_pendente"
         else:
             if chave not in status_map:
                 status_map[chave] = "mensagem"
 
-    st.session_state["_msg_status"] = status_map
+    # Dias desde a última ligação bem-sucedida por telefone
+    now_utc = datetime.now(_tz.utc)
+    concluida_dias = {}
+    for phone, ts in concluida_ts.items():
+        try:
+            delta = (now_utc - ts).days
+            concluida_dias[phone] = max(delta, 0)
+        except Exception:
+            pass
+
+    st.session_state["_msg_status"]       = status_map
+    st.session_state["_msg_concluida_dias"] = concluida_dias
+    st.session_state["_n8n_hoje"] = {
+        "mensagens": len(msgs_hoje),
+        "ligacoes":  ligacoes_hoje,
+        "atendidas": atendidas_hoje,
+    }
 
 
 def save_hist_to_bq(uid: str, cid: str, data: dict):
@@ -612,7 +650,28 @@ def calcular_score(cliente, hist) -> int:
     if parcelas > 1:
         score += (parcelas - 1) * 50
 
+    # +2 por dia sem contato
+    last_contact = hist.get("lastContact")
+    if last_contact:
+        try:
+            dt = datetime.strptime(last_contact, "%d/%m/%Y").date()
+            score += (date.today() - dt).days * 2
+        except Exception:
+            pass
+
     return int(score)
+
+
+def _dias_sem_contato(hist) -> int | None:
+    """Retorna dias desde o último contato registrado, ou None se nunca contatado."""
+    lc = hist.get("lastContact")
+    if not lc:
+        return None
+    try:
+        dt = datetime.strptime(lc, "%d/%m/%Y").date()
+        return (date.today() - dt).days
+    except Exception:
+        return None
 
 
 def recomendar_acao(cliente, hist) -> list[str]:
@@ -625,9 +684,19 @@ def recomendar_acao(cliente, hist) -> list[str]:
     if cliente.get("_tem_acordo") and dias >= 7:
         return ["ligar", "mensagem", "urgente"]
 
+    dsc = _dias_sem_contato(hist)  # None = nunca contatado
+
+    # Regra proativa: vencida 15-25 dias e sem contato há 3+ dias → ligar + mensagem
+    if 15 <= dias <= 25 and (dsc is None or dsc >= 3):
+        return ["ligar", "mensagem"]
+
     acoes = []
     if dias >= 7:
-        acoes.append("ligar")
+        # Não ligar se houve ligação bem-sucedida há menos de 2 dias
+        from helpers import get_msg_concluida_dias
+        dias_lig = get_msg_concluida_dias(cliente.get("telefone", ""))
+        if dias_lig is None or dias_lig >= 2:
+            acoes.append("ligar")
     if dias >= 5:
         acoes.append("mensagem")
     return acoes

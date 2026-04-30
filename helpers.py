@@ -34,6 +34,13 @@ def get_msg_status(telefone: str) -> str:
     return st.session_state.get("_msg_status", {}).get(chave, "sem_contato")
 
 
+def get_msg_concluida_dias(telefone: str):
+    """Retorna quantos dias atrás foi a última ligação bem-sucedida, ou None."""
+    import streamlit as st
+    chave = _norm_tel(telefone)
+    return st.session_state.get("_msg_concluida_dias", {}).get(chave)
+
+
 # ── Datas ─────────────────────────────────────────────────────────────────────
 
 def calc_dias(venc):
