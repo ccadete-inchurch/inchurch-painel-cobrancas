@@ -168,10 +168,10 @@ def _render_atividades(store, clientes, role):
     _h_wait = '<svg width="13" height="13" viewBox="0 0 24 24" fill="#6b7280" style="vertical-align:middle;margin-right:6px"><path d="M6 2v6l4 4-4 4v6h12v-6l-4-4 4-4V2H6zm10 14.5V20H8v-3.5l4-4 4 4zm-4-5l-4-4V4h8v3.5l-4 4z"/></svg>'
 
     colunas = [
-        (f'{_h_fire}URGENTE',                       acordos,   "#7cc243"),
-        (f'{_h_phone}LIGAÇÃO + {_h_msg}MENSAGEM',   ligar_msg, "#f59e0b"),
-        (f'{_h_msg}MENSAGEM',                       so_msg,    "#5fa3ff"),
-        (f'{_h_wait}AGUARDAR',                      aguardar,  "#4b5563"),
+        (f'{_h_fire}URGENTE',                                   acordos,   "#7cc243"),
+        (f'{_h_phone}LIGAÇÃO <span style="color:#4b5563;font-weight:400">·</span> {_h_msg}MENSAGEM', ligar_msg, "#f59e0b"),
+        (f'MENSAGEM',                                           so_msg,    "#5fa3ff"),
+        (f'{_h_wait}AGUARDAR',                                  aguardar,  "#4b5563"),
     ]
 
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
