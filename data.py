@@ -567,22 +567,11 @@ def calcular_score(cliente, hist) -> int:
 
 def recomendar_acao(cliente, hist) -> list[str]:
     dias_atraso = cliente.get("dias_atraso") or 0
-    last = hist.get("lastContact", "")
-    dias_sem_contato = None
-    if last:
-        try:
-            dt = datetime.strptime(last, "%d/%m/%Y").date()
-            dias_sem_contato = max((date.today() - dt).days, 0)
-        except Exception:
-            pass
-
-    if dias_sem_contato is not None and dias_sem_contato <= 2:
-        return []
 
     if cliente.get("_tem_acordo") and dias_atraso >= 7:
         return ["ligar", "mensagem", "urgente"]
 
-    if 15 <= dias_atraso <= 25 and (dias_sem_contato is None or dias_sem_contato >= 3):
+    if 15 <= dias_atraso <= 25:
         return ["ligar", "mensagem"]
 
     acoes = []
