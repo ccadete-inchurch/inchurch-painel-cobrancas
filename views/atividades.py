@@ -38,7 +38,7 @@ def _render_card(score, acoes, c, role, idx):
         f'padding:14px 16px;margin-bottom:10px;border-top:3px solid {cor}">'
         f'{acordo_row}'
         f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
-        f'<div style="font-weight:700;font-size:14px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
+        f'<div style="font-weight:700;font-size:17px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
         f'{c["nome"]}{inativo_badge}'
         f'<div style="font-size:11px;color:#6b7280;font-weight:400;margin-top:2px">'
         f'{c.get("cnpj","—")} · ID {c.get("id","—")}</div>'
@@ -53,7 +53,7 @@ def _render_card(score, acoes, c, role, idx):
         f'</div>'
         f'<div style="font-size:12px;color:#6b7280;line-height:1.6">'
         f'📞 {c.get("telefone","—")}<br>'
-        f'👥 {c.get("_grupo","—")}'
+        f'<span style="color:#e8eaf0">👥</span> {c.get("_grupo","—")}'
         f'</div>'
         f'</div>',
         unsafe_allow_html=True,
