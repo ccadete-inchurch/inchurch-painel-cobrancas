@@ -334,7 +334,7 @@ def load_mensagens_from_bq():
     except Exception:
         return
 
-    status_map: dict[str, str] = {}
+    status_map = {}
     for _, row in df.iterrows():
         chave = _norm(str(row.get("telefone") or ""))
         if not chave:
