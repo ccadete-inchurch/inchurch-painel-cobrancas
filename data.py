@@ -341,7 +341,6 @@ def load_mensagens_from_bq():
     query = f"""
     SELECT telefone, message, created_at, instancia
     FROM `{_N8N_TABLE}`
-    WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
     ORDER BY created_at ASC
     """
     try:
@@ -351,7 +350,6 @@ def load_mensagens_from_bq():
             query_fallback = f"""
             SELECT telefone, message, created_at
             FROM `{_N8N_TABLE}`
-            WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
             ORDER BY created_at ASC
             """
             df = client.query(query_fallback).to_dataframe()
