@@ -707,14 +707,16 @@ def calcular_score(cliente, hist) -> int:
     if parcelas > 1:
         score += (parcelas - 1) * 50
 
-    # +2 por dia sem contato
-    last_contact = hist.get("lastContact")
-    if last_contact:
+    # +2 por dia sem contato (desde o último contato ou, se nunca contatado, desde o vencimento)
+    lc = hist.get("lastContact")
+    if lc:
         try:
-            dt = datetime.strptime(last_contact, "%d/%m/%Y").date()
+            dt = datetime.strptime(lc, "%d/%m/%Y").date()
             score += (date.today() - dt).days * 2
         except Exception:
             pass
+    elif dias_atraso > 0:
+        score += dias_atraso * 2
 
     return int(score)
 
