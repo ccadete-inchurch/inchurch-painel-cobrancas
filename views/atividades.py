@@ -179,11 +179,10 @@ def _render_atividades(store, clientes, role):
                 )
             with rcols[1]:
                 sem_contato_txt = f'sem contato há {dias_sem}d' if dias_sem is not None else 'nunca contatado'
+                inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
                 st.markdown(
                     f'<div style="padding:12px 14px">'
-                    f'<div style="font-weight:600;font-size:16px;color:#e8eaf0">{c["nome"]}'
-                    f'{"<span style=\\"background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle\\">INATIVO</span>" if c.get("_inativo") else ""}'
-                    f'</div>'
+                    f'<div style="font-weight:600;font-size:16px;color:#e8eaf0">{c["nome"]}{inativo_badge}</div>'
                     f'<div style="font-size:13px;color:#6b7280;margin-top:2px">{c.get("cnpj","—")} · {sem_contato_txt}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
