@@ -336,70 +336,39 @@ def load_mensagens_from_bq():
         "priscila": "Priscila Oliveira",
         "adriely":  "Ana Carolina",
     }
+    _BRT  = timezone(timedelta(hours=-3))
+    hoje  = datetime.now(_BRT).date()
+    hoje_ts = hoje.strftime("%Y-%m-%d")
 
-    # Tenta buscar com instancia; se a coluna não existir, cai para query sem ela
-    query = f"""
-    SELECT telefone, message, created_at, instancia
-    FROM `{_N8N_TABLE}`
-    ORDER BY created_at ASC
-    """
+    # ── Query 1: tabela completa para status dos telefones (sem filtro de data) ─
     try:
-        df = client.query(query).to_dataframe()
-    except Exception:
-        try:
-            query_fallback = f"""
+        df = client.query(f"""
             SELECT telefone, message, created_at
             FROM `{_N8N_TABLE}`
             ORDER BY created_at ASC
-            """
-            df = client.query(query_fallback).to_dataframe()
-        except Exception:
-            return
+        """).to_dataframe()
+    except Exception:
+        return
 
-    _BRT = timezone(timedelta(hours=-3))
-    hoje = datetime.now(_BRT).date()
+    # ── Query 2: apenas hoje para métricas por atendente ─────────────────────
+    try:
+        df_hoje = client.query(f"""
+            SELECT telefone, message, instancia
+            FROM `{_N8N_TABLE}`
+            WHERE DATE(created_at, "America/Sao_Paulo") = "{hoje_ts}"
+        """).to_dataframe()
+    except Exception:
+        df_hoje = None
+
     status_map   = {}
     concluida_ts = {}
-    # métricas do dia: total + por atendente
-    msgs_hoje    = {"total": set(), "Priscila Oliveira": set(), "Ana Carolina": set()}
-    lig_hoje     = {"total": 0, "Priscila Oliveira": 0, "Ana Carolina": 0}
-    atend_hoje   = {"total": 0, "Priscila Oliveira": 0, "Ana Carolina": 0}
 
     for _, row in df.iterrows():
         chave = _norm(str(row.get("telefone") or ""))
         if not chave:
             continue
-        msg       = str(row.get("message") or "").lower()
-        ts        = row.get("created_at")
-        inst_raw  = str(row.get("instancia") or "").strip().lower() if "instancia" in df.columns else ""
-        atendente = _INSTANCIA_NOME.get(inst_raw, "total_only")
-
-        try:
-            if ts is not None and str(ts) != "NaT":
-                if hasattr(ts, "tz_convert"):
-                    ts_date = ts.tz_convert(_BRT).date()
-                elif hasattr(ts, "astimezone"):
-                    ts_date = ts.astimezone(_BRT).date()
-                else:
-                    ts_date = ts.date()
-            else:
-                ts_date = None
-        except Exception:
-            ts_date = None
-
-        # ── Métricas do dia ────────────────────────────────────────────────────
-        if ts_date == hoje:
-            msgs_hoje["total"].add(chave)
-            if atendente in msgs_hoje:
-                msgs_hoje[atendente].add(chave)
-            if any(p in msg for p in _MSG_PRE_LIGACAO):
-                lig_hoje["total"] += 1
-                if atendente in lig_hoje:
-                    lig_hoje[atendente] += 1
-            if "além da ligação" in msg:
-                atend_hoje["total"] += 1
-                if atendente in atend_hoje:
-                    atend_hoje[atendente] += 1
+        msg = str(row.get("message") or "").lower()
+        ts  = row.get("created_at")
 
         # ── Status por telefone (última ocorrência relevante) ──────────────────
         if any(p in msg for p in _MSG_CONCLUIDA):
@@ -429,6 +398,33 @@ def load_mensagens_from_bq():
 
     st.session_state["_msg_status"]        = status_map
     st.session_state["_msg_concluida_dias"] = concluida_dias
+
+    # ── Métricas do dia a partir da query filtrada por hoje ────────────────────
+    msgs_hoje  = {"total": set(), "Priscila Oliveira": set(), "Ana Carolina": set()}
+    lig_hoje   = {"total": 0, "Priscila Oliveira": 0, "Ana Carolina": 0}
+    atend_hoje = {"total": 0, "Priscila Oliveira": 0, "Ana Carolina": 0}
+
+    if df_hoje is not None and not df_hoje.empty:
+        for _, row in df_hoje.iterrows():
+            chave = _norm(str(row.get("telefone") or ""))
+            if not chave:
+                continue
+            msg      = str(row.get("message") or "").lower()
+            inst_raw = str(row.get("instancia") or "").strip().lower() if "instancia" in df_hoje.columns else ""
+            atend    = _INSTANCIA_NOME.get(inst_raw, "total_only")
+
+            msgs_hoje["total"].add(chave)
+            if atend in msgs_hoje:
+                msgs_hoje[atend].add(chave)
+            if any(p in msg for p in _MSG_PRE_LIGACAO):
+                lig_hoje["total"] += 1
+                if atend in lig_hoje:
+                    lig_hoje[atend] += 1
+            if any(p in msg for p in _MSG_CONCLUIDA):
+                atend_hoje["total"] += 1
+                if atend in atend_hoje:
+                    atend_hoje[atend] += 1
+
     st.session_state["_n8n_hoje"] = {
         "total": {
             "mensagens": len(msgs_hoje["total"]),
