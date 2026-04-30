@@ -311,7 +311,7 @@ def load_historico_from_bq():
 
 
 def load_mensagens_from_bq():
-    """Lê mensagens n8n dos últimos 30 dias, detecta status de ligação e computa métricas do dia."""
+    """1x por sessão — lê tabela completa para detectar status de cada telefone."""
     import re
     from datetime import timezone as _tz
 
@@ -321,26 +321,13 @@ def load_mensagens_from_bq():
             p = p[2:]
         return (p[:2] + p[-8:]) if len(p) >= 10 else p
 
-    # Garante que _n8n_hoje sempre existe mesmo em caso de falha
-    _zero = {"mensagens": 0, "ligacoes": 0, "atendidas": 0}
-    st.session_state.setdefault("_n8n_hoje", {
-        "total":           {**_zero},
-        "Priscila Oliveira": {**_zero},
-        "Ana Carolina":      {**_zero},
-    })
+    st.session_state.setdefault("_msg_status", {})
+    st.session_state.setdefault("_msg_concluida_dias", {})
 
     client = get_bq_client()
     if not client:
         return
-    _INSTANCIA_NOME = {
-        "priscila": "Priscila Oliveira",
-        "adriely":  "Ana Carolina",
-    }
-    _BRT  = timezone(timedelta(hours=-3))
-    hoje  = datetime.now(_BRT).date()
-    hoje_ts = hoje.strftime("%Y-%m-%d")
 
-    # ── Query 1: tabela completa para status dos telefones (sem filtro de data) ─
     try:
         df = client.query(f"""
             SELECT telefone, message, created_at
@@ -349,16 +336,6 @@ def load_mensagens_from_bq():
         """).to_dataframe()
     except Exception:
         return
-
-    # ── Query 2: apenas hoje para métricas por atendente ─────────────────────
-    try:
-        df_hoje = client.query(f"""
-            SELECT telefone, message, instancia
-            FROM `{_N8N_TABLE}`
-            WHERE DATE(created_at, "America/Sao_Paulo") = "{hoje_ts}"
-        """).to_dataframe()
-    except Exception:
-        df_hoje = None
 
     status_map   = {}
     concluida_ts = {}
@@ -370,7 +347,6 @@ def load_mensagens_from_bq():
         msg = str(row.get("message") or "").lower()
         ts  = row.get("created_at")
 
-        # ── Status por telefone (última ocorrência relevante) ──────────────────
         if any(p in msg for p in _MSG_CONCLUIDA):
             status_map[chave] = "concluida"
             if ts is not None:
@@ -379,68 +355,84 @@ def load_mensagens_from_bq():
             if status_map.get(chave) != "concluida":
                 status_map[chave] = "tentar_novamente"
         elif any(p in msg for p in _MSG_PRE_LIGACAO):
-            # Reagendamento: sobrescreve tentar_novamente com nova tentativa
             if status_map.get(chave) != "concluida":
                 status_map[chave] = "ligacao_pendente"
         else:
             if chave not in status_map:
                 status_map[chave] = "mensagem"
 
-    # Dias desde a última ligação bem-sucedida por telefone
     now_utc = datetime.now(_tz.utc)
     concluida_dias = {}
     for phone, ts in concluida_ts.items():
         try:
-            delta = (now_utc - ts).days
-            concluida_dias[phone] = max(delta, 0)
+            concluida_dias[phone] = max((now_utc - ts).days, 0)
         except Exception:
             pass
 
-    st.session_state["_msg_status"]        = status_map
+    st.session_state["_msg_status"]         = status_map
     st.session_state["_msg_concluida_dias"] = concluida_dias
 
-    # ── Métricas do dia a partir da query filtrada por hoje ────────────────────
+
+def load_metricas_from_bq():
+    """A cada 5 min na tela Atividades — só hoje, por atendente."""
+    import re
+
+    def _norm(phone: str) -> str:
+        p = re.sub(r'\D', '', phone or '')
+        if p.startswith('55') and len(p) > 11:
+            p = p[2:]
+        return (p[:2] + p[-8:]) if len(p) >= 10 else p
+
+    _INSTANCIA_NOME = {"priscila": "Priscila Oliveira", "adriely": "Ana Carolina"}
+    _zero = {"mensagens": 0, "ligacoes": 0, "atendidas": 0}
+    st.session_state.setdefault("_n8n_hoje", {
+        "total": {**_zero}, "Priscila Oliveira": {**_zero}, "Ana Carolina": {**_zero},
+    })
+
+    client = get_bq_client()
+    if not client:
+        return
+
+    _BRT    = timezone(timedelta(hours=-3))
+    hoje_ts = datetime.now(_BRT).date().strftime("%Y-%m-%d")
+
+    try:
+        df = client.query(f"""
+            SELECT telefone, message, instancia
+            FROM `{_N8N_TABLE}`
+            WHERE DATE(created_at, "America/Sao_Paulo") = "{hoje_ts}"
+        """).to_dataframe()
+    except Exception:
+        return
+
     msgs_hoje  = {"total": set(), "Priscila Oliveira": set(), "Ana Carolina": set()}
     lig_hoje   = {"total": 0, "Priscila Oliveira": 0, "Ana Carolina": 0}
     atend_hoje = {"total": 0, "Priscila Oliveira": 0, "Ana Carolina": 0}
 
-    if df_hoje is not None and not df_hoje.empty:
-        for _, row in df_hoje.iterrows():
-            chave = _norm(str(row.get("telefone") or ""))
-            if not chave:
-                continue
-            msg      = str(row.get("message") or "").lower()
-            inst_raw = str(row.get("instancia") or "").strip().lower() if "instancia" in df_hoje.columns else ""
-            atend    = _INSTANCIA_NOME.get(inst_raw, "total_only")
+    for _, row in df.iterrows():
+        chave = _norm(str(row.get("telefone") or ""))
+        if not chave:
+            continue
+        msg      = str(row.get("message") or "").lower()
+        inst_raw = str(row.get("instancia") or "").strip().lower()
+        atend    = _INSTANCIA_NOME.get(inst_raw, "total_only")
 
-            msgs_hoje["total"].add(chave)
-            if atend in msgs_hoje:
-                msgs_hoje[atend].add(chave)
-            if any(p in msg for p in _MSG_PRE_LIGACAO):
-                lig_hoje["total"] += 1
-                if atend in lig_hoje:
-                    lig_hoje[atend] += 1
-            if any(p in msg for p in _MSG_CONCLUIDA):
-                atend_hoje["total"] += 1
-                if atend in atend_hoje:
-                    atend_hoje[atend] += 1
+        msgs_hoje["total"].add(chave)
+        if atend in msgs_hoje:
+            msgs_hoje[atend].add(chave)
+        if any(p in msg for p in _MSG_PRE_LIGACAO):
+            lig_hoje["total"] += 1
+            if atend in lig_hoje:
+                lig_hoje[atend] += 1
+        if any(p in msg for p in _MSG_CONCLUIDA):
+            atend_hoje["total"] += 1
+            if atend in atend_hoje:
+                atend_hoje[atend] += 1
 
     st.session_state["_n8n_hoje"] = {
-        "total": {
-            "mensagens": len(msgs_hoje["total"]),
-            "ligacoes":  lig_hoje["total"],
-            "atendidas": atend_hoje["total"],
-        },
-        "Priscila Oliveira": {
-            "mensagens": len(msgs_hoje["Priscila Oliveira"]),
-            "ligacoes":  lig_hoje["Priscila Oliveira"],
-            "atendidas": atend_hoje["Priscila Oliveira"],
-        },
-        "Ana Carolina": {
-            "mensagens": len(msgs_hoje["Ana Carolina"]),
-            "ligacoes":  lig_hoje["Ana Carolina"],
-            "atendidas": atend_hoje["Ana Carolina"],
-        },
+        "total":             {"mensagens": len(msgs_hoje["total"]),             "ligacoes": lig_hoje["total"],             "atendidas": atend_hoje["total"]},
+        "Priscila Oliveira": {"mensagens": len(msgs_hoje["Priscila Oliveira"]), "ligacoes": lig_hoje["Priscila Oliveira"], "atendidas": atend_hoje["Priscila Oliveira"]},
+        "Ana Carolina":      {"mensagens": len(msgs_hoje["Ana Carolina"]),      "ligacoes": lig_hoje["Ana Carolina"],      "atendidas": atend_hoje["Ana Carolina"]},
     }
 
 

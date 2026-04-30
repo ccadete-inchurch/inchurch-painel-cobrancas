@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq
+from data import calcular_score, recomendar_acao, load_metricas_from_bq
 from views.dialog import dialog_editar
 
 
@@ -87,12 +87,11 @@ def _render_card(score, acoes, c, role, idx):
 
 
 def _render_atividades(store, clientes, role):
-    # Recarrega mensagens n8n a cada 5 min enquanto o usuário está nesta tela
-    import streamlit as st
-    _ts = st.session_state.get("_mensagens_ts", 0)
+    # Recarrega métricas do dia a cada 5 min (query pequena, só hoje)
+    _ts = st.session_state.get("_metricas_ts", 0)
     if _time.time() - _ts > 300:
-        load_mensagens_from_bq()
-        st.session_state["_mensagens_ts"] = _time.time()
+        load_metricas_from_bq()
+        st.session_state["_metricas_ts"] = _time.time()
 
     hoje_str = date.today().strftime("%d/%m/%Y")
 
