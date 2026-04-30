@@ -36,7 +36,10 @@ def _render_card(score, acoes, c, role, idx):
         f'padding:14px 16px;margin-bottom:10px;border-top:3px solid {cor}">'
         f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
         f'<div style="font-weight:700;font-size:14px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
-        f'{c["nome"]}{inativo_badge}</div>'
+        f'{c["nome"]}{inativo_badge}'
+        f'<div style="font-size:11px;color:#6b7280;font-weight:400;margin-top:2px">'
+        f'{c.get("cnpj","—")} · ID {c.get("id","—")}</div>'
+        f'</div>'
         f'<div style="text-align:right;flex-shrink:0">'
         f'<div style="font-size:20px;font-weight:800;color:{cor};line-height:1">{score}</div>'
         f'<div style="font-size:9px;color:#6b7280">pts</div>'
@@ -137,14 +140,14 @@ def _render_atividades(store, clientes, role):
                 if b in str(c.get("nome", "")).lower() or b in str(c.get("cnpj", "")).lower()]
 
     # ── Separar por coluna ────────────────────────────────────────────────────
-    urgentes  = [(s, a, c, h) for s, a, c, h in fila if "urgente" in a]
+    acordos   = [(s, a, c, h) for s, a, c, h in fila if "urgente" in a]
     ligar_msg = [(s, a, c, h) for s, a, c, h in fila if "ligar" in a and "mensagem" in a and "urgente" not in a]
     so_ligar  = [(s, a, c, h) for s, a, c, h in fila if a == ["ligar"]]
     so_msg    = [(s, a, c, h) for s, a, c, h in fila if a == ["mensagem"]]
     aguardar  = [(s, a, c, h) for s, a, c, h in fila if not a]
 
     colunas = [
-        ("🔥 Urgente",       urgentes,  "#ff5555"),
+        ("📋 Acordo",         acordos,   "#ff5555"),
         ("📞 Ligar + 💬 Msg", ligar_msg, "#f59e0b"),
         ("📞 Ligar",          so_ligar,  "#7cc243"),
         ("💬 Mensagem",       so_msg,    "#5fa3ff"),
@@ -159,7 +162,7 @@ def _render_atividades(store, clientes, role):
         with col:
             st.markdown(
                 f'<div style="background:#1e2333;border-radius:10px 10px 0 0;padding:10px 14px;'
-                f'border-top:3px solid {cor};margin-bottom:2px;display:flex;justify-content:space-between;align-items:center">'
+                f'border-top:3px solid {cor};margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
                 f'<span style="font-size:13px;font-weight:700;color:#e8eaf0">{titulo}</span>'
                 f'<span style="background:{cor}22;color:{cor};font-size:11px;font-weight:700;'
                 f'padding:2px 8px;border-radius:10px">{len(itens)}</span>'
@@ -168,10 +171,11 @@ def _render_atividades(store, clientes, role):
             )
             if not itens:
                 st.markdown(
-                    '<div style="background:#181c26;border:1px solid #2a2f42;border-radius:0 0 10px 10px;'
+                    '<div style="background:#181c26;border:1px solid #2a2f42;border-radius:10px;'
                     'padding:24px;text-align:center;color:#4b5563;font-size:12px">Nenhum cliente</div>',
                     unsafe_allow_html=True,
                 )
             else:
                 for idx, (score, acoes, c, h) in enumerate(itens):
-                    _render_card(score, acoes, c, role, f"{titulo}_{idx}")
+                    with st.container():
+                        _render_card(score, acoes, c, role, f"{titulo}_{idx}")
