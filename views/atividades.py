@@ -31,7 +31,7 @@ def _render_card(score, acoes, c, role, idx):
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:5px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
     cor = _score_cor(score)
 
-    acordo_badge = '<span style="background:rgba(245,158,11,.18);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">ACORDO VENCIDO</span>' if "urgente" in acoes else ""
+    acordo_badge = '<span style="background:#4f7cff;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">ACORDO VENCIDO</span>' if "urgente" in acoes else ""
     acordo_row   = f'<div style="margin-bottom:6px">{acordo_badge}</div>' if acordo_badge else ""
     st.markdown(
         f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
