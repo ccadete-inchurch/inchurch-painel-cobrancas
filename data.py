@@ -541,15 +541,6 @@ def calcular_score(cliente, hist) -> int:
     score += float(cliente.get("valor", 0)) / 100
     dias_atraso = cliente.get("dias_atraso") or 0
     score += dias_atraso
-    last = hist.get("lastContact", "")
-    if last:
-        try:
-            dt = datetime.strptime(last, "%d/%m/%Y").date()
-            score += max((date.today() - dt).days, 0) * 2
-        except Exception:
-            score += 60
-    else:
-        score += 60
     if cliente.get("_tem_acordo"):
         score += 20
     if dias_atraso > 15:
