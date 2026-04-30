@@ -31,9 +31,14 @@ from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
 
-_BQ_PROJECT = "business-intelligence-467516"
+_BQ_PROJECT  = "business-intelligence-467516"
 _BQ_DATASET  = "inadimplencia_painel_cobrancas"
 _HIST_TABLE  = f"{_BQ_PROJECT}.{_BQ_DATASET}.painel_historico"
+_N8N_TABLE   = f"{_BQ_PROJECT}.N8N.n8nfinchatbot_historico_atendente"
+
+_MSG_CONCLUIDA    = ("agradecemos o pagamento", "além da ligação")
+_MSG_NAO_ATENDIDA = ("não estava disponível",)
+_MSG_PRE_LIGACAO  = ("vou te ligar em instantes",)
 
 
 @st.cache_resource
@@ -303,6 +308,51 @@ def load_historico_from_bq():
                 pass
     except Exception:
         pass
+
+
+def load_mensagens_from_bq():
+    """Lê mensagens n8n dos últimos 30 dias e armazena status de ligação por telefone."""
+    import re
+
+    def _norm(phone: str) -> str:
+        p = re.sub(r'\D', '', phone or '')
+        if p.startswith('55') and len(p) > 11:
+            p = p[2:]
+        return (p[:2] + p[-8:]) if len(p) >= 10 else p
+
+    client = get_bq_client()
+    if not client:
+        return
+    query = f"""
+    SELECT telefone, message
+    FROM `{_N8N_TABLE}`
+    WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+    ORDER BY created_at ASC
+    """
+    try:
+        df = client.query(query).to_dataframe()
+    except Exception:
+        return
+
+    status_map: dict[str, str] = {}
+    for _, row in df.iterrows():
+        chave = _norm(str(row.get("telefone") or ""))
+        if not chave:
+            continue
+        msg = str(row.get("message") or "").lower()
+        if any(p in msg for p in _MSG_CONCLUIDA):
+            status_map[chave] = "concluida"
+        elif any(p in msg for p in _MSG_NAO_ATENDIDA):
+            if status_map.get(chave) != "concluida":
+                status_map[chave] = "tentar_novamente"
+        elif any(p in msg for p in _MSG_PRE_LIGACAO):
+            if status_map.get(chave) not in ("concluida", "tentar_novamente"):
+                status_map[chave] = "ligacao_pendente"
+        else:
+            if chave not in status_map:
+                status_map[chave] = "mensagem"
+
+    st.session_state["_msg_status"] = status_map
 
 
 def save_hist_to_bq(uid: str, cid: str, data: dict):

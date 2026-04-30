@@ -2,7 +2,7 @@ from datetime import date
 
 import streamlit as st
 
-from helpers import get_hist, fmt_moeda_plain, dias_html
+from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status
 from data import calcular_score, recomendar_acao
 from views.dialog import dialog_editar
 
@@ -158,10 +158,30 @@ def _render_atividades(store, clientes, role):
                 if b in str(c.get("nome", "")).lower() or b in str(c.get("cnpj", "")).lower()]
 
     # ── Separar por coluna ────────────────────────────────────────────────────
-    acordos   = [(s, a, c, h) for s, a, c, h in fila if "urgente" in a]
-    ligar_msg = [(s, a, c, h) for s, a, c, h in fila if "ligar" in a and "mensagem" in a and "urgente" not in a]
-    so_msg    = [(s, a, c, h) for s, a, c, h in fila if a == ["mensagem"]]
-    aguardar  = [(s, a, c, h) for s, a, c, h in fila if not a]
+    def _canal(acoes, msg_st):
+        if "urgente" in acoes and msg_st != "concluida":
+            return "urgente"
+        if msg_st == "concluida":
+            return "concluida"
+        if msg_st == "tentar_novamente":
+            return "tentar_novamente"
+        if "ligar" in acoes:
+            return "ligacao"
+        if "mensagem" in acoes:
+            return "mensagem"
+        return "aguardar"
+
+    acordos = []; ligacao = []; so_msg = []; tentar_nov = []; concluida = []; aguardar = []
+    for item in fila:
+        s, a, c, h = item
+        ms = get_msg_status(c.get("telefone", ""))
+        canal = _canal(a, ms)
+        if   canal == "urgente":          acordos.append(item)
+        elif canal == "ligacao":          ligacao.append(item)
+        elif canal == "mensagem":         so_msg.append(item)
+        elif canal == "tentar_novamente": tentar_nov.append(item)
+        elif canal == "concluida":        concluida.append(item)
+        else:                             aguardar.append(item)
 
     def _svg(path, color, size=13, ml=0, mr=6):
         return (f'<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="{color}" '
@@ -172,36 +192,49 @@ def _render_atividades(store, clientes, role):
     _phone = _svg("M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z", "#f59e0b", 16)
     _env   = _svg("M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z", "#e8eaf0", 15)
     _wait  = _svg("M6 2v6l4 4-4 4v6h12v-6l-4-4 4-4V2H6zm10 14.5V20H8v-3.5l4-4 4 4zm-4-5l-4-4V4h8v3.5l-4 4z", "#6b7280", 16)
+    _retry = _svg("M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z", "#a78bfa", 16)
+    _check = _svg("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z", "#7cc243", 16)
     _dot   = '<span style="color:#6b7280;margin:0 7px;font-weight:300;font-size:18px;line-height:1">|</span>'
 
-    colunas = [
-        (f'{_fire}URGENTE',                          acordos,   "#7cc243"),
-        (f'{_phone}LIGAÇÃO{_dot}{_env}MENSAGEM',     ligar_msg, "#f59e0b"),
-        (f'{_env}MENSAGEM',                          so_msg,    "#5fa3ff"),
-        (f'{_wait}AGUARDAR',                         aguardar,  "#4b5563"),
+    # Linha 1: fila ativa
+    colunas_l1 = [
+        (f'{_fire}URGENTE',              acordos,    "#7cc243"),
+        (f'{_phone}LIGAÇÃO',             ligacao,    "#f59e0b"),
+        (f'{_env}MENSAGEM',              so_msg,     "#5fa3ff"),
+    ]
+    # Linha 2: status / resultado
+    colunas_l2 = [
+        (f'{_retry}TENTAR NOVAMENTE',    tentar_nov, "#a78bfa"),
+        (f'{_check}CONCLUÍDA',           concluida,  "#7cc243"),
+        (f'{_wait}AGUARDAR',             aguardar,   "#4b5563"),
     ]
 
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-
-    cols = st.columns(len(colunas))
-    for col, (titulo, itens, cor) in zip(cols, colunas):
-        with col:
-            st.markdown(
-                f'<div style="background:#1e2333;border-radius:10px 10px 0 0;padding:12px 16px;'
-                f'margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-                f'<span style="display:inline-flex;align-items:center;font-size:15px;font-weight:800;color:#e8eaf0;letter-spacing:0.5px">{titulo}</span>'
-                f'<span style="background:#2a2f42;color:#e8eaf0;font-size:16px;font-weight:800;'
-                f'padding:2px 10px;border-radius:10px">{len(itens)}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-            if not itens:
+    def _render_linha(colunas):
+        cols = st.columns(len(colunas))
+        for col, (titulo, itens, cor) in zip(cols, colunas):
+            with col:
                 st.markdown(
-                    '<div style="background:#181c26;border:1px solid #2a2f42;border-radius:10px;'
-                    'padding:24px;text-align:center;color:#4b5563;font-size:12px">Nenhum cliente</div>',
+                    f'<div style="background:#1e2333;border-radius:10px 10px 0 0;padding:12px 16px;'
+                    f'margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
+                    f'<span style="display:inline-flex;align-items:center;font-size:15px;font-weight:800;color:#e8eaf0;letter-spacing:0.5px">{titulo}</span>'
+                    f'<span style="background:#2a2f42;color:#e8eaf0;font-size:16px;font-weight:800;'
+                    f'padding:2px 10px;border-radius:10px">{len(itens)}</span>'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
-            else:
-                for idx, (score, acoes, c, h) in enumerate(itens):
-                    with st.container():
-                        _render_card(score, acoes, c, role, f"{titulo}_{idx}")
+                if not itens:
+                    st.markdown(
+                        '<div style="background:#181c26;border:1px solid #2a2f42;border-radius:10px;'
+                        'padding:24px;text-align:center;color:#4b5563;font-size:12px">Nenhum cliente</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    for idx, (score, acoes, c, h) in enumerate(itens):
+                        with st.container():
+                            _render_card(score, acoes, c, role, f"{titulo}_{idx}")
+
+    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+    _render_linha(colunas_l1)
+    st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
+    _render_linha(colunas_l2)
+

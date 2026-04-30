@@ -9,7 +9,7 @@ st.set_page_config(
 
 from config import CSS
 from auth import is_logged, current_role
-from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq
+from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq
 from views import (
     render_sidebar, render_header, tela_login, tela_importar,
     _render_dashboard, _render_historico, _render_cliente, _render_proximas,
@@ -103,6 +103,11 @@ def main():
     if not st.session_state.get("_historico_loaded"):
         load_historico_from_bq()
         st.session_state["_historico_loaded"] = True
+
+    # Carrega mensagens n8n para lógica de ligação/status
+    if not st.session_state.get("_mensagens_loaded"):
+        load_mensagens_from_bq()
+        st.session_state["_mensagens_loaded"] = True
 
     tela = st.session_state.get("tela", "principal")
     if not store["clientes"] or tela == "importar":

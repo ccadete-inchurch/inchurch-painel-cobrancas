@@ -1,3 +1,4 @@
+import re
 from datetime import date
 import pandas as pd
 
@@ -12,6 +13,25 @@ def fmt_tel(valor) -> str:
     if not valor:
         return "—"
     return str(valor).split(";")[0].strip() or "—"
+
+
+def _norm_tel(phone: str) -> str:
+    """Normaliza para DDD (2) + últimos 8 dígitos — chave para cruzar com n8n."""
+    p = re.sub(r'\D', '', phone or '')
+    if p.startswith('55') and len(p) > 11:
+        p = p[2:]
+    return (p[:2] + p[-8:]) if len(p) >= 10 else p
+
+
+def get_msg_status(telefone: str) -> str:
+    """Retorna o status da última interação n8n para o telefone do cliente.
+
+    Valores possíveis: sem_contato | mensagem | ligacao_pendente |
+                       tentar_novamente | concluida
+    """
+    import streamlit as st
+    chave = _norm_tel(telefone)
+    return st.session_state.get("_msg_status", {}).get(chave, "sem_contato")
 
 
 # ── Datas ─────────────────────────────────────────────────────────────────────
