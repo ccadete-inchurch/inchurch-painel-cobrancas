@@ -27,6 +27,23 @@ def _score_cor(score: int) -> str:
     return "#5fa3ff"
 
 
+_ICON_PERSON = (
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#4b5563" style="flex-shrink:0;vertical-align:middle">'
+    '<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>'
+    '</svg>'
+)
+_ICON_PHONE = (
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" style="flex-shrink:0;vertical-align:middle">'
+    '<path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>'
+    '</svg>'
+)
+_ICON_GROUP = (
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" style="flex-shrink:0;vertical-align:middle">'
+    '<path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>'
+    '</svg>'
+)
+
+
 def _render_card(score, acoes, c, role, idx):
     cor = _score_cor(score)
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:5px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
@@ -38,20 +55,28 @@ def _render_card(score, acoes, c, role, idx):
         f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
         f'<div style="font-weight:700;font-size:17px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
         f'{c["nome"]}{inativo_badge}{acordo_badge}'
-        f'<div style="font-size:11px;color:#6b7280;font-weight:400;margin-top:2px">'
-        f'{c.get("cnpj","—")} · ID {c.get("id","—")}</div>'
+        f'<div style="font-size:11px;color:#6b7280;font-weight:400;margin-top:4px;display:flex;align-items:center;gap:4px">'
+        f'{_ICON_PERSON}'
+        f'<span>{c.get("cnpj","—")}</span>'
+        f'<span style="color:#374151;margin:0 1px">·</span>'
+        f'<span>ID {c.get("id","—")}</span>'
+        f'</div>'
         f'</div>'
         f'<div style="text-align:right;flex-shrink:0">'
         f'<div style="font-size:20px;font-weight:800;color:{cor};line-height:1">{score}</div>'
         f'<div style="font-size:9px;color:#6b7280">pts</div>'
         f'</div></div>'
-        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
         f'<span style="font-size:13px;font-weight:600;color:#e8eaf0">{fmt_moeda_plain(c["valor"])}</span>'
         f'{dias_html(c.get("dias_atraso"))}'
         f'</div>'
-        f'<div style="font-size:12px;color:#6b7280;line-height:1.6">'
-        f'📞 {c.get("telefone","—")}<br>'
-        f'<span style="color:#6b7280">Grupo:</span> <span style="color:#e8eaf0">{c.get("_grupo","—")}</span>'
+        f'<div style="font-size:12px;color:#6b7280">'
+        f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">'
+        f'{_ICON_PHONE}<span style="color:#e8eaf0">{c.get("telefone","—")}</span>'
+        f'</div>'
+        f'<div style="display:flex;align-items:center;gap:5px">'
+        f'{_ICON_GROUP}<span style="color:#e8eaf0">{c.get("_grupo","—")}</span>'
+        f'</div>'
         f'</div>'
         f'</div>',
         unsafe_allow_html=True,
