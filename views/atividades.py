@@ -300,11 +300,25 @@ def _render_atividades(store, clientes, role):
             return "ligacao"
         return "aguardar"
 
+    # Na visão do lote (atendente ou admin visualizando lote), ocultar passivos:
+    # - AGUARDAR: sem ação recomendada
+    # - CONCLUÍDA: só mostrar se a conclusão foi hoje (progresso do dia)
+    _e_lote = email in _EMAIL_GRUPO or (role in ("admin", "gestor") and _modo_admin == "Lote do dia")
+
     acordos = []; ligacao = []; so_msg = []; tentar_nov = []; concluida = []; aguardar = []
     for item in fila:
         s, a, c, h = item
         ms = get_msg_status(c.get("telefone", ""))
         canal = _canal(a, ms)
+
+        if _e_lote:
+            if canal == "aguardar":
+                continue
+            if canal == "concluida":
+                dias_contato = get_ultimo_contato_n8n_dias(c.get("telefone", ""))
+                if dias_contato is None or dias_contato >= 1:
+                    continue  # concluída antes de hoje → não era tarefa ativa do lote
+
         if   canal == "urgente":          acordos.append(item)
         elif canal == "ligacao":          ligacao.append(item)
         elif canal == "mensagem":         so_msg.append(item)
