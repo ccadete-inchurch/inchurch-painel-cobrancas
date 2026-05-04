@@ -273,17 +273,8 @@ def _render_atividades(store, clientes, role):
     else:
         dados_m, label_m = n8n.get("total", _zero), "Total"
 
-    # Contatos manuais registrados hoje via dialog (ligações atendidas pelo atendente)
-    _manual_lig_hoje = sum(
-        1 for c in clientes
-        if get_hist(c["id"]).get("status") in ("contacted", "promise", "negotiating")
-        and get_hist(c["id"]).get("lastContact") == hoje_str
-    )
-
     meta_msg, meta_lig, meta_atend = 50, 30, 15
-    n_msg   = dados_m.get("mensagens", 0)
-    n_lig   = dados_m.get("ligacoes",  0) + _manual_lig_hoje
-    n_atend = dados_m.get("atendidas", 0) + _manual_lig_hoje
+    n_msg, n_lig, n_atend = dados_m.get("mensagens", 0), dados_m.get("ligacoes", 0), dados_m.get("atendidas", 0)
 
     st.markdown(f'<div style="font-size:13px;font-weight:700;color:#6b7280;margin-bottom:6px">{label_m}</div>', unsafe_allow_html=True)
     m1, m2, m3 = st.columns(3)
@@ -348,12 +339,7 @@ def _render_atividades(store, clientes, role):
                 if b in str(c.get("nome", "")).lower() or b in str(c.get("cnpj", "")).lower()]
 
     # ── Separar por coluna ────────────────────────────────────────────────────
-    _STATUS_MANUAL_CONCLUIDO = ("contacted", "promise", "negotiating")
-
-    def _canal(acoes, msg_st, h=None):
-        # Contato manual registrado hoje → CONCLUÍDA imediatamente
-        if h and h.get("status") in _STATUS_MANUAL_CONCLUIDO and h.get("lastContact") == hoje_str:
-            return "concluida"
+    def _canal(acoes, msg_st):
         if "urgente" in acoes and msg_st != "concluida":
             return "urgente"
         if msg_st == "concluida":
@@ -375,26 +361,22 @@ def _render_atividades(store, clientes, role):
 
     # Na visão do lote (atendente ou admin visualizando lote), ocultar passivos:
     # - AGUARDAR: sem ação recomendada
-    # - CONCLUÍDA: só mostrar se a conclusão foi hoje (n8n ou manual)
+    # - CONCLUÍDA: só mostrar se a conclusão foi hoje (progresso do dia)
     _e_lote = email in _EMAIL_GRUPO or (role in ("admin", "gestor") and _modo_admin == "Lote do dia")
 
     acordos = []; ligacao = []; so_msg = []; tentar_nov = []; concluida = []; aguardar = []
     for item in fila:
         s, a, c, h = item
         ms = get_msg_status(c.get("telefone", ""))
-        canal = _canal(a, ms, h)
+        canal = _canal(a, ms)
 
         if _e_lote:
             if canal == "aguardar":
                 continue
             if canal == "concluida":
-                # Mantém se foi concluído manualmente hoje
-                if h.get("status") in _STATUS_MANUAL_CONCLUIDO and h.get("lastContact") == hoje_str:
-                    pass
-                else:
-                    dias_contato = get_ultimo_contato_n8n_dias(c.get("telefone", ""))
-                    if dias_contato is None or dias_contato >= 1:
-                        continue  # concluída antes de hoje → não era tarefa ativa do lote
+                dias_contato = get_ultimo_contato_n8n_dias(c.get("telefone", ""))
+                if dias_contato is None or dias_contato >= 1:
+                    continue  # concluída antes de hoje → não era tarefa ativa do lote
 
         if   canal == "urgente":          acordos.append(item)
         elif canal == "ligacao":          ligacao.append(item)
