@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias
-from data import calcular_score, recomendar_acao, load_metricas_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_metricas_from_bq, load_mensagens_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -126,9 +126,10 @@ def _render_card(score, acoes, c, role, idx, msg_st="", h=None):
 
 
 def _render_atividades(store, clientes, role):
-    # Recarrega métricas do dia a cada 5 min (query pequena, só hoje)
+    # Recarrega n8n a cada 5 min: status das mensagens (colunas do kanban) + métricas do dia
     _ts = st.session_state.get("_metricas_ts", 0)
     if _time.time() - _ts > 300:
+        load_mensagens_from_bq()
         load_metricas_from_bq()
         st.session_state["_metricas_ts"] = _time.time()
 
