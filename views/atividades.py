@@ -398,16 +398,18 @@ def _render_atividades(store, clientes, role):
     _check = _svg("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z", "#7cc243", 16)
     _dot   = '<span style="color:#6b7280;margin:0 7px;font-weight:300;font-size:18px;line-height:1">|</span>'
 
+    _mostrar_aguardar = role in ("admin", "gestor")
     colunas = [
         (f'{_fire}URGENTE',           acordos,    "#7cc243"),
         (f'{_env}MENSAGEM',           so_msg,     "#5fa3ff"),
         (f'{_phone}LIGAÇÃO',          ligacao,    "#f59e0b"),
         (f'{_retry}TENTAR NOVAMENTE', tentar_nov, "#a78bfa"),
         (f'{_check}CONCLUÍDA',        concluida,  "#7cc243"),
-        (f'{_wait}AGUARDAR',          aguardar,   "#4b5563"),
     ]
+    if _mostrar_aguardar:
+        colunas.append((f'{_wait}AGUARDAR', aguardar, "#4b5563"))
 
-    cols = st.columns(6)
+    cols = st.columns(len(colunas))
     for col, (titulo, itens, cor) in zip(cols, colunas):
         with col:
             st.markdown(
