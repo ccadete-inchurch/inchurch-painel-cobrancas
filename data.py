@@ -581,6 +581,24 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
     return top80
 
 
+def get_tarefas_do_dia_bq(atendente: str) -> list:
+    """Retorna IDs do lote do dia de um atendente consultando o BQ (uso do gestor)."""
+    client = get_bq_client()
+    if not client:
+        return []
+    hoje = date.today().isoformat()
+    try:
+        df = client.query(f"""
+            SELECT id_sacado_sac
+            FROM `{_TAREFAS_TABLE}`
+            WHERE atendente = '{atendente}'
+              AND data_tarefa = '{hoje}'
+        """).to_dataframe()
+        return df["id_sacado_sac"].tolist()
+    except Exception:
+        return []
+
+
 def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
     """Atualiza bools na tabela de tarefas com base no status n8n do dia.
     Usa um único MERGE em vez de 80 UPDATEs individuais.

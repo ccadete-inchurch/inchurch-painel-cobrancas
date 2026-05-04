@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status
-from data import calcular_score, recomendar_acao, load_metricas_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_metricas_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -106,8 +106,7 @@ def _render_atividades(store, clientes, role):
         st.session_state[_key_tarefas] = ids_hoje
     ids_hoje = set(st.session_state[_key_tarefas])
 
-    # Filtra clientes para o lote do dia (gestor vê todos)
-    from data import _EMAIL_GRUPO
+    # Filtra clientes para o lote do dia (atendente vê só os seus)
     if email in _EMAIL_GRUPO:
         clientes = [c for c in clientes if c["id"] in ids_hoje]
 
@@ -118,6 +117,36 @@ def _render_atividades(store, clientes, role):
         status_map = st.session_state.get("_msg_status", {})
         atualizar_tarefas_bq(atendente_bq, status_map, clientes)
         st.session_state["_tarefas_update_ts"] = _time.time()
+
+    # ── Controles de admin: visualização por lote ou todos ───────────────────
+    _nomes_atendentes = list(_EMAIL_GRUPO.values())
+    _modo_admin       = "Todos os clientes"
+    _atendente_sel    = None
+    if role in ("admin", "gestor"):
+        _ca, _cb = st.columns([1, 1])
+        with _ca:
+            _modo_admin = st.selectbox(
+                "Visualização",
+                ["Todos os clientes", "Lote do dia"],
+                label_visibility="collapsed",
+                key="_admin_modo",
+            )
+        with _cb:
+            if _modo_admin == "Lote do dia":
+                _atendente_sel = st.selectbox(
+                    "Atendente",
+                    _nomes_atendentes,
+                    label_visibility="collapsed",
+                    key="_admin_atendente",
+                )
+
+        if _modo_admin == "Lote do dia" and _atendente_sel:
+            _key_lote = f"_tarefas_admin_{date.today().isoformat()}_{_atendente_sel}"
+            if _key_lote not in st.session_state:
+                with st.spinner(f"Carregando lote de {_atendente_sel}..."):
+                    st.session_state[_key_lote] = get_tarefas_do_dia_bq(_atendente_sel)
+            ids_lote = set(st.session_state[_key_lote])
+            clientes = [c for c in clientes if c["id"] in ids_lote]
 
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
