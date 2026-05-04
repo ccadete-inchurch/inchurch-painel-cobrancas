@@ -47,10 +47,10 @@ _ICON_GROUP = (
 )
 
 
-def _motivo(acoes, msg_st, c, h) -> str:
-    dias = c.get("dias_atraso") or 0
-    tel  = c.get("telefone", "")
-    dias_n8n    = get_ultimo_contato_n8n_dias(tel)
+def _motivo(acoes, msg_st, c, h) -> tuple:
+    """Retorna (texto, estilo) onde estilo é 'blue' | 'purple' | 'gray'."""
+    tel      = c.get("telefone", "")
+    dias_n8n = get_ultimo_contato_n8n_dias(tel)
     dias_manual = None
     lc = h.get("lastContact")
     if lc:
@@ -63,31 +63,33 @@ def _motivo(acoes, msg_st, c, h) -> str:
     dsc = min(candidatos) if candidatos else None
 
     if "urgente" in acoes:
-        return ""
+        return "", ""
     if msg_st == "tentar_novamente":
-        return "Não atendeu a ligação"
+        return "Não atendeu a ligação", "purple"
     if msg_st in ("mensagem", "ligacao_pendente"):
-        dias_msg = get_ultimo_contato_n8n_dias(tel)
-        quando   = "hoje" if dias_msg == 0 else f"há {dias_msg}d" if dias_msg else ""
-        sufixo   = f" ({quando})" if quando else ""
-        return f"Mensagem enviada{sufixo} · aguarda ligação"
+        quando = "hoje" if dias_n8n == 0 else f"há {dias_n8n}d" if dias_n8n else ""
+        sufixo = f" ({quando})" if quando else ""
+        return f"Mensagem enviada{sufixo} · aguarda ligação", "blue"
     if "ligar" in acoes and "mensagem" in acoes:
-        if dsc is not None:
-            return f"{dias}d em atraso · sem contato há {dsc}d"
-        return f"{dias}d em atraso · sem contato recente"
-    if "ligar" in acoes:
-        return f"{dias}d em atraso"
-    if "mensagem" in acoes:
-        return f"{dias}d em atraso"
-    return ""
+        texto = f"Sem contato há {dsc}d" if dsc is not None else "Sem contato recente"
+        return texto, "gray"
+    return "", ""
 
 
 def _render_card(score, acoes, c, role, idx, msg_st="", h=None):
     cor           = _score_cor(score)
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
     acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if "urgente" in acoes else ""
-    motivo_txt    = _motivo(acoes, msg_st, c, h or {})
-    motivo_html   = f'<div style="font-size:11px;color:#7cc243;font-weight:600;margin-bottom:8px;padding:4px 8px;background:rgba(124,194,67,.08);border-radius:6px;border-left:2px solid #7cc243">{motivo_txt}</div>' if motivo_txt else ""
+    motivo_txt, motivo_style = _motivo(acoes, msg_st, c, h or {})
+    _motivo_css = {
+        "blue":   "color:#5fa3ff;background:rgba(95,163,255,.08);border-left:2px solid #5fa3ff;padding:4px 8px;border-radius:6px",
+        "purple": "color:#a78bfa;background:rgba(167,139,250,.08);border-left:2px solid #a78bfa;padding:4px 8px;border-radius:6px",
+        "gray":   "color:#6b7280;padding:2px 0",
+    }
+    motivo_html = (
+        f'<div style="font-size:11px;font-weight:600;margin-bottom:8px;{_motivo_css.get(motivo_style, "")}">{motivo_txt}</div>'
+        if motivo_txt else ""
+    )
 
     st.markdown(
         f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
