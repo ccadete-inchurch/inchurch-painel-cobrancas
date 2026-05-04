@@ -67,7 +67,10 @@ def _motivo(acoes, msg_st, c, h) -> str:
     if msg_st == "tentar_novamente":
         return "Não atendeu a ligação"
     if msg_st in ("mensagem", "ligacao_pendente"):
-        return "Mensagem enviada · aguarda ligação"
+        dias_msg = get_ultimo_contato_n8n_dias(tel)
+        quando   = "hoje" if dias_msg == 0 else f"há {dias_msg}d" if dias_msg else ""
+        sufixo   = f" ({quando})" if quando else ""
+        return f"Mensagem enviada{sufixo} · aguarda ligação"
     if "ligar" in acoes and "mensagem" in acoes:
         if dsc is not None:
             return f"{dias}d em atraso · sem contato há {dsc}d"
