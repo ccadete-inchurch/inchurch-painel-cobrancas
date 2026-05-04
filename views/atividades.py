@@ -146,7 +146,40 @@ def _render_atividades(store, clientes, role):
 
     # Filtra clientes para o lote do dia (atendente vê só os seus)
     if email in _EMAIL_GRUPO:
-        clientes = [c for c in clientes if c["id"] in ids_hoje]
+        grupo = _EMAIL_GRUPO[email]
+
+        def _ativo(c):
+            """Retorna True se o cliente tem ação pendente (não é passivo)."""
+            h2  = get_hist(c["id"])
+            a2  = recomendar_acao(c, h2)
+            if not a2:
+                return False
+            ms2 = get_msg_status(c.get("telefone", ""))
+            if "urgente" not in a2:
+                if ms2 == "concluida":
+                    dias2 = get_ultimo_contato_n8n_dias(c.get("telefone", ""))
+                    if dias2 is None or dias2 >= 1:
+                        return False
+                if ms2 in ("mensagem", "ligacao_pendente") and "ligar" not in a2:
+                    return False
+            return True
+
+        # Ativos do lote
+        ativos_lote = [c for c in clientes if c["id"] in ids_hoje and _ativo(c)]
+
+        # Complementa até 80 se necessário
+        if len(ativos_lote) < 80:
+            faltam   = 80 - len(ativos_lote)
+            ids_lote = ids_hoje
+            extras   = sorted(
+                [c for c in store["clientes"]
+                 if c.get("_grupo") == grupo and c["id"] not in ids_lote and _ativo(c)],
+                key=lambda x: calcular_score(x, get_hist(x["id"])),
+                reverse=True,
+            )
+            ativos_lote = ativos_lote + extras[:faltam]
+
+        clientes = ativos_lote
 
     # Atualiza bools na tabela BQ com base no status n8n atual (máx 1x a cada 10 min)
     atendente_bq = _EMAIL_GRUPO.get(email)
@@ -184,13 +217,39 @@ def _render_atividades(store, clientes, role):
                 with st.spinner(f"Carregando lote de {_atendente_sel}..."):
                     ids_bq = get_tarefas_do_dia_bq(_atendente_sel)
                     if not ids_bq:
-                        # Lote ainda não gerado hoje — gera agora usando email da atendente
                         _GRUPO_EMAIL = {v: k for k, v in _EMAIL_GRUPO.items()}
                         _email_atend = _GRUPO_EMAIL.get(_atendente_sel, "")
                         ids_bq = gerar_tarefas_do_dia(clientes, _email_atend)
                     st.session_state[_key_lote] = ids_bq
             ids_lote = set(st.session_state[_key_lote])
-            clientes = [c for c in clientes if c["id"] in ids_lote]
+
+            # Pré-filtra passivos e complementa até 80
+            def _ativo_admin(c):
+                h2  = get_hist(c["id"])
+                a2  = recomendar_acao(c, h2)
+                if not a2:
+                    return False
+                ms2 = get_msg_status(c.get("telefone", ""))
+                if "urgente" not in a2:
+                    if ms2 == "concluida":
+                        dias2 = get_ultimo_contato_n8n_dias(c.get("telefone", ""))
+                        if dias2 is None or dias2 >= 1:
+                            return False
+                    if ms2 in ("mensagem", "ligacao_pendente") and "ligar" not in a2:
+                        return False
+                return True
+
+            ativos_admin = [c for c in clientes if c["id"] in ids_lote and _ativo_admin(c)]
+            if len(ativos_admin) < 80:
+                faltam2 = 80 - len(ativos_admin)
+                extras2 = sorted(
+                    [c for c in store["clientes"]
+                     if c.get("_grupo") == _atendente_sel and c["id"] not in ids_lote and _ativo_admin(c)],
+                    key=lambda x: calcular_score(x, get_hist(x["id"])),
+                    reverse=True,
+                )
+                ativos_admin = ativos_admin + extras2[:faltam2]
+            clientes = ativos_admin
 
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
