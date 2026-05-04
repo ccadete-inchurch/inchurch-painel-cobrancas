@@ -329,6 +329,7 @@ def load_mensagens_from_bq():
 
     st.session_state.setdefault("_msg_status", {})
     st.session_state.setdefault("_msg_concluida_dias", {})
+    st.session_state.setdefault("_msg_ultimo_contato_dias", {})
 
     client = get_bq_client()
     if not client:
@@ -343,8 +344,9 @@ def load_mensagens_from_bq():
     except Exception:
         return
 
-    status_map   = {}
-    concluida_ts = {}
+    status_map        = {}
+    concluida_ts      = {}
+    ultimo_contato_ts = {}  # último contato n8n por telefone (qualquer mensagem)
 
     for _, row in df.iterrows():
         chave = _norm(str(row.get("telefone") or ""))
@@ -352,6 +354,9 @@ def load_mensagens_from_bq():
             continue
         msg = str(row.get("message") or "").lower()
         ts  = row.get("created_at")
+
+        if ts is not None:
+            ultimo_contato_ts[chave] = ts  # último sempre sobrescreve (ASC → last wins)
 
         if any(p in msg for p in _MSG_CONCLUIDA):
             status_map[chave] = "concluida"
@@ -368,15 +373,22 @@ def load_mensagens_from_bq():
                 status_map[chave] = "mensagem"
 
     now_utc = datetime.now(_tz.utc)
-    concluida_dias = {}
+    concluida_dias      = {}
+    ultimo_contato_dias = {}
     for phone, ts in concluida_ts.items():
         try:
             concluida_dias[phone] = max((now_utc - ts).days, 0)
         except Exception:
             pass
+    for phone, ts in ultimo_contato_ts.items():
+        try:
+            ultimo_contato_dias[phone] = max((now_utc - ts).days, 0)
+        except Exception:
+            pass
 
-    st.session_state["_msg_status"]         = status_map
-    st.session_state["_msg_concluida_dias"] = concluida_dias
+    st.session_state["_msg_status"]              = status_map
+    st.session_state["_msg_concluida_dias"]      = concluida_dias
+    st.session_state["_msg_ultimo_contato_dias"] = ultimo_contato_dias
 
 
 def load_metricas_from_bq():
@@ -865,16 +877,20 @@ def calcular_score(cliente, hist) -> int:
     return int(score)
 
 
-def _dias_sem_contato(hist) -> int | None:
-    """Retorna dias desde o último contato registrado, ou None se nunca contatado."""
+def _dias_sem_contato(hist, telefone: str = "") -> int | None:
+    """Retorna dias desde o último contato (n8n ou histórico manual), o mais recente dos dois."""
+    from helpers import get_ultimo_contato_n8n_dias
+    dias_n8n    = get_ultimo_contato_n8n_dias(telefone) if telefone else None
+    dias_manual = None
     lc = hist.get("lastContact")
-    if not lc:
-        return None
-    try:
-        dt = datetime.strptime(lc, "%d/%m/%Y").date()
-        return (date.today() - dt).days
-    except Exception:
-        return None
+    if lc:
+        try:
+            dt = datetime.strptime(lc, "%d/%m/%Y").date()
+            dias_manual = (date.today() - dt).days
+        except Exception:
+            pass
+    candidates = [d for d in (dias_n8n, dias_manual) if d is not None]
+    return min(candidates) if candidates else None
 
 
 def recomendar_acao(cliente, hist) -> list[str]:
@@ -888,7 +904,7 @@ def recomendar_acao(cliente, hist) -> list[str]:
     if cliente.get("_tem_acordo") and dias >= 7:
         return ["ligar", "urgente"]
 
-    dsc = _dias_sem_contato(hist)  # None = nunca contatado
+    dsc = _dias_sem_contato(hist, cliente.get("telefone", ""))  # None = nunca contatado
 
     # ≥ 15 dias + sem contato há 3+ dias → mensagem + ligação
     if dias >= 15 and (dsc is None or dsc >= 3):

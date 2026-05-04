@@ -41,6 +41,13 @@ def get_msg_concluida_dias(telefone: str):
     return st.session_state.get("_msg_concluida_dias", {}).get(chave)
 
 
+def get_ultimo_contato_n8n_dias(telefone: str):
+    """Retorna quantos dias atrás foi o último contato pelo n8n (qualquer mensagem), ou None."""
+    import streamlit as st
+    chave = _norm_tel(telefone)
+    return st.session_state.get("_msg_ultimo_contato_dias", {}).get(chave)
+
+
 # ── Datas ─────────────────────────────────────────────────────────────────────
 
 def calc_dias(venc):
