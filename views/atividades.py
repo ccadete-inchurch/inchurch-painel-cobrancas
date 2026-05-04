@@ -63,7 +63,7 @@ def _motivo(acoes, msg_st, c, h) -> str:
     dsc = min(candidatos) if candidatos else None
 
     if "urgente" in acoes:
-        return f"Acordo vencido há {dias}d"
+        return ""
     if msg_st == "tentar_novamente":
         return "Não atendeu a ligação"
     if msg_st in ("mensagem", "ligacao_pendente"):
