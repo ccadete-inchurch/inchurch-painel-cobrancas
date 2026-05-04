@@ -111,11 +111,13 @@ def _render_atividades(store, clientes, role):
     if email in _EMAIL_GRUPO:
         clientes = [c for c in clientes if c["id"] in ids_hoje]
 
-    # Atualiza bools na tabela BQ com base no status n8n atual
+    # Atualiza bools na tabela BQ com base no status n8n atual (máx 1x a cada 10 min)
     atendente_bq = _EMAIL_GRUPO.get(email)
-    if atendente_bq:
+    _ts_upd = st.session_state.get("_tarefas_update_ts", 0)
+    if atendente_bq and _time.time() - _ts_upd > 600:
         status_map = st.session_state.get("_msg_status", {})
         atualizar_tarefas_bq(atendente_bq, status_map, clientes)
+        st.session_state["_tarefas_update_ts"] = _time.time()
 
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'

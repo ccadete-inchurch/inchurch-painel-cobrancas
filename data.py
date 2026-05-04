@@ -545,13 +545,14 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
 
 
 def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
-    """Atualiza bools na tabela de tarefas com base no status n8n do dia."""
+    """Atualiza bools na tabela de tarefas com base no status n8n do dia.
+    Usa um único MERGE em vez de 80 UPDATEs individuais.
+    """
     client = get_bq_client()
     if not client:
         return
     hoje = date.today().isoformat()
 
-    # Monta dict id → telefone para cruzar com status_map
     import re
     def _norm(phone):
         p = re.sub(r'\D', '', phone or '')
@@ -559,30 +560,50 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
             p = p[2:]
         return (p[:2] + p[-8:]) if len(p) >= 10 else p
 
-    id_tel = {c["id"]: _norm(c.get("telefone", "")) for c in clientes}
-
-    for cid, tel in id_tel.items():
+    rows = []
+    for c in clientes:
+        tel = _norm(c.get("telefone", ""))
         if not tel:
             continue
         st = status_map.get(tel)
         if not st:
             continue
-        msg_env = st in ("mensagem", "ligacao_pendente", "concluida", "tentar_novamente")
-        lig_feit = st in ("ligacao_pendente", "concluida", "tentar_novamente")
+        msg_env   = st in ("mensagem", "ligacao_pendente", "concluida", "tentar_novamente")
+        lig_feit  = st in ("ligacao_pendente", "concluida", "tentar_novamente")
         lig_atend = st == "concluida"
-        try:
-            client.query(f"""
-                UPDATE `{_TAREFAS_TABLE}`
-                SET mensagem_enviada  = {str(msg_env).upper()},
-                    ligacao_feita     = {str(lig_feit).upper()},
-                    ligacao_atendida  = {str(lig_atend).upper()}
-                WHERE id_sacado_sac = '{cid}'
-                  AND atendente = '{atendente}'
-                  AND data_tarefa = '{hoje}'
-                  AND (mensagem_enviada IS FALSE OR ligacao_feita IS FALSE OR ligacao_atendida IS FALSE)
-            """).result()
-        except Exception:
-            pass
+        if msg_env or lig_feit or lig_atend:
+            rows.append((c["id"], msg_env, lig_feit, lig_atend))
+
+    if not rows:
+        return
+
+    values_str = ", ".join(
+        f"('{cid}', {str(me).upper()}, {str(lf).upper()}, {str(la).upper()})"
+        for cid, me, lf, la in rows
+    )
+    try:
+        client.query(f"""
+            MERGE `{_TAREFAS_TABLE}` T
+            USING (
+                SELECT id_sacado_sac, msg_env, lig_feit, lig_atend
+                FROM UNNEST(ARRAY<STRUCT<id_sacado_sac STRING, msg_env BOOL, lig_feit BOOL, lig_atend BOOL>>[
+                    {values_str}
+                ])
+            ) S
+            ON  T.id_sacado_sac = S.id_sacado_sac
+            AND T.atendente     = '{atendente}'
+            AND T.data_tarefa   = '{hoje}'
+            WHEN MATCHED AND (
+                (S.msg_env   AND NOT COALESCE(T.mensagem_enviada, FALSE)) OR
+                (S.lig_feit  AND NOT COALESCE(T.ligacao_feita,    FALSE)) OR
+                (S.lig_atend AND NOT COALESCE(T.ligacao_atendida, FALSE))
+            ) THEN UPDATE SET
+                mensagem_enviada = S.msg_env,
+                ligacao_feita    = S.lig_feit,
+                ligacao_atendida = S.lig_atend
+        """)  # fire-and-forget: não bloqueia o render
+    except Exception:
+        pass
 
 
 # ── Processamento ─────────────────────────────────────────────────────────────
