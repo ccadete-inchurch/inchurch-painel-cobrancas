@@ -538,9 +538,34 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
         h = get_hist(cid)
         if h.get("status") == "paid":
             continue
-        fila.append((calcular_score(c, h), cid))
-    fila.sort(reverse=True)
-    top80 = [cid for _, cid in fila[:80]]
+        fila.append((calcular_score(c, h), c, h))
+    fila.sort(reverse=True, key=lambda x: x[0])
+
+    # Seleciona top 80 respeitando limite de clientes inativos por tipo de ação
+    _MAX_INATIVO_LIG = 10
+    _MAX_INATIVO_MSG = 15
+    inativo_lig_ct   = 0
+    inativo_msg_ct   = 0
+    top80 = []
+
+    for _, c, h in fila:
+        if len(top80) >= 80:
+            break
+        if c.get("_inativo"):
+            acoes   = recomendar_acao(c, h)
+            tem_lig = "ligar" in acoes
+            tem_msg = "mensagem" in acoes
+            # Clientes com ligação consomem cota de ligação
+            if tem_lig:
+                if inativo_lig_ct >= _MAX_INATIVO_LIG:
+                    continue
+                inativo_lig_ct += 1
+            # Clientes só com mensagem (sem ligação) consomem cota de mensagem
+            elif tem_msg:
+                if inativo_msg_ct >= _MAX_INATIVO_MSG:
+                    continue
+                inativo_msg_ct += 1
+        top80.append(c["id"])
 
     # Persiste no BQ
     if client and top80:
