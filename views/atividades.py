@@ -194,15 +194,15 @@ def _render_atividades(store, clientes, role):
     _modo_admin       = "Todos os clientes"
     _atendente_sel    = None
     if role in ("admin", "gestor"):
-        _ca, _cb = st.columns([1, 1])
-        with _ca:
+        _, _cadm_v, _cadm_a = st.columns([3, 1.2, 1.2])
+        with _cadm_v:
             _modo_admin = st.selectbox(
                 "Visualização",
                 ["Todos os clientes", "Lote do dia"],
                 label_visibility="collapsed",
                 key="_admin_modo",
             )
-        with _cb:
+        with _cadm_a:
             if _modo_admin == "Lote do dia":
                 _atendente_sel = st.selectbox(
                     "Atendente",

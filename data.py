@@ -73,20 +73,23 @@ def fetch_cobrancas_competencia():
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
+    # Agrupa por (sacado, recebimento) para somar todos os itens de uma mesma cobrança.
+    # Sem este GROUP BY, múltiplos itens do mesmo id_recebimento geram linhas duplicadas
+    # e o Python descartava os menores, resultando em valores incorretos.
     query = """
     SELECT
-        c.id_sacado_sac as codigo,
-        c.id_recebimento_recb as id_recebimento,
-        c.st_nome_sac as nome,
-        c.st_cgc_sac as cnpj,
-        COALESCE(NULLIF(cli.st_fax_sac, ''), c.st_telefone_sac) as telefone,
-        c.comp_valor as valor,
-        FORMAT_TIMESTAMP('%Y-%m-%d', c.dt_vencimento_recb) as vencimento,
-        c.fl_status_recb as status,
-        u.nm_grupo as grupo,
-        p.parcelas_em_atraso as parcelas,
-        CASE WHEN ac.id_sacado_sac IS NOT NULL THEN TRUE ELSE FALSE END as tem_acordo,
-        CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END as inativo
+        c.id_sacado_sac                                                   AS codigo,
+        c.id_recebimento_recb                                             AS id_recebimento,
+        MAX(c.st_nome_sac)                                                AS nome,
+        MAX(c.st_cgc_sac)                                                 AS cnpj,
+        MAX(COALESCE(NULLIF(cli.st_fax_sac, ''), c.st_telefone_sac))     AS telefone,
+        SUM(c.comp_valor)                                                 AS valor,
+        FORMAT_TIMESTAMP('%Y-%m-%d', MAX(c.dt_vencimento_recb))          AS vencimento,
+        MAX(c.fl_status_recb)                                             AS status,
+        MAX(u.nm_grupo)                                                   AS grupo,
+        MAX(p.parcelas_em_atraso)                                         AS parcelas,
+        MAX(CASE WHEN ac.id_sacado_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS tem_acordo,
+        MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
     FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
     LEFT JOIN (
         SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(grupo) AS nm_grupo
@@ -99,7 +102,7 @@ def fetch_cobrancas_competencia():
         GROUP BY id_sacado_sac
     ) cli ON CAST(c.id_sacado_sac AS STRING) = cli.id_sacado_sac
     LEFT JOIN (
-        SELECT id_sacado_sac, COUNT(DISTINCT id_recebimento_recb) as parcelas_em_atraso
+        SELECT id_sacado_sac, COUNT(DISTINCT id_recebimento_recb) AS parcelas_em_atraso
         FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
         WHERE fl_status_recb = '0'
         GROUP BY id_sacado_sac
@@ -111,7 +114,8 @@ def fetch_cobrancas_competencia():
           AND fl_status_recb = '0'
     ) ac ON c.id_sacado_sac = ac.id_sacado_sac
     WHERE c.fl_status_recb = '0'
-    ORDER BY c.comp_valor DESC
+    GROUP BY c.id_sacado_sac, c.id_recebimento_recb
+    ORDER BY SUM(c.comp_valor) DESC
     """
     try:
         return client.query(query).to_dataframe()
