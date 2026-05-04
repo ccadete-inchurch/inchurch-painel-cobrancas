@@ -5,14 +5,14 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias
-from data import calcular_score, recomendar_acao, load_metricas_from_bq, load_mensagens_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_metricas_from_bq, load_mensagens_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, adicionar_tarefas_extras_bq, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
 
-@st.fragment(run_every=300)
+@st.fragment(run_every=1800)
 def _auto_refresh_n8n():
-    """Dispara a cada 5 min para atualizar status N8N e re-renderizar o kanban."""
+    """Dispara a cada 30 min para atualizar status N8N e re-renderizar o kanban."""
     last_ts = st.session_state.get("_metricas_ts", 0)
     if _time.time() - last_ts < 30:
         return
@@ -180,7 +180,7 @@ def _render_atividades(store, clientes, role):
         # Ativos do lote
         ativos_lote = [c for c in clientes if c["id"] in ids_hoje and _ativo(c)]
 
-        # Complementa até 80 se necessário
+        # Complementa até 80 se necessário e persiste extras no BQ
         if len(ativos_lote) < 80:
             faltam   = 80 - len(ativos_lote)
             ids_lote = ids_hoje
@@ -190,7 +190,12 @@ def _render_atividades(store, clientes, role):
                 key=lambda x: calcular_score(x, get_hist(x["id"])),
                 reverse=True,
             )
-            ativos_lote = ativos_lote + extras[:faltam]
+            extras_sel = extras[:faltam]
+            novos_ids  = [c["id"] for c in extras_sel]
+            ativos_lote = ativos_lote + extras_sel
+            if novos_ids:
+                adicionar_tarefas_extras_bq(grupo, novos_ids)
+                st.session_state[_key_tarefas] = list(ids_hoje | set(novos_ids))
 
         clientes = ativos_lote
 

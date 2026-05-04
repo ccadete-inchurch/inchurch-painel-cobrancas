@@ -612,6 +612,22 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
     return top80
 
 
+def adicionar_tarefas_extras_bq(atendente: str, extra_ids: list):
+    """Insere clientes extras (complemento do lote) na tabela de tarefas diárias."""
+    client = get_bq_client()
+    if not client or not extra_ids:
+        return
+    hoje = date.today().isoformat()
+    rows = [{"id_sacado_sac": cid, "atendente": atendente, "data_tarefa": hoje,
+             "dt_entrou_coluna_msg": None, "dt_entrou_coluna_ligacao": None,
+             "mensagem_enviada": False, "ligacao_feita": False, "ligacao_atendida": False}
+            for cid in extra_ids]
+    try:
+        client.insert_rows_json(_TAREFAS_TABLE, rows)
+    except Exception:
+        pass
+
+
 def get_tarefas_do_dia_bq(atendente: str) -> list:
     """Retorna IDs do lote do dia de um atendente consultando o BQ (uso do gestor)."""
     client = get_bq_client()
