@@ -25,7 +25,7 @@ def tela_principal():
     role     = current_role()
 
     render_header()
-    page = st.session_state.get("page", "dashboard")
+    page = st.session_state.get("page", "atividades")
 
     if page == "dashboard":
         _render_dashboard(store, clientes, role)

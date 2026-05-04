@@ -6,7 +6,7 @@ import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status
 from data import calcular_score, recomendar_acao, load_metricas_from_bq
-from auth import current_nome
+from auth import current_nome, current_role
 from views.dialog import dialog_editar
 
 
@@ -95,11 +95,13 @@ def _render_atividades(store, clientes, role):
         st.session_state["_metricas_ts"] = _time.time()
 
     hoje_str = date.today().strftime("%d/%m/%Y")
+    nome = current_nome() or "usuário"
 
     st.markdown(
-        '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
-        'font-weight:800;color:#e8eaf0;margin-top:32px;margin-bottom:32px;letter-spacing:-1.5px;line-height:1.1">'
-        'Atividades</div>',
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
+        f'font-weight:800;color:#e8eaf0;margin-top:32px;margin-bottom:8px;letter-spacing:-1.5px;line-height:1.1">'
+        f'Bem-vindo(a), {nome}!</div>'
+        f'<div style="font-size:18px;font-weight:600;color:#6b7280;margin-bottom:32px">Atividades</div>',
         unsafe_allow_html=True,
     )
 
