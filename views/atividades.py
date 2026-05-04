@@ -70,7 +70,7 @@ def _motivo(acoes, msg_st, c, h) -> tuple:
     if msg_st == "tentar_novamente":
         return "Não atendeu a ligação", "purple"
     if msg_st in ("mensagem", "ligacao_pendente"):
-        quando = "hoje" if dias_n8n == 0 else f"há {dias_n8n}d" if dias_n8n else ""
+        quando = "hoje" if dsc == 0 else f"há {dsc}d" if dsc else ""
         sufixo = f" ({quando})" if quando else ""
         return f"Mensagem enviada{sufixo} · aguarda ligação", "blue"
 
