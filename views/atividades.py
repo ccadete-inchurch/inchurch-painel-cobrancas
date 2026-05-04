@@ -63,7 +63,8 @@ def _motivo(acoes, msg_st, c, h) -> tuple:
     dsc = min(candidatos) if candidatos else None
 
     if "urgente" in acoes:
-        return "", ""
+        dias = c.get("dias_atraso") or 0
+        return f"Acordo vencido há {dias}d · ligação prioritária", "red"
     if msg_st == "tentar_novamente":
         return "Não atendeu a ligação", "purple"
     if msg_st in ("mensagem", "ligacao_pendente"):
@@ -82,6 +83,7 @@ def _render_card(score, acoes, c, role, idx, msg_st="", h=None):
     acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if "urgente" in acoes else ""
     motivo_txt, motivo_style = _motivo(acoes, msg_st, c, h or {})
     _motivo_css = {
+        "red":    "color:#ff5555;background:rgba(239,68,68,.08);border-left:2px solid #ff5555;padding:4px 8px;border-radius:6px",
         "blue":   "color:#5fa3ff;background:rgba(95,163,255,.08);border-left:2px solid #5fa3ff;padding:4px 8px;border-radius:6px",
         "purple": "color:#a78bfa;background:rgba(167,139,250,.08);border-left:2px solid #a78bfa;padding:4px 8px;border-radius:6px",
         "gray":   "color:#f59e0b;background:rgba(245,158,11,.08);border-left:2px solid #f59e0b;padding:4px 8px;border-radius:6px",
