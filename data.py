@@ -974,7 +974,7 @@ def _dias_sem_contato(telefone: str = "") -> int | None:
 def recomendar_acao(cliente) -> list[str]:
     cobracas = [c for c in cliente.get("_cobracas", []) if (c.get("dias_atraso") or 0) > 0]
     if cobracas:
-        dias = min(int(c.get("dias_atraso") or 0) for c in cobracas)
+        dias = max(int(c.get("dias_atraso") or 0) for c in cobracas)
     else:
         dias = cliente.get("dias_atraso") or 0
 
