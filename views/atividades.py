@@ -144,7 +144,13 @@ def _render_atividades(store, clientes, role):
             _key_lote = f"_tarefas_admin_{date.today().isoformat()}_{_atendente_sel}"
             if _key_lote not in st.session_state:
                 with st.spinner(f"Carregando lote de {_atendente_sel}..."):
-                    st.session_state[_key_lote] = get_tarefas_do_dia_bq(_atendente_sel)
+                    ids_bq = get_tarefas_do_dia_bq(_atendente_sel)
+                    if not ids_bq:
+                        # Lote ainda não gerado hoje — gera agora usando email da atendente
+                        _GRUPO_EMAIL = {v: k for k, v in _EMAIL_GRUPO.items()}
+                        _email_atend = _GRUPO_EMAIL.get(_atendente_sel, "")
+                        ids_bq = gerar_tarefas_do_dia(clientes, _email_atend)
+                    st.session_state[_key_lote] = ids_bq
             ids_lote = set(st.session_state[_key_lote])
             clientes = [c for c in clientes if c["id"] in ids_lote]
 
