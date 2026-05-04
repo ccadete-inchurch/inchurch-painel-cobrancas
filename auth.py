@@ -49,9 +49,10 @@ def login(email, senha):
     for uid, u in get_store()["usuarios"].items():
         if u["email"].lower() == email.lower() and u["senha_hash"] == hash_senha(senha):
             st.session_state.update({
-                "user_uid":  uid,
-                "user_nome": u["nome"],
-                "user_role": u["role"],
+                "user_uid":   uid,
+                "user_nome":  u["nome"],
+                "user_role":  u["role"],
+                "user_email": email.lower(),
             })
             return True
     return False
@@ -63,15 +64,17 @@ def login_google(email: str, nome: str) -> bool:
     for uid, u in get_store()["usuarios"].items():
         if u["email"].lower() == email_lower:
             st.session_state.update({
-                "user_uid":  uid,
-                "user_nome": u["nome"],
-                "user_role": u["role"],
+                "user_uid":   uid,
+                "user_nome":  u["nome"],
+                "user_role":  u["role"],
+                "user_email": email_lower,
             })
             return True
     return False
 
 
-def is_logged():    return "user_uid" in st.session_state
-def current_uid():  return st.session_state.get("user_uid",  "")
-def current_nome(): return st.session_state.get("user_nome", "")
-def current_role(): return st.session_state.get("user_role", "atendente")
+def is_logged():     return "user_uid" in st.session_state
+def current_uid():   return st.session_state.get("user_uid",   "")
+def current_nome():  return st.session_state.get("user_nome",  "")
+def current_role():  return st.session_state.get("user_role",  "atendente")
+def current_email(): return st.session_state.get("user_email", "")

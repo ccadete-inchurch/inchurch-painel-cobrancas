@@ -31,10 +31,16 @@ from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
 
-_BQ_PROJECT  = "business-intelligence-467516"
-_BQ_DATASET  = "inadimplencia_painel_cobrancas"
-_HIST_TABLE  = f"{_BQ_PROJECT}.{_BQ_DATASET}.painel_historico"
-_N8N_TABLE   = f"{_BQ_PROJECT}.N8N.n8nfinchatbot_historico_atendente"
+_BQ_PROJECT    = "business-intelligence-467516"
+_BQ_DATASET    = "inadimplencia_painel_cobrancas"
+_HIST_TABLE    = f"{_BQ_PROJECT}.{_BQ_DATASET}.painel_historico"
+_N8N_TABLE     = f"{_BQ_PROJECT}.N8N.n8nfinchatbot_historico_atendente"
+_TAREFAS_TABLE = f"{_BQ_PROJECT}.{_BQ_DATASET}.painel_tarefas_diarias"
+
+_EMAIL_GRUPO = {
+    "priscila.oliveira@inchurch.com.br":    "Priscila Oliveira",
+    "anacarolina.silveira@inchurch.com.br": "Ana Carolina",
+}
 
 _MSG_CONCLUIDA    = ("além da ligação",)
 _MSG_NAO_ATENDIDA = ("não estava disponível",)
@@ -451,6 +457,132 @@ def save_hist_to_bq(uid: str, cid: str, data: dict):
         client.insert_rows_json(_HIST_TABLE, rows)
     except Exception:
         pass
+
+
+# ── Tarefas diárias ───────────────────────────────────────────────────────────
+
+def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
+    """Retorna IDs dos 80 clientes prioritários do dia para o atendente logado.
+    Gera e persiste no BQ se ainda não existe lote para hoje.
+    """
+    atendente = _EMAIL_GRUPO.get(email_logado)
+    if not atendente:
+        return [c["id"] for c in clientes]  # gestor vê todos
+
+    client = get_bq_client()
+    hoje = date.today().isoformat()
+
+    # Verifica se lote já foi gerado hoje
+    if client:
+        try:
+            df_check = client.query(f"""
+                SELECT COUNT(*) AS total
+                FROM `{_TAREFAS_TABLE}`
+                WHERE atendente = '{atendente}'
+                  AND data_tarefa = '{hoje}'
+            """).to_dataframe()
+            if int(df_check.iloc[0]["total"]) > 0:
+                df_ids = client.query(f"""
+                    SELECT id_sacado_sac
+                    FROM `{_TAREFAS_TABLE}`
+                    WHERE atendente = '{atendente}'
+                      AND data_tarefa = '{hoje}'
+                """).to_dataframe()
+                return df_ids["id_sacado_sac"].tolist()
+        except Exception:
+            pass
+
+    # Clientes do grupo da atendente
+    grupo_clientes = [c for c in clientes if c.get("_grupo") == atendente]
+
+    # Cooldown: IDs a excluir por mensagem (1 dia) ou ligação (2 dias)
+    excluir_msg = set()
+    excluir_lig = set()
+    if client:
+        try:
+            df_cool = client.query(f"""
+                SELECT id_sacado_sac,
+                       MAX(IF(mensagem_enviada IS TRUE
+                              AND data_tarefa >= DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY),
+                              1, 0)) AS bloquear_msg,
+                       MAX(IF(ligacao_feita IS TRUE
+                              AND data_tarefa >= DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 2 DAY),
+                              1, 0)) AS bloquear_lig
+                FROM `{_TAREFAS_TABLE}`
+                WHERE atendente = '{atendente}'
+                GROUP BY id_sacado_sac
+            """).to_dataframe()
+            excluir_msg = set(df_cool[df_cool["bloquear_msg"] == 1]["id_sacado_sac"])
+            excluir_lig = set(df_cool[df_cool["bloquear_lig"] == 1]["id_sacado_sac"])
+        except Exception:
+            pass
+
+    # Pontua e ordena — exclui clientes em cooldown completo
+    fila = []
+    for c in grupo_clientes:
+        cid = c["id"]
+        if cid in excluir_msg and cid in excluir_lig:
+            continue  # cooldown total: nem mensagem nem ligação
+        h = get_hist(cid)
+        if h.get("status") == "paid":
+            continue
+        fila.append((calcular_score(c, h), cid))
+    fila.sort(reverse=True)
+    top80 = [cid for _, cid in fila[:80]]
+
+    # Persiste no BQ
+    if client and top80:
+        rows = [{"id_sacado_sac": cid, "atendente": atendente, "data_tarefa": hoje,
+                 "dt_entrou_coluna_msg": None, "dt_entrou_coluna_ligacao": None,
+                 "mensagem_enviada": False, "ligacao_feita": False, "ligacao_atendida": False}
+                for cid in top80]
+        try:
+            client.insert_rows_json(_TAREFAS_TABLE, rows)
+        except Exception:
+            pass
+
+    return top80
+
+
+def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
+    """Atualiza bools na tabela de tarefas com base no status n8n do dia."""
+    client = get_bq_client()
+    if not client:
+        return
+    hoje = date.today().isoformat()
+
+    # Monta dict id → telefone para cruzar com status_map
+    import re
+    def _norm(phone):
+        p = re.sub(r'\D', '', phone or '')
+        if p.startswith('55') and len(p) > 11:
+            p = p[2:]
+        return (p[:2] + p[-8:]) if len(p) >= 10 else p
+
+    id_tel = {c["id"]: _norm(c.get("telefone", "")) for c in clientes}
+
+    for cid, tel in id_tel.items():
+        if not tel:
+            continue
+        st = status_map.get(tel)
+        if not st:
+            continue
+        msg_env = st in ("mensagem", "ligacao_pendente", "concluida", "tentar_novamente")
+        lig_feit = st in ("ligacao_pendente", "concluida", "tentar_novamente")
+        lig_atend = st == "concluida"
+        try:
+            client.query(f"""
+                UPDATE `{_TAREFAS_TABLE}`
+                SET mensagem_enviada  = {str(msg_env).upper()},
+                    ligacao_feita     = {str(lig_feit).upper()},
+                    ligacao_atendida  = {str(lig_atend).upper()}
+                WHERE id_sacado_sac = '{cid}'
+                  AND atendente = '{atendente}'
+                  AND data_tarefa = '{hoje}'
+                  AND (mensagem_enviada IS FALSE OR ligacao_feita IS FALSE OR ligacao_atendida IS FALSE)
+            """).result()
+        except Exception:
+            pass
 
 
 # ── Processamento ─────────────────────────────────────────────────────────────

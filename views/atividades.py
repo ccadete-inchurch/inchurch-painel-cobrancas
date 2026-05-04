@@ -5,8 +5,8 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status
-from data import calcular_score, recomendar_acao, load_metricas_from_bq
-from auth import current_nome, current_role
+from data import calcular_score, recomendar_acao, load_metricas_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, _EMAIL_GRUPO
+from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
 
@@ -95,7 +95,27 @@ def _render_atividades(store, clientes, role):
         st.session_state["_metricas_ts"] = _time.time()
 
     hoje_str = date.today().strftime("%d/%m/%Y")
-    nome = current_nome() or "usuário"
+    nome  = current_nome()  or "usuário"
+    email = current_email() or ""
+
+    # ── Gera / carrega lote de 80 tarefas do dia ──────────────────────────────
+    _key_tarefas = f"_tarefas_{date.today().isoformat()}_{email}"
+    if _key_tarefas not in st.session_state:
+        with st.spinner("Preparando tarefas do dia..."):
+            ids_hoje = gerar_tarefas_do_dia(clientes, email)
+        st.session_state[_key_tarefas] = ids_hoje
+    ids_hoje = set(st.session_state[_key_tarefas])
+
+    # Filtra clientes para o lote do dia (gestor vê todos)
+    from data import _EMAIL_GRUPO
+    if email in _EMAIL_GRUPO:
+        clientes = [c for c in clientes if c["id"] in ids_hoje]
+
+    # Atualiza bools na tabela BQ com base no status n8n atual
+    atendente_bq = _EMAIL_GRUPO.get(email)
+    if atendente_bq:
+        status_map = st.session_state.get("_msg_status", {})
+        atualizar_tarefas_bq(atendente_bq, status_map, clientes)
 
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
