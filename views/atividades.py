@@ -339,11 +339,11 @@ def _render_atividades(store, clientes, role):
     grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
     fa, fb, fc = st.columns([1.3, 1.3, 2])
     with fa:
-        filtro_grupo = st.selectbox("Grupo", ["Todos"] + grupos_disp, label_visibility="collapsed")
+        filtro_grupo = st.selectbox("Grupo", ["Todos"] + grupos_disp, label_visibility="collapsed", key="atv_filtro_grupo")
     with fb:
-        filtro_inativo = st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], label_visibility="collapsed")
+        filtro_inativo = st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], label_visibility="collapsed", key="atv_filtro_inativo")
     with fc:
-        busca = st.text_input("Buscar", placeholder="Nome ou CNPJ...", label_visibility="collapsed")
+        busca = st.text_input("Buscar", placeholder="Nome ou CNPJ...", label_visibility="collapsed", key="atv_busca")
 
     if filtro_grupo != "Todos":
         fila = [(s, a, c, h) for s, a, c, h in fila if c.get("_grupo") == filtro_grupo]
