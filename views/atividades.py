@@ -4,7 +4,7 @@ import streamlit as st
 
 import time as _time
 
-from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status
+from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias
 from data import calcular_score, recomendar_acao, load_metricas_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
@@ -47,10 +47,44 @@ _ICON_GROUP = (
 )
 
 
-def _render_card(score, acoes, c, role, idx):
-    cor = _score_cor(score)
+def _motivo(acoes, msg_st, c, h) -> str:
+    dias = c.get("dias_atraso") or 0
+    tel  = c.get("telefone", "")
+    dias_n8n    = get_ultimo_contato_n8n_dias(tel)
+    dias_manual = None
+    lc = h.get("lastContact")
+    if lc:
+        try:
+            from datetime import datetime as _dt
+            dias_manual = (date.today() - _dt.strptime(lc, "%d/%m/%Y").date()).days
+        except Exception:
+            pass
+    candidatos = [d for d in (dias_n8n, dias_manual) if d is not None]
+    dsc = min(candidatos) if candidatos else None
+
+    if "urgente" in acoes:
+        return f"Acordo vencido há {dias}d"
+    if msg_st == "tentar_novamente":
+        return "Não atendeu a ligação"
+    if msg_st in ("mensagem", "ligacao_pendente"):
+        return "Mensagem enviada · aguarda ligação"
+    if "ligar" in acoes and "mensagem" in acoes:
+        if dsc is not None:
+            return f"{dias}d em atraso · sem contato há {dsc}d"
+        return f"{dias}d em atraso · sem contato recente"
+    if "ligar" in acoes:
+        return f"{dias}d em atraso"
+    if "mensagem" in acoes:
+        return f"{dias}d em atraso"
+    return ""
+
+
+def _render_card(score, acoes, c, role, idx, msg_st="", h=None):
+    cor           = _score_cor(score)
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
     acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if "urgente" in acoes else ""
+    motivo_txt    = _motivo(acoes, msg_st, c, h or {})
+    motivo_html   = f'<div style="font-size:11px;color:#7cc243;font-weight:600;margin-bottom:8px;padding:4px 8px;background:rgba(124,194,67,.08);border-radius:6px;border-left:2px solid #7cc243">{motivo_txt}</div>' if motivo_txt else ""
 
     st.markdown(
         f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
@@ -67,6 +101,7 @@ def _render_card(score, acoes, c, role, idx):
         f'<div style="font-size:20px;font-weight:800;color:{cor};line-height:1">{score}</div>'
         f'<div style="font-size:14px;color:#6b7280">pts</div>'
         f'</div></div>'
+        f'{motivo_html}'
         f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
         f'<span style="font-size:13px;font-weight:600;color:#e8eaf0">{fmt_moeda_plain(c["valor"])}</span>'
         f'{dias_html(c.get("dias_atraso"))}'
@@ -316,6 +351,7 @@ def _render_atividades(store, clientes, role):
                 )
             else:
                 for idx, (score, acoes, c, h) in enumerate(itens):
+                    ms = get_msg_status(c.get("telefone", ""))
                     with st.container():
-                        _render_card(score, acoes, c, role, f"{titulo}_{idx}")
+                        _render_card(score, acoes, c, role, f"{titulo}_{idx}", msg_st=ms, h=h)
 
