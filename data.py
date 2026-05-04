@@ -731,21 +731,22 @@ def recomendar_acao(cliente, hist) -> list[str]:
     else:
         dias = cliente.get("dias_atraso") or 0
 
+    # Acordo vencido ≥ 7 dias → prioridade alta, só ligação
     if cliente.get("_tem_acordo") and dias >= 7:
-        return ["ligar", "mensagem", "urgente"]
+        return ["ligar", "urgente"]
 
     dsc = _dias_sem_contato(hist)  # None = nunca contatado
 
-    # Regra proativa: vencida 15-25 dias e sem contato há 3+ dias → ligar + mensagem
-    if 15 <= dias <= 25 and (dsc is None or dsc >= 3):
+    # ≥ 15 dias + sem contato há 3+ dias → mensagem + ligação
+    if dias >= 15 and (dsc is None or dsc >= 3):
         return ["ligar", "mensagem"]
 
     acoes = []
     if dias >= 7:
-        # Não ligar se houve ligação bem-sucedida há menos de 2 dias
+        # Não ligar se houve ligação bem-sucedida há menos de 5 dias
         from helpers import get_msg_concluida_dias
         dias_lig = get_msg_concluida_dias(cliente.get("telefone", ""))
-        if dias_lig is None or dias_lig >= 2:
+        if dias_lig is None or dias_lig >= 5:
             acoes.append("ligar")
     if dias >= 5:
         acoes.append("mensagem")
