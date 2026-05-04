@@ -542,7 +542,8 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
         fila.append((calcular_score(c, h), c, h))
     fila.sort(reverse=True, key=lambda x: x[0])
 
-    # Seleciona top 80 respeitando limite de clientes inativos por tipo de ação
+    # Seleciona top 80 respeitando limite de inativos e excluindo tarefas já passivas
+    from helpers import get_msg_status as _get_msg_status
     _MAX_INATIVO_LIG = 10
     _MAX_INATIVO_MSG = 15
     inativo_lig_ct   = 0
@@ -552,20 +553,33 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
     for _, c, h in fila:
         if len(top80) >= 80:
             break
+
+        acoes  = recomendar_acao(c, h)
+        msg_st = _get_msg_status(c.get("telefone", ""))
+
+        # Pula clientes sem ação (AGUARDAR)
+        if not acoes:
+            continue
+
+        # Pula clientes que já estariam em CONCLUÍDA no momento da geração
+        if "urgente" not in acoes:
+            if msg_st == "concluida":
+                continue
+            if msg_st in ("mensagem", "ligacao_pendente") and "ligar" not in acoes:
+                continue
+
         if c.get("_inativo"):
-            acoes   = recomendar_acao(c, h)
             tem_lig = "ligar" in acoes
             tem_msg = "mensagem" in acoes
-            # Clientes com ligação consomem cota de ligação
             if tem_lig:
                 if inativo_lig_ct >= _MAX_INATIVO_LIG:
                     continue
                 inativo_lig_ct += 1
-            # Clientes só com mensagem (sem ligação) consomem cota de mensagem
             elif tem_msg:
                 if inativo_msg_ct >= _MAX_INATIVO_MSG:
                     continue
                 inativo_msg_ct += 1
+
         top80.append(c["id"])
 
     # Persiste no BQ
