@@ -61,18 +61,8 @@ _ICON_GROUP = (
 
 def _motivo(acoes, msg_st, c, h) -> tuple:
     """Retorna (texto, estilo) onde estilo é 'blue' | 'purple' | 'gray'."""
-    tel      = c.get("telefone", "")
-    dias_n8n = get_ultimo_contato_n8n_dias(tel)
-    dias_manual = None
-    lc = h.get("lastContact")
-    if lc:
-        try:
-            from datetime import datetime as _dt
-            dias_manual = (date.today() - _dt.strptime(lc, "%d/%m/%Y").date()).days
-        except Exception:
-            pass
-    candidatos = [d for d in (dias_n8n, dias_manual) if d is not None]
-    dsc = min(candidatos) if candidatos else None
+    tel = c.get("telefone", "")
+    dsc = get_ultimo_contato_n8n_dias(tel)
 
     if "urgente" in acoes:
         dias = c.get("dias_atraso") or 0
@@ -102,8 +92,8 @@ def _motivo(acoes, msg_st, c, h) -> tuple:
         if dias_min is not None:
             return f"Vencimento em {dias_min}d", "green"
 
-    if "ligar" in acoes and "mensagem" in acoes:
-        texto = f"Sem contato há {dsc}d" if dsc is not None else "Sem contato recente"
+    if "mensagem" in acoes:
+        texto = f"Último contato há {dsc}d" if dsc is not None else "Sem contato anterior"
         return texto, "gray"
     return "", ""
 
@@ -185,7 +175,7 @@ def _render_atividades(store, clientes, role):
         def _ativo(c):
             """Retorna True se o cliente tem ação pendente (não é passivo)."""
             h2  = get_hist(c["id"])
-            a2  = recomendar_acao(c, h2)
+            a2  = recomendar_acao(c)
             if not a2:
                 return False
             ms2 = get_msg_status(c.get("telefone", ""))
@@ -265,7 +255,7 @@ def _render_atividades(store, clientes, role):
             # Pré-filtra passivos e complementa até 80
             def _ativo_admin(c):
                 h2  = get_hist(c["id"])
-                a2  = recomendar_acao(c, h2)
+                a2  = recomendar_acao(c)
                 if not a2:
                     return False
                 ms2 = get_msg_status(c.get("telefone", ""))
@@ -367,7 +357,7 @@ def _render_atividades(store, clientes, role):
         h = get_hist(c["id"])
         if h.get("status") == "paid":
             continue
-        fila.append((calcular_score(c, h), recomendar_acao(c, h), c, h))
+        fila.append((calcular_score(c, h), recomendar_acao(c), c, h))
     fila.sort(key=lambda x: x[0], reverse=True)
 
     # ── Filtros ───────────────────────────────────────────────────────────────

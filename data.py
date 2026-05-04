@@ -391,6 +391,29 @@ def load_mensagens_from_bq():
         except Exception:
             pass
 
+    # Último contato histórico completo (tabela toda, só MAX por telefone)
+    try:
+        df_lc = client.query(f"""
+            SELECT telefone, MAX(created_at) AS ultimo_contato
+            FROM `{_N8N_TABLE}`
+            GROUP BY telefone
+        """).to_dataframe()
+        for _, row in df_lc.iterrows():
+            chave = _norm(str(row.get("telefone") or ""))
+            if not chave:
+                continue
+            ts = row.get("ultimo_contato")
+            if ts is not None:
+                try:
+                    dias = max((now_utc - ts).days, 0)
+                    # sobrescreve só se for mais recente que o da janela de 7 dias
+                    if chave not in ultimo_contato_dias or dias < ultimo_contato_dias[chave]:
+                        ultimo_contato_dias[chave] = dias
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
     st.session_state["_msg_status"]              = status_map
     st.session_state["_msg_concluida_dias"]      = concluida_dias
     st.session_state["_msg_ultimo_contato_dias"] = ultimo_contato_dias
@@ -537,7 +560,7 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
         if len(top80) >= 80:
             break
 
-        acoes  = recomendar_acao(c, h)
+        acoes  = recomendar_acao(c)
         msg_st = _get_msg_status(c.get("telefone", ""))
 
         # Pula clientes sem ação (AGUARDAR)
@@ -942,23 +965,13 @@ def calcular_score(cliente, hist) -> int:
     return int(score)
 
 
-def _dias_sem_contato(hist, telefone: str = "") -> int | None:
-    """Retorna dias desde o último contato (n8n ou histórico manual), o mais recente dos dois."""
+def _dias_sem_contato(telefone: str = "") -> int | None:
+    """Retorna dias desde o último contato registrado pelo N8N."""
     from helpers import get_ultimo_contato_n8n_dias
-    dias_n8n    = get_ultimo_contato_n8n_dias(telefone) if telefone else None
-    dias_manual = None
-    lc = hist.get("lastContact")
-    if lc:
-        try:
-            dt = datetime.strptime(lc, "%d/%m/%Y").date()
-            dias_manual = (date.today() - dt).days
-        except Exception:
-            pass
-    candidates = [d for d in (dias_n8n, dias_manual) if d is not None]
-    return min(candidates) if candidates else None
+    return get_ultimo_contato_n8n_dias(telefone) if telefone else None
 
 
-def recomendar_acao(cliente, hist) -> list[str]:
+def recomendar_acao(cliente) -> list[str]:
     cobracas = [c for c in cliente.get("_cobracas", []) if (c.get("dias_atraso") or 0) > 0]
     if cobracas:
         dias = min(int(c.get("dias_atraso") or 0) for c in cobracas)
@@ -969,7 +982,7 @@ def recomendar_acao(cliente, hist) -> list[str]:
     if cliente.get("_tem_acordo") and dias >= 7:
         return ["ligar", "urgente"]
 
-    dsc = _dias_sem_contato(hist, cliente.get("telefone", ""))  # None = nunca contatado
+    dsc = _dias_sem_contato(cliente.get("telefone", ""))  # None = nunca contatado pelo N8N
 
     # ≥ 15 dias + sem contato há 3+ dias → mensagem + ligação
     if dias >= 15 and (dsc is None or dsc >= 3):
