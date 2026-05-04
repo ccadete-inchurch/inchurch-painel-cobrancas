@@ -512,35 +512,10 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
     # Clientes do grupo da atendente
     grupo_clientes = [c for c in clientes if c.get("_grupo") == atendente]
 
-    # Cooldown: IDs a excluir por mensagem (1 dia) ou ligação (2 dias)
-    excluir_msg = set()
-    excluir_lig = set()
-    if client:
-        try:
-            df_cool = client.query(f"""
-                SELECT id_sacado_sac,
-                       MAX(IF(mensagem_enviada IS TRUE
-                              AND data_tarefa >= DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY),
-                              1, 0)) AS bloquear_msg,
-                       MAX(IF(ligacao_feita IS TRUE
-                              AND data_tarefa >= DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 2 DAY),
-                              1, 0)) AS bloquear_lig
-                FROM `{_TAREFAS_TABLE}`
-                WHERE atendente = '{atendente}'
-                GROUP BY id_sacado_sac
-            """).to_dataframe()
-            excluir_msg = set(df_cool[df_cool["bloquear_msg"] == 1]["id_sacado_sac"])
-            excluir_lig = set(df_cool[df_cool["bloquear_lig"] == 1]["id_sacado_sac"])
-        except Exception:
-            pass
-
-    # Pontua e ordena — exclui clientes em cooldown completo
+    # Pontua e ordena
     fila = []
     for c in grupo_clientes:
-        cid = c["id"]
-        if cid in excluir_msg and cid in excluir_lig:
-            continue  # cooldown total: nem mensagem nem ligação
-        h = get_hist(cid)
+        h = get_hist(c["id"])
         if h.get("status") == "paid":
             continue
         fila.append((calcular_score(c, h), c, h))
