@@ -7,7 +7,7 @@ import time as _time
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status
 from data import calcular_score, recomendar_acao, load_metricas_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
-from views.dialog import dialog_anotar
+from views.dialog import dialog_editar
 
 
 def _acao_badge(acoes: list[str]) -> str:
@@ -83,8 +83,8 @@ def _render_card(score, acoes, c, role, idx):
         unsafe_allow_html=True,
     )
     if role != "gestor":
-        if st.button("📝 Anotar", key=f"atv_{c['id']}_{idx}", width="stretch"):
-            dialog_anotar(c["id"])
+        if st.button("✏ Atender", key=f"atv_{c['id']}_{idx}", width="stretch"):
+            dialog_editar(c["id"])
 
 
 def _render_atividades(store, clientes, role):
