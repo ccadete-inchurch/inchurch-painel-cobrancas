@@ -83,6 +83,25 @@ def _motivo(acoes, msg_st, c, h) -> tuple:
         quando = "hoje" if dias_n8n == 0 else f"há {dias_n8n}d" if dias_n8n else ""
         sufixo = f" ({quando})" if quando else ""
         return f"Mensagem enviada{sufixo} · aguarda ligação", "blue"
+
+    # Contato proativo: sem cobrança vencida, verifica vencimento próximo
+    if not (c.get("dias_atraso") or 0) and acoes:
+        hoje = date.today()
+        dias_min = None
+        for cb in c.get("_cobracas", []):
+            venc = cb.get("vencimento")
+            if venc:
+                try:
+                    parts = venc.split("/")
+                    d = date(int(parts[2]), int(parts[1]), int(parts[0]))
+                    restantes = (d - hoje).days
+                    if restantes > 0 and (dias_min is None or restantes < dias_min):
+                        dias_min = restantes
+                except Exception:
+                    pass
+        if dias_min is not None:
+            return f"Vencimento em {dias_min}d", "green"
+
     if "ligar" in acoes and "mensagem" in acoes:
         texto = f"Sem contato há {dsc}d" if dsc is not None else "Sem contato recente"
         return texto, "gray"
@@ -93,12 +112,14 @@ def _render_card(score, acoes, c, role, idx, msg_st="", h=None):
     cor           = _score_cor(score)
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
     acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if "urgente" in acoes else ""
+    ligar_badge   = '<span style="background:rgba(95,163,255,.15);color:#5fa3ff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">📞 LIGAR APÓS</span>' if (msg_st in ("sem_contato", "") and "ligar" in acoes and "mensagem" in acoes) else ""
     motivo_txt, motivo_style = _motivo(acoes, msg_st, c, h or {})
     _motivo_css = {
         "red":    "color:#ff5555;background:rgba(239,68,68,.08);border-left:2px solid #ff5555;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
         "blue":   "color:#5fa3ff;background:rgba(95,163,255,.08);border-left:2px solid #5fa3ff;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
         "purple": "color:#a78bfa;background:rgba(167,139,250,.08);border-left:2px solid #a78bfa;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
         "gray":   "color:#f59e0b;background:rgba(245,158,11,.08);border-left:2px solid #f59e0b;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "green":  "color:#10b981;background:rgba(16,185,129,.08);border-left:2px solid #10b981;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
     }
     motivo_html = (
         f'<div style="font-size:11px;font-weight:600;margin-bottom:8px;{_motivo_css.get(motivo_style, "")}">{motivo_txt}</div>'
@@ -113,7 +134,7 @@ def _render_card(score, acoes, c, role, idx, msg_st="", h=None):
         f'{c["nome"]}'
         f'<div style="font-size:11px;color:#9ca3af;font-weight:400;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
         f'<span>{c.get("cnpj","—")} · ID {c.get("id","—")}</span>'
-        f'{inativo_badge}{acordo_badge}'
+        f'{inativo_badge}{acordo_badge}{ligar_badge}'
         f'</div>'
         f'</div>'
         f'<div style="text-align:right;flex-shrink:0">'
