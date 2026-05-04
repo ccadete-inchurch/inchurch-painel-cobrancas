@@ -6,6 +6,7 @@ import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status
 from data import calcular_score, recomendar_acao, load_metricas_from_bq
+from auth import current_nome
 from views.dialog import dialog_editar
 
 
@@ -102,54 +103,52 @@ def _render_atividades(store, clientes, role):
         unsafe_allow_html=True,
     )
 
-    # ── Progresso do dia ──────────────────────────────────────────────────────
+    # ── Progresso do dia — filtra pelo atendente logado ──────────────────────
     _zero = {"mensagens": 0, "ligacoes": 0, "atendidas": 0}
     n8n = st.session_state.get("_n8n_hoje", {"total": _zero, "Priscila Oliveira": _zero, "Ana Carolina": _zero})
-    # compatibilidade com formato antigo (dict plano)
     if "mensagens" in n8n:
         n8n = {"total": n8n, "Priscila Oliveira": _zero, "Ana Carolina": _zero}
-    meta_msg, meta_lig, meta_atend = 50, 30, 15
 
-    def _metric_row(dados, label_atendente, cor_nome):
-        n_msg   = dados.get("mensagens", 0)
-        n_lig   = dados.get("ligacoes",  0)
-        n_atend = dados.get("atendidas", 0)
+    nome_logado = (current_nome() or "").lower()
+    if "priscila" in nome_logado:
+        dados_m, label_m = n8n.get("Priscila Oliveira", _zero), "Priscila Oliveira"
+    elif "ana" in nome_logado or "adriely" in nome_logado or "carolina" in nome_logado:
+        dados_m, label_m = n8n.get("Ana Carolina", _zero), "Ana Carolina"
+    else:
+        dados_m, label_m = n8n.get("total", _zero), "Total"
+
+    meta_msg, meta_lig, meta_atend = 50, 30, 15
+    n_msg, n_lig, n_atend = dados_m.get("mensagens", 0), dados_m.get("ligacoes", 0), dados_m.get("atendidas", 0)
+
+    st.markdown(f'<div style="font-size:13px;font-weight:700;color:#6b7280;margin-bottom:6px">{label_m}</div>', unsafe_allow_html=True)
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        pct = min(int(n_msg / meta_msg * 100), 100)
         st.markdown(
-            f'<div style="font-size:13px;font-weight:700;color:{cor_nome};margin-bottom:6px">{label_atendente}</div>',
+            f'<div class="metric-card"><div class="metric-label">Mensagens Enviadas</div>'
+            f'<div class="metric-value" style="color:#5fa3ff;font-size:32px">{n_msg}<span style="font-size:18px;color:#6b7280">/{meta_msg}</span></div>'
+            f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
+            f'<div style="background:#5fa3ff;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
             unsafe_allow_html=True,
         )
-        m1, m2, m3 = st.columns(3)
-        with m1:
-            pct = min(int(n_msg / meta_msg * 100), 100)
-            st.markdown(
-                f'<div class="metric-card"><div class="metric-label">Mensagens Enviadas</div>'
-                f'<div class="metric-value" style="color:#5fa3ff;font-size:32px">{n_msg}<span style="font-size:18px;color:#6b7280">/{meta_msg}</span></div>'
-                f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
-                f'<div style="background:#5fa3ff;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
-                unsafe_allow_html=True,
-            )
-        with m2:
-            pct = min(int(n_lig / meta_lig * 100), 100)
-            st.markdown(
-                f'<div class="metric-card"><div class="metric-label">Ligações Realizadas</div>'
-                f'<div class="metric-value" style="color:#f59e0b;font-size:32px">{n_lig}<span style="font-size:18px;color:#6b7280">/{meta_lig}</span></div>'
-                f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
-                f'<div style="background:#f59e0b;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
-                unsafe_allow_html=True,
-            )
-        with m3:
-            pct = min(int(n_atend / meta_atend * 100), 100)
-            st.markdown(
-                f'<div class="metric-card"><div class="metric-label">Ligações Atendidas</div>'
-                f'<div class="metric-value" style="color:#7cc243;font-size:32px">{n_atend}<span style="font-size:18px;color:#6b7280">/{meta_atend}</span></div>'
-                f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
-                f'<div style="background:#7cc243;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
-                unsafe_allow_html=True,
-            )
-
-    _metric_row(n8n.get("Priscila Oliveira", _zero), "Priscila Oliveira", "#5fa3ff")
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-    _metric_row(n8n.get("Ana Carolina", _zero), "Ana Carolina", "#a78bfa")
+    with m2:
+        pct = min(int(n_lig / meta_lig * 100), 100)
+        st.markdown(
+            f'<div class="metric-card"><div class="metric-label">Ligações Realizadas</div>'
+            f'<div class="metric-value" style="color:#f59e0b;font-size:32px">{n_lig}<span style="font-size:18px;color:#6b7280">/{meta_lig}</span></div>'
+            f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
+            f'<div style="background:#f59e0b;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+            unsafe_allow_html=True,
+        )
+    with m3:
+        pct = min(int(n_atend / meta_atend * 100), 100)
+        st.markdown(
+            f'<div class="metric-card"><div class="metric-label">Ligações Atendidas</div>'
+            f'<div class="metric-value" style="color:#7cc243;font-size:32px">{n_atend}<span style="font-size:18px;color:#6b7280">/{meta_atend}</span></div>'
+            f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
+            f'<div style="background:#7cc243;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
 
@@ -229,45 +228,35 @@ def _render_atividades(store, clientes, role):
     _check = _svg("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z", "#7cc243", 16)
     _dot   = '<span style="color:#6b7280;margin:0 7px;font-weight:300;font-size:18px;line-height:1">|</span>'
 
-    # Linha 1: fila ativa
-    colunas_l1 = [
-        (f'{_fire}URGENTE',              acordos,    "#7cc243"),
-        (f'{_phone}LIGAÇÃO',             ligacao,    "#f59e0b"),
-        (f'{_env}MENSAGEM',              so_msg,     "#5fa3ff"),
-    ]
-    # Linha 2: status / resultado
-    colunas_l2 = [
-        (f'{_retry}TENTAR NOVAMENTE',    tentar_nov, "#a78bfa"),
-        (f'{_check}CONCLUÍDA',           concluida,  "#7cc243"),
-        (f'{_wait}AGUARDAR',             aguardar,   "#4b5563"),
+    colunas = [
+        (f'{_fire}URGENTE',           acordos,    "#7cc243"),
+        (f'{_env}MENSAGEM',           so_msg,     "#5fa3ff"),
+        (f'{_phone}LIGAÇÃO',          ligacao,    "#f59e0b"),
+        (f'{_retry}TENTAR NOVAMENTE', tentar_nov, "#a78bfa"),
+        (f'{_check}CONCLUÍDA',        concluida,  "#7cc243"),
+        (f'{_wait}AGUARDAR',          aguardar,   "#4b5563"),
     ]
 
-    def _render_linha(colunas):
-        cols = st.columns(len(colunas))
-        for col, (titulo, itens, cor) in zip(cols, colunas):
-            with col:
+    cols = st.columns(6)
+    for col, (titulo, itens, cor) in zip(cols, colunas):
+        with col:
+            st.markdown(
+                f'<div style="background:#1e2333;border-radius:10px 10px 0 0;padding:10px 12px;'
+                f'margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
+                f'<span style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;color:#e8eaf0;letter-spacing:0.3px">{titulo}</span>'
+                f'<span style="background:#2a2f42;color:#e8eaf0;font-size:14px;font-weight:800;'
+                f'padding:2px 8px;border-radius:10px">{len(itens)}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if not itens:
                 st.markdown(
-                    f'<div style="background:#1e2333;border-radius:10px 10px 0 0;padding:12px 16px;'
-                    f'margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-                    f'<span style="display:inline-flex;align-items:center;font-size:15px;font-weight:800;color:#e8eaf0;letter-spacing:0.5px">{titulo}</span>'
-                    f'<span style="background:#2a2f42;color:#e8eaf0;font-size:16px;font-weight:800;'
-                    f'padding:2px 10px;border-radius:10px">{len(itens)}</span>'
-                    f'</div>',
+                    '<div style="background:#181c26;border:1px solid #2a2f42;border-radius:10px;'
+                    'padding:20px;text-align:center;color:#4b5563;font-size:11px">Nenhum cliente</div>',
                     unsafe_allow_html=True,
                 )
-                if not itens:
-                    st.markdown(
-                        '<div style="background:#181c26;border:1px solid #2a2f42;border-radius:10px;'
-                        'padding:24px;text-align:center;color:#4b5563;font-size:12px">Nenhum cliente</div>',
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    for idx, (score, acoes, c, h) in enumerate(itens):
-                        with st.container():
-                            _render_card(score, acoes, c, role, f"{titulo}_{idx}")
-
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-    _render_linha(colunas_l1)
-    st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
-    _render_linha(colunas_l2)
+            else:
+                for idx, (score, acoes, c, h) in enumerate(itens):
+                    with st.container():
+                        _render_card(score, acoes, c, role, f"{titulo}_{idx}")
 
