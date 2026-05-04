@@ -106,7 +106,10 @@ def main():
 
     # Carrega status n8n 1x por sessão (tabela completa)
     if not st.session_state.get("_mensagens_loaded"):
+        import time as _t
         load_mensagens_from_bq()
+        load_metricas_from_bq()
+        st.session_state["_metricas_ts"] = _t.time()
         st.session_state["_mensagens_loaded"] = True
 
     tela = st.session_state.get("tela", "principal")

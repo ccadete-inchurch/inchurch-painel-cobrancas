@@ -546,12 +546,16 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
         fila.append((calcular_score(c, h), c, h))
     fila.sort(reverse=True, key=lambda x: x[0])
 
-    # Seleciona top 80 respeitando limite de inativos e excluindo tarefas já passivas
+    # Seleciona top 80: 30 ligação/urgente + 50 mensagem, com limites de inativos por balde
     from helpers import get_msg_status as _get_msg_status
+    _MAX_LIG         = 30
+    _MAX_MSG         = 50
     _MAX_INATIVO_LIG = 10
     _MAX_INATIVO_MSG = 15
-    inativo_lig_ct   = 0
-    inativo_msg_ct   = 0
+    lig_ct         = 0
+    msg_ct         = 0
+    inativo_lig_ct = 0
+    inativo_msg_ct = 0
     top80 = []
 
     for _, c, h in fila:
@@ -572,16 +576,24 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
             if msg_st in ("mensagem", "ligacao_pendente") and "ligar" not in acoes:
                 continue
 
-        if c.get("_inativo"):
-            tem_lig = "ligar" in acoes
-            tem_msg = "mensagem" in acoes
-            if tem_lig:
-                if inativo_lig_ct >= _MAX_INATIVO_LIG:
-                    continue
+        eh_ligacao = "urgente" in acoes or "ligar" in acoes
+        eh_inativo = bool(c.get("_inativo"))
+
+        if eh_ligacao:
+            if lig_ct >= _MAX_LIG:
+                continue
+            if eh_inativo and inativo_lig_ct >= _MAX_INATIVO_LIG:
+                continue
+            lig_ct += 1
+            if eh_inativo:
                 inativo_lig_ct += 1
-            elif tem_msg:
-                if inativo_msg_ct >= _MAX_INATIVO_MSG:
-                    continue
+        else:  # só mensagem
+            if msg_ct >= _MAX_MSG:
+                continue
+            if eh_inativo and inativo_msg_ct >= _MAX_INATIVO_MSG:
+                continue
+            msg_ct += 1
+            if eh_inativo:
                 inativo_msg_ct += 1
 
         top80.append(c["id"])

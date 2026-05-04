@@ -10,6 +10,18 @@ from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
 
+@st.fragment(run_every=300)
+def _auto_refresh_n8n():
+    """Dispara a cada 5 min para atualizar status N8N e re-renderizar o kanban."""
+    last_ts = st.session_state.get("_metricas_ts", 0)
+    if _time.time() - last_ts < 30:
+        return
+    load_mensagens_from_bq()
+    load_metricas_from_bq()
+    st.session_state["_metricas_ts"] = _time.time()
+    st.rerun()
+
+
 def _acao_badge(acoes: list[str]) -> str:
     if "urgente" in acoes:
         return '<span style="background:rgba(239,68,68,.18);color:#ff5555;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px">🔥 Urgente</span>'
@@ -130,12 +142,8 @@ def _render_card(score, acoes, c, role, idx, msg_st="", h=None):
 
 
 def _render_atividades(store, clientes, role):
-    # Recarrega n8n a cada 5 min: status das mensagens (colunas do kanban) + métricas do dia
-    _ts = st.session_state.get("_metricas_ts", 0)
-    if _time.time() - _ts > 300:
-        load_mensagens_from_bq()
-        load_metricas_from_bq()
-        st.session_state["_metricas_ts"] = _time.time()
+    # Recarrega n8n a cada 5 min automaticamente (fragment com run_every=300)
+    _auto_refresh_n8n()
 
     hoje_str = date.today().strftime("%d/%m/%Y")
     nome  = current_nome()  or "usuário"
