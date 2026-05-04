@@ -171,7 +171,7 @@ def _render_atividades(store, clientes, role):
             if "urgente" not in a2:
                 if ms2 == "concluida":
                     dias2 = get_ultimo_contato_n8n_dias(c.get("telefone", ""))
-                    if dias2 is None or dias2 >= 1:
+                    if dias2 is not None and dias2 >= 1:
                         return False
                 if ms2 in ("mensagem", "ligacao_pendente") and "ligar" not in a2:
                     return False
@@ -251,7 +251,7 @@ def _render_atividades(store, clientes, role):
                 if "urgente" not in a2:
                     if ms2 == "concluida":
                         dias2 = get_ultimo_contato_n8n_dias(c.get("telefone", ""))
-                        if dias2 is None or dias2 >= 1:
+                        if dias2 is not None and dias2 >= 1:
                             return False
                     if ms2 in ("mensagem", "ligacao_pendente") and "ligar" not in a2:
                         return False
@@ -393,7 +393,7 @@ def _render_atividades(store, clientes, role):
                 continue
             if canal == "concluida":
                 dias_contato = get_ultimo_contato_n8n_dias(c.get("telefone", ""))
-                if dias_contato is None or dias_contato >= 1:
+                if dias_contato is not None and dias_contato >= 1:
                     continue  # concluída antes de hoje → não era tarefa ativa do lote
 
         if   canal == "urgente":          acordos.append(item)
