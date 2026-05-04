@@ -283,11 +283,11 @@ def _render_atividades(store, clientes, role):
     if "mensagens" in n8n:
         n8n = {"total": n8n, "Priscila Oliveira": _zero, "Ana Carolina": _zero}
 
-    nome_logado = (current_nome() or "").lower()
-    if "priscila" in nome_logado:
-        dados_m, label_m = n8n.get("Priscila Oliveira", _zero), "Priscila Oliveira"
-    elif "ana" in nome_logado or "adriely" in nome_logado or "carolina" in nome_logado:
-        dados_m, label_m = n8n.get("Ana Carolina", _zero), "Ana Carolina"
+    atendente_logado = _EMAIL_GRUPO.get(email)
+    if atendente_logado:
+        dados_m, label_m = n8n.get(atendente_logado, _zero), atendente_logado
+    elif role in ("admin", "gestor") and _atendente_sel:
+        dados_m, label_m = n8n.get(_atendente_sel, _zero), _atendente_sel
     else:
         dados_m, label_m = n8n.get("total", _zero), "Total"
 
