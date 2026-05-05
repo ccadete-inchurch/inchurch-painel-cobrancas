@@ -349,6 +349,16 @@ def load_mensagens_from_bq():
     except Exception:
         return
 
+    # Tabela completa: só MAX(created_at) por telefone para rastrear último contato
+    try:
+        df_last = client.query(f"""
+            SELECT telefone, MAX(created_at) AS ultimo_contato
+            FROM `{_N8N_TABLE}`
+            GROUP BY telefone
+        """).to_dataframe()
+    except Exception:
+        df_last = None
+
     status_map        = {}
     concluida_ts      = {}
     ultimo_contato_ts = {}  # último contato n8n por telefone (qualquer mensagem)
@@ -390,6 +400,19 @@ def load_mensagens_from_bq():
             ultimo_contato_dias[phone] = max((now_utc - ts).days, 0)
         except Exception:
             pass
+
+    # Sobrescreve com dados da tabela completa (captura contatos anteriores a 7 dias)
+    if df_last is not None and not df_last.empty:
+        for _, row in df_last.iterrows():
+            chave = _norm(str(row.get("telefone") or ""))
+            if not chave:
+                continue
+            ts = row.get("ultimo_contato")
+            if ts is not None:
+                try:
+                    ultimo_contato_dias[chave] = max((now_utc - ts).days, 0)
+                except Exception:
+                    pass
 
     st.session_state["_msg_status"]              = status_map
     st.session_state["_msg_concluida_dias"]      = concluida_dias
