@@ -389,19 +389,27 @@ def load_mensagens_from_bq():
             if chave not in status_map:
                 status_map[chave] = "mensagem"
 
-    now_utc = datetime.now(_tz.utc)
+    # Diferença em dias de CALENDÁRIO BRT — não em janelas de 24h.
+    # Mensagem de ontem 23h aparece como "há 1d" mesmo se faltarem horas pra completar 24h.
+    _BRT_TZ      = timezone(timedelta(hours=-3))
+    hoje_brt_dt  = datetime.now(_BRT_TZ).date()
+
+    def _dias_calendario_brt(ts):
+        try:
+            return max((hoje_brt_dt - ts.astimezone(_BRT_TZ).date()).days, 0)
+        except Exception:
+            return None
+
     concluida_dias      = {}
     ultimo_contato_dias = {}
     for phone, ts in concluida_ts.items():
-        try:
-            concluida_dias[phone] = max((now_utc - ts).days, 0)
-        except Exception:
-            pass
+        d = _dias_calendario_brt(ts)
+        if d is not None:
+            concluida_dias[phone] = d
     for phone, ts in ultimo_contato_ts.items():
-        try:
-            ultimo_contato_dias[phone] = max((now_utc - ts).days, 0)
-        except Exception:
-            pass
+        d = _dias_calendario_brt(ts)
+        if d is not None:
+            ultimo_contato_dias[phone] = d
 
     # Último contato histórico completo (tabela toda, só MAX por telefone)
     try:
@@ -416,12 +424,9 @@ def load_mensagens_from_bq():
                 continue
             ts = row.get("ultimo_contato")
             if ts is not None:
-                try:
-                    dias = max((now_utc - ts).days, 0)
-                    if chave not in ultimo_contato_dias or dias < ultimo_contato_dias[chave]:
-                        ultimo_contato_dias[chave] = dias
-                except Exception:
-                    pass
+                dias = _dias_calendario_brt(ts)
+                if dias is not None and (chave not in ultimo_contato_dias or dias < ultimo_contato_dias[chave]):
+                    ultimo_contato_dias[chave] = dias
     except Exception:
         pass
 
