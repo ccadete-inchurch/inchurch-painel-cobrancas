@@ -343,7 +343,7 @@ def load_mensagens_from_bq():
         df = client.query(f"""
             SELECT telefone, message, created_at
             FROM `{_N8N_TABLE}`
-            WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+            WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
             ORDER BY created_at ASC
         """).to_dataframe()
     except Exception:
