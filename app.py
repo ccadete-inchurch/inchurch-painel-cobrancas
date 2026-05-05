@@ -87,7 +87,8 @@ def main():
 
     # Guard de sessão: evita recarregar BQ mais de uma vez por dia na mesma sessão
     from datetime import date as _date
-    _hoje = _date.today().isoformat()
+    from helpers import hoje_brt as _hoje_brt
+    _hoje = _hoje_brt()
     _bq_key = f"_bq_loaded_{_hoje}"
 
     if not store["clientes"] and not st.session_state.get(_bq_key):

@@ -155,7 +155,6 @@ def _render_dashboard(store, clientes, role):
     df["_lastContact"] = df["id"].apply(lambda i: get_hist(i).get("lastContact", ""))
     df["_atendente"]   = df["id"].apply(lambda i: get_hist(i).get("atendente",   ""))
     df["_notes"]       = df["id"].apply(lambda i: get_hist(i).get("notes",       ""))
-    df = df[df["_status"] != "paid"]
 
     if busca:
         b = busca.lower()

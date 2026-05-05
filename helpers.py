@@ -1,6 +1,14 @@
 import re
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 import pandas as pd
+
+_BRT = timezone(timedelta(hours=-3))
+
+
+def hoje_brt() -> str:
+    """Data de hoje no fuso BRT (America/Sao_Paulo) em ISO. Usar como chave de
+    'dia útil' em vez de date.today(), que segue o timezone do servidor (UTC)."""
+    return datetime.now(_BRT).date().isoformat()
 
 from auth import current_uid, get_store
 from pathlib import Path

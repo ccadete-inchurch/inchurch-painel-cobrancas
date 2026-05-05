@@ -26,7 +26,7 @@ from google.cloud import bigquery
 
 from config import MAP_COB, MAP_INAD, DIAS_SEM_CONTATO
 from auth import get_store, current_nome
-from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel
+from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel, hoje_brt
 
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
@@ -45,6 +45,17 @@ _EMAIL_GRUPO = {
 _MSG_CONCLUIDA    = ("além da ligação",)
 _MSG_NAO_ATENDIDA = ("não estava disponível",)
 _MSG_PRE_LIGACAO  = ("vou te ligar em instantes",)
+
+# ── Lote diário: caps de inativos (únicos hard caps) + alvo ──────────────────
+# Ligação = urgente OU ligar. Mensagem = só mensagem.
+# Caps duros: no máximo 10 inativos em ligação e 15 inativos em mensagem.
+# Totais 30/50 são apenas referência das metas diárias — ativos preenchem o lote
+# livremente até atingir _LOTE_TARGET=80.
+_LOTE_TARGET       = 80
+_LOTE_META_LIG     = 30
+_LOTE_META_MSG     = 50
+_LOTE_MAX_INAT_LIG = 10
+_LOTE_MAX_INAT_MSG = 15
 
 
 @st.cache_resource
@@ -321,7 +332,8 @@ def load_historico_from_bq():
 
 
 def load_mensagens_from_bq():
-    """1x por sessão — lê tabela completa para detectar status de cada telefone."""
+    """Lê últimos 3 dias de mensagens N8N para definir o status atual de cada telefone.
+    Cliente tocado pelo bot há ≤ 3d fica em cooldown e sai do lote (a menos que vire urgente)."""
     import re
     from datetime import timezone as _tz
 
@@ -343,7 +355,7 @@ def load_mensagens_from_bq():
         df = client.query(f"""
             SELECT telefone, message, created_at
             FROM `{_N8N_TABLE}`
-            WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
+            WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 DAY)
             ORDER BY created_at ASC
         """).to_dataframe()
     except Exception:
@@ -505,8 +517,90 @@ def save_hist_to_bq(uid: str, cid: str, data: dict):
 
 # ── Tarefas diárias ───────────────────────────────────────────────────────────
 
+def _classificar_lote(cliente):
+    """Classifica cliente para o lote diário.
+    Retorna (bucket, eh_inativo) onde bucket é 'ligacao' (urgente/ligar) ou 'mensagem'.
+    Retorna None se o cliente é passivo no momento (não deve ocupar slot).
+    """
+    from helpers import get_msg_status
+    acoes = recomendar_acao(cliente)
+    if not acoes:
+        return None
+    msg_st = get_msg_status(cliente.get("telefone", ""))
+    if "urgente" not in acoes:
+        if msg_st == "concluida":
+            return None
+        if msg_st in ("mensagem", "ligacao_pendente") and "ligar" not in acoes:
+            return None
+    eh_ligacao = "urgente" in acoes or "ligar" in acoes
+    return ("ligacao" if eh_ligacao else "mensagem", bool(cliente.get("_inativo")))
+
+
+def _quota_atual_lote(lote_clientes):
+    """Conta quotas usadas pelo lote atual: (lig, msg, inat_lig, inat_msg)."""
+    lig = msg = inat_lig = inat_msg = 0
+    for c in lote_clientes:
+        cls = _classificar_lote(c)
+        if cls is None:
+            continue
+        bucket, eh_inativo = cls
+        if bucket == "ligacao":
+            lig += 1
+            if eh_inativo:
+                inat_lig += 1
+        else:
+            msg += 1
+            if eh_inativo:
+                inat_msg += 1
+    return lig, msg, inat_lig, inat_msg
+
+
+def selecionar_lote_com_quotas(grupo_clientes, lote_clientes=None):
+    """Seleciona IDs novos pra completar o lote respeitando quotas estritas.
+    `lote_clientes` é a lista atual (vazia para geração inicial).
+    Retorna lista de IDs a adicionar — nunca ultrapassa _LOTE_TARGET nem os caps.
+    """
+    lote_clientes = lote_clientes or []
+    lig, msg, inat_lig, inat_msg = _quota_atual_lote(lote_clientes)
+    ids_no_lote = {c["id"] for c in lote_clientes}
+
+    candidatos = []
+    for c in grupo_clientes:
+        if c["id"] in ids_no_lote:
+            continue
+        h = get_hist(c["id"])
+        cls = _classificar_lote(c)
+        if cls is None:
+            continue
+        candidatos.append((calcular_score(c, h), c, cls))
+    candidatos.sort(reverse=True, key=lambda x: x[0])
+
+    novos_ids = []
+    total_atual = sum(1 for c in lote_clientes if _classificar_lote(c) is not None)
+    for _, c, (bucket, eh_inativo) in candidatos:
+        if total_atual + len(novos_ids) >= _LOTE_TARGET:
+            break
+        # Únicos caps duros: inativos por bucket (10 ligação, 15 mensagem).
+        # Totais 30/50 ficam como meta — ativos preenchem livremente até 80.
+        if bucket == "ligacao":
+            if eh_inativo and inat_lig >= _LOTE_MAX_INAT_LIG:
+                continue
+            lig += 1
+            if eh_inativo:
+                inat_lig += 1
+        else:
+            if eh_inativo and inat_msg >= _LOTE_MAX_INAT_MSG:
+                continue
+            msg += 1
+            if eh_inativo:
+                inat_msg += 1
+        novos_ids.append(c["id"])
+
+    return novos_ids
+
+
 def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
-    """Retorna IDs dos 80 clientes prioritários do dia para o atendente logado.
+    """Retorna IDs dos clientes prioritários do dia para o atendente logado.
     Gera e persiste no BQ se ainda não existe lote para hoje.
     """
     atendente = _EMAIL_GRUPO.get(email_logado)
@@ -514,7 +608,7 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
         return [c["id"] for c in clientes]  # gestor vê todos
 
     client = get_bq_client()
-    hoje = date.today().isoformat()
+    hoje = hoje_brt()
 
     # Verifica se lote já foi gerado hoje
     if client:
@@ -536,82 +630,22 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
         except Exception:
             pass
 
-    # Clientes do grupo da atendente
+    # Geração inicial: lote vazio + quotas estritas (30 lig + 50 msg, ≤10/15 inativos)
     grupo_clientes = [c for c in clientes if c.get("_grupo") == atendente]
-
-    # Pontua e ordena
-    fila = []
-    for c in grupo_clientes:
-        h = get_hist(c["id"])
-        if h.get("status") == "paid":
-            continue
-        fila.append((calcular_score(c, h), c, h))
-    fila.sort(reverse=True, key=lambda x: x[0])
-
-    # Seleciona top 80: 30 ligação/urgente + 50 mensagem, com limites de inativos por balde
-    from helpers import get_msg_status as _get_msg_status
-    _MAX_LIG         = 30
-    _MAX_MSG         = 50
-    _MAX_INATIVO_LIG = 10
-    _MAX_INATIVO_MSG = 15
-    lig_ct         = 0
-    msg_ct         = 0
-    inativo_lig_ct = 0
-    inativo_msg_ct = 0
-    top80 = []
-
-    for _, c, h in fila:
-        if len(top80) >= 80:
-            break
-
-        acoes  = recomendar_acao(c)
-        msg_st = _get_msg_status(c.get("telefone", ""))
-
-        # Pula clientes sem ação (AGUARDAR)
-        if not acoes:
-            continue
-
-        # Pula clientes que já estariam em CONCLUÍDA no momento da geração
-        if "urgente" not in acoes:
-            if msg_st == "concluida":
-                continue
-            if msg_st in ("mensagem", "ligacao_pendente") and "ligar" not in acoes:
-                continue
-
-        eh_ligacao = "urgente" in acoes or "ligar" in acoes
-        eh_inativo = bool(c.get("_inativo"))
-
-        if eh_ligacao:
-            if lig_ct >= _MAX_LIG:
-                continue
-            if eh_inativo and inativo_lig_ct >= _MAX_INATIVO_LIG:
-                continue
-            lig_ct += 1
-            if eh_inativo:
-                inativo_lig_ct += 1
-        else:  # só mensagem
-            if msg_ct >= _MAX_MSG:
-                continue
-            if eh_inativo and inativo_msg_ct >= _MAX_INATIVO_MSG:
-                continue
-            msg_ct += 1
-            if eh_inativo:
-                inativo_msg_ct += 1
-
-        top80.append(c["id"])
+    top_ids = selecionar_lote_com_quotas(grupo_clientes, lote_clientes=[])
 
     # Persiste no BQ
-    if client and top80:
+    if client and top_ids:
         rows = [{"id_sacado_sac": cid, "atendente": atendente, "data_tarefa": hoje,
                  "dt_entrou_coluna_msg": None, "dt_entrou_coluna_ligacao": None,
                  "mensagem_enviada": False, "ligacao_feita": False, "ligacao_atendida": False}
-                for cid in top80]
+                for cid in top_ids]
         try:
             client.insert_rows_json(_TAREFAS_TABLE, rows)
         except Exception:
             pass
 
-    return top80
+    return top_ids
 
 
 def adicionar_tarefas_extras_bq(atendente: str, extra_ids: list):
@@ -619,7 +653,7 @@ def adicionar_tarefas_extras_bq(atendente: str, extra_ids: list):
     client = get_bq_client()
     if not client or not extra_ids:
         return
-    hoje = date.today().isoformat()
+    hoje = hoje_brt()
     rows = [{"id_sacado_sac": cid, "atendente": atendente, "data_tarefa": hoje,
              "dt_entrou_coluna_msg": None, "dt_entrou_coluna_ligacao": None,
              "mensagem_enviada": False, "ligacao_feita": False, "ligacao_atendida": False}
@@ -635,7 +669,7 @@ def get_tarefas_do_dia_bq(atendente: str) -> list:
     client = get_bq_client()
     if not client:
         return []
-    hoje = date.today().isoformat()
+    hoje = hoje_brt()
     try:
         df = client.query(f"""
             SELECT id_sacado_sac
@@ -655,7 +689,7 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
     client = get_bq_client()
     if not client:
         return
-    hoje = date.today().isoformat()
+    hoje = hoje_brt()
 
     import re
     def _norm(phone):
@@ -1040,8 +1074,6 @@ def calcular_pendencias(clientes):
     for c in clientes:
         h = get_hist(c["id"])
         s = h.get("status", "pending")
-        if s == "paid":
-            continue
         if s == "promise" and h.get("promiseDate"):
             dt = parse_date_br(h["promiseDate"])
             if dt and dt <= hoje:

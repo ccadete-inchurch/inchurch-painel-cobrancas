@@ -4,15 +4,21 @@ import streamlit as st
 
 import time as _time
 
-from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias, get_msg_concluida_dias
-from data import calcular_score, recomendar_acao, load_metricas_from_bq, load_mensagens_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, adicionar_tarefas_extras_bq, _EMAIL_GRUPO
+from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, hoje_brt
+from data import calcular_score, recomendar_acao, load_metricas_from_bq, load_mensagens_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, adicionar_tarefas_extras_bq, selecionar_lote_com_quotas, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
 
 @st.fragment(run_every=1800)
 def _auto_refresh_n8n():
-    """Dispara a cada 30 min para atualizar status N8N e re-renderizar o kanban."""
+    """Dispara a cada 30 min para atualizar status N8N e re-renderizar o kanban.
+    Também detecta virada de dia BRT e força rerun do app inteiro pra renovar o lote."""
+    hoje = hoje_brt()
+    if st.session_state.get("_dia_ativo") != hoje:
+        st.session_state["_dia_ativo"] = hoje
+        st.rerun(scope="app")
+        return
     last_ts = st.session_state.get("_metricas_ts", 0)
     if _time.time() - last_ts < 1740:
         return
@@ -161,7 +167,7 @@ def _render_atividades(store, clientes, role):
     email = current_email() or ""
 
     # ── Gera / carrega lote de 80 tarefas do dia ──────────────────────────────
-    _key_tarefas = f"_tarefas_{date.today().isoformat()}_{email}"
+    _key_tarefas = f"_tarefas_{hoje_brt()}_{email}"
     if _key_tarefas not in st.session_state:
         with st.spinner("Preparando tarefas do dia..."):
             ids_hoje = gerar_tarefas_do_dia(clientes, email)
@@ -191,22 +197,14 @@ def _render_atividades(store, clientes, role):
         # Ativos do lote
         ativos_lote = [c for c in clientes if c["id"] in ids_hoje and _ativo(c)]
 
-        # Complementa até 80 se necessário e persiste extras no BQ
-        if len(ativos_lote) < 80:
-            faltam   = 80 - len(ativos_lote)
-            ids_lote = ids_hoje
-            extras   = sorted(
-                [c for c in store["clientes"]
-                 if c.get("_grupo") == grupo and c["id"] not in ids_lote and _ativo(c)],
-                key=lambda x: calcular_score(x, get_hist(x["id"])),
-                reverse=True,
-            )
-            extras_sel = extras[:faltam]
-            novos_ids  = [c["id"] for c in extras_sel]
+        # Complementa até 80 respeitando quotas estritas (30 lig + 50 msg, ≤10/15 inativos)
+        grupo_clientes = [c for c in store["clientes"] if c.get("_grupo") == grupo]
+        novos_ids = selecionar_lote_com_quotas(grupo_clientes, ativos_lote)
+        if novos_ids:
+            extras_sel  = [c for c in grupo_clientes if c["id"] in set(novos_ids)]
             ativos_lote = ativos_lote + extras_sel
-            if novos_ids:
-                adicionar_tarefas_extras_bq(grupo, novos_ids)
-                st.session_state[_key_tarefas] = list(ids_hoje | set(novos_ids))
+            adicionar_tarefas_extras_bq(grupo, novos_ids)
+            st.session_state[_key_tarefas] = list(ids_hoje | set(novos_ids))
 
         clientes = ativos_lote
 
@@ -241,7 +239,7 @@ def _render_atividades(store, clientes, role):
                 )
 
         if _modo_admin == "Lote do dia" and _atendente_sel:
-            _key_lote = f"_tarefas_admin_{date.today().isoformat()}_{_atendente_sel}"
+            _key_lote = f"_tarefas_admin_{hoje_brt()}_{_atendente_sel}"
             if _key_lote not in st.session_state:
                 with st.spinner(f"Carregando lote de {_atendente_sel}..."):
                     ids_bq = get_tarefas_do_dia_bq(_atendente_sel)
@@ -269,15 +267,10 @@ def _render_atividades(store, clientes, role):
                 return True
 
             ativos_admin = [c for c in clientes if c["id"] in ids_lote and _ativo_admin(c)]
-            if len(ativos_admin) < 80:
-                faltam2 = 80 - len(ativos_admin)
-                extras2 = sorted(
-                    [c for c in store["clientes"]
-                     if c.get("_grupo") == _atendente_sel and c["id"] not in ids_lote and _ativo_admin(c)],
-                    key=lambda x: calcular_score(x, get_hist(x["id"])),
-                    reverse=True,
-                )
-                ativos_admin = ativos_admin + extras2[:faltam2]
+            grupo_admin  = [c for c in store["clientes"] if c.get("_grupo") == _atendente_sel]
+            novos_admin  = selecionar_lote_com_quotas(grupo_admin, ativos_admin)
+            if novos_admin:
+                ativos_admin = ativos_admin + [c for c in grupo_admin if c["id"] in set(novos_admin)]
             clientes = ativos_admin
 
     st.markdown(
@@ -314,7 +307,7 @@ def _render_atividades(store, clientes, role):
     if atendente_logado:
         dados_m, label_m = _metricas_lote_n8n(ids_hoje, atendente_logado), atendente_logado
     elif role in ("admin", "gestor") and _modo_admin == "Lote do dia" and _atendente_sel:
-        _key_lote_adm = f"_tarefas_admin_{date.today().isoformat()}_{_atendente_sel}"
+        _key_lote_adm = f"_tarefas_admin_{hoje_brt()}_{_atendente_sel}"
         _ids_lote_adm = set(st.session_state.get(_key_lote_adm, []))
         dados_m, label_m = _metricas_lote_n8n(_ids_lote_adm, _atendente_sel), _atendente_sel
     else:
@@ -360,8 +353,6 @@ def _render_atividades(store, clientes, role):
     fila = []
     for c in clientes:
         h = get_hist(c["id"])
-        if h.get("status") == "paid":
-            continue
         fila.append((calcular_score(c, h), recomendar_acao(c), c, h))
     fila.sort(key=lambda x: x[0], reverse=True)
 
