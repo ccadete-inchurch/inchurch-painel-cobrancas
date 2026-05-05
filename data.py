@@ -487,6 +487,35 @@ def load_metricas_from_bq():
     }
 
 
+def load_metricas_tarefas_from_bq():
+    """Carrega contagens mensagem/ligação do lote de hoje por atendente da painel_tarefas_diarias."""
+    client = get_bq_client()
+    if not client:
+        return
+    hoje = date.today().isoformat()
+    try:
+        df = client.query(f"""
+            SELECT
+                atendente,
+                COUNTIF(mensagem_enviada = TRUE) AS mensagens,
+                COUNTIF(ligacao_feita    = TRUE) AS ligacoes,
+                COUNTIF(ligacao_atendida = TRUE) AS atendidas
+            FROM `{_TAREFAS_TABLE}`
+            WHERE data_tarefa = '{hoje}'
+            GROUP BY atendente
+        """).to_dataframe()
+        metricas = {}
+        for _, row in df.iterrows():
+            metricas[str(row["atendente"])] = {
+                "mensagens": int(row.get("mensagens") or 0),
+                "ligacoes":  int(row.get("ligacoes")  or 0),
+                "atendidas": int(row.get("atendidas") or 0),
+            }
+        st.session_state["_metricas_tarefas"] = metricas
+    except Exception:
+        pass
+
+
 def save_hist_to_bq(uid: str, cid: str, data: dict):
     """Persiste uma entrada do historico no BQ (append; leitura sempre pega a mais recente)."""
     client = get_bq_client()
