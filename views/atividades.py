@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, hoje_brt
-from data import calcular_score, recomendar_acao, load_metricas_from_bq, load_mensagens_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, adicionar_tarefas_extras_bq, selecionar_lote_com_quotas, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_metricas_from_bq, load_mensagens_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -80,24 +80,6 @@ def _motivo(acoes, msg_st, c, h) -> tuple:
         sufixo = f" {quando}" if quando else ""
         return f"Mensagem enviada{sufixo} · fazer ligação", "blue"
 
-    # Contato proativo: sem cobrança vencida, verifica vencimento próximo
-    if not (c.get("dias_atraso") or 0) and acoes:
-        hoje = date.today()
-        dias_min = None
-        for cb in c.get("_cobracas", []):
-            venc = cb.get("vencimento")
-            if venc:
-                try:
-                    parts = venc.split("/")
-                    d = date(int(parts[2]), int(parts[1]), int(parts[0]))
-                    restantes = (d - hoje).days
-                    if restantes > 0 and (dias_min is None or restantes < dias_min):
-                        dias_min = restantes
-                except Exception:
-                    pass
-        if dias_min is not None:
-            return f"Vencimento em {dias_min}d", "green"
-
     if "mensagem" in acoes:
         sufixo = " · Mensagem" if "ligar" in acoes else ""
         texto  = f"Último contato há {dsc}d{sufixo}" if dsc is not None else f"Sem contato anterior{sufixo}"
@@ -115,7 +97,6 @@ def _render_card(score, acoes, c, role, idx, msg_st="", h=None):
         "blue":   "color:#5fa3ff;background:rgba(95,163,255,.08);border-left:2px solid #5fa3ff;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
         "purple": "color:#a78bfa;background:rgba(167,139,250,.08);border-left:2px solid #a78bfa;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
         "gray":   "color:#f59e0b;background:rgba(245,158,11,.08);border-left:2px solid #f59e0b;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
-        "green":  "color:#10b981;background:rgba(16,185,129,.08);border-left:2px solid #10b981;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
     }
     motivo_html = (
         f'<div style="font-size:11px;font-weight:600;margin-bottom:8px;{_motivo_css.get(motivo_style, "")}">{motivo_txt}</div>'
@@ -174,39 +155,10 @@ def _render_atividades(store, clientes, role):
         st.session_state[_key_tarefas] = ids_hoje
     ids_hoje = set(st.session_state[_key_tarefas])
 
-    # Filtra clientes para o lote do dia (atendente vê só os seus)
+    # Lote estático do dia: 80 IDs fixos. Tarefas concluídas vão pra coluna
+    # CONCLUÍDA e ficam visíveis. Renovação só na virada do dia.
     if email in _EMAIL_GRUPO:
-        grupo = _EMAIL_GRUPO[email]
-
-        def _ativo(c):
-            """Retorna True se o cliente tem ação pendente (não é passivo)."""
-            h2  = get_hist(c["id"])
-            a2  = recomendar_acao(c)
-            if not a2:
-                return False
-            ms2 = get_msg_status(c.get("telefone", ""))
-            if "urgente" not in a2:
-                if ms2 == "concluida":
-                    dias2 = get_ultimo_contato_n8n_dias(c.get("telefone", ""))
-                    if dias2 is not None and dias2 >= 1:
-                        return False
-                if ms2 in ("mensagem", "ligacao_pendente") and "ligar" not in a2:
-                    return False
-            return True
-
-        # Ativos do lote
-        ativos_lote = [c for c in clientes if c["id"] in ids_hoje and _ativo(c)]
-
-        # Complementa até 80 respeitando quotas estritas (30 lig + 50 msg, ≤10/15 inativos)
-        grupo_clientes = [c for c in store["clientes"] if c.get("_grupo") == grupo]
-        novos_ids = selecionar_lote_com_quotas(grupo_clientes, ativos_lote)
-        if novos_ids:
-            extras_sel  = [c for c in grupo_clientes if c["id"] in set(novos_ids)]
-            ativos_lote = ativos_lote + extras_sel
-            adicionar_tarefas_extras_bq(grupo, novos_ids)
-            st.session_state[_key_tarefas] = list(ids_hoje | set(novos_ids))
-
-        clientes = ativos_lote
+        clientes = [c for c in clientes if c["id"] in ids_hoje]
 
     # Atualiza bools na tabela BQ com base no status n8n atual (máx 1x a cada 10 min)
     atendente_bq = _EMAIL_GRUPO.get(email)
@@ -250,28 +202,8 @@ def _render_atividades(store, clientes, role):
                     st.session_state[_key_lote] = ids_bq
             ids_lote = set(st.session_state[_key_lote])
 
-            # Pré-filtra passivos e complementa até 80
-            def _ativo_admin(c):
-                h2  = get_hist(c["id"])
-                a2  = recomendar_acao(c)
-                if not a2:
-                    return False
-                ms2 = get_msg_status(c.get("telefone", ""))
-                if "urgente" not in a2:
-                    if ms2 == "concluida":
-                        dias2 = get_ultimo_contato_n8n_dias(c.get("telefone", ""))
-                        if dias2 is not None and dias2 >= 1:
-                            return False
-                    if ms2 in ("mensagem", "ligacao_pendente") and "ligar" not in a2:
-                        return False
-                return True
-
-            ativos_admin = [c for c in clientes if c["id"] in ids_lote and _ativo_admin(c)]
-            grupo_admin  = [c for c in store["clientes"] if c.get("_grupo") == _atendente_sel]
-            novos_admin  = selecionar_lote_com_quotas(grupo_admin, ativos_admin)
-            if novos_admin:
-                ativos_admin = ativos_admin + [c for c in grupo_admin if c["id"] in set(novos_admin)]
-            clientes = ativos_admin
+            # Lote estático do dia: mostra os 80 IDs fixos do atendente selecionado
+            clientes = [c for c in clientes if c["id"] in ids_lote]
 
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'

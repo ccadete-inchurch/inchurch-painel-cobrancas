@@ -1036,35 +1036,6 @@ def recomendar_acao(cliente) -> list[str]:
     if dias >= 5:
         acoes.append("mensagem")
 
-    if acoes:
-        return acoes
-
-    # Contato proativo: cobranças ainda não vencidas
-    from datetime import date as _date
-    from helpers import get_msg_concluida_dias
-    hoje = _date.today()
-    dias_lig = get_msg_concluida_dias(cliente.get("telefone", ""))
-    dias_min = None
-    for cb in cliente.get("_cobracas", []):
-        venc = cb.get("vencimento")
-        if not venc:
-            continue
-        d = parse_date_br(venc)
-        if d is None:
-            continue
-        restantes = (d - hoje).days
-        if restantes > 0 and (dias_min is None or restantes < dias_min):
-            dias_min = restantes
-
-    if dias_min is not None:
-        proativo = []
-        if dias_min <= 7:
-            if dias_lig is None or dias_lig >= 5:
-                proativo.append("ligar")
-        if dias_min <= 5:
-            proativo.append("mensagem")
-        return proativo
-
     return acoes
 
 
