@@ -14,7 +14,7 @@ from views.dialog import dialog_editar
 def _auto_refresh_n8n():
     """Dispara a cada 30 min para atualizar status N8N e re-renderizar o kanban."""
     last_ts = st.session_state.get("_metricas_ts", 0)
-    if _time.time() - last_ts < 30:
+    if _time.time() - last_ts < 1740:
         return
     load_mensagens_from_bq()
     load_metricas_from_bq()

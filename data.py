@@ -349,9 +349,20 @@ def load_mensagens_from_bq():
     except Exception:
         return
 
+    # Aggregation query for last contact date over a longer window (no message content needed)
+    try:
+        df_last = client.query(f"""
+            SELECT telefone, MAX(created_at) AS ultimo_contato
+            FROM `{_N8N_TABLE}`
+            WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+            GROUP BY telefone
+        """).to_dataframe()
+    except Exception:
+        df_last = None
+
     status_map        = {}
     concluida_ts      = {}
-    ultimo_contato_ts = {}  # último contato n8n por telefone (qualquer mensagem)
+    ultimo_contato_ts = {}
 
     for _, row in df.iterrows():
         chave = _norm(str(row.get("telefone") or ""))
@@ -390,6 +401,20 @@ def load_mensagens_from_bq():
             ultimo_contato_dias[phone] = max((now_utc - ts).days, 0)
         except Exception:
             pass
+
+    # Merge 30-day last contact (overwrites 7-day values with same or older timestamps)
+    if df_last is not None and not df_last.empty:
+        for _, row in df_last.iterrows():
+            chave = _norm(str(row.get("telefone") or ""))
+            if not chave:
+                continue
+            ts = row.get("ultimo_contato")
+            if ts is not None:
+                try:
+                    dias = max((now_utc - ts).days, 0)
+                    ultimo_contato_dias[chave] = dias
+                except Exception:
+                    pass
 
     st.session_state["_msg_status"]              = status_map
     st.session_state["_msg_concluida_dias"]      = concluida_dias
