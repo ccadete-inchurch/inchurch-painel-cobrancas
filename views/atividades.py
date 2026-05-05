@@ -93,7 +93,7 @@ def _motivo(acoes, msg_st, c, h) -> tuple:
             return f"Vencimento em {dias_min}d", "green"
 
     if "mensagem" in acoes:
-        sufixo = " · Mensagem e ligação" if "ligar" in acoes else ""
+        sufixo = " · Mensagem" if "ligar" in acoes else ""
         texto  = f"Último contato há {dsc}d{sufixo}" if dsc is not None else f"Sem contato anterior{sufixo}"
         return texto, "gray"
     return "", ""
