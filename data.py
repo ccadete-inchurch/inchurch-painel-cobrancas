@@ -479,41 +479,6 @@ def load_metricas_from_bq():
         "Priscila Oliveira": {"mensagens": len(msgs_hoje["Priscila Oliveira"]), "ligacoes": len(lig_hoje["Priscila Oliveira"]), "atendidas": len(atend_hoje["Priscila Oliveira"])},
         "Ana Carolina":      {"mensagens": len(msgs_hoje["Ana Carolina"]),      "ligacoes": len(lig_hoje["Ana Carolina"]),      "atendidas": len(atend_hoje["Ana Carolina"])},
     }
-    # Sets de telefones de hoje por atendente — usados por _metricas_lote()
-    st.session_state["_n8n_hoje_phones"] = {
-        "msgs":  msgs_hoje,
-        "lig":   lig_hoje,
-        "atend": atend_hoje,
-    }
-
-
-def load_metricas_tarefas_from_bq():
-    """Carrega contagens mensagem/ligação do lote de hoje por atendente da painel_tarefas_diarias."""
-    client = get_bq_client()
-    if not client:
-        return
-    hoje = date.today().isoformat()
-    try:
-        df = client.query(f"""
-            SELECT
-                atendente,
-                COUNTIF(mensagem_enviada = TRUE) AS mensagens,
-                COUNTIF(ligacao_feita    = TRUE) AS ligacoes,
-                COUNTIF(ligacao_atendida = TRUE) AS atendidas
-            FROM `{_TAREFAS_TABLE}`
-            WHERE data_tarefa = '{hoje}'
-            GROUP BY atendente
-        """).to_dataframe()
-        metricas = {}
-        for _, row in df.iterrows():
-            metricas[str(row["atendente"])] = {
-                "mensagens": int(row.get("mensagens") or 0),
-                "ligacoes":  int(row.get("ligacoes")  or 0),
-                "atendidas": int(row.get("atendidas") or 0),
-            }
-        st.session_state["_metricas_tarefas"] = metricas
-    except Exception:
-        pass
 
 
 def save_hist_to_bq(uid: str, cid: str, data: dict):

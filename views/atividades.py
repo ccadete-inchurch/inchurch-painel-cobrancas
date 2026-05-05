@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias
-from data import calcular_score, recomendar_acao, load_metricas_from_bq, load_mensagens_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, adicionar_tarefas_extras_bq, load_metricas_tarefas_from_bq, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_metricas_from_bq, load_mensagens_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, adicionar_tarefas_extras_bq, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -210,12 +210,6 @@ def _render_atividades(store, clientes, role):
 
         clientes = ativos_lote
 
-    # Carrega métricas do lote (tarefas_diarias) uma vez por dia ou após update
-    _key_met = f"_met_tarefas_{date.today().isoformat()}"
-    if _key_met not in st.session_state:
-        load_metricas_tarefas_from_bq()
-        st.session_state[_key_met] = True
-
     # Atualiza bools na tabela BQ com base no status n8n atual (máx 1x a cada 10 min)
     atendente_bq = _EMAIL_GRUPO.get(email)
     _ts_upd = st.session_state.get("_tarefas_update_ts", 0)
@@ -296,20 +290,28 @@ def _render_atividades(store, clientes, role):
     )
 
     # ── Progresso do dia — calcula só sobre os clientes do lote ─────────────
-    def _metricas_lote(ids_lote_set, atendente=None):
-        metricas = st.session_state.get("_metricas_tarefas", {})
-        _zero = {"mensagens": 0, "ligacoes": 0, "atendidas": 0}
-        if atendente and atendente in metricas:
-            return metricas[atendente]
-        return _zero
+    def _metricas_lote(ids_lote_set):
+        msgs = lig = atend = 0
+        for c in store["clientes"]:
+            if c["id"] not in ids_lote_set:
+                continue
+            tel = c.get("telefone", "")
+            ms  = get_msg_status(tel)
+            if ms in ("mensagem", "ligacao_pendente", "concluida", "tentar_novamente"):
+                msgs += 1
+            if ms in ("ligacao_pendente", "concluida", "tentar_novamente"):
+                lig += 1
+            if ms == "concluida" and (get_ultimo_contato_n8n_dias(tel) or 999) == 0:
+                atend += 1
+        return {"mensagens": msgs, "ligacoes": lig, "atendidas": atend}
 
     atendente_logado = _EMAIL_GRUPO.get(email)
     if atendente_logado:
-        dados_m, label_m = _metricas_lote(ids_hoje, atendente_logado), atendente_logado
+        dados_m, label_m = _metricas_lote(ids_hoje), atendente_logado
     elif role in ("admin", "gestor") and _modo_admin == "Lote do dia" and _atendente_sel:
         _key_lote_adm = f"_tarefas_admin_{date.today().isoformat()}_{_atendente_sel}"
         _ids_lote_adm  = set(st.session_state.get(_key_lote_adm, []))
-        dados_m, label_m = _metricas_lote(_ids_lote_adm, _atendente_sel), _atendente_sel
+        dados_m, label_m = _metricas_lote(_ids_lote_adm), _atendente_sel
     else:
         _zero  = {"mensagens": 0, "ligacoes": 0, "atendidas": 0}
         n8n    = st.session_state.get("_n8n_hoje", {"total": _zero})
