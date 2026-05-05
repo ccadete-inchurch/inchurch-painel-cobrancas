@@ -367,7 +367,7 @@ def _render_atividades(store, clientes, role):
 
     # ── Separar por coluna ────────────────────────────────────────────────────
     def _canal(acoes, msg_st):
-        if "urgente" in acoes and msg_st != "concluida":
+        if "urgente" in acoes:
             return "urgente"
         if msg_st == "concluida":
             return "concluida"
