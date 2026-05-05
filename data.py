@@ -451,8 +451,8 @@ def load_metricas_from_bq():
         return
 
     msgs_hoje  = {"total": set(), "Priscila Oliveira": set(), "Ana Carolina": set()}
-    lig_hoje   = {"total": 0, "Priscila Oliveira": 0, "Ana Carolina": 0}
-    atend_hoje = {"total": 0, "Priscila Oliveira": 0, "Ana Carolina": 0}
+    lig_hoje   = {"total": set(), "Priscila Oliveira": set(), "Ana Carolina": set()}
+    atend_hoje = {"total": set(), "Priscila Oliveira": set(), "Ana Carolina": set()}
 
     for _, row in df.iterrows():
         chave = _norm(str(row.get("telefone") or ""))
@@ -466,18 +466,24 @@ def load_metricas_from_bq():
         if atend in msgs_hoje:
             msgs_hoje[atend].add(chave)
         if any(p in msg for p in _MSG_PRE_LIGACAO):
-            lig_hoje["total"] += 1
+            lig_hoje["total"].add(chave)
             if atend in lig_hoje:
-                lig_hoje[atend] += 1
+                lig_hoje[atend].add(chave)
         if any(p in msg for p in _MSG_CONCLUIDA):
-            atend_hoje["total"] += 1
+            atend_hoje["total"].add(chave)
             if atend in atend_hoje:
-                atend_hoje[atend] += 1
+                atend_hoje[atend].add(chave)
 
     st.session_state["_n8n_hoje"] = {
-        "total":             {"mensagens": len(msgs_hoje["total"]),             "ligacoes": lig_hoje["total"],             "atendidas": atend_hoje["total"]},
-        "Priscila Oliveira": {"mensagens": len(msgs_hoje["Priscila Oliveira"]), "ligacoes": lig_hoje["Priscila Oliveira"], "atendidas": atend_hoje["Priscila Oliveira"]},
-        "Ana Carolina":      {"mensagens": len(msgs_hoje["Ana Carolina"]),      "ligacoes": lig_hoje["Ana Carolina"],      "atendidas": atend_hoje["Ana Carolina"]},
+        "total":             {"mensagens": len(msgs_hoje["total"]),             "ligacoes": len(lig_hoje["total"]),             "atendidas": len(atend_hoje["total"])},
+        "Priscila Oliveira": {"mensagens": len(msgs_hoje["Priscila Oliveira"]), "ligacoes": len(lig_hoje["Priscila Oliveira"]), "atendidas": len(atend_hoje["Priscila Oliveira"])},
+        "Ana Carolina":      {"mensagens": len(msgs_hoje["Ana Carolina"]),      "ligacoes": len(lig_hoje["Ana Carolina"]),      "atendidas": len(atend_hoje["Ana Carolina"])},
+    }
+    # Sets de telefones de hoje por atendente — usados por _metricas_lote()
+    st.session_state["_n8n_hoje_phones"] = {
+        "msgs":  msgs_hoje,
+        "lig":   lig_hoje,
+        "atend": atend_hoje,
     }
 
 
