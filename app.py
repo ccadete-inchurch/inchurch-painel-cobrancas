@@ -85,19 +85,30 @@ def main():
     if not store["clientes"]:
         carregar_cache_local()
 
-    # Força atualização do BQ se não há dados ou o cache é de um dia anterior
-    ultima = store.get("ultima_atualizacao", "")
-    cache_desatualizado = True
-    if ultima:
-        try:
-            from datetime import datetime as _datetime, date as _date
-            cache_desatualizado = _datetime.strptime(ultima[:10], "%d/%m/%Y").date() < _date.today()
-        except Exception:
-            pass
+    # Guard de sessão: evita recarregar BQ mais de uma vez por dia na mesma sessão
+    from datetime import date as _date
+    _hoje = _date.today().isoformat()
+    _bq_key = f"_bq_loaded_{_hoje}"
 
-    if not store["clientes"] or cache_desatualizado:
+    if not store["clientes"] and not st.session_state.get(_bq_key):
+        # Sessão nova ou dados ausentes
         with st.spinner("Carregando dados do BigQuery..."):
             processar_dados_bigquery()
+        st.session_state[_bq_key] = True
+    elif store["clientes"] and not st.session_state.get(_bq_key):
+        # Dados de cache local — verifica se são de ontem
+        ultima = store.get("ultima_atualizacao") or ""
+        cache_desatualizado = True
+        if ultima:
+            try:
+                from datetime import datetime as _datetime
+                cache_desatualizado = _datetime.strptime(ultima[:10], "%d/%m/%Y").date() < _date.today()
+            except Exception:
+                pass
+        if cache_desatualizado:
+            with st.spinner("Carregando dados do BigQuery..."):
+                processar_dados_bigquery()
+        st.session_state[_bq_key] = True
 
     # Carrega historico de atendimento do BQ uma vez por sessão
     if not st.session_state.get("_historico_loaded"):
