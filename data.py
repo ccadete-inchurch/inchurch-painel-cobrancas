@@ -479,6 +479,11 @@ def load_metricas_from_bq():
         "Priscila Oliveira": {"mensagens": len(msgs_hoje["Priscila Oliveira"]), "ligacoes": len(lig_hoje["Priscila Oliveira"]), "atendidas": len(atend_hoje["Priscila Oliveira"])},
         "Ana Carolina":      {"mensagens": len(msgs_hoje["Ana Carolina"]),      "ligacoes": len(lig_hoje["Ana Carolina"]),      "atendidas": len(atend_hoje["Ana Carolina"])},
     }
+    st.session_state["_n8n_hoje_phones"] = {
+        "msgs":  msgs_hoje,
+        "lig":   lig_hoje,
+        "atend": atend_hoje,
+    }
 
 
 def save_hist_to_bq(uid: str, cid: str, data: dict):
