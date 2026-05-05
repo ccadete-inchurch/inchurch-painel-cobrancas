@@ -4,7 +4,7 @@ import streamlit as st
 
 import time as _time
 
-from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias
+from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias, get_msg_concluida_dias
 from data import calcular_score, recomendar_acao, load_metricas_from_bq, load_mensagens_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, adicionar_tarefas_extras_bq, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
@@ -288,16 +288,37 @@ def _render_atividades(store, clientes, role):
         unsafe_allow_html=True,
     )
 
-    # ── Progresso do dia — direto da N8N por instância ───────────────────────
+    # ── Progresso do dia — N8N de hoje cruzado com telefones do lote ─────────
+    import re as _re
     _zero = {"mensagens": 0, "ligacoes": 0, "atendidas": 0}
-    n8n   = st.session_state.get("_n8n_hoje", {"total": {**_zero}})
+
+    def _norm_ph(ph):
+        p = _re.sub(r'\D', '', ph or '')
+        if p.startswith('55') and len(p) > 11:
+            p = p[2:]
+        return (p[:2] + p[-8:]) if len(p) >= 10 else p
+
+    def _metricas_lote_n8n(ids_lote, atd_nome):
+        lote_ph = {_norm_ph(c.get("telefone", "")) for c in store["clientes"] if c["id"] in ids_lote}
+        lote_ph.discard("")
+        pd = st.session_state.get("_n8n_hoje_phones", {})
+        if not pd or not lote_ph:
+            return {**_zero}
+        return {
+            "mensagens": len(pd.get("msgs",  {}).get(atd_nome, set()) & lote_ph),
+            "ligacoes":  len(pd.get("lig",   {}).get(atd_nome, set()) & lote_ph),
+            "atendidas": len(pd.get("atend", {}).get(atd_nome, set()) & lote_ph),
+        }
 
     atendente_logado = _EMAIL_GRUPO.get(email)
     if atendente_logado:
-        dados_m, label_m = n8n.get(atendente_logado, {**_zero}), atendente_logado
+        dados_m, label_m = _metricas_lote_n8n(ids_hoje, atendente_logado), atendente_logado
     elif role in ("admin", "gestor") and _modo_admin == "Lote do dia" and _atendente_sel:
-        dados_m, label_m = n8n.get(_atendente_sel, {**_zero}), _atendente_sel
+        _key_lote_adm = f"_tarefas_admin_{date.today().isoformat()}_{_atendente_sel}"
+        _ids_lote_adm = set(st.session_state.get(_key_lote_adm, []))
+        dados_m, label_m = _metricas_lote_n8n(_ids_lote_adm, _atendente_sel), _atendente_sel
     else:
+        n8n    = st.session_state.get("_n8n_hoje", {"total": {**_zero}})
         dados_m, label_m = n8n.get("total", {**_zero}), "Total"
 
     meta_msg, meta_lig, meta_atend = 50, 30, 15
@@ -367,7 +388,7 @@ def _render_atividades(store, clientes, role):
 
     # ── Separar por coluna ────────────────────────────────────────────────────
     def _canal(acoes, msg_st):
-        if "urgente" in acoes:
+        if "urgente" in acoes and msg_st != "concluida":
             return "urgente"
         if msg_st == "concluida":
             return "concluida"
@@ -403,7 +424,14 @@ def _render_atividades(store, clientes, role):
             if canal == "concluida":
                 dias_contato = get_ultimo_contato_n8n_dias(c.get("telefone", ""))
                 if dias_contato is not None and dias_contato >= 1:
-                    continue  # concluída antes de hoje → não era tarefa ativa do lote
+                    if "urgente" in a:
+                        dias_lig = get_msg_concluida_dias(c.get("telefone", ""))
+                        if dias_lig is not None and dias_lig < 5:
+                            continue  # ligou há <5 dias → tarefa concluída, ocultar
+                        else:
+                            canal = "urgente"  # 5+ dias sem ligar → volta para urgente
+                    else:
+                        continue  # concluída antes de hoje → ocultar
 
         if   canal == "urgente":          acordos.append(item)
         elif canal == "ligacao":          ligacao.append(item)
