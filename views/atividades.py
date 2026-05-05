@@ -93,7 +93,8 @@ def _motivo(acoes, msg_st, c, h) -> tuple:
             return f"Vencimento em {dias_min}d", "green"
 
     if "mensagem" in acoes:
-        texto = f"Último contato há {dsc}d" if dsc is not None else "Sem contato anterior"
+        sufixo = " · Mensagem e ligação" if "ligar" in acoes else ""
+        texto  = f"Último contato há {dsc}d{sufixo}" if dsc is not None else f"Sem contato anterior{sufixo}"
         return texto, "gray"
     return "", ""
 
@@ -102,7 +103,6 @@ def _render_card(score, acoes, c, role, idx, msg_st="", h=None):
     cor           = _score_cor(score)
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
     acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if "urgente" in acoes else ""
-    ligar_badge   = '<span style="background:rgba(95,163,255,.15);color:#5fa3ff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">📞 LIGAR APÓS</span>' if (msg_st in ("sem_contato", "") and "ligar" in acoes and "mensagem" in acoes) else ""
     motivo_txt, motivo_style = _motivo(acoes, msg_st, c, h or {})
     _motivo_css = {
         "red":    "color:#ff5555;background:rgba(239,68,68,.08);border-left:2px solid #ff5555;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
@@ -124,7 +124,7 @@ def _render_card(score, acoes, c, role, idx, msg_st="", h=None):
         f'{c["nome"]}'
         f'<div style="font-size:11px;color:#9ca3af;font-weight:400;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
         f'<span>{c.get("cnpj","—")} · ID {c.get("id","—")}</span>'
-        f'{inativo_badge}{acordo_badge}{ligar_badge}'
+        f'{inativo_badge}{acordo_badge}'
         f'</div>'
         f'</div>'
         f'<div style="text-align:right;flex-shrink:0">'
