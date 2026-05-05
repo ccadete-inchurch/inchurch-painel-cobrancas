@@ -71,8 +71,8 @@ def _motivo(acoes, msg_st, c, h) -> tuple:
         return "Não atendeu a ligação", "purple"
     if msg_st in ("mensagem", "ligacao_pendente"):
         quando = "hoje" if dsc == 0 else f"há {dsc}d" if dsc else ""
-        sufixo = f" ({quando})" if quando else ""
-        return f"Mensagem enviada{sufixo} · aguarda ligação", "blue"
+        sufixo = f" {quando}" if quando else ""
+        return f"Mensagem enviada{sufixo} · fazer ligação", "blue"
 
     # Contato proativo: sem cobrança vencida, verifica vencimento próximo
     if not (c.get("dias_atraso") or 0) and acoes:
