@@ -216,7 +216,6 @@ def _render_atividades(store, clientes, role):
     if atendente_bq and _time.time() - _ts_upd > 600:
         status_map = st.session_state.get("_msg_status", {})
         atualizar_tarefas_bq(atendente_bq, status_map, clientes)
-        load_metricas_tarefas_from_bq()
         st.session_state["_tarefas_update_ts"] = _time.time()
 
     # ── Controles de admin: visualização por lote ou todos ───────────────────
