@@ -35,6 +35,7 @@ _BQ_PROJECT    = "business-intelligence-467516"
 _BQ_DATASET    = "inadimplencia_painel_cobrancas"
 _HIST_TABLE    = f"{_BQ_PROJECT}.{_BQ_DATASET}.painel_historico"
 _TAREFAS_TABLE = f"{_BQ_PROJECT}.{_BQ_DATASET}.painel_tarefas_diarias"
+_N8N_MSGS_TABLE = f"{_BQ_PROJECT}.N8N.n8nfinchatbot_historico_msgs"
 
 _EMAIL_GRUPO = {
     "priscila.oliveira@inchurch.com.br":    "Priscila Oliveira",
@@ -368,8 +369,11 @@ def load_historico_from_bq():
 
 
 def load_mensagens_from_bq():
-    """Lê histórico N8N direto do Postgres (sem atraso de 30min do Data Transfer).
-    Mantém o nome 'from_bq' por compat com imports existentes — fonte agora é Postgres.
+    """Lê histórico N8N do BigQuery em N8N.n8nfinchatbot_historico_msgs — tabela
+    com a CONVERSA COMPLETA (todas as mensagens). A historico_atendente que
+    estávamos lendo no Postgres só salva 1 msg/telefone/dia, perdendo a "atendida"
+    quando vem após "vou te ligar em instantes".
+    Filtra fromme=TRUE pra pegar só msgs do bot/atendente (não respostas do cliente).
     Popula _msg_status (últimos 3d), _msg_concluida_dias e _msg_ultimo_contato_dias.
     """
     import re
@@ -384,43 +388,40 @@ def load_mensagens_from_bq():
     st.session_state.setdefault("_msg_concluida_dias", {})
     st.session_state.setdefault("_msg_ultimo_contato_dias", {})
 
-    conn = get_pg_n8n_conn()
-    if not conn:
+    client = get_bq_client()
+    if not client:
         return
 
-    table = _pg_table_ref()
-    cur = conn.cursor()
-
-    # Janela de 3 dias — define cooldowns curtos e status atual
+    # Janela de 3 dias — define cooldowns curtos e status atual.
+    # fromme = "true" → mensagem enviada pelo bot/atendente (ignora respostas do cliente).
     try:
-        cur.execute(f"""
+        df = client.query(f"""
             SELECT telefone, message, created_at
-            FROM {table}
-            WHERE created_at >= NOW() - INTERVAL '3 days'
+            FROM `{_N8N_MSGS_TABLE}`
+            WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 DAY)
+              AND LOWER(fromme) = 'true'
             ORDER BY created_at ASC
-        """)
-        rows = cur.fetchall()
+        """).to_dataframe()
     except Exception as e:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        st.warning(f"Falha ao ler N8N (3d): {e}")
-        cur.close()
+        st.warning(f"Falha ao ler N8N historico_msgs (3d): {e}")
         return
 
     status_map        = {}
     concluida_ts      = {}
     ultimo_contato_ts = {}
 
-    for tel_raw, msg_raw, ts in rows:
-        chave = _norm(str(tel_raw or ""))
+    for _, row in df.iterrows():
+        chave = _norm(str(row.get("telefone") or ""))
         if not chave:
             continue
-        msg = str(msg_raw or "").lower()
-        if ts is not None:
-            ultimo_contato_ts[chave] = ts
+        msg = str(row.get("message") or "").lower()
+        ts  = row.get("created_at")
 
+        if ts is not None:
+            ultimo_contato_ts[chave] = ts  # último sempre sobrescreve (ASC → last wins)
+
+        # Como historico_msgs tem TODAS as mensagens, "atendida" sobrescreve
+        # "ligacao_pendente" anterior — exatamente o que precisamos.
         if any(p in msg for p in _MSG_CONCLUIDA):
             status_map[chave] = "concluida"
             if ts is not None:
@@ -457,27 +458,26 @@ def load_mensagens_from_bq():
         if d is not None:
             ultimo_contato_dias[phone] = d
 
-    # Último contato histórico completo (MAX por telefone, sem janela)
+    # Último contato histórico completo (MAX por telefone, tabela toda)
     try:
-        cur.execute(f"""
+        df_lc = client.query(f"""
             SELECT telefone, MAX(created_at) AS ultimo_contato
-            FROM {table}
+            FROM `{_N8N_MSGS_TABLE}`
+            WHERE LOWER(fromme) = 'true'
             GROUP BY telefone
-        """)
-        for tel_raw, ts in cur.fetchall():
-            chave = _norm(str(tel_raw or ""))
-            if not chave or ts is None:
+        """).to_dataframe()
+        for _, row in df_lc.iterrows():
+            chave = _norm(str(row.get("telefone") or ""))
+            if not chave:
+                continue
+            ts = row.get("ultimo_contato")
+            if ts is None:
                 continue
             dias = _dias_calendario_brt(ts)
             if dias is not None and (chave not in ultimo_contato_dias or dias < ultimo_contato_dias[chave]):
                 ultimo_contato_dias[chave] = dias
     except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-
-    cur.close()
+        pass
 
     st.session_state["_msg_status"]              = status_map
     st.session_state["_msg_concluida_dias"]      = concluida_dias
