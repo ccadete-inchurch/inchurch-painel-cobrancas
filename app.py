@@ -9,7 +9,7 @@ st.set_page_config(
 
 from config import CSS
 from auth import is_logged, current_role
-from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq, load_metricas_from_bq
+from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq, load_metricas_from_bq, load_cooldowns_from_painel
 from views import (
     render_sidebar, render_header, tela_login, tela_importar,
     _render_dashboard, _render_historico, _render_cliente, _render_proximas,
@@ -116,11 +116,12 @@ def main():
         load_historico_from_bq()
         st.session_state["_historico_loaded"] = True
 
-    # Carrega status n8n 1x por sessão (tabela completa)
+    # Carrega status n8n + cooldowns do painel 1x por sessão (tabelas completas)
     if not st.session_state.get("_mensagens_loaded"):
         import time as _t
         load_mensagens_from_bq()
         load_metricas_from_bq()
+        load_cooldowns_from_painel()
         st.session_state["_metricas_ts"] = _t.time()
         st.session_state["_mensagens_loaded"] = True
 

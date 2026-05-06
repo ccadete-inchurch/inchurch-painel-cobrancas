@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, hoje_brt
-from data import calcular_score, recomendar_acao, load_metricas_from_bq, load_mensagens_from_bq, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_tarefas_do_dia_bq, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_metricas_from_bq, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -24,6 +24,7 @@ def _auto_refresh_n8n():
         return
     load_mensagens_from_bq()
     load_metricas_from_bq()
+    load_cooldowns_from_painel()
     st.session_state["_metricas_ts"] = _time.time()
     st.rerun()
 
@@ -148,12 +149,17 @@ def _render_atividades(store, clientes, role):
     email = current_email() or ""
 
     # ── Gera / carrega lote de 80 tarefas do dia ──────────────────────────────
-    _key_tarefas = f"_tarefas_{hoje_brt()}_{email}"
-    if _key_tarefas not in st.session_state:
-        with st.spinner("Preparando tarefas do dia..."):
-            ids_hoje = gerar_tarefas_do_dia(clientes, email)
-        st.session_state[_key_tarefas] = ids_hoje
-    ids_hoje = set(st.session_state[_key_tarefas])
+    # session_state guarda {id: bucket} pra rotear cada cliente direto na coluna
+    # certa (mensagem/ligacao) sem recalcular acoes. Gestor/admin só geram lote
+    # quando entram no modo "Lote do dia" (lá embaixo).
+    buckets_hoje = {}
+    if email in _EMAIL_GRUPO:
+        _key_tarefas = f"_tarefas_{hoje_brt()}_{email}"
+        if _key_tarefas not in st.session_state:
+            with st.spinner("Preparando tarefas do dia..."):
+                st.session_state[_key_tarefas] = gerar_tarefas_do_dia(clientes, email)
+        buckets_hoje = st.session_state[_key_tarefas] or {}
+    ids_hoje = set(buckets_hoje.keys())
 
     # Lote estático do dia: 80 IDs fixos. Tarefas concluídas vão pra coluna
     # CONCLUÍDA e ficam visíveis. Renovação só na virada do dia.
@@ -195,16 +201,19 @@ def _render_atividades(store, clientes, role):
             _key_lote = f"_tarefas_admin_{hoje_brt()}_{_atendente_sel}"
             if _key_lote not in st.session_state:
                 with st.spinner(f"Carregando lote de {_atendente_sel}..."):
-                    ids_bq = get_tarefas_do_dia_bq(_atendente_sel)
-                    if not ids_bq:
+                    buckets_bq = get_lote_buckets_bq(_atendente_sel, store["clientes"])
+                    if not buckets_bq:
                         _GRUPO_EMAIL = {v: k for k, v in _EMAIL_GRUPO.items()}
                         _email_atend = _GRUPO_EMAIL.get(_atendente_sel, "")
-                        ids_bq = gerar_tarefas_do_dia(clientes, _email_atend)
-                    st.session_state[_key_lote] = ids_bq
-            ids_lote = set(st.session_state[_key_lote])
+                        buckets_bq = gerar_tarefas_do_dia(clientes, _email_atend)
+                    st.session_state[_key_lote] = buckets_bq
+            buckets_lote = st.session_state[_key_lote] or {}
+            ids_lote = set(buckets_lote.keys())
 
             # Lote estático do dia: mostra os 80 IDs fixos do atendente selecionado
             clientes = [c for c in clientes if c["id"] in ids_lote]
+            # Quando admin visualiza lote de outro atendente, usa o bucket dele
+            buckets_hoje = buckets_lote
 
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
@@ -311,51 +320,45 @@ def _render_atividades(store, clientes, role):
                 if b in str(c.get("nome", "")).lower() or b in str(c.get("cnpj", "")).lower()]
 
     # ── Separar por coluna ────────────────────────────────────────────────────
-    def _canal(acoes, msg_st):
-        if "urgente" in acoes and msg_st != "concluida":
-            return "urgente"
-        if msg_st == "concluida":
+    # Lote estático: cliente entra na coluna inicial (URGENTE/LIGAÇÃO/MENSAGEM)
+    # definida pelo bucket gravado no BQ no momento da geração do lote, e SÓ
+    # sai dela direto pra CONCLUÍDA ou TENTAR NOVAMENTE quando o bot age HOJE.
+    # Sem transição MSG → LIG no meio do dia.
+    def _canal(bucket, acoes, msg_st, dias_uc):
+        # Tarefa teve tratamento HOJE → coluna terminal
+        if dias_uc == 0:
+            if msg_st == "tentar_novamente":
+                return "tentar_novamente"
             return "concluida"
-        if msg_st == "tentar_novamente":
-            return "tentar_novamente"
-        # Mensagem já foi enviada pelo n8n
-        if msg_st in ("mensagem", "ligacao_pendente"):
-            if "ligar" not in acoes:
-                return "concluida"   # só precisava de mensagem → concluída
-            else:
-                return "ligacao"     # mensagem feita, agora precisa ligar
-        # Sem contato ainda → precisa de mensagem primeiro
-        if "mensagem" in acoes:
+
+        # Urgente sobrepõe bucket — sempre vai pra URGENTE
+        if "urgente" in acoes:
+            return "urgente"
+        if bucket == "ligacao":
+            return "ligacao"
+        if bucket == "mensagem":
             return "mensagem"
+        # Fallback (sem bucket — ex.: gestor visualizando todos): usa acoes
         if "ligar" in acoes:
             return "ligacao"
+        if "mensagem" in acoes:
+            return "mensagem"
         return "aguardar"
 
-    # Na visão do lote (atendente ou admin visualizando lote), ocultar passivos:
-    # - AGUARDAR: sem ação recomendada
-    # - CONCLUÍDA: só mostrar se a conclusão foi hoje (progresso do dia)
+    # Na visão do lote, esconder só os passivos extremos (sem ação alguma)
     _e_lote = email in _EMAIL_GRUPO or (role in ("admin", "gestor") and _modo_admin == "Lote do dia")
 
     acordos = []; ligacao = []; so_msg = []; tentar_nov = []; concluida = []; aguardar = []
     for item in fila:
         s, a, c, h = item
-        ms = get_msg_status(c.get("telefone", ""))
-        canal = _canal(a, ms)
+        tel = c.get("telefone", "")
+        ms = get_msg_status(tel)
+        dias_uc = get_ultimo_contato_n8n_dias(tel)
+        bucket = buckets_hoje.get(c["id"]) if isinstance(buckets_hoje, dict) else None
+        canal = _canal(bucket, a, ms, dias_uc)
 
-        if _e_lote:
-            if canal == "aguardar":
-                continue
-            if canal == "concluida":
-                dias_contato = get_ultimo_contato_n8n_dias(c.get("telefone", ""))
-                if dias_contato is not None and dias_contato >= 1:
-                    if "urgente" in a:
-                        dias_lig = get_msg_concluida_dias(c.get("telefone", ""))
-                        if dias_lig is not None and dias_lig < 5:
-                            continue  # ligou há <5 dias → tarefa concluída, ocultar
-                        else:
-                            canal = "urgente"  # 5+ dias sem ligar → volta para urgente
-                    else:
-                        continue  # concluída antes de hoje → ocultar
+        if _e_lote and canal == "aguardar":
+            continue
 
         if   canal == "urgente":          acordos.append(item)
         elif canal == "ligacao":          ligacao.append(item)

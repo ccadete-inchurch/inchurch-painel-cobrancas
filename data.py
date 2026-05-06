@@ -435,6 +435,82 @@ def load_mensagens_from_bq():
     st.session_state["_msg_ultimo_contato_dias"] = ultimo_contato_dias
 
 
+def load_cooldowns_from_painel():
+    """Carrega cooldowns por id_sacado_sac via painel_tarefas_diarias.
+    Fonte de verdade pra geração do lote (substitui cooldown N8N).
+    Janela: 5 dias (cobre ligação 5d e mensagem 3d).
+    Salva no session_state:
+      _painel_dias_msg[id]  → dias desde dt_mensagem_enviada (None se nunca)
+      _painel_dias_lig[id]  → dias desde dt_ligacao_feita    (None se nunca)
+      _painel_acoes_hoje[id] → {"msg": bool, "lig": bool, "atend": bool} do dia atual
+    """
+    st.session_state.setdefault("_painel_dias_msg", {})
+    st.session_state.setdefault("_painel_dias_lig", {})
+    st.session_state.setdefault("_painel_acoes_hoje", {})
+
+    client = get_bq_client()
+    if not client:
+        return
+
+    hoje = hoje_brt()
+    _BRT = timezone(timedelta(hours=-3))
+    hoje_brt_dt = datetime.now(_BRT).date()
+
+    def _dias(ts):
+        if ts is None or pd.isna(ts):
+            return None
+        try:
+            return max((hoje_brt_dt - ts.astimezone(_BRT).date()).days, 0)
+        except Exception:
+            return None
+
+    try:
+        df = client.query(f"""
+            SELECT id_sacado_sac,
+                   MAX(dt_mensagem_enviada) AS dt_msg,
+                   MAX(dt_ligacao_feita)    AS dt_lig
+            FROM `{_TAREFAS_TABLE}`
+            WHERE data_tarefa >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 6 DAY)
+            GROUP BY id_sacado_sac
+        """).to_dataframe()
+    except Exception:
+        return
+
+    dias_msg = {}
+    dias_lig = {}
+    for _, row in df.iterrows():
+        cid = str(row["id_sacado_sac"])
+        d_msg = _dias(row.get("dt_msg"))
+        d_lig = _dias(row.get("dt_lig"))
+        if d_msg is not None:
+            dias_msg[cid] = d_msg
+        if d_lig is not None:
+            dias_lig[cid] = d_lig
+
+    # Bools do dia atual (pra status visual no kanban)
+    try:
+        df_hoje = client.query(f"""
+            SELECT id_sacado_sac, mensagem_enviada, ligacao_feita, ligacao_atendida
+            FROM `{_TAREFAS_TABLE}`
+            WHERE data_tarefa = '{hoje}'
+        """).to_dataframe()
+    except Exception:
+        df_hoje = pd.DataFrame()
+
+    acoes_hoje = {}
+    for _, row in df_hoje.iterrows():
+        cid = str(row["id_sacado_sac"])
+        acoes_hoje[cid] = {
+            "msg":   bool(row.get("mensagem_enviada")),
+            "lig":   bool(row.get("ligacao_feita")),
+            "atend": bool(row.get("ligacao_atendida")),
+        }
+
+    st.session_state["_painel_dias_msg"]   = dias_msg
+    st.session_state["_painel_dias_lig"]   = dias_lig
+    st.session_state["_painel_acoes_hoje"] = acoes_hoje
+
+
 def load_metricas_from_bq():
     """A cada 5 min na tela Atividades — só hoje, por atendente."""
     import re
@@ -525,20 +601,29 @@ def save_hist_to_bq(uid: str, cid: str, data: dict):
 def _classificar_lote(cliente):
     """Classifica cliente para o lote diário.
     Retorna (bucket, eh_inativo) onde bucket é 'ligacao' (urgente/ligar) ou 'mensagem'.
-    Retorna None se o cliente é passivo no momento (não deve ocupar slot).
+    Retorna None se o cliente não tem ações elegíveis (cooldown já tratado em recomendar_acao).
     """
-    from helpers import get_msg_status
     acoes = recomendar_acao(cliente)
     if not acoes:
         return None
-    msg_st = get_msg_status(cliente.get("telefone", ""))
-    if "urgente" not in acoes:
-        if msg_st == "concluida":
-            return None
-        if msg_st in ("mensagem", "ligacao_pendente") and "ligar" not in acoes:
-            return None
     eh_ligacao = "urgente" in acoes or "ligar" in acoes
     return ("ligacao" if eh_ligacao else "mensagem", bool(cliente.get("_inativo")))
+
+
+def _candidato_lote(cliente):
+    """Retorna (eligible_lig, eligible_msg, eh_inativo) ou None.
+    Cliente pode ser elegível pra LIG (acoes contém 'ligar' ou 'urgente'),
+    pra MSG (acoes contém 'mensagem'), ou ambos. Lote estrito top 30 LIG + top 50 MSG
+    pega o cliente em apenas um bucket — sem cruzamento.
+    """
+    acoes = recomendar_acao(cliente)
+    if not acoes:
+        return None
+    eligible_lig = ("urgente" in acoes) or ("ligar" in acoes)
+    eligible_msg = "mensagem" in acoes
+    if not (eligible_lig or eligible_msg):
+        return None
+    return (eligible_lig, eligible_msg, bool(cliente.get("_inativo")))
 
 
 def _quota_atual_lote(lote_clientes):
@@ -560,111 +645,129 @@ def _quota_atual_lote(lote_clientes):
     return lig, msg, inat_lig, inat_msg
 
 
-def selecionar_lote_com_quotas(grupo_clientes, lote_clientes=None):
-    """Seleciona IDs do lote em 3 fases para reservar vagas a inativos:
-      1) Top inativos LIGAÇÃO  (até 10)
-      2) Top inativos MENSAGEM (até 15)
-      3) Top ativos preenchendo o restante até _LOTE_TARGET (80)
+def _selecionar_top_30_50(clientes: list, lote_atual_ids: set | None = None) -> list:
+    """Núcleo da seleção de lote (Davi):
+      • Top 30 elegíveis pra LIG por score (cap inat 10) → bucket=ligacao.
+      • Próximos top 50 elegíveis pra MSG, EXCLUINDO quem já está em LIG, por score
+        (cap inat 15) → bucket=mensagem. Sem cruzamento.
+      • Overflow: se LIG < 30 (pool seco), MSG cresce até completar 80
+        (mesma elegibilidade MSG, mesmo cap inat 15).
 
-    Cap de inativos é simultaneamente piso garantido e teto absoluto:
-    se houver inativo elegível com score, a vaga é dele; nunca passa do cap.
-    Se inativos elegíveis < cap, vagas sobrantes ficam disponíveis para ativos
-    via passo 3 (não desperdiça slot).
+    Retorna lista de (id, bucket).
+    """
+    lote_atual_ids = lote_atual_ids or set()
+
+    cands = []  # (score, cid, eli_lig, eli_msg, inat)
+    for c in clientes:
+        if c["id"] in lote_atual_ids:
+            continue
+        info = _candidato_lote(c)
+        if info is None:
+            continue
+        eli_lig, eli_msg, inat = info
+        score = calcular_score(c, get_hist(c["id"]))
+        cands.append((score, c["id"], eli_lig, eli_msg, inat))
+    cands.sort(reverse=True, key=lambda x: x[0])
+
+    novos = []
+    inat_lig = inat_msg = 0
+    ids_lig = set()
+
+    # Top 30 LIG (cap inat 10)
+    for score, cid, eli_lig, _eli_msg, inat in cands:
+        if len([x for x in novos if x[1] == "ligacao"]) >= _LOTE_META_LIG:
+            break
+        if not eli_lig:
+            continue
+        if inat and inat_lig >= _LOTE_MAX_INAT_LIG:
+            continue
+        novos.append((cid, "ligacao"))
+        ids_lig.add(cid)
+        if inat:
+            inat_lig += 1
+
+    # Top 50 MSG (excluindo IDs em LIG, cap inat 15) + overflow se LIG curto
+    cap_msg = _LOTE_META_MSG + max(_LOTE_META_LIG - len(ids_lig), 0)  # cresce se LIG < 30
+    msg_count = 0
+    for score, cid, _eli_lig, eli_msg, inat in cands:
+        if msg_count >= cap_msg:
+            break
+        if cid in ids_lig:
+            continue  # sem cruzamento
+        if not eli_msg:
+            continue
+        if inat and inat_msg >= _LOTE_MAX_INAT_MSG:
+            continue
+        novos.append((cid, "mensagem"))
+        msg_count += 1
+        if inat:
+            inat_msg += 1
+
+    return novos
+
+
+def _quota_buckets_para(clientes_no_lote: list) -> dict:
+    """Reclassifica clientes JÁ comprometidos no lote (leitura).
+    Aplica top 30 LIG + top 50 MSG sobre o conjunto comprometido.
+    Caps inativos (10/15) são teto absoluto; sem cruzamento entre buckets.
+    Cliente sem elegibilidade alguma fica de fora do dict — atividades.py o
+    interpreta como 'aguardar/sem ação' (raro: só clientes em cooldown total).
+    """
+    pares = _selecionar_top_30_50(clientes_no_lote, lote_atual_ids=set())
+    return {cid: bucket for cid, bucket in pares}
+
+
+def selecionar_lote_com_quotas(grupo_clientes, lote_clientes=None):
+    """Geração nova do lote do dia. Retorna lista [(id, bucket)].
+    Algoritmo: top 30 LIG + top 50 MSG estrito (sem cruzamento, sem fallback).
+    Overflow MSG até 80 quando LIG < 30 (única exceção do Davi: ligamos pra base
+    inteira em 5 dias).
     """
     lote_clientes = lote_clientes or []
-    _, _, inat_lig_atual, inat_msg_atual = _quota_atual_lote(lote_clientes)
     ids_no_lote = {c["id"] for c in lote_clientes}
-
-    # Separa candidatos por bucket × ativo/inativo
-    inat_lig_cand = []
-    inat_msg_cand = []
-    ativo_cand    = []
-    for c in grupo_clientes:
-        if c["id"] in ids_no_lote:
-            continue
-        h = get_hist(c["id"])
-        cls = _classificar_lote(c)
-        if cls is None:
-            continue
-        bucket, eh_inativo = cls
-        score = calcular_score(c, h)
-        if eh_inativo:
-            if bucket == "ligacao":
-                inat_lig_cand.append((score, c))
-            else:
-                inat_msg_cand.append((score, c))
-        else:
-            ativo_cand.append((score, c))
-
-    inat_lig_cand.sort(reverse=True, key=lambda x: x[0])
-    inat_msg_cand.sort(reverse=True, key=lambda x: x[0])
-    ativo_cand.sort(reverse=True,    key=lambda x: x[0])
-
-    novos_ids = []
-    total_lote = sum(1 for c in lote_clientes if _classificar_lote(c) is not None)
-
-    # Fase 1: inativos ligação (cap 10, descontando o que já está no lote)
-    vagas_lig_inat = max(_LOTE_MAX_INAT_LIG - inat_lig_atual, 0)
-    for _, c in inat_lig_cand[:vagas_lig_inat]:
-        novos_ids.append(c["id"])
-
-    # Fase 2: inativos mensagem (cap 15, descontando o que já está no lote)
-    vagas_msg_inat = max(_LOTE_MAX_INAT_MSG - inat_msg_atual, 0)
-    for _, c in inat_msg_cand[:vagas_msg_inat]:
-        novos_ids.append(c["id"])
-
-    # Fase 3: ativos preenchem até 80
-    vagas_ativos = max(_LOTE_TARGET - total_lote - len(novos_ids), 0)
-    for _, c in ativo_cand[:vagas_ativos]:
-        novos_ids.append(c["id"])
-
-    return novos_ids
+    return _selecionar_top_30_50(grupo_clientes, lote_atual_ids=ids_no_lote)
 
 
-def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
-    """Retorna IDs dos clientes prioritários do dia para o atendente logado.
+def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
+    """Retorna {id: bucket} do lote do dia ('ligacao' | 'mensagem').
     Gera e persiste no BQ se ainda não existe lote para hoje.
+    Bucket guia tanto a coluna inicial do kanban quanto o timestamp gravado no BQ.
     """
     atendente = _EMAIL_GRUPO.get(email_logado)
     if not atendente:
-        return [c["id"] for c in clientes]  # gestor vê todos
+        # gestor vê todos — bucket fake só pra render (não usado em filtro)
+        return {c["id"]: "ligacao" for c in clientes}
 
     client = get_bq_client()
     hoje = hoje_brt()
 
-    # Verifica se lote já foi gerado hoje
+    # Lote já gerado hoje? Lê IDs do BQ e RECLASSIFICA bucket via _candidato_lote
+    # + quotas 30/50. Não confiamos nos timestamps de coluna do BQ porque registros
+    # antigos (rule 4 anterior) podem ter sido gravados com bucket errado.
     if client:
         try:
-            df_check = client.query(f"""
-                SELECT COUNT(*) AS total
+            df = client.query(f"""
+                SELECT id_sacado_sac
                 FROM `{_TAREFAS_TABLE}`
                 WHERE atendente = '{atendente}'
                   AND data_tarefa = '{hoje}'
             """).to_dataframe()
-            if int(df_check.iloc[0]["total"]) > 0:
-                df_ids = client.query(f"""
-                    SELECT id_sacado_sac
-                    FROM `{_TAREFAS_TABLE}`
-                    WHERE atendente = '{atendente}'
-                      AND data_tarefa = '{hoje}'
-                """).to_dataframe()
-                return df_ids["id_sacado_sac"].tolist()
+            if not df.empty:
+                ids_bq = set(df["id_sacado_sac"].tolist())
+                clientes_no_lote = [c for c in clientes if c["id"] in ids_bq]
+                return _quota_buckets_para(clientes_no_lote)
         except Exception:
             pass
 
-    # Geração inicial: lote vazio + quotas estritas (30 lig + 50 msg, ≤10/15 inativos)
+    # Geração inicial: 4 fases (30 lig + 50 msg, ≤10/15 inativos, overflow B)
     grupo_clientes = [c for c in clientes if c.get("_grupo") == atendente]
-    top_ids = selecionar_lote_com_quotas(grupo_clientes, lote_clientes=[])
+    pares = selecionar_lote_com_quotas(grupo_clientes, lote_clientes=[])
+    buckets = {cid: bucket for cid, bucket in pares}
 
-    # Persiste no BQ — dt_entrou_coluna_* preenchido conforme bucket inicial
-    if client and top_ids:
-        cliente_by_id = {c["id"]: c for c in grupo_clientes}
+    if client and pares:
         now_iso = datetime.now(timezone.utc).isoformat()
         rows = []
-        for cid in top_ids:
-            c = cliente_by_id.get(cid)
-            cls = _classificar_lote(c) if c else None
-            bucket = cls[0] if cls else "mensagem"
+        for cid, bucket in pares:
             rows.append({
                 "id_sacado_sac":            cid,
                 "atendente":                atendente,
@@ -680,7 +783,7 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> list:
         except Exception:
             pass
 
-    return top_ids
+    return buckets
 
 
 def adicionar_tarefas_extras_bq(atendente: str, extra_ids: list, clientes: list | None = None):
@@ -713,11 +816,14 @@ def adicionar_tarefas_extras_bq(atendente: str, extra_ids: list, clientes: list 
         pass
 
 
-def get_tarefas_do_dia_bq(atendente: str) -> list:
-    """Retorna IDs do lote do dia de um atendente consultando o BQ (uso do gestor)."""
+def get_lote_buckets_bq(atendente: str, clientes: list) -> dict:
+    """Retorna {id: bucket} do lote do dia consultando o BQ.
+    Bucket é RECLASSIFICADO via _candidato_lote + quotas 30/50 sobre os IDs
+    comprometidos (não confia nos timestamps do BQ — registros antigos têm
+    bucket errado herdado da rule 4 anterior)."""
     client = get_bq_client()
     if not client:
-        return []
+        return {}
     hoje = hoje_brt()
     try:
         df = client.query(f"""
@@ -726,9 +832,13 @@ def get_tarefas_do_dia_bq(atendente: str) -> list:
             WHERE atendente = '{atendente}'
               AND data_tarefa = '{hoje}'
         """).to_dataframe()
-        return df["id_sacado_sac"].tolist()
+        if df.empty:
+            return {}
+        ids_bq = set(df["id_sacado_sac"].tolist())
+        clientes_no_lote = [c for c in (clientes or []) if c["id"] in ids_bq]
+        return _quota_buckets_para(clientes_no_lote)
     except Exception:
-        return []
+        return {}
 
 
 def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
@@ -794,17 +904,19 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
                 (S.lig_feit  AND NOT COALESCE(T.ligacao_feita,    FALSE)) OR
                 (S.lig_atend AND NOT COALESCE(T.ligacao_atendida, FALSE))
             ) THEN UPDATE SET
-                mensagem_enviada = S.msg_env,
-                ligacao_feita    = S.lig_feit,
-                ligacao_atendida = S.lig_atend,
-                dt_entrou_coluna_ligacao = CASE
-                    WHEN S.lig_feit
-                     AND NOT COALESCE(T.ligacao_feita, FALSE)
-                     AND T.dt_entrou_coluna_ligacao IS NULL
-                    THEN CURRENT_TIMESTAMP()
-                    ELSE T.dt_entrou_coluna_ligacao
-                END
-        """)  # fire-and-forget: não bloqueia o render
+                mensagem_enviada    = S.msg_env,
+                ligacao_feita       = S.lig_feit,
+                ligacao_atendida    = S.lig_atend,
+                dt_mensagem_enviada = CASE
+                    WHEN S.msg_env AND NOT COALESCE(T.mensagem_enviada, FALSE)
+                    THEN CURRENT_TIMESTAMP() ELSE T.dt_mensagem_enviada END,
+                dt_ligacao_feita = CASE
+                    WHEN S.lig_feit AND NOT COALESCE(T.ligacao_feita, FALSE)
+                    THEN CURRENT_TIMESTAMP() ELSE T.dt_ligacao_feita END,
+                dt_ligacao_atendida = CASE
+                    WHEN S.lig_atend AND NOT COALESCE(T.ligacao_atendida, FALSE)
+                    THEN CURRENT_TIMESTAMP() ELSE T.dt_ligacao_atendida END
+        """)  # fire-and-forget: dt_entrou_coluna_* só é gravado no INSERT inicial
     except Exception:
         pass
 
@@ -1075,32 +1187,32 @@ def _dias_sem_contato(telefone: str = "") -> int | None:
 
 
 def recomendar_acao(cliente) -> list[str]:
+    """Retorna ações elegíveis para o cliente. Cooldown via painel_tarefas_diarias.
+    Regras (Davi):
+      - Acordo vencido ≥7d  → ['ligar', 'urgente']
+      - Inadimplência ≥7d   → 'ligar' (se cooldown LIG OK: sem ligação nos últimos 5 dias)
+      - Inadimplência ≥5d   → 'mensagem' (se cooldown MSG OK: sem mensagem nos últimos 3 dias)
+    """
+    from helpers import get_painel_dias_lig, get_painel_dias_msg
+
     cobracas = [c for c in cliente.get("_cobracas", []) if (c.get("dias_atraso") or 0) > 0]
     if cobracas:
         dias = max(int(c.get("dias_atraso") or 0) for c in cobracas)
     else:
         dias = cliente.get("dias_atraso") or 0
 
-    # Acordo vencido ≥ 7 dias → prioridade alta, só ligação
     if cliente.get("_tem_acordo") and dias >= 7:
         return ["ligar", "urgente"]
 
-    dsc = _dias_sem_contato(cliente.get("telefone", ""))  # None = nunca contatado pelo N8N
-
-    # ≥ 15 dias + sem contato há 3+ dias → mensagem + ligação
-    if dias >= 15 and (dsc is None or dsc >= 3):
-        return ["ligar", "mensagem"]
+    cid = cliente.get("id")
+    dias_lig = get_painel_dias_lig(cid)  # None = nunca ligado
+    dias_msg = get_painel_dias_msg(cid)  # None = nunca enviou msg
 
     acoes = []
-    if dias >= 7:
-        # Não ligar se houve ligação bem-sucedida há menos de 5 dias
-        from helpers import get_msg_concluida_dias
-        dias_lig = get_msg_concluida_dias(cliente.get("telefone", ""))
-        if dias_lig is None or dias_lig >= 5:
-            acoes.append("ligar")
-    if dias >= 5:
+    if dias >= 7 and (dias_lig is None or dias_lig >= 5):
+        acoes.append("ligar")
+    if dias >= 5 and (dias_msg is None or dias_msg >= 3):
         acoes.append("mensagem")
-
     return acoes
 
 

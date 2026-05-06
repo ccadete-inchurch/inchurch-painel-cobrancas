@@ -56,6 +56,26 @@ def get_ultimo_contato_n8n_dias(telefone: str):
     return st.session_state.get("_msg_ultimo_contato_dias", {}).get(chave)
 
 
+# ── Painel de tarefas (cooldowns autoritativos) ──────────────────────────────
+
+def get_painel_dias_msg(cliente_id: str):
+    """Dias desde a última mensagem registrada em painel_tarefas_diarias, ou None."""
+    import streamlit as st
+    return st.session_state.get("_painel_dias_msg", {}).get(str(cliente_id))
+
+
+def get_painel_dias_lig(cliente_id: str):
+    """Dias desde a última ligação feita registrada em painel_tarefas_diarias, ou None."""
+    import streamlit as st
+    return st.session_state.get("_painel_dias_lig", {}).get(str(cliente_id))
+
+
+def get_painel_acoes_hoje(cliente_id: str) -> dict:
+    """Bools do dia atual em painel_tarefas_diarias: {'msg': bool, 'lig': bool, 'atend': bool}."""
+    import streamlit as st
+    return st.session_state.get("_painel_acoes_hoje", {}).get(str(cliente_id), {})
+
+
 # ── Datas ─────────────────────────────────────────────────────────────────────
 
 def calc_dias(venc):
