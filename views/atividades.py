@@ -120,27 +120,36 @@ def _motivo(bucket, acoes, c) -> tuple:
     # Acordo é SEMPRE ligação (regra) — nunca mensagem.
     # Padrão: "Acordo vencido há Xd · {contexto} · ligação prioritária"
     if tem_acordo:
-        # Estado HOJE
+        # Estado HOJE — atendeu (concluído de verdade)
         if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
             return f"{prefixo_ac} · ligação realizada hoje · ligação prioritária", "blue"
         if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
             return f"{prefixo_ac} · não atendeu ligação hoje · ligação prioritária", "purple"
 
-        # Sem ação hoje — sempre URGENTE com info de cooldown/histórico
+        # Recebeu msg hoje mas sem ligação real → tarefa pendente, mantém em URGENTE
+        if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
+            return f"{prefixo_ac} · mensagem enviada hoje · ligação pendente", "red"
+
+        # Sem ação hoje — info de cooldown/histórico
         if tentou_sem_atender:
             return f"{prefixo_ac} · não atendeu ligação há {dias_lig_tent}d · ligação prioritária", "red"
         if dias_lig_atend is not None:
-            # Acordo em cooldown LIG — atendeu há Xd, espera passar 5d
             return f"{prefixo_ac} · última ligação há {dias_lig_atend}d · ligação prioritária", "red"
         return f"{prefixo_ac} · sem ligação anterior · ligação prioritária", "red"
 
     # ═══ Cliente sem acordo ═══
-    # Estado HOJE
+    # Estado HOJE — atendeu ou tentou ligar (resultado real do bucket lig)
     if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
         return "Ligação atendida hoje", "blue"
     if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
         return "Não atendeu ligação hoje", "purple"
+
+    # Recebeu msg hoje — comportamento depende do bucket:
+    # - bucket=msg: tarefa concluída (verde)
+    # - bucket=lig: tarefa pendente, fica em LIGAÇÃO (laranja, alerta)
     if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
+        if bucket == "ligacao":
+            return "Mensagem enviada hoje · ligação pendente", "lig"
         return "Mensagem enviada hoje", "blue"
 
     if "urgente" in acoes:
