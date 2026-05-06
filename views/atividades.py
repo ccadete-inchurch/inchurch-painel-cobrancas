@@ -496,23 +496,29 @@ def _render_atividades(store, clientes, role):
         if regularizado:
             return "concluida"
         n8n_hoje = (dsc_n8n == 0)
-        if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
-            return "concluida"
-        if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
-            return "tentar_novamente"
+
+        # Sinais de ligação só contam se cliente é bucket=ligacao (ou urgente/sem bucket).
+        # Cliente bucket=mensagem que recebeu ligação: ignoramos — ação fora da regra,
+        # não interfere no cooldown nem move o card.
+        if bucket != "mensagem":
+            if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
+                return "concluida"
+            if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
+                return "tentar_novamente"
 
         # Cliente acordo: SEMPRE em URGENTE até atender ligação ou não atender.
-        # Mensagem/pré-ligação não conclui acordo (acordo é só ligação).
         if eh_acordo:
             return "urgente"
 
         # Cliente bucket=ligacao só sai da LIGAÇÃO atendendo ou tentando ligar.
-        # Mensagem (manual ou automática) NÃO conclui um cliente que era pra ligar.
+        # Mensagem manual NÃO conclui — fica em LIGAÇÃO até cumprir a tarefa real.
         if bucket == "ligacao":
             return "ligacao"
 
-        if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
-            return "concluida"
+        # Sinais de mensagem só contam se cliente é bucket=mensagem (ou sem bucket).
+        if bucket != "ligacao":
+            if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
+                return "concluida"
 
         if "urgente" in acoes:
             return "urgente"

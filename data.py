@@ -980,21 +980,32 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
             AND T.atendente     = '{atendente}'
             AND T.data_tarefa   = '{hoje}'
             WHEN MATCHED AND (
-                (S.msg_env   AND NOT COALESCE(T.mensagem_enviada, FALSE)) OR
-                (S.lig_feit  AND NOT COALESCE(T.ligacao_feita,    FALSE)) OR
-                (S.lig_atend AND NOT COALESCE(T.ligacao_atendida, FALSE))
+                -- mensagem só conta se bucket=mensagem (cliente nasceu pra mensagem)
+                (S.msg_env   AND NOT COALESCE(T.mensagem_enviada, FALSE) AND T.dt_entrou_coluna_msg     IS NOT NULL) OR
+                -- ligação só conta se bucket=ligacao (cliente nasceu pra ligação ou urgente)
+                (S.lig_feit  AND NOT COALESCE(T.ligacao_feita,    FALSE) AND T.dt_entrou_coluna_ligacao IS NOT NULL) OR
+                (S.lig_atend AND NOT COALESCE(T.ligacao_atendida, FALSE) AND T.dt_entrou_coluna_ligacao IS NOT NULL)
             ) THEN UPDATE SET
-                mensagem_enviada    = S.msg_env,
-                ligacao_feita       = S.lig_feit,
-                ligacao_atendida    = S.lig_atend,
+                mensagem_enviada    = CASE
+                    WHEN T.dt_entrou_coluna_msg IS NOT NULL
+                    THEN COALESCE(T.mensagem_enviada, FALSE) OR S.msg_env
+                    ELSE T.mensagem_enviada END,
+                ligacao_feita       = CASE
+                    WHEN T.dt_entrou_coluna_ligacao IS NOT NULL
+                    THEN COALESCE(T.ligacao_feita, FALSE) OR S.lig_feit
+                    ELSE T.ligacao_feita END,
+                ligacao_atendida    = CASE
+                    WHEN T.dt_entrou_coluna_ligacao IS NOT NULL
+                    THEN COALESCE(T.ligacao_atendida, FALSE) OR S.lig_atend
+                    ELSE T.ligacao_atendida END,
                 dt_mensagem_enviada = CASE
-                    WHEN S.msg_env AND NOT COALESCE(T.mensagem_enviada, FALSE)
+                    WHEN S.msg_env AND NOT COALESCE(T.mensagem_enviada, FALSE) AND T.dt_entrou_coluna_msg IS NOT NULL
                     THEN CURRENT_TIMESTAMP() ELSE T.dt_mensagem_enviada END,
                 dt_ligacao_feita = CASE
-                    WHEN S.lig_feit AND NOT COALESCE(T.ligacao_feita, FALSE)
+                    WHEN S.lig_feit AND NOT COALESCE(T.ligacao_feita, FALSE) AND T.dt_entrou_coluna_ligacao IS NOT NULL
                     THEN CURRENT_TIMESTAMP() ELSE T.dt_ligacao_feita END,
                 dt_ligacao_atendida = CASE
-                    WHEN S.lig_atend AND NOT COALESCE(T.ligacao_atendida, FALSE)
+                    WHEN S.lig_atend AND NOT COALESCE(T.ligacao_atendida, FALSE) AND T.dt_entrou_coluna_ligacao IS NOT NULL
                     THEN CURRENT_TIMESTAMP() ELSE T.dt_ligacao_atendida END
         """)  # fire-and-forget: dt_entrou_coluna_* só é gravado no INSERT inicial
     except Exception:
