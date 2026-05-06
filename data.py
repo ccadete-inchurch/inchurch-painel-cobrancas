@@ -1185,13 +1185,16 @@ def _dias_sem_contato(telefone: str = "") -> int | None:
 def recomendar_acao(cliente) -> list[str]:
     """Retorna ações elegíveis para o cliente. Cooldown via painel_tarefas_diarias.
     Regras:
-      - Acordo vencido ≥7d + cooldown LIG OK → ['ligar', 'urgente']
-        (acordo respeita o mesmo cooldown 5d de ligação atendida; se em cooldown,
-         segue regra normal — pode cair em mensagem)
-      - Inadimplência ≥7d + cooldown LIG OK  → 'ligar'
-      - Inadimplência ≥5d + cooldown MSG OK  → 'mensagem'
+      1. Acordo vencido ≥7d + cooldown LIG OK   → ['ligar', 'urgente']
+      2. Inadimplência ≥15d + sem contato ≥3d   → ['ligar']  (só ligação, sem msg)
+      3. Inadimplência ≥7d + cooldown LIG OK    → 'ligar'
+      4. Inadimplência ≥5d + cooldown MSG OK    → 'mensagem'
+
+    Cooldown LIG = 5 dias desde a última ligação ATENDIDA (não conta tentativas).
+    Cooldown MSG = 3 dias desde a última mensagem enviada.
+    "Sem contato" = nem msg nem tentativa de ligação nos últimos 3 dias (painel).
     """
-    from helpers import get_painel_dias_lig, get_painel_dias_msg
+    from helpers import get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg
 
     cobracas = [c for c in cliente.get("_cobracas", []) if (c.get("dias_atraso") or 0) > 0]
     if cobracas:
@@ -1200,15 +1203,26 @@ def recomendar_acao(cliente) -> list[str]:
         dias = cliente.get("dias_atraso") or 0
 
     cid = cliente.get("id")
-    dias_lig = get_painel_dias_lig(cid)  # None = nunca ligado (atendida)
-    dias_msg = get_painel_dias_msg(cid)  # None = nunca enviou msg
+    dias_lig      = get_painel_dias_lig(cid)          # ligação atendida (cooldown 5d)
+    dias_lig_tent = get_painel_dias_lig_tentada(cid)  # qualquer tentativa de lig
+    dias_msg      = get_painel_dias_msg(cid)          # mensagem enviada (cooldown 3d)
 
     cooldown_lig_ok = dias_lig is None or dias_lig >= 5
     cooldown_msg_ok = dias_msg is None or dias_msg >= 3
+    sem_contato_3d  = (
+        (dias_msg is None or dias_msg >= 3)
+        and (dias_lig_tent is None or dias_lig_tent >= 3)
+    )
 
+    # 1. Acordo vencido ≥7d (urgente, se cooldown LIG OK)
     if cliente.get("_tem_acordo") and dias >= 7 and cooldown_lig_ok:
         return ["ligar", "urgente"]
 
+    # 2. Inadimplência ≥15d + sem contato 3d → só ligação (não dispersar com msg)
+    if dias >= 15 and sem_contato_3d and cooldown_lig_ok:
+        return ["ligar"]
+
+    # 3 e 4: regras genéricas
     acoes = []
     if dias >= 7 and cooldown_lig_ok:
         acoes.append("ligar")
