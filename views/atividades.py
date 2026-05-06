@@ -324,6 +324,12 @@ def _render_atividades(store, clientes, role):
                 with _cr:
                     if st.button("🔄 Atualizar", key="_btn_force_refresh",
                                  help="Limpa cache e recarrega N8N + painel"):
+                        # Mostra config Postgres atual (qual user/table está sendo usado)
+                        pg_cfg = st.secrets.get("n8n_postgres", {})
+                        st.info(f"📡 Conectando: user=`{pg_cfg.get('user','?')}` | "
+                                f"table=`{pg_cfg.get('schema','?')}.{pg_cfg.get('table','?')}` | "
+                                f"host=`{pg_cfg.get('host','?')}`")
+
                         # Limpa caches relevantes
                         for k in list(st.session_state.keys()):
                             if k.startswith(("_metricas_ts","_painel_refresh_ts",
@@ -331,20 +337,38 @@ def _render_atividades(store, clientes, role):
                                              "_msg_status","_msg_concluida_dias",
                                              "_msg_ultimo_contato_dias")):
                                 del st.session_state[k]
+                        # Força reconectar Postgres (limpa @st.cache_resource)
+                        try:
+                            from data import get_pg_n8n_conn
+                            get_pg_n8n_conn.clear()
+                        except Exception:
+                            pass
+
                         load_mensagens_from_bq()
                         from auth import get_store as _gs
                         cli_all = _gs().get("clientes", [])
                         ms = st.session_state.get("_msg_status", {})
+                        # Conta por tipo no cache
+                        st_cnt = {"concluida":0, "tentar_novamente":0, "ligacao_pendente":0, "mensagem":0}
+                        for v in ms.values():
+                            if v in st_cnt: st_cnt[v] += 1
+
                         if ms and cli_all:
                             for _atd in _EMAIL_GRUPO.values():
                                 atualizar_tarefas_bq(_atd, ms, cli_all)
                         load_cooldowns_from_painel()
-                        # Diagnóstico
                         ah = st.session_state.get("_painel_acoes_hoje", {})
                         atendidos = sum(1 for v in ah.values() if v.get("atend"))
                         ligados = sum(1 for v in ah.values() if v.get("lig"))
                         msgs = sum(1 for v in ah.values() if v.get("msg"))
-                        st.success(f"Recarregado: {len(ms)} status N8N | painel hoje: {msgs} msg, {ligados} lig, {atendidos} atend")
+                        st.success(
+                            f"📞 N8N cache: {len(ms)} tels | "
+                            f"concluida={st_cnt['concluida']} | tentar_novamente={st_cnt['tentar_novamente']} | "
+                            f"lig_pendente={st_cnt['ligacao_pendente']} | mensagem={st_cnt['mensagem']}"
+                        )
+                        st.success(
+                            f"📊 Painel hoje: {msgs} msg | {ligados} lig | {atendidos} atend"
+                        )
                         st.rerun()
 
         if _modo_admin == "Lote do dia" and _atendente_sel:
