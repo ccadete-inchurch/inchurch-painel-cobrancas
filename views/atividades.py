@@ -305,7 +305,7 @@ def _render_atividades(store, clientes, role):
                     'Painel Administrativo</div>',
                     unsafe_allow_html=True,
                 )
-                _cm, _ca = st.columns([1, 1])
+                _cm, _ca, _cr = st.columns([1, 1, 0.7])
                 with _cm:
                     _modo_admin = st.selectbox(
                         "Visualização",
@@ -321,6 +321,31 @@ def _render_atividades(store, clientes, role):
                             label_visibility="collapsed",
                             key="_admin_atendente",
                         )
+                with _cr:
+                    if st.button("🔄 Atualizar", key="_btn_force_refresh",
+                                 help="Limpa cache e recarrega N8N + painel"):
+                        # Limpa caches relevantes
+                        for k in list(st.session_state.keys()):
+                            if k.startswith(("_metricas_ts","_painel_refresh_ts",
+                                             "_painel_acoes_hoje","_painel_dias_",
+                                             "_msg_status","_msg_concluida_dias",
+                                             "_msg_ultimo_contato_dias")):
+                                del st.session_state[k]
+                        load_mensagens_from_bq()
+                        from auth import get_store as _gs
+                        cli_all = _gs().get("clientes", [])
+                        ms = st.session_state.get("_msg_status", {})
+                        if ms and cli_all:
+                            for _atd in _EMAIL_GRUPO.values():
+                                atualizar_tarefas_bq(_atd, ms, cli_all)
+                        load_cooldowns_from_painel()
+                        # Diagnóstico
+                        ah = st.session_state.get("_painel_acoes_hoje", {})
+                        atendidos = sum(1 for v in ah.values() if v.get("atend"))
+                        ligados = sum(1 for v in ah.values() if v.get("lig"))
+                        msgs = sum(1 for v in ah.values() if v.get("msg"))
+                        st.success(f"Recarregado: {len(ms)} status N8N | painel hoje: {msgs} msg, {ligados} lig, {atendidos} atend")
+                        st.rerun()
 
         if _modo_admin == "Lote do dia" and _atendente_sel:
             _key_lote = f"_tarefas_admin_{hoje_lote()}_{_atendente_sel}"
