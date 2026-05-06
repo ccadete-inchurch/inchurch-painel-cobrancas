@@ -736,9 +736,10 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
     client = get_bq_client()
     hoje = hoje_lote()
 
-    # Lote já gerado hoje? Lê IDs do BQ e RECLASSIFICA bucket via _candidato_lote
-    # + quotas 30/50. Pra IDs que o reclassificador ignorou (cooldown total etc.),
-    # usa o bucket original gravado no BQ — assim 100% dos 80 continuam visíveis.
+    # Lote já gerado hoje? Lê bucket DIRETO do BQ (autoritativo).
+    # O bucket foi gravado no INSERT inicial pelo algoritmo top 30/50 — a métrica
+    # do card precisa ser consistente com isso. Reclassificar em tempo de leitura
+    # causa divergência (bool=lig+bucket=msg → não conta nada).
     if client:
         try:
             df = client.query(f"""
@@ -748,14 +749,9 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
                   AND data_tarefa = '{hoje}'
             """).to_dataframe()
             if not df.empty:
-                ids_bq = set(df["id_sacado_sac"].tolist())
-                clientes_no_lote = [c for c in clientes if c["id"] in ids_bq]
-                buckets = _quota_buckets_para(clientes_no_lote)
-                # Fallback: ID que sumiu da reclassificação volta com bucket do BQ
+                buckets = {}
                 for _, row in df.iterrows():
                     cid = row["id_sacado_sac"]
-                    if cid in buckets:
-                        continue
                     buckets[cid] = "mensagem" if pd.notna(row.get("dt_entrou_coluna_msg")) else "ligacao"
                 return buckets
         except Exception:
@@ -891,10 +887,10 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
 
 
 def get_lote_buckets_bq(atendente: str, clientes: list) -> dict:
-    """Retorna {id: bucket} do lote do dia consultando o BQ.
-    Reclassifica via _candidato_lote + quotas 30/50. Pra IDs que o reclassificador
-    ignorou (cooldown total etc.), usa o bucket original gravado no BQ — assim
-    100% dos 80 continuam visíveis no kanban (mesmo fallback do gerar_tarefas_do_dia).
+    """Retorna {id: bucket} do lote do dia consultando o BQ — bucket DIRETO do BQ
+    (autoritativo, gravado na geração inicial). Não reclassifica em tempo de
+    leitura pra evitar divergência com os bools (msg=T num cliente que viraria
+    bucket=lig na reclassificação não contaria em lugar nenhum).
     """
     client = get_bq_client()
     if not client:
@@ -909,14 +905,9 @@ def get_lote_buckets_bq(atendente: str, clientes: list) -> dict:
         """).to_dataframe()
         if df.empty:
             return {}
-        ids_bq = set(df["id_sacado_sac"].tolist())
-        clientes_no_lote = [c for c in (clientes or []) if c["id"] in ids_bq]
-        buckets = _quota_buckets_para(clientes_no_lote)
-        # Fallback: ID que sumiu da reclassificação volta com bucket do BQ
+        buckets = {}
         for _, row in df.iterrows():
             cid = row["id_sacado_sac"]
-            if cid in buckets:
-                continue
             buckets[cid] = "mensagem" if pd.notna(row.get("dt_entrou_coluna_msg")) else "ligacao"
         return buckets
     except Exception:
