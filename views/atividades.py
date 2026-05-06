@@ -487,10 +487,16 @@ def _render_atividades(store, clientes, role):
             return "concluida"
         if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
             return "tentar_novamente"
+
+        # Cliente acordo: SEMPRE em URGENTE até atender ligação ou não atender.
+        # Mensagem/pré-ligação não conclui acordo (acordo é só ligação).
+        if eh_acordo:
+            return "urgente"
+
         if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
             return "concluida"
 
-        if eh_acordo or "urgente" in acoes:
+        if "urgente" in acoes:
             return "urgente"
         if bucket == "ligacao":
             return "ligacao"
