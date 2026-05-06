@@ -91,12 +91,7 @@ def _motivo(bucket, acoes, c) -> tuple:
     pra manter a info do acordo visível mesmo durante cooldown ou em outras colunas.
     """
     if c.get("_regularizado_hoje"):
-        dp = c.get("_dias_pagamento")
-        if dp == 0:
-            return "Regularizado hoje · pagamento confirmado", "blue"
-        if dp is not None and dp > 0:
-            return f"Regularizado · pagamento há {dp}d", "blue"
-        return "Regularizado · pagamento confirmado", "blue"
+        return "Regularizado hoje · pagamento confirmado", "blue"
 
     cid = c.get("id")
     tel = c.get("telefone", "")
@@ -203,16 +198,10 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
     )
 
     if _regularizado:
-        valor_pago = c.get("_valor_pago_hoje", 0) or 0
-        dias_pag   = c.get("_dias_pagamento")
-        label_pago = "Pago hoje" if dias_pag == 0 else (f"Pago há {dias_pag}d" if dias_pag else "Pago")
-        valor_html = (
-            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-            f'<span style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.4px">{label_pago}</span>'
-            f'<span style="font-size:14px;font-weight:700;color:#7cc243">{fmt_moeda_plain(valor_pago)}</span>'
-            f'</div>'
-            if valor_pago > 0 else ""
-        )
+        # Valor pago oculto por enquanto — pode haver casos onde a tabela do BQ
+        # ainda não refletiu liquidações exatamente do dia, deixando "Pago hoje"
+        # com valor desatualizado/incompleto. Quando confiável, reativar.
+        valor_html = ""
         st.markdown(
             f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
             f'padding:14px 16px;margin-bottom:10px;border-top:2px solid #7cc243">'
