@@ -362,26 +362,39 @@ def _render_atividades(store, clientes, role):
     # ── Progresso do dia — contagem direto do painel_tarefas_diarias ─────────
     _zero = {"mensagens": 0, "ligacoes": 0, "atendidas": 0}
 
-    def _metricas_lote_painel(ids_lote=None):
-        """Conta bools do painel hoje. Se ids_lote=None, conta total geral."""
+    def _metricas_lote_painel(ids_lote=None, buckets_map=None):
+        """Conta bools do painel hoje, separados por bucket pra refletir as metas:
+          - Mensagens Enviadas (50): só clientes do bucket MENSAGEM com msg=TRUE
+          - Ligações Realizadas (30): só clientes do bucket LIGAÇÃO/URGENTE com lig=TRUE
+          - Ligações Atendidas (15): só clientes do bucket LIGAÇÃO/URGENTE com atend=TRUE
+        Sem buckets_map (modo "Total"), conta tudo sem distinção.
+        """
         acoes = st.session_state.get("_painel_acoes_hoje", {})
         if ids_lote is None:
-            items = list(acoes.values())
+            items = [(cid, a) for cid, a in acoes.items()]
         else:
-            items = [acoes.get(str(cid), {}) for cid in ids_lote]
-        return {
-            "mensagens": sum(1 for a in items if a.get("msg")),
-            "ligacoes":  sum(1 for a in items if a.get("lig")),
-            "atendidas": sum(1 for a in items if a.get("atend")),
-        }
+            items = [(str(cid), acoes.get(str(cid), {})) for cid in ids_lote]
+
+        if buckets_map is not None:
+            msg = sum(1 for cid, a in items if a.get("msg") and buckets_map.get(cid) == "mensagem")
+            lig = sum(1 for cid, a in items if a.get("lig") and buckets_map.get(cid) in ("ligacao",))
+            atd = sum(1 for cid, a in items if a.get("atend") and buckets_map.get(cid) in ("ligacao",))
+            # Acordo (bucket=ligacao gravado no INSERT) entra em LIG. Cliente em
+            # urgente também tem bucket="ligacao" no BQ — já é coberto.
+        else:
+            msg = sum(1 for _, a in items if a.get("msg"))
+            lig = sum(1 for _, a in items if a.get("lig"))
+            atd = sum(1 for _, a in items if a.get("atend"))
+        return {"mensagens": msg, "ligacoes": lig, "atendidas": atd}
 
     atendente_logado = _EMAIL_GRUPO.get(email)
     if atendente_logado:
-        dados_m, label_m = _metricas_lote_painel(ids_hoje), atendente_logado
+        dados_m, label_m = _metricas_lote_painel(ids_hoje, buckets_hoje), atendente_logado
     elif role in ("admin", "gestor") and _modo_admin == "Lote do dia" and _atendente_sel:
         _key_lote_adm = f"_tarefas_admin_{hoje_lote()}_{_atendente_sel}"
-        _ids_lote_adm = set(st.session_state.get(_key_lote_adm, {}))
-        dados_m, label_m = _metricas_lote_painel(_ids_lote_adm), _atendente_sel
+        _buckets_adm  = st.session_state.get(_key_lote_adm, {}) or {}
+        _ids_lote_adm = set(_buckets_adm.keys())
+        dados_m, label_m = _metricas_lote_painel(_ids_lote_adm, _buckets_adm), _atendente_sel
     else:
         dados_m, label_m = _metricas_lote_painel(None), "Total"
 
