@@ -848,22 +848,39 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
                 WHERE CAST(c.id_sacado_sac AS STRING) IN ({ids_str})
                 GROUP BY c.id_sacado_sac
             ),
-            pago_hoje AS (
-                SELECT CAST(id_sacado_sac AS STRING) AS id, SUM(comp_valor) AS valor_pago
+            pago_recente AS (
+                -- Liquidações dos últimos 7 dias: cliente foi removido do lote por
+                -- ter pago recentemente (nem sempre exatamente "hoje" — Splgc pode
+                -- demorar pra refletir e/ou pagamento foi nos dias anteriores).
+                SELECT CAST(id_sacado_sac AS STRING) AS id,
+                       SUM(comp_valor) AS valor_pago,
+                       MAX(dt_liquidacao_recb) AS ultima_liquidacao
                 FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
                 WHERE fl_status_recb = '1'
-                  AND DATE(dt_liquidacao_recb, "America/Sao_Paulo") = CURRENT_DATE("America/Sao_Paulo")
+                  AND dt_liquidacao_recb >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
                   AND CAST(id_sacado_sac AS STRING) IN ({ids_str})
                 GROUP BY id_sacado_sac
             )
-            SELECT base.*, COALESCE(pago_hoje.valor_pago, 0) AS valor_pago_hoje
-            FROM base LEFT JOIN pago_hoje ON CAST(base.id AS STRING) = pago_hoje.id
+            SELECT base.*,
+                   COALESCE(pago_recente.valor_pago, 0) AS valor_pago,
+                   pago_recente.ultima_liquidacao
+            FROM base LEFT JOIN pago_recente ON CAST(base.id AS STRING) = pago_recente.id
         """).to_dataframe()
     except Exception:
         return []
 
     out = []
     for _, row in df.iterrows():
+        ultima_liq = row.get("ultima_liquidacao")
+        dias_pago = None
+        if ultima_liq is not None and pd.notna(ultima_liq):
+            try:
+                _BRT_TZ = timezone(timedelta(hours=-3))
+                hoje_d = datetime.now(_BRT_TZ).date()
+                liq_d = ultima_liq.astimezone(_BRT_TZ).date() if hasattr(ultima_liq, 'astimezone') else ultima_liq.date()
+                dias_pago = max((hoje_d - liq_d).days, 0)
+            except Exception:
+                pass
         out.append({
             "id":                 str(row["id"]),
             "cod":                str(row["id"]),
@@ -879,7 +896,8 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
             "_inativo":           bool(row.get("inativo", False)),
             "_cobracas":          [],
             "_regularizado_hoje": True,
-            "_valor_pago_hoje":   float(row.get("valor_pago_hoje") or 0),
+            "_valor_pago_hoje":   float(row.get("valor_pago") or 0),
+            "_dias_pagamento":    dias_pago,  # 0=hoje, 1=ontem, etc.
         })
     return out
 
