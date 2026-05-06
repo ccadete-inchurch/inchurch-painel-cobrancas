@@ -506,13 +506,16 @@ def _render_atividades(store, clientes, role):
         if eh_acordo:
             return "urgente"
 
+        # Cliente bucket=ligacao só sai da LIGAÇÃO atendendo ou tentando ligar.
+        # Mensagem (manual ou automática) NÃO conclui um cliente que era pra ligar.
+        if bucket == "ligacao":
+            return "ligacao"
+
         if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
             return "concluida"
 
         if "urgente" in acoes:
             return "urgente"
-        if bucket == "ligacao":
-            return "ligacao"
         if bucket == "mensagem":
             return "mensagem"
         if "ligar" in acoes:
