@@ -117,20 +117,16 @@ def _motivo(bucket, acoes, c) -> tuple:
     )
 
     # ═══ Cliente com ACORDO ═══
-    # Acordo é SEMPRE ligação (regra) — nunca mensagem.
+    # Acordo é SEMPRE ligação (regra) — mensagem é irrelevante, não aparece no badge.
     # Padrão: "Acordo vencido há Xd · {contexto} · ligação prioritária"
     if tem_acordo:
-        # Estado HOJE — atendeu (concluído de verdade)
+        # Estado HOJE — só liga (atendeu ou tentou e não atendeu)
         if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
             return f"{prefixo_ac} · ligação realizada hoje · ligação prioritária", "blue"
         if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
             return f"{prefixo_ac} · não atendeu ligação hoje · ligação prioritária", "purple"
 
-        # Recebeu msg hoje mas sem ligação real → tarefa pendente, mantém em URGENTE
-        if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
-            return f"{prefixo_ac} · mensagem enviada hoje · ligação pendente", "red"
-
-        # Sem ação hoje — info de cooldown/histórico
+        # Sem ação de ligação hoje — info de cooldown/histórico de ligação
         if tentou_sem_atender:
             return f"{prefixo_ac} · não atendeu ligação há {dias_lig_tent}d · ligação prioritária", "red"
         if dias_lig_atend is not None:
