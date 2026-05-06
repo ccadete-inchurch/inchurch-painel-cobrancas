@@ -34,7 +34,6 @@ from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel, hoje_b
 _BQ_PROJECT    = "business-intelligence-467516"
 _BQ_DATASET    = "inadimplencia_painel_cobrancas"
 _HIST_TABLE    = f"{_BQ_PROJECT}.{_BQ_DATASET}.painel_historico"
-_N8N_TABLE     = f"{_BQ_PROJECT}.N8N.n8nfinchatbot_historico_atendente"
 _TAREFAS_TABLE = f"{_BQ_PROJECT}.{_BQ_DATASET}.painel_tarefas_diarias"
 
 _EMAIL_GRUPO = {
@@ -56,6 +55,43 @@ _LOTE_META_LIG     = 30
 _LOTE_META_MSG     = 50
 _LOTE_MAX_INAT_LIG = 10
 _LOTE_MAX_INAT_MSG = 15
+
+
+@st.cache_resource
+def get_pg_n8n_conn():
+    """Conexão direta ao Postgres do N8N. Substitui o BQ Data Transfer (atrasado 30min)."""
+    try:
+        import psycopg2
+    except ImportError:
+        st.error("psycopg2 não instalado — rode `pip install psycopg2-binary`")
+        return None
+    if "n8n_postgres" not in st.secrets:
+        st.warning("Configuração [n8n_postgres] ausente em secrets.toml")
+        return None
+    s = st.secrets["n8n_postgres"]
+    sslmode = s.get("sslmode", "require")
+    last_err = None
+    for mode in (sslmode, "prefer", "disable"):
+        try:
+            conn = psycopg2.connect(
+                host=s["host"], port=int(s.get("port", 5432)),
+                dbname=s["database"], user=s["user"], password=s["password"],
+                sslmode=mode, connect_timeout=10,
+                application_name="painel-inadimplencia",
+            )
+            conn.set_session(readonly=True, autocommit=True)
+            return conn
+        except Exception as e:
+            last_err = e
+    st.error(f"Falha ao conectar Postgres N8N: {last_err}")
+    return None
+
+
+def _pg_table_ref():
+    s = st.secrets.get("n8n_postgres", {})
+    schema = s.get("schema", "public")
+    table = s.get("table", "n8nfinchatbot_historico_atendente")
+    return f'"{schema}"."{table}"'
 
 
 @st.cache_resource
@@ -332,10 +368,11 @@ def load_historico_from_bq():
 
 
 def load_mensagens_from_bq():
-    """Lê últimos 3 dias de mensagens N8N para definir o status atual de cada telefone.
-    Cliente tocado pelo bot há ≤ 3d fica em cooldown e sai do lote (a menos que vire urgente)."""
+    """Lê histórico N8N direto do Postgres (sem atraso de 30min do Data Transfer).
+    Mantém o nome 'from_bq' por compat com imports existentes — fonte agora é Postgres.
+    Popula _msg_status (últimos 3d), _msg_concluida_dias e _msg_ultimo_contato_dias.
+    """
     import re
-    from datetime import timezone as _tz
 
     def _norm(phone: str) -> str:
         p = re.sub(r'\D', '', phone or '')
@@ -347,33 +384,42 @@ def load_mensagens_from_bq():
     st.session_state.setdefault("_msg_concluida_dias", {})
     st.session_state.setdefault("_msg_ultimo_contato_dias", {})
 
-    client = get_bq_client()
-    if not client:
+    conn = get_pg_n8n_conn()
+    if not conn:
         return
 
+    table = _pg_table_ref()
+    cur = conn.cursor()
+
+    # Janela de 3 dias — define cooldowns curtos e status atual
     try:
-        df = client.query(f"""
+        cur.execute(f"""
             SELECT telefone, message, created_at
-            FROM `{_N8N_TABLE}`
-            WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 DAY)
+            FROM {table}
+            WHERE created_at >= NOW() - INTERVAL '3 days'
             ORDER BY created_at ASC
-        """).to_dataframe()
-    except Exception:
+        """)
+        rows = cur.fetchall()
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        st.warning(f"Falha ao ler N8N (3d): {e}")
+        cur.close()
         return
 
     status_map        = {}
     concluida_ts      = {}
-    ultimo_contato_ts = {}  # último contato n8n por telefone (qualquer mensagem)
+    ultimo_contato_ts = {}
 
-    for _, row in df.iterrows():
-        chave = _norm(str(row.get("telefone") or ""))
+    for tel_raw, msg_raw, ts in rows:
+        chave = _norm(str(tel_raw or ""))
         if not chave:
             continue
-        msg = str(row.get("message") or "").lower()
-        ts  = row.get("created_at")
-
+        msg = str(msg_raw or "").lower()
         if ts is not None:
-            ultimo_contato_ts[chave] = ts  # último sempre sobrescreve (ASC → last wins)
+            ultimo_contato_ts[chave] = ts
 
         if any(p in msg for p in _MSG_CONCLUIDA):
             status_map[chave] = "concluida"
@@ -389,13 +435,13 @@ def load_mensagens_from_bq():
             if chave not in status_map:
                 status_map[chave] = "mensagem"
 
-    # Diferença em dias de CALENDÁRIO BRT — não em janelas de 24h.
-    # Mensagem de ontem 23h aparece como "há 1d" mesmo se faltarem horas pra completar 24h.
-    _BRT_TZ      = timezone(timedelta(hours=-3))
-    hoje_brt_dt  = datetime.now(_BRT_TZ).date()
+    _BRT_TZ     = timezone(timedelta(hours=-3))
+    hoje_brt_dt = datetime.now(_BRT_TZ).date()
 
     def _dias_calendario_brt(ts):
         try:
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
             return max((hoje_brt_dt - ts.astimezone(_BRT_TZ).date()).days, 0)
         except Exception:
             return None
@@ -411,24 +457,27 @@ def load_mensagens_from_bq():
         if d is not None:
             ultimo_contato_dias[phone] = d
 
-    # Último contato histórico completo (tabela toda, só MAX por telefone)
+    # Último contato histórico completo (MAX por telefone, sem janela)
     try:
-        df_lc = client.query(f"""
+        cur.execute(f"""
             SELECT telefone, MAX(created_at) AS ultimo_contato
-            FROM `{_N8N_TABLE}`
+            FROM {table}
             GROUP BY telefone
-        """).to_dataframe()
-        for _, row in df_lc.iterrows():
-            chave = _norm(str(row.get("telefone") or ""))
-            if not chave:
+        """)
+        for tel_raw, ts in cur.fetchall():
+            chave = _norm(str(tel_raw or ""))
+            if not chave or ts is None:
                 continue
-            ts = row.get("ultimo_contato")
-            if ts is not None:
-                dias = _dias_calendario_brt(ts)
-                if dias is not None and (chave not in ultimo_contato_dias or dias < ultimo_contato_dias[chave]):
-                    ultimo_contato_dias[chave] = dias
+            dias = _dias_calendario_brt(ts)
+            if dias is not None and (chave not in ultimo_contato_dias or dias < ultimo_contato_dias[chave]):
+                ultimo_contato_dias[chave] = dias
     except Exception:
-        pass
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+    cur.close()
 
     st.session_state["_msg_status"]              = status_map
     st.session_state["_msg_concluida_dias"]      = concluida_dias
@@ -509,74 +558,6 @@ def load_cooldowns_from_painel():
     st.session_state["_painel_dias_msg"]   = dias_msg
     st.session_state["_painel_dias_lig"]   = dias_lig
     st.session_state["_painel_acoes_hoje"] = acoes_hoje
-
-
-def load_metricas_from_bq():
-    """A cada 5 min na tela Atividades — só hoje, por atendente."""
-    import re
-
-    def _norm(phone: str) -> str:
-        p = re.sub(r'\D', '', phone or '')
-        if p.startswith('55') and len(p) > 11:
-            p = p[2:]
-        return (p[:2] + p[-8:]) if len(p) >= 10 else p
-
-    _INSTANCIA_NOME = {"priscila": "Priscila Oliveira", "adriely": "Ana Carolina"}
-    _zero = {"mensagens": 0, "ligacoes": 0, "atendidas": 0}
-    st.session_state.setdefault("_n8n_hoje", {
-        "total": {**_zero}, "Priscila Oliveira": {**_zero}, "Ana Carolina": {**_zero},
-    })
-
-    client = get_bq_client()
-    if not client:
-        return
-
-    _BRT    = timezone(timedelta(hours=-3))
-    hoje_ts = datetime.now(_BRT).date().strftime("%Y-%m-%d")
-
-    try:
-        df = client.query(f"""
-            SELECT telefone, message, instancia
-            FROM `{_N8N_TABLE}`
-            WHERE DATE(created_at, "America/Sao_Paulo") = "{hoje_ts}"
-        """).to_dataframe()
-    except Exception:
-        return
-
-    msgs_hoje  = {"total": set(), "Priscila Oliveira": set(), "Ana Carolina": set()}
-    lig_hoje   = {"total": set(), "Priscila Oliveira": set(), "Ana Carolina": set()}
-    atend_hoje = {"total": set(), "Priscila Oliveira": set(), "Ana Carolina": set()}
-
-    for _, row in df.iterrows():
-        chave = _norm(str(row.get("telefone") or ""))
-        if not chave:
-            continue
-        msg      = str(row.get("message") or "").lower()
-        inst_raw = str(row.get("instancia") or "").strip().lower()
-        atend    = _INSTANCIA_NOME.get(inst_raw, "total_only")
-
-        msgs_hoje["total"].add(chave)
-        if atend in msgs_hoje:
-            msgs_hoje[atend].add(chave)
-        if any(p in msg for p in _MSG_PRE_LIGACAO):
-            lig_hoje["total"].add(chave)
-            if atend in lig_hoje:
-                lig_hoje[atend].add(chave)
-        if any(p in msg for p in _MSG_CONCLUIDA):
-            atend_hoje["total"].add(chave)
-            if atend in atend_hoje:
-                atend_hoje[atend].add(chave)
-
-    st.session_state["_n8n_hoje"] = {
-        "total":             {"mensagens": len(msgs_hoje["total"]),             "ligacoes": len(lig_hoje["total"]),             "atendidas": len(atend_hoje["total"])},
-        "Priscila Oliveira": {"mensagens": len(msgs_hoje["Priscila Oliveira"]), "ligacoes": len(lig_hoje["Priscila Oliveira"]), "atendidas": len(atend_hoje["Priscila Oliveira"])},
-        "Ana Carolina":      {"mensagens": len(msgs_hoje["Ana Carolina"]),      "ligacoes": len(lig_hoje["Ana Carolina"]),      "atendidas": len(atend_hoje["Ana Carolina"])},
-    }
-    st.session_state["_n8n_hoje_phones"] = {
-        "msgs":  msgs_hoje,
-        "lig":   lig_hoje,
-        "atend": atend_hoje,
-    }
 
 
 def save_hist_to_bq(uid: str, cid: str, data: dict):

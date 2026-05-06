@@ -4,29 +4,45 @@ import streamlit as st
 
 import time as _time
 
-from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, hoje_brt
-from data import calcular_score, recomendar_acao, load_metricas_from_bq, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, _EMAIL_GRUPO
+from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_msg, get_painel_acoes_hoje, hoje_brt
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
 
-@st.fragment(run_every=1800)
+@st.fragment(run_every=60)
 def _auto_refresh_n8n():
-    """Dispara a cada 30 min para atualizar status N8N e re-renderizar o kanban.
-    Também detecta virada de dia BRT e força rerun do app inteiro pra renovar o lote."""
+    """A cada 60s: recarrega status N8N direto do Postgres (responsivo, sem atraso de transferência).
+    Detecta virada de dia BRT e força rerun do app inteiro pra renovar o lote."""
     hoje = hoje_brt()
     if st.session_state.get("_dia_ativo") != hoje:
         st.session_state["_dia_ativo"] = hoje
         st.rerun(scope="app")
         return
     last_ts = st.session_state.get("_metricas_ts", 0)
-    if _time.time() - last_ts < 1740:
+    if _time.time() - last_ts < 50:
         return
     load_mensagens_from_bq()
-    load_metricas_from_bq()
-    load_cooldowns_from_painel()
     st.session_state["_metricas_ts"] = _time.time()
-    st.rerun()
+    st.rerun(scope="app")
+
+
+@st.fragment(run_every=90)
+def _auto_refresh_painel():
+    """Ciclo curto (~90s): MERGE bools no painel + recarrega cooldowns/metricas.
+    Mantém contadores do topo e estado de hoje atualizados quase em tempo real."""
+    last_ts = st.session_state.get("_painel_refresh_ts", 0)
+    if _time.time() - last_ts < 80:
+        return
+    from auth import get_store
+    status_map = st.session_state.get("_msg_status", {})
+    clientes = get_store().get("clientes", []) if status_map else []
+    if status_map and clientes:
+        for _atd in _EMAIL_GRUPO.values():
+            atualizar_tarefas_bq(_atd, status_map, clientes)
+    load_cooldowns_from_painel()
+    st.session_state["_painel_refresh_ts"] = _time.time()
+    st.rerun(scope="app")
 
 
 def _acao_badge(acoes: list[str]) -> str:
@@ -66,33 +82,62 @@ _ICON_GROUP = (
 )
 
 
-def _motivo(acoes, msg_st, c, h) -> tuple:
-    """Retorna (texto, estilo) onde estilo é 'blue' | 'purple' | 'gray'."""
+def _motivo(bucket, acoes, c) -> tuple:
+    """Retorna (texto, estilo) pro badge do card.
+    Fonte primária: painel_tarefas_diarias. Fallback: N8N (histórico mais antigo).
+    estilo ∈ 'red' | 'blue' | 'purple' | 'gray' | ''.
+    """
+    cid = c.get("id")
     tel = c.get("telefone", "")
-    dsc = get_ultimo_contato_n8n_dias(tel)
+    acoes_hj = get_painel_acoes_hoje(cid)
+    msg_st_n8n  = get_msg_status(tel)
+    dsc_n8n     = get_ultimo_contato_n8n_dias(tel)
+    dias_lig = get_painel_dias_lig(cid)
+    if dias_lig is None:
+        dias_lig = get_msg_concluida_dias(tel)  # fallback N8N
+    # Pra "última mensagem", painel é específico (mensagem do bot enviada);
+    # N8N traz qualquer contato — usamos como fallback aproximado.
+    dias_msg = get_painel_dias_msg(cid)
+    if dias_msg is None:
+        dias_msg = dsc_n8n
 
     if "urgente" in acoes:
         dias = c.get("dias_atraso") or 0
         return f"Acordo vencido há {dias}d · ligação prioritária", "red"
-    if msg_st == "tentar_novamente":
-        return "Não atendeu a ligação", "purple"
-    if msg_st in ("mensagem", "ligacao_pendente"):
-        quando = "hoje" if dsc == 0 else f"há {dsc}d" if dsc else ""
-        sufixo = f" {quando}" if quando else ""
-        return f"Mensagem enviada{sufixo} · fazer ligação", "blue"
 
+    # Estado HOJE — painel + fallback N8N
+    if acoes_hj.get("atend") or msg_st_n8n == "concluida":
+        return "Ligação atendida hoje", "blue"
+    if acoes_hj.get("lig") or msg_st_n8n == "tentar_novamente":
+        return "Não atendeu a ligação", "purple"
+    if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and dsc_n8n == 0):
+        return "Mensagem enviada hoje", "blue"
+
+    # Estado anterior — texto reflete o BUCKET
+    if bucket == "ligacao":
+        if dias_lig is not None:
+            return f"Última ligação há {dias_lig}d · Ligação", "gray"
+        return "Sem ligação anterior · Ligação", "gray"
+    if bucket == "mensagem":
+        if dias_msg is not None:
+            return f"Última mensagem há {dias_msg}d · Mensagem", "gray"
+        return "Sem mensagem anterior · Mensagem", "gray"
+
+    # Sem bucket (gestor "Todos os clientes") — fallback por acoes
+    if "ligar" in acoes:
+        return (f"Última ligação há {dias_lig}d · Ligação" if dias_lig is not None
+                else "Sem ligação anterior · Ligação"), "gray"
     if "mensagem" in acoes:
-        sufixo = " · Mensagem" if "ligar" in acoes else ""
-        texto  = f"Último contato há {dsc}d{sufixo}" if dsc is not None else f"Sem contato anterior{sufixo}"
-        return texto, "gray"
+        return (f"Última mensagem há {dias_msg}d · Mensagem" if dias_msg is not None
+                else "Sem mensagem anterior · Mensagem"), "gray"
     return "", ""
 
 
-def _render_card(score, acoes, c, role, idx, msg_st="", h=None):
+def _render_card(score, acoes, c, role, idx, bucket=None):
     cor           = _score_cor(score)
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
     acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if "urgente" in acoes else ""
-    motivo_txt, motivo_style = _motivo(acoes, msg_st, c, h or {})
+    motivo_txt, motivo_style = _motivo(bucket, acoes, c)
     _motivo_css = {
         "red":    "color:#ff5555;background:rgba(239,68,68,.08);border-left:2px solid #ff5555;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
         "blue":   "color:#5fa3ff;background:rgba(95,163,255,.08);border-left:2px solid #5fa3ff;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
@@ -141,7 +186,8 @@ def _render_card(score, acoes, c, role, idx, msg_st="", h=None):
 
 
 def _render_atividades(store, clientes, role):
-    # Recarrega n8n a cada 5 min automaticamente (fragment com run_every=300)
+    # Ciclo curto (~90s): atualiza painel/metricas. Ciclo longo (30min): cache N8N de fallback.
+    _auto_refresh_painel()
     _auto_refresh_n8n()
 
     hoje_str = date.today().strftime("%d/%m/%Y")
@@ -165,15 +211,6 @@ def _render_atividades(store, clientes, role):
     # CONCLUÍDA e ficam visíveis. Renovação só na virada do dia.
     if email in _EMAIL_GRUPO:
         clientes = [c for c in clientes if c["id"] in ids_hoje]
-
-    # Atualiza bools na tabela BQ pra TODOS os atendentes (máx 1x a cada 10 min).
-    # Independe de quem está logado — basta alguém abrir o painel pra rodar.
-    _ts_upd = st.session_state.get("_tarefas_update_ts", 0)
-    if _time.time() - _ts_upd > 600:
-        status_map = st.session_state.get("_msg_status", {})
-        for _atd in _EMAIL_GRUPO.values():
-            atualizar_tarefas_bq(_atd, status_map, store["clientes"])
-        st.session_state["_tarefas_update_ts"] = _time.time()
 
     # ── Controles de admin: visualização por lote ou todos ───────────────────
     _nomes_atendentes = list(_EMAIL_GRUPO.values())
@@ -223,38 +260,31 @@ def _render_atividades(store, clientes, role):
         unsafe_allow_html=True,
     )
 
-    # ── Progresso do dia — N8N de hoje cruzado com telefones do lote ─────────
-    import re as _re
+    # ── Progresso do dia — contagem direto do painel_tarefas_diarias ─────────
     _zero = {"mensagens": 0, "ligacoes": 0, "atendidas": 0}
 
-    def _norm_ph(ph):
-        p = _re.sub(r'\D', '', ph or '')
-        if p.startswith('55') and len(p) > 11:
-            p = p[2:]
-        return (p[:2] + p[-8:]) if len(p) >= 10 else p
-
-    def _metricas_lote_n8n(ids_lote, atd_nome):
-        lote_ph = {_norm_ph(c.get("telefone", "")) for c in store["clientes"] if c["id"] in ids_lote}
-        lote_ph.discard("")
-        pd = st.session_state.get("_n8n_hoje_phones", {})
-        if not pd or not lote_ph:
-            return {**_zero}
+    def _metricas_lote_painel(ids_lote=None):
+        """Conta bools do painel hoje. Se ids_lote=None, conta total geral."""
+        acoes = st.session_state.get("_painel_acoes_hoje", {})
+        if ids_lote is None:
+            items = list(acoes.values())
+        else:
+            items = [acoes.get(str(cid), {}) for cid in ids_lote]
         return {
-            "mensagens": len(pd.get("msgs",  {}).get(atd_nome, set()) & lote_ph),
-            "ligacoes":  len(pd.get("lig",   {}).get(atd_nome, set()) & lote_ph),
-            "atendidas": len(pd.get("atend", {}).get(atd_nome, set()) & lote_ph),
+            "mensagens": sum(1 for a in items if a.get("msg")),
+            "ligacoes":  sum(1 for a in items if a.get("lig")),
+            "atendidas": sum(1 for a in items if a.get("atend")),
         }
 
     atendente_logado = _EMAIL_GRUPO.get(email)
     if atendente_logado:
-        dados_m, label_m = _metricas_lote_n8n(ids_hoje, atendente_logado), atendente_logado
+        dados_m, label_m = _metricas_lote_painel(ids_hoje), atendente_logado
     elif role in ("admin", "gestor") and _modo_admin == "Lote do dia" and _atendente_sel:
         _key_lote_adm = f"_tarefas_admin_{hoje_brt()}_{_atendente_sel}"
-        _ids_lote_adm = set(st.session_state.get(_key_lote_adm, []))
-        dados_m, label_m = _metricas_lote_n8n(_ids_lote_adm, _atendente_sel), _atendente_sel
+        _ids_lote_adm = set(st.session_state.get(_key_lote_adm, {}))
+        dados_m, label_m = _metricas_lote_painel(_ids_lote_adm), _atendente_sel
     else:
-        n8n    = st.session_state.get("_n8n_hoje", {"total": {**_zero}})
-        dados_m, label_m = n8n.get("total", {**_zero}), "Total"
+        dados_m, label_m = _metricas_lote_painel(None), "Total"
 
     meta_msg, meta_lig, meta_atend = 50, 30, 15
     n_msg, n_lig, n_atend = dados_m.get("mensagens", 0), dados_m.get("ligacoes", 0), dados_m.get("atendidas", 0)
@@ -321,24 +351,27 @@ def _render_atividades(store, clientes, role):
 
     # ── Separar por coluna ────────────────────────────────────────────────────
     # Lote estático: cliente entra na coluna inicial (URGENTE/LIGAÇÃO/MENSAGEM)
-    # definida pelo bucket gravado no BQ no momento da geração do lote, e SÓ
-    # sai dela direto pra CONCLUÍDA ou TENTAR NOVAMENTE quando o bot age HOJE.
-    # Sem transição MSG → LIG no meio do dia.
-    def _canal(bucket, acoes, msg_st, dias_uc):
-        # Tarefa teve tratamento HOJE → coluna terminal
-        if dias_uc == 0:
-            if msg_st == "tentar_novamente":
-                return "tentar_novamente"
+    # definida pelo bucket gravado no BQ na geração do lote, e só sai pra
+    # CONCLUÍDA ou TENTAR NOVAMENTE quando bool do painel registra ação hoje.
+    # Sem transição MSG ↔ LIG no meio do dia. Fonte: painel_tarefas_diarias.
+    def _canal(bucket, acoes, acoes_hj, msg_st_n8n, dsc_n8n):
+        """Painel é fonte primária pra 'atendido hoje'. N8N entra como fallback
+        responsivo (latência: bot atua em segundos, painel só atualiza a cada 10min).
+        """
+        # Atendido HOJE — painel OU N8N indicando contato hoje
+        if acoes_hj.get("atend") or msg_st_n8n == "concluida":
+            return "concluida"
+        if acoes_hj.get("lig") or msg_st_n8n == "tentar_novamente":
+            return "tentar_novamente"
+        if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and dsc_n8n == 0):
             return "concluida"
 
-        # Urgente sobrepõe bucket — sempre vai pra URGENTE
         if "urgente" in acoes:
             return "urgente"
         if bucket == "ligacao":
             return "ligacao"
         if bucket == "mensagem":
             return "mensagem"
-        # Fallback (sem bucket — ex.: gestor visualizando todos): usa acoes
         if "ligar" in acoes:
             return "ligacao"
         if "mensagem" in acoes:
@@ -352,10 +385,11 @@ def _render_atividades(store, clientes, role):
     for item in fila:
         s, a, c, h = item
         tel = c.get("telefone", "")
-        ms = get_msg_status(tel)
-        dias_uc = get_ultimo_contato_n8n_dias(tel)
         bucket = buckets_hoje.get(c["id"]) if isinstance(buckets_hoje, dict) else None
-        canal = _canal(bucket, a, ms, dias_uc)
+        acoes_hj = get_painel_acoes_hoje(c["id"])
+        ms_n8n = get_msg_status(tel)
+        dsc_n8n = get_ultimo_contato_n8n_dias(tel)
+        canal = _canal(bucket, a, acoes_hj, ms_n8n, dsc_n8n)
 
         if _e_lote and canal == "aguardar":
             continue
@@ -411,7 +445,7 @@ def _render_atividades(store, clientes, role):
                 )
             else:
                 for idx, (score, acoes, c, h) in enumerate(itens):
-                    ms = get_msg_status(c.get("telefone", ""))
+                    bk = buckets_hoje.get(c["id"]) if isinstance(buckets_hoje, dict) else None
                     with st.container():
-                        _render_card(score, acoes, c, role, f"{titulo}_{idx}", msg_st=ms, h=h)
+                        _render_card(score, acoes, c, role, f"{titulo}_{idx}", bucket=bk)
 
