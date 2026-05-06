@@ -4,7 +4,7 @@ import streamlit as st
 
 import time as _time
 
-from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_brt
+from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote
 from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
@@ -14,7 +14,7 @@ from views.dialog import dialog_editar
 def _auto_refresh_n8n():
     """A cada 60s: recarrega status N8N direto do Postgres (responsivo, sem atraso de transferência).
     Detecta virada de dia BRT e força rerun do app inteiro pra renovar o lote."""
-    hoje = hoje_brt()
+    hoje = hoje_lote()
     if st.session_state.get("_dia_ativo") != hoje:
         st.session_state["_dia_ativo"] = hoje
         st.rerun(scope="app")
@@ -287,7 +287,7 @@ def _render_atividades(store, clientes, role):
     # quando entram no modo "Lote do dia" (lá embaixo).
     buckets_hoje = {}
     if email in _EMAIL_GRUPO:
-        _key_tarefas = f"_tarefas_{hoje_brt()}_{email}"
+        _key_tarefas = f"_tarefas_{hoje_lote()}_{email}"
         if _key_tarefas not in st.session_state:
             with st.spinner("Preparando tarefas do dia..."):
                 st.session_state[_key_tarefas] = gerar_tarefas_do_dia(clientes, email)
@@ -340,7 +340,7 @@ def _render_atividades(store, clientes, role):
                         )
 
         if _modo_admin == "Lote do dia" and _atendente_sel:
-            _key_lote = f"_tarefas_admin_{hoje_brt()}_{_atendente_sel}"
+            _key_lote = f"_tarefas_admin_{hoje_lote()}_{_atendente_sel}"
             if _key_lote not in st.session_state:
                 with st.spinner(f"Carregando lote de {_atendente_sel}..."):
                     buckets_bq = get_lote_buckets_bq(_atendente_sel, store["clientes"])
@@ -388,7 +388,7 @@ def _render_atividades(store, clientes, role):
     if atendente_logado:
         dados_m, label_m = _metricas_lote_painel(ids_hoje), atendente_logado
     elif role in ("admin", "gestor") and _modo_admin == "Lote do dia" and _atendente_sel:
-        _key_lote_adm = f"_tarefas_admin_{hoje_brt()}_{_atendente_sel}"
+        _key_lote_adm = f"_tarefas_admin_{hoje_lote()}_{_atendente_sel}"
         _ids_lote_adm = set(st.session_state.get(_key_lote_adm, {}))
         dados_m, label_m = _metricas_lote_painel(_ids_lote_adm), _atendente_sel
     else:

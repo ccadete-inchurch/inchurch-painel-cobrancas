@@ -26,7 +26,7 @@ from google.cloud import bigquery
 
 from config import MAP_COB, MAP_INAD, DIAS_SEM_CONTATO
 from auth import get_store, current_nome
-from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel, hoje_brt
+from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel, hoje_lote
 
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
@@ -503,7 +503,7 @@ def load_cooldowns_from_painel():
     if not client:
         return
 
-    hoje = hoje_brt()
+    hoje = hoje_lote()
     _BRT = timezone(timedelta(hours=-3))
     hoje_brt_dt = datetime.now(_BRT).date()
 
@@ -728,7 +728,7 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
         return {c["id"]: "ligacao" for c in clientes}
 
     client = get_bq_client()
-    hoje = hoje_brt()
+    hoje = hoje_lote()
 
     # Lote já gerado hoje? Lê IDs do BQ e RECLASSIFICA bucket via _candidato_lote
     # + quotas 30/50. Pra IDs que o reclassificador ignorou (cooldown total etc.),
@@ -788,7 +788,7 @@ def adicionar_tarefas_extras_bq(atendente: str, extra_ids: list, clientes: list 
     client = get_bq_client()
     if not client or not extra_ids:
         return
-    hoje = hoje_brt()
+    hoje = hoje_lote()
     cliente_by_id = {c["id"]: c for c in (clientes or [])}
     now_iso = datetime.now(timezone.utc).isoformat()
     rows = []
@@ -893,7 +893,7 @@ def get_lote_buckets_bq(atendente: str, clientes: list) -> dict:
     client = get_bq_client()
     if not client:
         return {}
-    hoje = hoje_brt()
+    hoje = hoje_lote()
     try:
         df = client.query(f"""
             SELECT id_sacado_sac, dt_entrou_coluna_msg, dt_entrou_coluna_ligacao
@@ -924,7 +924,7 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
     client = get_bq_client()
     if not client:
         return
-    hoje = hoje_brt()
+    hoje = hoje_lote()
 
     import re
     def _norm(phone):

@@ -10,6 +10,17 @@ def hoje_brt() -> str:
     'dia útil' em vez de date.today(), que segue o timezone do servidor (UTC)."""
     return datetime.now(_BRT).date().isoformat()
 
+
+def hoje_lote() -> str:
+    """Data do 'dia operacional' do lote. Vira às 08:15 BRT, não à meia-noite.
+    Antes das 08:15, ainda retorna o dia anterior — pra dar tempo da base do BQ
+    refletir os pagamentos da noite e evitar gerar lote com dados desatualizados.
+    """
+    agora = datetime.now(_BRT)
+    if agora.hour < 8 or (agora.hour == 8 and agora.minute < 15):
+        return (agora.date() - timedelta(days=1)).isoformat()
+    return agora.date().isoformat()
+
 from auth import current_uid, get_store
 from pathlib import Path
 import json
