@@ -213,7 +213,6 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
             f'{inativo_badge}'
             f'</div>'
             f'</div>'
-            f'<div style="text-align:right;flex-shrink:0;font-size:22px">✓</div>'
             f'</div>'
             f'{motivo_html}'
             f'{valor_html}'
@@ -445,7 +444,7 @@ def _render_atividades(store, clientes, role):
     with fb:
         filtro_inativo = st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], label_visibility="collapsed", key="atv_filtro_inativo")
     with fc:
-        busca = st.text_input("Buscar", placeholder="Nome ou CNPJ...", label_visibility="collapsed", key="atv_busca")
+        busca = st.text_input("Buscar", placeholder="Nome, CNPJ ou ID...", label_visibility="collapsed", key="atv_busca")
 
     if filtro_grupo != "Todos":
         fila = [(s, a, c, h) for s, a, c, h in fila if c.get("_grupo") == filtro_grupo]
@@ -454,9 +453,28 @@ def _render_atividades(store, clientes, role):
     elif filtro_inativo == "Inativos":
         fila = [(s, a, c, h) for s, a, c, h in fila if c.get("_inativo")]
     if busca:
-        b = busca.lower()
-        fila = [(s, a, c, h) for s, a, c, h in fila
-                if b in str(c.get("nome", "")).lower() or b in str(c.get("cnpj", "")).lower()]
+        # Normaliza busca: lowercase + remove pontuação pra casar com CNPJ digitado
+        # com ou sem máscara (XX.XXX.XXX/XXXX-XX vs XXXXXXXXXXXXXX).
+        import re as _re_b
+        b = busca.strip().lower()
+        b_digits = _re_b.sub(r'\D', '', b)
+
+        def _match(c):
+            nome  = str(c.get("nome") or "").lower()
+            cnpj  = str(c.get("cnpj") or "")
+            cnpj_digits = _re_b.sub(r'\D', '', cnpj)
+            cid   = str(c.get("id") or "")
+            if b in nome:
+                return True
+            if b in cnpj.lower():
+                return True
+            if b_digits and b_digits in cnpj_digits:
+                return True
+            if b_digits and b_digits == cid:
+                return True
+            return False
+
+        fila = [(s, a, c, h) for s, a, c, h in fila if _match(c)]
 
     # ── Separar por coluna ────────────────────────────────────────────────────
     # Lote estático: cliente entra na coluna inicial (URGENTE/LIGAÇÃO/MENSAGEM)
