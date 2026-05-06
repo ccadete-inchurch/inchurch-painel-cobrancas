@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_brt
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -90,6 +90,9 @@ def _motivo(bucket, acoes, c) -> tuple:
     Cliente com acordo vencido (≥7d) tem badges prefixados por "Acordo vencido há Xd"
     pra manter a info do acordo visível mesmo durante cooldown ou em outras colunas.
     """
+    if c.get("_regularizado_hoje"):
+        return "Regularizado hoje · pagamento confirmado", "blue"
+
     cid = c.get("id")
     tel = c.get("telefone", "")
     acoes_hj = get_painel_acoes_hoje(cid)
@@ -262,6 +265,11 @@ def _render_atividades(store, clientes, role):
     # CONCLUÍDA e ficam visíveis. Renovação só na virada do dia.
     if email in _EMAIL_GRUPO:
         clientes = [c for c in clientes if c["id"] in ids_hoje]
+        # IDs do lote que pagaram os atrasos durante o dia — saem da lista normal
+        # mas voltam aqui como REGULARIZADO pra atendente não perder a meta.
+        ids_regularizados = ids_hoje - {c["id"] for c in clientes}
+        if ids_regularizados:
+            clientes.extend(fetch_regularizados_do_dia(ids_regularizados))
 
     # ── Painel administrativo (alinhado à direita) ──────────────────────────
     _nomes_atendentes = list(_EMAIL_GRUPO.values())
@@ -313,6 +321,10 @@ def _render_atividades(store, clientes, role):
 
             # Lote estático do dia: mostra os 80 IDs fixos do atendente selecionado
             clientes = [c for c in clientes if c["id"] in ids_lote]
+            # Inclui regularizados (pagaram durante o dia) pra completar 80 visíveis
+            ids_regularizados_adm = ids_lote - {c["id"] for c in clientes}
+            if ids_regularizados_adm:
+                clientes.extend(fetch_regularizados_do_dia(ids_regularizados_adm))
             # Quando admin visualiza lote de outro atendente, usa o bucket dele
             buckets_hoje = buckets_lote
 
@@ -417,11 +429,14 @@ def _render_atividades(store, clientes, role):
     # definida pelo bucket gravado no BQ na geração do lote, e só sai pra
     # CONCLUÍDA ou TENTAR NOVAMENTE quando bool do painel registra ação hoje.
     # Sem transição MSG ↔ LIG no meio do dia. Fonte: painel_tarefas_diarias.
-    def _canal(bucket, acoes, acoes_hj, msg_st_n8n, dsc_n8n):
+    def _canal(bucket, acoes, acoes_hj, msg_st_n8n, dsc_n8n, regularizado=False):
         """Painel é fonte primária pra 'atendido hoje'. N8N entra como fallback
         responsivo (latência: bot atua em segundos, painel só atualiza a cada 10min).
         Fallback N8N só vale se contato foi HOJE (dsc_n8n==0) — status do cache vive 3d.
+        Cliente regularizado (pagou os atrasos hoje) sempre vai pra CONCLUÍDA.
         """
+        if regularizado:
+            return "concluida"
         n8n_hoje = (dsc_n8n == 0)
         if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
             return "concluida"
@@ -453,7 +468,7 @@ def _render_atividades(store, clientes, role):
         acoes_hj = get_painel_acoes_hoje(c["id"])
         ms_n8n = get_msg_status(tel)
         dsc_n8n = get_ultimo_contato_n8n_dias(tel)
-        canal = _canal(bucket, a, acoes_hj, ms_n8n, dsc_n8n)
+        canal = _canal(bucket, a, acoes_hj, ms_n8n, dsc_n8n, regularizado=c.get("_regularizado_hoje", False))
 
         if _e_lote and canal == "aguardar":
             continue

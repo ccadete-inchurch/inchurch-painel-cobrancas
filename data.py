@@ -812,6 +812,65 @@ def adicionar_tarefas_extras_bq(atendente: str, extra_ids: list, clientes: list 
         pass
 
 
+def fetch_regularizados_do_dia(ids_lote: set) -> list:
+    """Pra IDs do lote que pagaram os atrasos durante o dia (mas ainda têm cobranças
+    futuras), retorna info básica + flag _regularizado_hoje=True. Esses clientes saem
+    da lista normal de inadimplentes (valor em atraso = 0) mas devem permanecer no
+    kanban como REGULARIZADO pra atendente não perder a meta de 80 do dia.
+    """
+    if not ids_lote:
+        return []
+    client = get_bq_client()
+    if not client:
+        return []
+    ids_str = ", ".join(f"'{cid}'" for cid in ids_lote)
+    try:
+        df = client.query(f"""
+            SELECT
+                c.id_sacado_sac AS id,
+                MAX(c.st_nome_sac) AS nome,
+                MAX(c.st_cgc_sac)  AS cnpj,
+                MAX(COALESCE(NULLIF(cli.st_fax_sac, ''), c.st_telefone_sac)) AS telefone,
+                MAX(u.nm_grupo) AS grupo,
+                MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
+            FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
+            LEFT JOIN (
+                SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(grupo) AS nm_grupo
+                FROM `business-intelligence-467516.Splgc.vw-splgc-clientes_unificada`
+                GROUP BY id_sacado_sac
+            ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
+            LEFT JOIN (
+                SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(st_fax_sac) AS st_fax_sac
+                FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
+                GROUP BY id_sacado_sac
+            ) cli ON CAST(c.id_sacado_sac AS STRING) = cli.id_sacado_sac
+            WHERE CAST(c.id_sacado_sac AS STRING) IN ({ids_str})
+            GROUP BY c.id_sacado_sac
+        """).to_dataframe()
+    except Exception:
+        return []
+
+    out = []
+    for _, row in df.iterrows():
+        out.append({
+            "id":                 str(row["id"]),
+            "cod":                str(row["id"]),
+            "nome":               str(row.get("nome") or ""),
+            "cnpj":               str(row.get("cnpj") or ""),
+            "telefone":           fmt_tel(row.get("telefone")),
+            "valor":              0.0,
+            "vencimento":         "",
+            "dias_atraso":        0,
+            "parcelas":           0,
+            "_grupo":             str(row.get("grupo") or "—"),
+            "_tem_acordo":        False,
+            "_inativo":           bool(row.get("inativo", False)),
+            "_cobracas":          [],
+            "_regularizado_hoje": True,
+        })
+    return out
+
+
 def get_lote_buckets_bq(atendente: str, clientes: list) -> dict:
     """Retorna {id: bucket} do lote do dia consultando o BQ.
     Reclassifica via _candidato_lote + quotas 30/50. Pra IDs que o reclassificador
