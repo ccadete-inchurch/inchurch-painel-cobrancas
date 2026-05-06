@@ -181,8 +181,9 @@ def _motivo(bucket, acoes, c) -> tuple:
 def _render_card(score, acoes, c, role, idx, bucket=None):
     cor           = _score_cor(score)
     _eh_acordo    = bool(c.get("_tem_acordo")) and (c.get("dias_atraso") or 0) >= 7
+    _regularizado = bool(c.get("_regularizado_hoje"))
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
-    acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if _eh_acordo else ""
+    acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if _eh_acordo and not _regularizado else ""
     motivo_txt, motivo_style = _motivo(bucket, acoes, c)
     _motivo_css = {
         "red":    "color:#ff5555;background:rgba(239,68,68,.08);border-left:2px solid #ff5555;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
@@ -195,6 +196,43 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
         f'<div style="font-size:11px;font-weight:600;margin-bottom:8px;{_motivo_css.get(motivo_style, "")}">{motivo_txt}</div>'
         if motivo_txt else ""
     )
+
+    if _regularizado:
+        valor_pago = c.get("_valor_pago_hoje", 0) or 0
+        valor_html = (
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+            f'<span style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.4px">Pago hoje</span>'
+            f'<span style="font-size:14px;font-weight:700;color:#7cc243">{fmt_moeda_plain(valor_pago)}</span>'
+            f'</div>'
+            if valor_pago > 0 else ""
+        )
+        st.markdown(
+            f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
+            f'padding:14px 16px;margin-bottom:10px;border-top:2px solid #7cc243">'
+            f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
+            f'<div style="font-weight:700;font-size:17px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
+            f'{c["nome"]}'
+            f'<div style="font-size:11px;color:#9ca3af;font-weight:400;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
+            f'<span>{c.get("cnpj","—")} · ID {c.get("id","—")}</span>'
+            f'{inativo_badge}'
+            f'</div>'
+            f'</div>'
+            f'<div style="text-align:right;flex-shrink:0;font-size:22px">✓</div>'
+            f'</div>'
+            f'{motivo_html}'
+            f'{valor_html}'
+            f'<div style="font-size:12px;color:#6b7280">'
+            f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">'
+            f'{_ICON_PHONE}<span style="color:#9ca3af">{c.get("telefone","—")}</span>'
+            f'</div>'
+            f'<div style="display:flex;align-items:center;gap:5px">'
+            f'{_ICON_GROUP}<span style="color:#9ca3af">{c.get("_grupo","—")}</span>'
+            f'</div>'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        return  # sem botão "Detalhes" — não há histórico editável
 
     st.markdown(
         f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'

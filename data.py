@@ -814,9 +814,9 @@ def adicionar_tarefas_extras_bq(atendente: str, extra_ids: list, clientes: list 
 
 def fetch_regularizados_do_dia(ids_lote: set) -> list:
     """Pra IDs do lote que pagaram os atrasos durante o dia (mas ainda têm cobranças
-    futuras), retorna info básica + flag _regularizado_hoje=True. Esses clientes saem
-    da lista normal de inadimplentes (valor em atraso = 0) mas devem permanecer no
-    kanban como REGULARIZADO pra atendente não perder a meta de 80 do dia.
+    futuras), retorna info básica + valor pago hoje + flag _regularizado_hoje=True.
+    Esses clientes saem da lista normal de inadimplentes (valor em atraso = 0) mas
+    devem permanecer no kanban como REGULARIZADO pra atendente não perder a meta.
     """
     if not ids_lote:
         return []
@@ -826,26 +826,38 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
     ids_str = ", ".join(f"'{cid}'" for cid in ids_lote)
     try:
         df = client.query(f"""
-            SELECT
-                c.id_sacado_sac AS id,
-                MAX(c.st_nome_sac) AS nome,
-                MAX(c.st_cgc_sac)  AS cnpj,
-                MAX(COALESCE(NULLIF(cli.st_fax_sac, ''), c.st_telefone_sac)) AS telefone,
-                MAX(u.nm_grupo) AS grupo,
-                MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
-            FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
-            LEFT JOIN (
-                SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(grupo) AS nm_grupo
-                FROM `business-intelligence-467516.Splgc.vw-splgc-clientes_unificada`
+            WITH base AS (
+                SELECT
+                    c.id_sacado_sac AS id,
+                    MAX(c.st_nome_sac) AS nome,
+                    MAX(c.st_cgc_sac)  AS cnpj,
+                    MAX(COALESCE(NULLIF(cli.st_fax_sac, ''), c.st_telefone_sac)) AS telefone,
+                    MAX(u.nm_grupo) AS grupo,
+                    MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
+                FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
+                LEFT JOIN (
+                    SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(grupo) AS nm_grupo
+                    FROM `business-intelligence-467516.Splgc.vw-splgc-clientes_unificada`
+                    GROUP BY id_sacado_sac
+                ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
+                LEFT JOIN (
+                    SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(st_fax_sac) AS st_fax_sac
+                    FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
+                    GROUP BY id_sacado_sac
+                ) cli ON CAST(c.id_sacado_sac AS STRING) = cli.id_sacado_sac
+                WHERE CAST(c.id_sacado_sac AS STRING) IN ({ids_str})
+                GROUP BY c.id_sacado_sac
+            ),
+            pago_hoje AS (
+                SELECT CAST(id_sacado_sac AS STRING) AS id, SUM(comp_valor) AS valor_pago
+                FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+                WHERE fl_status_recb = '1'
+                  AND DATE(dt_liquidacao_recb, "America/Sao_Paulo") = CURRENT_DATE("America/Sao_Paulo")
+                  AND CAST(id_sacado_sac AS STRING) IN ({ids_str})
                 GROUP BY id_sacado_sac
-            ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
-            LEFT JOIN (
-                SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(st_fax_sac) AS st_fax_sac
-                FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
-                GROUP BY id_sacado_sac
-            ) cli ON CAST(c.id_sacado_sac AS STRING) = cli.id_sacado_sac
-            WHERE CAST(c.id_sacado_sac AS STRING) IN ({ids_str})
-            GROUP BY c.id_sacado_sac
+            )
+            SELECT base.*, COALESCE(pago_hoje.valor_pago, 0) AS valor_pago_hoje
+            FROM base LEFT JOIN pago_hoje ON CAST(base.id AS STRING) = pago_hoje.id
         """).to_dataframe()
     except Exception:
         return []
@@ -867,6 +879,7 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
             "_inativo":           bool(row.get("inativo", False)),
             "_cobracas":          [],
             "_regularizado_hoje": True,
+            "_valor_pago_hoje":   float(row.get("valor_pago_hoje") or 0),
         })
     return out
 
