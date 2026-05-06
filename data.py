@@ -731,12 +731,12 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
     hoje = hoje_brt()
 
     # Lote já gerado hoje? Lê IDs do BQ e RECLASSIFICA bucket via _candidato_lote
-    # + quotas 30/50. Não confiamos nos timestamps de coluna do BQ porque registros
-    # antigos (rule 4 anterior) podem ter sido gravados com bucket errado.
+    # + quotas 30/50. Pra IDs que o reclassificador ignorou (cooldown total etc.),
+    # usa o bucket original gravado no BQ — assim 100% dos 80 continuam visíveis.
     if client:
         try:
             df = client.query(f"""
-                SELECT id_sacado_sac
+                SELECT id_sacado_sac, dt_entrou_coluna_msg, dt_entrou_coluna_ligacao
                 FROM `{_TAREFAS_TABLE}`
                 WHERE atendente = '{atendente}'
                   AND data_tarefa = '{hoje}'
@@ -744,7 +744,14 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
             if not df.empty:
                 ids_bq = set(df["id_sacado_sac"].tolist())
                 clientes_no_lote = [c for c in clientes if c["id"] in ids_bq]
-                return _quota_buckets_para(clientes_no_lote)
+                buckets = _quota_buckets_para(clientes_no_lote)
+                # Fallback: ID que sumiu da reclassificação volta com bucket do BQ
+                for _, row in df.iterrows():
+                    cid = row["id_sacado_sac"]
+                    if cid in buckets:
+                        continue
+                    buckets[cid] = "mensagem" if pd.notna(row.get("dt_entrou_coluna_msg")) else "ligacao"
+                return buckets
         except Exception:
             pass
 
