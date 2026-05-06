@@ -1302,10 +1302,13 @@ def recomendar_acao(cliente) -> list[str]:
         and (dias_lig_tent is None or dias_lig_tent >= 3)
     )
 
-    # 1. Acordo vencido ≥7d → APENAS ligação (urgente). Nunca mensagem.
-    #    Em cooldown LIG: ações vazias — cliente continua visível em URGENTE
-    #    pelo fallback de bucket BQ, mas ninguém liga até cooldown expirar.
-    if cliente.get("_tem_acordo") and dias >= 7:
+    # 1. Acordo: SEMPRE só ligação (regra do Davi).
+    #    - dias < 7: nenhuma ação (espera completar 7d, regra "vencida há 7 dias")
+    #    - dias ≥ 7 + cooldown LIG OK: ligação urgente
+    #    - dias ≥ 7 + cooldown LIG ativo: aguarda cooldown
+    if cliente.get("_tem_acordo"):
+        if dias < 7:
+            return []
         return ["ligar", "urgente"] if cooldown_lig_ok else []
 
     # 2. Inadimplência ≥15d + sem contato 3d → só ligação (não dispersar com msg)
