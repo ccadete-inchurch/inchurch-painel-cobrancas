@@ -85,9 +85,10 @@ _ICON_GROUP = (
 def _motivo(bucket, acoes, c) -> tuple:
     """Retorna (texto, estilo) pro badge do card.
     Fonte primária: painel_tarefas_diarias. Fallback: N8N (histórico mais antigo).
-    estilo ∈ 'red' | 'blue' | 'purple' | 'gray' | ''.
+    estilo ∈ 'red' | 'blue' | 'purple' | 'lig' | 'msg' | ''.
 
-    Distingue ligação ATENDIDA (cooldown 5d) de TENTATIVA não atendida (informativo).
+    Cliente com acordo vencido (≥7d) tem badges prefixados por "Acordo vencido há Xd"
+    pra manter a info do acordo visível mesmo durante cooldown ou em outras colunas.
     """
     cid = c.get("id")
     tel = c.get("telefone", "")
@@ -102,24 +103,42 @@ def _motivo(bucket, acoes, c) -> tuple:
     if dias_msg is None:
         dias_msg = dsc_n8n
 
-    if "urgente" in acoes:
-        dias = c.get("dias_atraso") or 0
-        return f"Acordo vencido há {dias}d · ligação prioritária", "red"
+    n8n_hoje = (dsc_n8n == 0)
+    acordo_dias = c.get("dias_atraso") or 0
+    tem_acordo  = bool(c.get("_tem_acordo")) and acordo_dias >= 7
+    prefixo_ac  = f"Acordo vencido há {acordo_dias}d · "
 
     # Estado HOJE — painel + fallback N8N (sempre exigir contato HOJE no N8N)
-    n8n_hoje = (dsc_n8n == 0)
     if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
+        if tem_acordo:
+            return f"{prefixo_ac}ligação realizada hoje", "blue"
         return "Ligação atendida hoje", "blue"
     if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
+        if tem_acordo:
+            return f"{prefixo_ac}não atendeu ligação", "purple"
         return "Não atendeu ligação hoje", "purple"
     if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
+        if tem_acordo:
+            return f"{prefixo_ac}mensagem enviada hoje", "blue"
         return "Mensagem enviada hoje", "blue"
 
-    # Tentativa não atendida recente (sem atendida posterior) → roxo
+    # Acordo SEM cooldown ativo → ainda em URGENTE (lig prioritária)
+    if "urgente" in acoes:
+        return f"{prefixo_ac}ligação prioritária", "red"
+
+    # Tentativa não atendida recente (sem atendida posterior)
     tentou_sem_atender = (
         dias_lig_tent is not None
         and (dias_lig_atend is None or dias_lig_tent < dias_lig_atend)
     )
+
+    # Cliente acordo em cooldown ou em outra coluna — preserva info de acordo
+    if tem_acordo:
+        if tentou_sem_atender:
+            return f"{prefixo_ac}não atendeu ligação há {dias_lig_tent}d", "purple"
+        if dias_lig_atend is not None:
+            return f"{prefixo_ac}ligação realizada há {dias_lig_atend}d", "blue"
+        return f"Acordo vencido há {acordo_dias}d", "red"
 
     if bucket == "ligacao":
         if tentou_sem_atender:
@@ -146,8 +165,9 @@ def _motivo(bucket, acoes, c) -> tuple:
 
 def _render_card(score, acoes, c, role, idx, bucket=None):
     cor           = _score_cor(score)
+    _eh_acordo    = bool(c.get("_tem_acordo")) and (c.get("dias_atraso") or 0) >= 7
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
-    acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if "urgente" in acoes else ""
+    acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if _eh_acordo else ""
     motivo_txt, motivo_style = _motivo(bucket, acoes, c)
     _motivo_css = {
         "red":    "color:#ff5555;background:rgba(239,68,68,.08);border-left:2px solid #ff5555;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
@@ -198,9 +218,16 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
 
 
 def _render_atividades(store, clientes, role):
-    # Ciclo curto (~90s): atualiza painel/metricas. Ciclo longo (30min): cache N8N de fallback.
+    # Ciclo curto (~90s): atualiza painel/metricas. Ciclo longo (60s): cache N8N de fallback.
     _auto_refresh_painel()
     _auto_refresh_n8n()
+
+    # Garantia: a cada render, se o cache do painel está parado há >30s, recarrega.
+    # Cobre casos em que o fragmento ficou preso (sessão idle, runaway gate, etc).
+    _ts_painel = st.session_state.get("_painel_refresh_ts", 0)
+    if _time.time() - _ts_painel > 30:
+        load_cooldowns_from_painel()
+        st.session_state["_painel_refresh_ts"] = _time.time()
 
     hoje_str = date.today().strftime("%d/%m/%Y")
     nome  = current_nome()  or "usuário"
