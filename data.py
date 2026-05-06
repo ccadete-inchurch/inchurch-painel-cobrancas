@@ -949,7 +949,10 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
         interacao_hoje = (ultimo_contato_dias.get(tel) == 0)
         concluida_hoje = (concluida_dias.get(tel) == 0)
 
-        msg_env   = interacao_hoje
+        # mensagem_enviada só conta msg de cobrança real (status "mensagem"), não
+        # pré-ligação ("vou te ligar em instantes" → status "ligacao_pendente"),
+        # nem "não estava disponível", nem "além da ligação" — esses são fluxo de lig.
+        msg_env   = interacao_hoje and st_n8n == "mensagem"
         lig_feit  = concluida_hoje or (interacao_hoje and st_n8n in ("ligacao_pendente", "tentar_novamente"))
         lig_atend = concluida_hoje
 
