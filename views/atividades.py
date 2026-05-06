@@ -120,7 +120,7 @@ def _motivo(bucket, acoes, c) -> tuple:
         if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
             return f"{prefixo_ac} · ligação realizada hoje · ligação prioritária", "blue"
         if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
-            return f"{prefixo_ac} · não atendeu ligação · ligação prioritária", "purple"
+            return f"{prefixo_ac} · não atendeu ligação hoje · ligação prioritária", "purple"
         if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
             return f"{prefixo_ac} · mensagem enviada hoje · mensagem prioritária", "blue"
 
