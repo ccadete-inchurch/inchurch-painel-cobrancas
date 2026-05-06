@@ -10,39 +10,33 @@ from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
 
-@st.fragment(run_every=60)
-def _auto_refresh_n8n():
-    """A cada 60s: recarrega status N8N direto do Postgres (responsivo, sem atraso de transferência).
-    Detecta virada de dia BRT e força rerun do app inteiro pra renovar o lote."""
+def _detectar_virada_dia():
+    """Detecta virada do dia operacional (08:15 BRT) e força rerun do app
+    pra renovar o lote do dia. Chamado dentro do fragment dinâmico."""
     hoje = hoje_lote()
     if st.session_state.get("_dia_ativo") != hoje:
         st.session_state["_dia_ativo"] = hoje
         st.rerun(scope="app")
-        return
-    last_ts = st.session_state.get("_metricas_ts", 0)
-    if _time.time() - last_ts < 50:
-        return
-    load_mensagens_from_bq()
-    st.session_state["_metricas_ts"] = _time.time()
-    st.rerun(scope="app")
+        return True
+    return False
 
 
-@st.fragment(run_every=90)
-def _auto_refresh_painel():
-    """Ciclo curto (~90s): MERGE bools no painel + recarrega cooldowns/metricas.
-    Mantém contadores do topo e estado de hoje atualizados quase em tempo real."""
-    last_ts = st.session_state.get("_painel_refresh_ts", 0)
-    if _time.time() - last_ts < 80:
-        return
-    from auth import get_store
-    status_map = st.session_state.get("_msg_status", {})
-    clientes = get_store().get("clientes", []) if status_map else []
-    if status_map and clientes:
-        for _atd in _EMAIL_GRUPO.values():
-            atualizar_tarefas_bq(_atd, status_map, clientes)
-    load_cooldowns_from_painel()
-    st.session_state["_painel_refresh_ts"] = _time.time()
-    st.rerun(scope="app")
+def _atualizar_dados_periodicos(store_clientes):
+    """Recarrega N8N e painel se passou tempo suficiente. Não faz rerun —
+    chamada dentro do fragment dinâmico, que se reroda sozinho via run_every."""
+    last_n8n = st.session_state.get("_metricas_ts", 0)
+    if _time.time() - last_n8n > 50:
+        load_mensagens_from_bq()
+        st.session_state["_metricas_ts"] = _time.time()
+
+    last_painel = st.session_state.get("_painel_refresh_ts", 0)
+    if _time.time() - last_painel > 80:
+        status_map = st.session_state.get("_msg_status", {})
+        if status_map and store_clientes:
+            for _atd in _EMAIL_GRUPO.values():
+                atualizar_tarefas_bq(_atd, status_map, store_clientes)
+        load_cooldowns_from_painel()
+        st.session_state["_painel_refresh_ts"] = _time.time()
 
 
 def _acao_badge(acoes: list[str]) -> str:
@@ -262,16 +256,9 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
 
 
 def _render_atividades(store, clientes, role):
-    # Ciclo curto (~90s): atualiza painel/metricas. Ciclo longo (60s): cache N8N de fallback.
-    _auto_refresh_painel()
-    _auto_refresh_n8n()
-
-    # Garantia: a cada render, se o cache do painel está parado há >30s, recarrega.
-    # Cobre casos em que o fragmento ficou preso (sessão idle, runaway gate, etc).
-    _ts_painel = st.session_state.get("_painel_refresh_ts", 0)
-    if _time.time() - _ts_painel > 30:
-        load_cooldowns_from_painel()
-        st.session_state["_painel_refresh_ts"] = _time.time()
+    # Detecta virada do dia operacional (08:15 BRT) — força rerun pra renovar lote
+    if _detectar_virada_dia():
+        return
 
     hoje_str = date.today().strftime("%d/%m/%Y")
     nome  = current_nome()  or "usuário"
@@ -364,245 +351,220 @@ def _render_atividades(store, clientes, role):
         unsafe_allow_html=True,
     )
 
-    # ── Progresso do dia — contagem direto do painel_tarefas_diarias ─────────
-    _zero = {"mensagens": 0, "ligacoes": 0, "atendidas": 0}
-
-    def _metricas_lote_painel(ids_lote=None, buckets_map=None):
-        """Conta bools do painel hoje, separados por bucket pra refletir as metas:
-          - Mensagens Enviadas (50): só clientes do bucket MENSAGEM com msg=TRUE
-          - Ligações Realizadas (30): só clientes do bucket LIGAÇÃO/URGENTE com lig=TRUE
-          - Ligações Atendidas (15): só clientes do bucket LIGAÇÃO/URGENTE com atend=TRUE
-        Sem buckets_map (modo "Total"), conta tudo sem distinção.
-        """
-        acoes = st.session_state.get("_painel_acoes_hoje", {})
-        if ids_lote is None:
-            items = [(cid, a) for cid, a in acoes.items()]
-        else:
-            items = [(str(cid), acoes.get(str(cid), {})) for cid in ids_lote]
-
-        if buckets_map is not None:
-            msg = sum(1 for cid, a in items if a.get("msg") and buckets_map.get(cid) == "mensagem")
-            lig = sum(1 for cid, a in items if a.get("lig") and buckets_map.get(cid) in ("ligacao",))
-            atd = sum(1 for cid, a in items if a.get("atend") and buckets_map.get(cid) in ("ligacao",))
-            # Acordo (bucket=ligacao gravado no INSERT) entra em LIG. Cliente em
-            # urgente também tem bucket="ligacao" no BQ — já é coberto.
-        else:
-            msg = sum(1 for _, a in items if a.get("msg"))
-            lig = sum(1 for _, a in items if a.get("lig"))
-            atd = sum(1 for _, a in items if a.get("atend"))
-        return {"mensagens": msg, "ligacoes": lig, "atendidas": atd}
-
-    atendente_logado = _EMAIL_GRUPO.get(email)
-    if atendente_logado:
-        dados_m, label_m = _metricas_lote_painel(ids_hoje, buckets_hoje), atendente_logado
-    elif role in ("admin", "gestor") and _modo_admin == "Lote do dia" and _atendente_sel:
-        _key_lote_adm = f"_tarefas_admin_{hoje_lote()}_{_atendente_sel}"
-        _buckets_adm  = st.session_state.get(_key_lote_adm, {}) or {}
-        _ids_lote_adm = set(_buckets_adm.keys())
-        dados_m, label_m = _metricas_lote_painel(_ids_lote_adm, _buckets_adm), _atendente_sel
-    else:
-        dados_m, label_m = _metricas_lote_painel(None), "Total"
-
-    meta_msg, meta_lig, meta_atend = 50, 30, 15
-    n_msg, n_lig, n_atend = dados_m.get("mensagens", 0), dados_m.get("ligacoes", 0), dados_m.get("atendidas", 0)
-
-    st.markdown(f'<div style="font-size:13px;font-weight:700;color:#6b7280;margin-bottom:6px">{label_m}</div>', unsafe_allow_html=True)
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        pct = min(int(n_msg / meta_msg * 100), 100)
-        st.markdown(
-            f'<div class="metric-card"><div class="metric-label">Mensagens Enviadas</div>'
-            f'<div class="metric-value" style="color:#5fa3ff;font-size:32px">{n_msg}<span style="font-size:18px;color:#6b7280">/{meta_msg}</span></div>'
-            f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
-            f'<div style="background:#5fa3ff;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
-            unsafe_allow_html=True,
-        )
-    with m2:
-        pct = min(int(n_lig / meta_lig * 100), 100)
-        st.markdown(
-            f'<div class="metric-card"><div class="metric-label">Ligações Realizadas</div>'
-            f'<div class="metric-value" style="color:#f59e0b;font-size:32px">{n_lig}<span style="font-size:18px;color:#6b7280">/{meta_lig}</span></div>'
-            f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
-            f'<div style="background:#f59e0b;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
-            unsafe_allow_html=True,
-        )
-    with m3:
-        pct = min(int(n_atend / meta_atend * 100), 100)
-        st.markdown(
-            f'<div class="metric-card"><div class="metric-label">Ligações Atendidas</div>'
-            f'<div class="metric-value" style="color:#7cc243;font-size:32px">{n_atend}<span style="font-size:18px;color:#6b7280">/{meta_atend}</span></div>'
-            f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
-            f'<div style="background:#7cc243;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
-            unsafe_allow_html=True,
-        )
-
-    st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
-
-    # ── Montar fila ───────────────────────────────────────────────────────────
-    fila = []
-    for c in clientes:
-        h = get_hist(c["id"])
-        fila.append((calcular_score(c, h), recomendar_acao(c), c, h))
-    fila.sort(key=lambda x: x[0], reverse=True)
-
-    # ── Filtros ───────────────────────────────────────────────────────────────
+    # ── Filtros (fora do fragment — Streamlit preserva valor por session_state)
     grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
     fa, fb, fc = st.columns([1.3, 1.3, 2])
     with fa:
-        filtro_grupo = st.selectbox("Grupo", ["Todos"] + grupos_disp, label_visibility="collapsed", key="atv_filtro_grupo")
+        st.selectbox("Grupo", ["Todos"] + grupos_disp, label_visibility="collapsed", key="atv_filtro_grupo")
     with fb:
-        filtro_inativo = st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], label_visibility="collapsed", key="atv_filtro_inativo")
+        st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], label_visibility="collapsed", key="atv_filtro_inativo")
     with fc:
-        busca = st.text_input("Buscar", placeholder="Nome, CNPJ ou ID...", label_visibility="collapsed", key="atv_busca")
+        st.text_input("Buscar", placeholder="Nome, CNPJ ou ID...", label_visibility="collapsed", key="atv_busca")
 
-    if filtro_grupo != "Todos":
-        fila = [(s, a, c, h) for s, a, c, h in fila if c.get("_grupo") == filtro_grupo]
-    if filtro_inativo == "Ativos":
-        fila = [(s, a, c, h) for s, a, c, h in fila if not c.get("_inativo")]
-    elif filtro_inativo == "Inativos":
-        fila = [(s, a, c, h) for s, a, c, h in fila if c.get("_inativo")]
-    if busca:
-        # Normaliza busca: lowercase + remove pontuação pra casar com CNPJ digitado
-        # com ou sem máscara (XX.XXX.XXX/XXXX-XX vs XXXXXXXXXXXXXX).
-        import re as _re_b
-        b = busca.strip().lower()
-        b_digits = _re_b.sub(r'\D', '', b)
+    # ── Conteúdo dinâmico (métricas + kanban) — fragment com run_every=60s
+    # Atualiza a cada 60s sem fazer rerun do app inteiro: filtros (acima) ficam
+    # com seu valor preservado, sem reset.
+    @st.fragment(run_every=60)
+    def _kanban_dinamico():
+        # Atualiza dados periódicos (gates internos)
+        _atualizar_dados_periodicos(store["clientes"])
 
-        def _match(c):
-            nome  = str(c.get("nome") or "").lower()
-            cnpj  = str(c.get("cnpj") or "")
-            cnpj_digits = _re_b.sub(r'\D', '', cnpj)
-            cid   = str(c.get("id") or "")
-            if b in nome:
-                return True
-            if b in cnpj.lower():
-                return True
-            if b_digits and b_digits in cnpj_digits:
-                return True
-            if b_digits and b_digits == cid:
-                return True
-            return False
+        # Lê filtros do session_state (preserva valor entre runs do fragment)
+        filtro_grupo   = st.session_state.get("atv_filtro_grupo", "Todos")
+        filtro_inativo = st.session_state.get("atv_filtro_inativo", "Todos")
+        busca          = st.session_state.get("atv_busca", "") or ""
 
-        fila = [(s, a, c, h) for s, a, c, h in fila if _match(c)]
+        # ── Métricas dos cards do topo (contagem direta de painel_tarefas_diarias) ─
+        def _metricas_lote_painel(ids_lote=None, buckets_map=None):
+            acoes = st.session_state.get("_painel_acoes_hoje", {})
+            if ids_lote is None:
+                items = [(cid, a) for cid, a in acoes.items()]
+            else:
+                items = [(str(cid), acoes.get(str(cid), {})) for cid in ids_lote]
+            if buckets_map is not None:
+                msg = sum(1 for cid, a in items if a.get("msg") and buckets_map.get(cid) == "mensagem")
+                lig = sum(1 for cid, a in items if a.get("lig") and buckets_map.get(cid) in ("ligacao",))
+                atd = sum(1 for cid, a in items if a.get("atend") and buckets_map.get(cid) in ("ligacao",))
+            else:
+                msg = sum(1 for _, a in items if a.get("msg"))
+                lig = sum(1 for _, a in items if a.get("lig"))
+                atd = sum(1 for _, a in items if a.get("atend"))
+            return {"mensagens": msg, "ligacoes": lig, "atendidas": atd}
 
-    # ── Separar por coluna ────────────────────────────────────────────────────
-    # Lote estático: cliente entra na coluna inicial (URGENTE/LIGAÇÃO/MENSAGEM)
-    # definida pelo bucket gravado no BQ na geração do lote, e só sai pra
-    # CONCLUÍDA ou TENTAR NOVAMENTE quando bool do painel registra ação hoje.
-    # Sem transição MSG ↔ LIG no meio do dia. Fonte: painel_tarefas_diarias.
-    def _canal(bucket, acoes, acoes_hj, msg_st_n8n, dsc_n8n, regularizado=False, eh_acordo=False):
-        """Painel é fonte primária pra 'atendido hoje'. N8N entra como fallback
-        responsivo (latência: bot atua em segundos, painel só atualiza a cada 10min).
-        Fallback N8N só vale se contato foi HOJE (dsc_n8n==0) — status do cache vive 3d.
-        Cliente regularizado (pagou os atrasos hoje) sempre vai pra CONCLUÍDA.
-        Cliente com acordo SEMPRE em URGENTE (regra: acordo é sempre ligação),
-        mesmo em cooldown — fica visível como urgente até cooldown LIG passar.
-        """
-        if regularizado:
-            return "concluida"
-        n8n_hoje = (dsc_n8n == 0)
+        atendente_logado = _EMAIL_GRUPO.get(email)
+        if atendente_logado:
+            dados_m, label_m = _metricas_lote_painel(ids_hoje, buckets_hoje), atendente_logado
+        elif role in ("admin", "gestor") and _modo_admin == "Lote do dia" and _atendente_sel:
+            _key_lote_adm = f"_tarefas_admin_{hoje_lote()}_{_atendente_sel}"
+            _buckets_adm  = st.session_state.get(_key_lote_adm, {}) or {}
+            _ids_lote_adm = set(_buckets_adm.keys())
+            dados_m, label_m = _metricas_lote_painel(_ids_lote_adm, _buckets_adm), _atendente_sel
+        else:
+            dados_m, label_m = _metricas_lote_painel(None), "Total"
 
-        # Sinais de ligação só contam se cliente é bucket=ligacao (ou urgente/sem bucket).
-        # Cliente bucket=mensagem que recebeu ligação: ignoramos — ação fora da regra,
-        # não interfere no cooldown nem move o card.
-        if bucket != "mensagem":
-            if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
-                return "concluida"
-            if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
-                return "tentar_novamente"
+        meta_msg, meta_lig, meta_atend = 50, 30, 15
+        n_msg, n_lig, n_atend = dados_m.get("mensagens", 0), dados_m.get("ligacoes", 0), dados_m.get("atendidas", 0)
 
-        # Cliente acordo: SEMPRE em URGENTE até atender ligação ou não atender.
-        if eh_acordo:
-            return "urgente"
-
-        # Cliente bucket=ligacao só sai da LIGAÇÃO atendendo ou tentando ligar.
-        # Mensagem manual NÃO conclui — fica em LIGAÇÃO até cumprir a tarefa real.
-        if bucket == "ligacao":
-            return "ligacao"
-
-        # Sinais de mensagem só contam se cliente é bucket=mensagem (ou sem bucket).
-        if bucket != "ligacao":
-            if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
-                return "concluida"
-
-        if "urgente" in acoes:
-            return "urgente"
-        if bucket == "mensagem":
-            return "mensagem"
-        if "ligar" in acoes:
-            return "ligacao"
-        if "mensagem" in acoes:
-            return "mensagem"
-        return "aguardar"
-
-    # Na visão do lote, esconder só os passivos extremos (sem ação alguma)
-    _e_lote = email in _EMAIL_GRUPO or (role in ("admin", "gestor") and _modo_admin == "Lote do dia")
-
-    acordos = []; ligacao = []; so_msg = []; tentar_nov = []; concluida = []; aguardar = []
-    for item in fila:
-        s, a, c, h = item
-        tel = c.get("telefone", "")
-        bucket = buckets_hoje.get(c["id"]) if isinstance(buckets_hoje, dict) else None
-        acoes_hj = get_painel_acoes_hoje(c["id"])
-        ms_n8n = get_msg_status(tel)
-        dsc_n8n = get_ultimo_contato_n8n_dias(tel)
-        eh_acordo = bool(c.get("_tem_acordo")) and (c.get("dias_atraso") or 0) >= 7
-        canal = _canal(bucket, a, acoes_hj, ms_n8n, dsc_n8n,
-                       regularizado=c.get("_regularizado_hoje", False),
-                       eh_acordo=eh_acordo)
-
-        if _e_lote and canal == "aguardar":
-            continue
-
-        if   canal == "urgente":          acordos.append(item)
-        elif canal == "ligacao":          ligacao.append(item)
-        elif canal == "mensagem":         so_msg.append(item)
-        elif canal == "tentar_novamente": tentar_nov.append(item)
-        elif canal == "concluida":        concluida.append(item)
-        else:                             aguardar.append(item)
-
-    def _svg(path, color, size=13, ml=0, mr=6):
-        return (f'<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="{color}" '
-                f'style="flex-shrink:0;margin-left:{ml}px;margin-right:{mr}px">'
-                f'<path d="{path}"/></svg>')
-
-    _fire  = _svg("M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z", "#7cc243", 17)
-    _phone = _svg("M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z", "#f59e0b", 16)
-    _env   = _svg("M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z", "#e8eaf0", 15)
-    _wait  = _svg("M6 2v6l4 4-4 4v6h12v-6l-4-4 4-4V2H6zm10 14.5V20H8v-3.5l4-4 4 4zm-4-5l-4-4V4h8v3.5l-4 4z", "#6b7280", 16)
-    _retry = _svg("M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z", "#a78bfa", 16)
-    _check = _svg("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z", "#7cc243", 16)
-    _dot   = '<span style="color:#6b7280;margin:0 7px;font-weight:300;font-size:18px;line-height:1">|</span>'
-
-    colunas = [
-        (f'{_fire}URGENTE',           acordos,    "#ff5555"),
-        (f'{_env}MENSAGEM',           so_msg,     "#5fa3ff"),
-        (f'{_phone}LIGAÇÃO',          ligacao,    "#f59e0b"),
-        (f'{_retry}TENTAR NOVAMENTE', tentar_nov, "#a78bfa"),
-        (f'{_check}CONCLUÍDA',        concluida,  "#7cc243"),
-    ]
-
-    cols = st.columns(len(colunas))
-    for col, (titulo, itens, cor) in zip(cols, colunas):
-        with col:
+        st.markdown(f'<div style="font-size:13px;font-weight:700;color:#6b7280;margin-bottom:6px">{label_m}</div>', unsafe_allow_html=True)
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            pct = min(int(n_msg / meta_msg * 100), 100)
             st.markdown(
-                f'<div style="background:#1e2333;border-radius:10px 10px 0 0;padding:10px 12px;'
-                f'margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-                f'<span style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;color:#e8eaf0;letter-spacing:0.3px">{titulo}</span>'
-                f'<span style="background:#2a2f42;color:#e8eaf0;font-size:14px;font-weight:800;'
-                f'padding:2px 8px;border-radius:10px">{len(itens)}</span>'
-                f'</div>',
+                f'<div class="metric-card"><div class="metric-label">Mensagens Enviadas</div>'
+                f'<div class="metric-value" style="color:#5fa3ff;font-size:32px">{n_msg}<span style="font-size:18px;color:#6b7280">/{meta_msg}</span></div>'
+                f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
+                f'<div style="background:#5fa3ff;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
                 unsafe_allow_html=True,
             )
-            if not itens:
+        with m2:
+            pct = min(int(n_lig / meta_lig * 100), 100)
+            st.markdown(
+                f'<div class="metric-card"><div class="metric-label">Ligações Realizadas</div>'
+                f'<div class="metric-value" style="color:#f59e0b;font-size:32px">{n_lig}<span style="font-size:18px;color:#6b7280">/{meta_lig}</span></div>'
+                f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
+                f'<div style="background:#f59e0b;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+                unsafe_allow_html=True,
+            )
+        with m3:
+            pct = min(int(n_atend / meta_atend * 100), 100)
+            st.markdown(
+                f'<div class="metric-card"><div class="metric-label">Ligações Atendidas</div>'
+                f'<div class="metric-value" style="color:#7cc243;font-size:32px">{n_atend}<span style="font-size:18px;color:#6b7280">/{meta_atend}</span></div>'
+                f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
+                f'<div style="background:#7cc243;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+                unsafe_allow_html=True,
+            )
+
+        st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
+
+        # ── Monta fila ────────────────────────────────────────────────────────
+        fila = []
+        for c in clientes:
+            h = get_hist(c["id"])
+            fila.append((calcular_score(c, h), recomendar_acao(c), c, h))
+        fila.sort(key=lambda x: x[0], reverse=True)
+
+        # ── Aplica filtros (lê do session_state, preserva entre runs) ─────────
+        if filtro_grupo != "Todos":
+            fila = [(s, a, c, h) for s, a, c, h in fila if c.get("_grupo") == filtro_grupo]
+        if filtro_inativo == "Ativos":
+            fila = [(s, a, c, h) for s, a, c, h in fila if not c.get("_inativo")]
+        elif filtro_inativo == "Inativos":
+            fila = [(s, a, c, h) for s, a, c, h in fila if c.get("_inativo")]
+        if busca:
+            import re as _re_b
+            b = busca.strip().lower()
+            b_digits = _re_b.sub(r'\D', '', b)
+
+            def _match(c):
+                nome  = str(c.get("nome") or "").lower()
+                cnpj  = str(c.get("cnpj") or "")
+                cnpj_digits = _re_b.sub(r'\D', '', cnpj)
+                cid   = str(c.get("id") or "")
+                if b in nome:
+                    return True
+                if b in cnpj.lower():
+                    return True
+                if b_digits and b_digits in cnpj_digits:
+                    return True
+                if b_digits and b_digits == cid:
+                    return True
+                return False
+
+            fila = [(s, a, c, h) for s, a, c, h in fila if _match(c)]
+
+        # ── Separar por coluna ────────────────────────────────────────────────
+        def _canal(bucket, acoes, acoes_hj, msg_st_n8n, dsc_n8n, regularizado=False, eh_acordo=False):
+            if regularizado:
+                return "concluida"
+            n8n_hoje = (dsc_n8n == 0)
+            if bucket != "mensagem":
+                if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
+                    return "concluida"
+                if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
+                    return "tentar_novamente"
+            if eh_acordo:
+                return "urgente"
+            if bucket == "ligacao":
+                return "ligacao"
+            if bucket != "ligacao":
+                if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
+                    return "concluida"
+            if "urgente" in acoes:
+                return "urgente"
+            if bucket == "mensagem":
+                return "mensagem"
+            if "ligar" in acoes:
+                return "ligacao"
+            if "mensagem" in acoes:
+                return "mensagem"
+            return "aguardar"
+
+        _e_lote = email in _EMAIL_GRUPO or (role in ("admin", "gestor") and _modo_admin == "Lote do dia")
+
+        acordos = []; ligacao = []; so_msg = []; tentar_nov = []; concluida = []; aguardar = []
+        for item in fila:
+            s, a, c, h = item
+            tel = c.get("telefone", "")
+            bucket = buckets_hoje.get(c["id"]) if isinstance(buckets_hoje, dict) else None
+            acoes_hj = get_painel_acoes_hoje(c["id"])
+            ms_n8n = get_msg_status(tel)
+            dsc_n8n = get_ultimo_contato_n8n_dias(tel)
+            eh_acordo = bool(c.get("_tem_acordo")) and (c.get("dias_atraso") or 0) >= 7
+            canal = _canal(bucket, a, acoes_hj, ms_n8n, dsc_n8n,
+                           regularizado=c.get("_regularizado_hoje", False),
+                           eh_acordo=eh_acordo)
+            if _e_lote and canal == "aguardar":
+                continue
+            if   canal == "urgente":          acordos.append(item)
+            elif canal == "ligacao":          ligacao.append(item)
+            elif canal == "mensagem":         so_msg.append(item)
+            elif canal == "tentar_novamente": tentar_nov.append(item)
+            elif canal == "concluida":        concluida.append(item)
+            else:                             aguardar.append(item)
+
+        def _svg(path, color, size=13, ml=0, mr=6):
+            return (f'<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="{color}" '
+                    f'style="flex-shrink:0;margin-left:{ml}px;margin-right:{mr}px">'
+                    f'<path d="{path}"/></svg>')
+
+        _fire  = _svg("M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z", "#7cc243", 17)
+        _phone = _svg("M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z", "#f59e0b", 16)
+        _env   = _svg("M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z", "#e8eaf0", 15)
+        _retry = _svg("M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z", "#a78bfa", 16)
+        _check = _svg("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z", "#7cc243", 16)
+
+        colunas = [
+            (f'{_fire}URGENTE',           acordos,    "#ff5555"),
+            (f'{_env}MENSAGEM',           so_msg,     "#5fa3ff"),
+            (f'{_phone}LIGAÇÃO',          ligacao,    "#f59e0b"),
+            (f'{_retry}TENTAR NOVAMENTE', tentar_nov, "#a78bfa"),
+            (f'{_check}CONCLUÍDA',        concluida,  "#7cc243"),
+        ]
+
+        cols = st.columns(len(colunas))
+        for col, (titulo, itens, cor) in zip(cols, colunas):
+            with col:
                 st.markdown(
-                    '<div style="background:#181c26;border:1px solid #2a2f42;border-radius:10px;'
-                    'padding:20px;text-align:center;color:#4b5563;font-size:11px">Nenhum cliente</div>',
+                    f'<div style="background:#1e2333;border-radius:10px 10px 0 0;padding:10px 12px;'
+                    f'margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
+                    f'<span style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;color:#e8eaf0;letter-spacing:0.3px">{titulo}</span>'
+                    f'<span style="background:#2a2f42;color:#e8eaf0;font-size:14px;font-weight:800;'
+                    f'padding:2px 8px;border-radius:10px">{len(itens)}</span>'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
-            else:
-                for idx, (score, acoes, c, h) in enumerate(itens):
-                    bk = buckets_hoje.get(c["id"]) if isinstance(buckets_hoje, dict) else None
-                    with st.container():
-                        _render_card(score, acoes, c, role, f"{titulo}_{idx}", bucket=bk)
+                if not itens:
+                    st.markdown(
+                        '<div style="background:#181c26;border:1px solid #2a2f42;border-radius:10px;'
+                        'padding:20px;text-align:center;color:#4b5563;font-size:11px">Nenhum cliente</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    for idx, (score, acoes, c, h) in enumerate(itens):
+                        bk = buckets_hoje.get(c["id"]) if isinstance(buckets_hoje, dict) else None
+                        with st.container():
+                            _render_card(score, acoes, c, role, f"{titulo}_{idx}", bucket=bk)
+
+    _kanban_dinamico()
 
