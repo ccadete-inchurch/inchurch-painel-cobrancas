@@ -193,10 +193,8 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
         unsafe_allow_html=True,
     )
     if role != "gestor":
-        _bl, _bc, _br = st.columns([1, 1.2, 1])
-        with _bc:
-            if st.button("📋 Detalhes", key=f"atv_{c['id']}_{idx}", width="stretch"):
-                dialog_editar(c["id"])
+        if st.button("📋 Detalhes", key=f"atv_{c['id']}_{idx}", width="stretch"):
+            dialog_editar(c["id"])
 
 
 def _render_atividades(store, clientes, role):
