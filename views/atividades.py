@@ -4,7 +4,7 @@ import streamlit as st
 
 import time as _time
 
-from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_msg, get_painel_acoes_hoje, hoje_brt
+from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_brt
 from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
@@ -86,17 +86,18 @@ def _motivo(bucket, acoes, c) -> tuple:
     """Retorna (texto, estilo) pro badge do card.
     Fonte primária: painel_tarefas_diarias. Fallback: N8N (histórico mais antigo).
     estilo ∈ 'red' | 'blue' | 'purple' | 'gray' | ''.
+
+    Distingue ligação ATENDIDA (cooldown 5d) de TENTATIVA não atendida (informativo).
     """
     cid = c.get("id")
     tel = c.get("telefone", "")
     acoes_hj = get_painel_acoes_hoje(cid)
     msg_st_n8n  = get_msg_status(tel)
     dsc_n8n     = get_ultimo_contato_n8n_dias(tel)
-    dias_lig = get_painel_dias_lig(cid)
-    if dias_lig is None:
-        dias_lig = get_msg_concluida_dias(tel)  # fallback N8N
-    # Pra "última mensagem", painel é específico (mensagem do bot enviada);
-    # N8N traz qualquer contato — usamos como fallback aproximado.
+    dias_lig_atend = get_painel_dias_lig(cid)             # atendida (concluída)
+    dias_lig_tent  = get_painel_dias_lig_tentada(cid)     # qualquer tentativa
+    if dias_lig_atend is None:
+        dias_lig_atend = get_msg_concluida_dias(tel)      # fallback N8N
     dias_msg = get_painel_dias_msg(cid)
     if dias_msg is None:
         dias_msg = dsc_n8n
@@ -105,31 +106,41 @@ def _motivo(bucket, acoes, c) -> tuple:
         dias = c.get("dias_atraso") or 0
         return f"Acordo vencido há {dias}d · ligação prioritária", "red"
 
-    # Estado HOJE — painel + fallback N8N
-    if acoes_hj.get("atend") or msg_st_n8n == "concluida":
+    # Estado HOJE — painel + fallback N8N (sempre exigir contato HOJE no N8N)
+    n8n_hoje = (dsc_n8n == 0)
+    if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
         return "Ligação atendida hoje", "blue"
-    if acoes_hj.get("lig") or msg_st_n8n == "tentar_novamente":
-        return "Não atendeu a ligação", "purple"
-    if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and dsc_n8n == 0):
+    if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
+        return "Não atendeu ligação hoje", "purple"
+    if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
         return "Mensagem enviada hoje", "blue"
 
-    # Estado anterior — texto reflete o BUCKET
+    # Tentativa não atendida recente (sem atendida posterior) → roxo
+    tentou_sem_atender = (
+        dias_lig_tent is not None
+        and (dias_lig_atend is None or dias_lig_tent < dias_lig_atend)
+    )
+
     if bucket == "ligacao":
-        if dias_lig is not None:
-            return f"Última ligação há {dias_lig}d · Ligação", "gray"
-        return "Sem ligação anterior · Ligação", "gray"
+        if tentou_sem_atender:
+            return f"Não atendeu ligação há {dias_lig_tent}d · Ligação", "purple"
+        if dias_lig_atend is not None:
+            return f"Última ligação há {dias_lig_atend}d · Ligação", "lig"
+        return "Sem ligação anterior · Ligação", "lig"
     if bucket == "mensagem":
         if dias_msg is not None:
-            return f"Última mensagem há {dias_msg}d · Mensagem", "gray"
-        return "Sem mensagem anterior · Mensagem", "gray"
+            return f"Última mensagem há {dias_msg}d · Mensagem", "msg"
+        return "Sem mensagem anterior · Mensagem", "msg"
 
     # Sem bucket (gestor "Todos os clientes") — fallback por acoes
     if "ligar" in acoes:
-        return (f"Última ligação há {dias_lig}d · Ligação" if dias_lig is not None
-                else "Sem ligação anterior · Ligação"), "gray"
+        if tentou_sem_atender:
+            return f"Não atendeu ligação há {dias_lig_tent}d · Ligação", "purple"
+        return (f"Última ligação há {dias_lig_atend}d · Ligação" if dias_lig_atend is not None
+                else "Sem ligação anterior · Ligação"), "lig"
     if "mensagem" in acoes:
         return (f"Última mensagem há {dias_msg}d · Mensagem" if dias_msg is not None
-                else "Sem mensagem anterior · Mensagem"), "gray"
+                else "Sem mensagem anterior · Mensagem"), "msg"
     return "", ""
 
 
@@ -140,9 +151,10 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
     motivo_txt, motivo_style = _motivo(bucket, acoes, c)
     _motivo_css = {
         "red":    "color:#ff5555;background:rgba(239,68,68,.08);border-left:2px solid #ff5555;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
-        "blue":   "color:#5fa3ff;background:rgba(95,163,255,.08);border-left:2px solid #5fa3ff;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "blue":   "color:#7cc243;background:rgba(124,194,67,.08);border-left:2px solid #7cc243;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
         "purple": "color:#a78bfa;background:rgba(167,139,250,.08);border-left:2px solid #a78bfa;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
-        "gray":   "color:#f59e0b;background:rgba(245,158,11,.08);border-left:2px solid #f59e0b;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "lig":    "color:#5fa3ff;background:rgba(95,163,255,.08);border-left:2px solid #5fa3ff;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "msg":    "color:#5fa3ff;background:rgba(95,163,255,.08);border-left:2px solid #5fa3ff;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
     }
     motivo_html = (
         f'<div style="font-size:11px;font-weight:600;margin-bottom:8px;{_motivo_css.get(motivo_style, "")}">{motivo_txt}</div>'
@@ -254,9 +266,8 @@ def _render_atividades(store, clientes, role):
 
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
-        f'font-weight:800;color:#e8eaf0;margin-top:32px;margin-bottom:8px;letter-spacing:-1.5px;line-height:1.1">'
-        f'Bem-vindo(a), {nome}!</div>'
-        f'<div style="font-size:18px;font-weight:600;color:#6b7280;margin-bottom:32px">Atividades</div>',
+        f'font-weight:800;color:#e8eaf0;margin-top:32px;margin-bottom:32px;letter-spacing:-1.5px;line-height:1.1">'
+        f'Bem-vindo(a), {nome}!</div>',
         unsafe_allow_html=True,
     )
 
@@ -357,13 +368,14 @@ def _render_atividades(store, clientes, role):
     def _canal(bucket, acoes, acoes_hj, msg_st_n8n, dsc_n8n):
         """Painel é fonte primária pra 'atendido hoje'. N8N entra como fallback
         responsivo (latência: bot atua em segundos, painel só atualiza a cada 10min).
+        Fallback N8N só vale se contato foi HOJE (dsc_n8n==0) — status do cache vive 3d.
         """
-        # Atendido HOJE — painel OU N8N indicando contato hoje
-        if acoes_hj.get("atend") or msg_st_n8n == "concluida":
+        n8n_hoje = (dsc_n8n == 0)
+        if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
             return "concluida"
-        if acoes_hj.get("lig") or msg_st_n8n == "tentar_novamente":
+        if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
             return "tentar_novamente"
-        if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and dsc_n8n == 0):
+        if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
             return "concluida"
 
         if "urgente" in acoes:
@@ -414,7 +426,6 @@ def _render_atividades(store, clientes, role):
     _check = _svg("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z", "#7cc243", 16)
     _dot   = '<span style="color:#6b7280;margin:0 7px;font-weight:300;font-size:18px;line-height:1">|</span>'
 
-    _mostrar_aguardar = role in ("admin", "gestor")
     colunas = [
         (f'{_fire}URGENTE',           acordos,    "#7cc243"),
         (f'{_env}MENSAGEM',           so_msg,     "#5fa3ff"),
@@ -422,8 +433,6 @@ def _render_atividades(store, clientes, role):
         (f'{_retry}TENTAR NOVAMENTE', tentar_nov, "#a78bfa"),
         (f'{_check}CONCLUÍDA',        concluida,  "#7cc243"),
     ]
-    if _mostrar_aguardar:
-        colunas.append((f'{_wait}AGUARDAR', aguardar, "#4b5563"))
 
     cols = st.columns(len(colunas))
     for col, (titulo, itens, cor) in zip(cols, colunas):

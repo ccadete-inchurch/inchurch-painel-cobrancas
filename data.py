@@ -489,12 +489,14 @@ def load_cooldowns_from_painel():
     Fonte de verdade pra geração do lote (substitui cooldown N8N).
     Janela: 5 dias (cobre ligação 5d e mensagem 3d).
     Salva no session_state:
-      _painel_dias_msg[id]  → dias desde dt_mensagem_enviada (None se nunca)
-      _painel_dias_lig[id]  → dias desde dt_ligacao_feita    (None se nunca)
-      _painel_acoes_hoje[id] → {"msg": bool, "lig": bool, "atend": bool} do dia atual
+      _painel_dias_msg[id]            → dias desde dt_mensagem_enviada (None se nunca)
+      _painel_dias_lig[id]            → dias desde dt_ligacao_atendida — cooldown 5d só conta atendida
+      _painel_dias_lig_tentada[id]    → dias desde dt_ligacao_feita — qualquer tentativa (badge)
+      _painel_acoes_hoje[id]          → {"msg": bool, "lig": bool, "atend": bool} do dia atual
     """
     st.session_state.setdefault("_painel_dias_msg", {})
     st.session_state.setdefault("_painel_dias_lig", {})
+    st.session_state.setdefault("_painel_dias_lig_tentada", {})
     st.session_state.setdefault("_painel_acoes_hoje", {})
 
     client = get_bq_client()
@@ -517,7 +519,8 @@ def load_cooldowns_from_painel():
         df = client.query(f"""
             SELECT id_sacado_sac,
                    MAX(dt_mensagem_enviada) AS dt_msg,
-                   MAX(dt_ligacao_feita)    AS dt_lig
+                   MAX(dt_ligacao_atendida) AS dt_lig_atend,
+                   MAX(dt_ligacao_feita)    AS dt_lig_tent
             FROM `{_TAREFAS_TABLE}`
             WHERE data_tarefa >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 6 DAY)
             GROUP BY id_sacado_sac
@@ -526,15 +529,19 @@ def load_cooldowns_from_painel():
         return
 
     dias_msg = {}
-    dias_lig = {}
+    dias_lig = {}          # cooldown — só ligação ATENDIDA conta
+    dias_lig_tentada = {}  # tentativa de ligação (atendida OU não) — informativo, badge
     for _, row in df.iterrows():
         cid = str(row["id_sacado_sac"])
-        d_msg = _dias(row.get("dt_msg"))
-        d_lig = _dias(row.get("dt_lig"))
+        d_msg       = _dias(row.get("dt_msg"))
+        d_lig       = _dias(row.get("dt_lig_atend"))
+        d_lig_tent  = _dias(row.get("dt_lig_tent"))
         if d_msg is not None:
             dias_msg[cid] = d_msg
         if d_lig is not None:
             dias_lig[cid] = d_lig
+        if d_lig_tent is not None:
+            dias_lig_tentada[cid] = d_lig_tent
 
     # Bools do dia atual (pra status visual no kanban)
     try:
@@ -555,9 +562,10 @@ def load_cooldowns_from_painel():
             "atend": bool(row.get("ligacao_atendida")),
         }
 
-    st.session_state["_painel_dias_msg"]   = dias_msg
-    st.session_state["_painel_dias_lig"]   = dias_lig
-    st.session_state["_painel_acoes_hoje"] = acoes_hoje
+    st.session_state["_painel_dias_msg"]         = dias_msg
+    st.session_state["_painel_dias_lig"]         = dias_lig
+    st.session_state["_painel_dias_lig_tentada"] = dias_lig_tentada
+    st.session_state["_painel_acoes_hoje"]       = acoes_hoje
 
 
 def save_hist_to_bq(uid: str, cid: str, data: dict):

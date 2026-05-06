@@ -65,9 +65,17 @@ def get_painel_dias_msg(cliente_id: str):
 
 
 def get_painel_dias_lig(cliente_id: str):
-    """Dias desde a última ligação feita registrada em painel_tarefas_diarias, ou None."""
+    """Dias desde a última ligação ATENDIDA (concluída) em painel_tarefas_diarias, ou None.
+    Cooldown de 5 dias só conta ligação atendida — tentativas não atendidas não bloqueiam."""
     import streamlit as st
     return st.session_state.get("_painel_dias_lig", {}).get(str(cliente_id))
+
+
+def get_painel_dias_lig_tentada(cliente_id: str):
+    """Dias desde a última tentativa de ligação (atendida OU não), ou None.
+    Usado pra badge 'Não atendeu ligação há Xd' — informativo, não afeta cooldown."""
+    import streamlit as st
+    return st.session_state.get("_painel_dias_lig_tentada", {}).get(str(cliente_id))
 
 
 def get_painel_acoes_hoje(cliente_id: str) -> dict:
