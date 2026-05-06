@@ -106,39 +106,51 @@ def _motivo(bucket, acoes, c) -> tuple:
     n8n_hoje = (dsc_n8n == 0)
     acordo_dias = c.get("dias_atraso") or 0
     tem_acordo  = bool(c.get("_tem_acordo")) and acordo_dias >= 7
-    prefixo_ac  = f"Acordo vencido há {acordo_dias}d · "
+    prefixo_ac  = f"Acordo vencido há {acordo_dias}d"
 
-    # Estado HOJE — painel + fallback N8N (sempre exigir contato HOJE no N8N)
-    if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
-        if tem_acordo:
-            return f"{prefixo_ac}ligação realizada hoje", "blue"
-        return "Ligação atendida hoje", "blue"
-    if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
-        if tem_acordo:
-            return f"{prefixo_ac}não atendeu ligação", "purple"
-        return "Não atendeu ligação hoje", "purple"
-    if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
-        if tem_acordo:
-            return f"{prefixo_ac}mensagem enviada hoje", "blue"
-        return "Mensagem enviada hoje", "blue"
-
-    # Acordo SEM cooldown ativo → ainda em URGENTE (lig prioritária)
-    if "urgente" in acoes:
-        return f"{prefixo_ac}ligação prioritária", "red"
-
-    # Tentativa não atendida recente (sem atendida posterior)
     tentou_sem_atender = (
         dias_lig_tent is not None
         and (dias_lig_atend is None or dias_lig_tent < dias_lig_atend)
     )
 
-    # Cliente acordo em cooldown ou em outra coluna — preserva info de acordo
+    # ═══ Cliente com ACORDO ═══
+    # Padrão: "Acordo vencido há Xd · {contexto} · {ação prioritária}"
     if tem_acordo:
+        # Estado HOJE
+        if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
+            return f"{prefixo_ac} · ligação realizada hoje · ligação prioritária", "blue"
+        if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
+            return f"{prefixo_ac} · não atendeu ligação · ligação prioritária", "purple"
+        if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
+            return f"{prefixo_ac} · mensagem enviada hoje · mensagem prioritária", "blue"
+
+        # Sem ação hoje
+        # Caiu em MENSAGEM (cooldown LIG ativo) — mostra última msg + sufixo msg prio
+        if bucket == "mensagem" or "mensagem" in acoes:
+            if dias_msg is not None:
+                return f"{prefixo_ac} · última mensagem há {dias_msg}d · mensagem prioritária", "msg"
+            return f"{prefixo_ac} · sem mensagem anterior · mensagem prioritária", "msg"
+
+        # URGENTE (sem cooldown LIG) ou bucket=ligacao em cooldown total
         if tentou_sem_atender:
-            return f"{prefixo_ac}não atendeu ligação há {dias_lig_tent}d", "purple"
+            estilo = "red" if "urgente" in acoes else "purple"
+            return f"{prefixo_ac} · não atendeu ligação há {dias_lig_tent}d · ligação prioritária", estilo
         if dias_lig_atend is not None:
-            return f"{prefixo_ac}ligação realizada há {dias_lig_atend}d", "blue"
-        return f"Acordo vencido há {acordo_dias}d", "red"
+            estilo = "red" if "urgente" in acoes else "blue"
+            return f"{prefixo_ac} · última ligação há {dias_lig_atend}d · ligação prioritária", estilo
+        return f"{prefixo_ac} · sem ligação anterior · ligação prioritária", "red"
+
+    # ═══ Cliente sem acordo ═══
+    # Estado HOJE
+    if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
+        return "Ligação atendida hoje", "blue"
+    if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
+        return "Não atendeu ligação hoje", "purple"
+    if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
+        return "Mensagem enviada hoje", "blue"
+
+    if "urgente" in acoes:
+        return f"{prefixo_ac} · ligação prioritária", "red"
 
     if bucket == "ligacao":
         if tentou_sem_atender:
