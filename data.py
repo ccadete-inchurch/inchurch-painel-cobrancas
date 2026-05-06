@@ -1214,9 +1214,10 @@ def recomendar_acao(cliente) -> list[str]:
         and (dias_lig_tent is None or dias_lig_tent >= 3)
     )
 
-    # 1. Acordo vencido ≥7d (urgente, se cooldown LIG OK)
-    if cliente.get("_tem_acordo") and dias >= 7 and cooldown_lig_ok:
-        return ["ligar", "urgente"]
+    # 1. Acordo vencido ≥7d → APENAS ligação (nunca mensagem).
+    #    Em cooldown LIG → ações vazias (espera os 5d, não se dispersa em msg).
+    if cliente.get("_tem_acordo") and dias >= 7:
+        return ["ligar", "urgente"] if cooldown_lig_ok else []
 
     # 2. Inadimplência ≥15d + sem contato 3d → só ligação (não dispersar com msg)
     if dias >= 15 and sem_contato_3d and cooldown_lig_ok:
