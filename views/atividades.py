@@ -424,21 +424,21 @@ def _render_atividades(store, clientes, role):
         busca          = st.session_state.get("atv_busca", "") or ""
 
         # ── Métricas dos cards do topo (contagem direta de painel_tarefas_diarias) ─
+        # Conta TODOS os clientes do lote com bool=TRUE no painel — sem filtro de
+        # bucket. Cliente que recebeu pré-ligação (lig=T) conta em "Realizadas",
+        # cliente atendido (atend=T) conta em "Atendidas", cliente com msg conta
+        # em "Mensagens" — independente do bucket onde foi colocado de manhã.
         def _metricas_lote_painel(ids_lote=None, buckets_map=None):
             acoes = st.session_state.get("_painel_acoes_hoje", {})
             if ids_lote is None:
-                items = [(cid, a) for cid, a in acoes.items()]
+                items = list(acoes.values())
             else:
-                items = [(str(cid), acoes.get(str(cid), {})) for cid in ids_lote]
-            if buckets_map is not None:
-                msg = sum(1 for cid, a in items if a.get("msg") and buckets_map.get(cid) == "mensagem")
-                lig = sum(1 for cid, a in items if a.get("lig") and buckets_map.get(cid) in ("ligacao",))
-                atd = sum(1 for cid, a in items if a.get("atend") and buckets_map.get(cid) in ("ligacao",))
-            else:
-                msg = sum(1 for _, a in items if a.get("msg"))
-                lig = sum(1 for _, a in items if a.get("lig"))
-                atd = sum(1 for _, a in items if a.get("atend"))
-            return {"mensagens": msg, "ligacoes": lig, "atendidas": atd}
+                items = [acoes.get(str(cid), {}) for cid in ids_lote]
+            return {
+                "mensagens": sum(1 for a in items if a.get("msg")),
+                "ligacoes":  sum(1 for a in items if a.get("lig")),
+                "atendidas": sum(1 for a in items if a.get("atend")),
+            }
 
         atendente_logado = _EMAIL_GRUPO.get(email)
         if atendente_logado:
