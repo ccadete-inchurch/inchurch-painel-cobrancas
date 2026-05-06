@@ -117,30 +117,21 @@ def _motivo(bucket, acoes, c) -> tuple:
     )
 
     # ═══ Cliente com ACORDO ═══
-    # Padrão: "Acordo vencido há Xd · {contexto} · {ação prioritária}"
+    # Acordo é SEMPRE ligação (regra) — nunca mensagem.
+    # Padrão: "Acordo vencido há Xd · {contexto} · ligação prioritária"
     if tem_acordo:
         # Estado HOJE
         if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
             return f"{prefixo_ac} · ligação realizada hoje · ligação prioritária", "blue"
         if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
             return f"{prefixo_ac} · não atendeu ligação hoje · ligação prioritária", "purple"
-        if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
-            return f"{prefixo_ac} · mensagem enviada hoje · mensagem prioritária", "blue"
 
-        # Sem ação hoje
-        # Caiu em MENSAGEM (cooldown LIG ativo) — mostra última msg + sufixo msg prio
-        if bucket == "mensagem" or "mensagem" in acoes:
-            if dias_msg is not None:
-                return f"{prefixo_ac} · última mensagem há {dias_msg}d · mensagem prioritária", "msg"
-            return f"{prefixo_ac} · sem mensagem anterior · mensagem prioritária", "msg"
-
-        # URGENTE (sem cooldown LIG) ou bucket=ligacao em cooldown total
+        # Sem ação hoje — sempre URGENTE com info de cooldown/histórico
         if tentou_sem_atender:
-            estilo = "red" if "urgente" in acoes else "purple"
-            return f"{prefixo_ac} · não atendeu ligação há {dias_lig_tent}d · ligação prioritária", estilo
+            return f"{prefixo_ac} · não atendeu ligação há {dias_lig_tent}d · ligação prioritária", "red"
         if dias_lig_atend is not None:
-            estilo = "red" if "urgente" in acoes else "blue"
-            return f"{prefixo_ac} · última ligação há {dias_lig_atend}d · ligação prioritária", estilo
+            # Acordo em cooldown LIG — atendeu há Xd, espera passar 5d
+            return f"{prefixo_ac} · última ligação há {dias_lig_atend}d · ligação prioritária", "red"
         return f"{prefixo_ac} · sem ligação anterior · ligação prioritária", "red"
 
     # ═══ Cliente sem acordo ═══
@@ -481,11 +472,13 @@ def _render_atividades(store, clientes, role):
     # definida pelo bucket gravado no BQ na geração do lote, e só sai pra
     # CONCLUÍDA ou TENTAR NOVAMENTE quando bool do painel registra ação hoje.
     # Sem transição MSG ↔ LIG no meio do dia. Fonte: painel_tarefas_diarias.
-    def _canal(bucket, acoes, acoes_hj, msg_st_n8n, dsc_n8n, regularizado=False):
+    def _canal(bucket, acoes, acoes_hj, msg_st_n8n, dsc_n8n, regularizado=False, eh_acordo=False):
         """Painel é fonte primária pra 'atendido hoje'. N8N entra como fallback
         responsivo (latência: bot atua em segundos, painel só atualiza a cada 10min).
         Fallback N8N só vale se contato foi HOJE (dsc_n8n==0) — status do cache vive 3d.
         Cliente regularizado (pagou os atrasos hoje) sempre vai pra CONCLUÍDA.
+        Cliente com acordo SEMPRE em URGENTE (regra: acordo é sempre ligação),
+        mesmo em cooldown — fica visível como urgente até cooldown LIG passar.
         """
         if regularizado:
             return "concluida"
@@ -497,7 +490,7 @@ def _render_atividades(store, clientes, role):
         if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
             return "concluida"
 
-        if "urgente" in acoes:
+        if eh_acordo or "urgente" in acoes:
             return "urgente"
         if bucket == "ligacao":
             return "ligacao"
@@ -520,7 +513,10 @@ def _render_atividades(store, clientes, role):
         acoes_hj = get_painel_acoes_hoje(c["id"])
         ms_n8n = get_msg_status(tel)
         dsc_n8n = get_ultimo_contato_n8n_dias(tel)
-        canal = _canal(bucket, a, acoes_hj, ms_n8n, dsc_n8n, regularizado=c.get("_regularizado_hoje", False))
+        eh_acordo = bool(c.get("_tem_acordo")) and (c.get("dias_atraso") or 0) >= 7
+        canal = _canal(bucket, a, acoes_hj, ms_n8n, dsc_n8n,
+                       regularizado=c.get("_regularizado_hoje", False),
+                       eh_acordo=eh_acordo)
 
         if _e_lote and canal == "aguardar":
             continue
