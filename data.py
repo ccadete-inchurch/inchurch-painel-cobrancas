@@ -1320,13 +1320,14 @@ def recomendar_acao(cliente) -> list[str]:
     """Retorna ações elegíveis para o cliente. Cooldown via painel_tarefas_diarias.
     Regras:
       1. Acordo vencido ≥7d + cooldown LIG OK   → ['ligar', 'urgente']
-      2. Inadimplência ≥15d + sem contato ≥3d   → ['ligar']  (só ligação, sem msg)
-      3. Inadimplência ≥7d + cooldown LIG OK    → 'ligar'
-      4. Inadimplência ≥5d + cooldown MSG OK    → 'mensagem'
+      2. Inadimplência ≥7d + cooldown LIG OK    → 'ligar'
+      3. Inadimplência ≥5d + cooldown MSG OK    → 'mensagem'
 
     Cooldown LIG = 5 dias desde a última ligação ATENDIDA (não conta tentativas).
     Cooldown MSG = 3 dias desde a última mensagem enviada.
-    "Sem contato" = nem msg nem tentativa de ligação nos últimos 3 dias (painel).
+    
+    Nota: Ranking por score (2-fase) decide qual bucket (LIG ou MSG) o cliente cai.
+    Clientes com 15d+ sem contato ≥3d são elegíveis, mas podem cair em MSG se score for menor.
     """
     from helpers import get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg
 
@@ -1357,11 +1358,8 @@ def recomendar_acao(cliente) -> list[str]:
             return []
         return ["ligar", "urgente"] if cooldown_lig_ok else []
 
-    # 2. Inadimplência ≥15d + sem contato 3d → só ligação (não dispersar com msg)
-    if dias >= 15 and sem_contato_3d and cooldown_lig_ok:
-        return ["ligar"]
-
-    # 3 e 4: regras genéricas
+    # 2. Regras genéricas: ranking por score decide o bucket
+    #    Não há restrição: cliente com 15d pode cair em MSG se score for menor
     acoes = []
     if dias >= 7 and cooldown_lig_ok:
         acoes.append("ligar")
