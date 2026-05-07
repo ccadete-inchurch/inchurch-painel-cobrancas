@@ -128,15 +128,19 @@ def _motivo(bucket, acoes, c) -> tuple:
         return f"{prefixo_ac} · sem ligação anterior · ligação prioritária", "red"
 
     # ═══ Cliente sem acordo ═══
-    # Estado HOJE — atendeu ou tentou ligar (resultado real do bucket lig)
+    # Bucket=mensagem: tarefa é msg → se mandou msg, tarefa cumprida (verde)
+    # mesmo que tenha tentado ligar tb. Badge reflete a tarefa do bucket.
+    if bucket == "mensagem" and acoes_hj.get("msg"):
+        return "Mensagem enviada hoje", "blue"
+
+    # Bucket=ligacao: tarefa é ligar → atender ou tentar é o que importa
     if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
         return "Ligação atendida hoje", "blue"
     if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
         return "Não atendeu ligação hoje", "purple"
 
-    # Recebeu msg hoje — comportamento depende do bucket:
-    # - bucket=msg: tarefa concluída (verde)
-    # - bucket=lig: tarefa pendente, fica em LIGAÇÃO (laranja, alerta)
+    # Recebeu msg hoje sem ser bucket=msg (ex.: bucket=lig pegou pré-ligação):
+    # tarefa pendente, fica em LIGAÇÃO (laranja, alerta)
     if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
         if bucket == "ligacao":
             return "Mensagem enviada hoje · ligação pendente", "lig"
