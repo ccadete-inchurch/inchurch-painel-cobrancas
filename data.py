@@ -609,22 +609,6 @@ def _classificar_lote(cliente):
     return ("ligacao" if eh_ligacao else "mensagem", bool(cliente.get("_inativo")))
 
 
-def _candidato_lote(cliente):
-    """Retorna (eligible_lig, eligible_msg, eh_inativo) ou None.
-    Cliente pode ser elegível pra LIG (acoes contém 'ligar' ou 'urgente'),
-    pra MSG (acoes contém 'mensagem'), ou ambos. Lote estrito top 30 LIG + top 50 MSG
-    pega o cliente em apenas um bucket — sem cruzamento.
-    """
-    acoes = recomendar_acao(cliente)
-    if not acoes:
-        return None
-    eligible_lig = ("urgente" in acoes) or ("ligar" in acoes)
-    eligible_msg = "mensagem" in acoes
-    if not (eligible_lig or eligible_msg):
-        return None
-    return (eligible_lig, eligible_msg, bool(cliente.get("_inativo")))
-
-
 def _quota_atual_lote(lote_clientes):
     """Conta quotas usadas pelo lote atual: (lig, msg, inat_lig, inat_msg)."""
     lig = msg = inat_lig = inat_msg = 0
@@ -645,63 +629,117 @@ def _quota_atual_lote(lote_clientes):
 
 
 def _selecionar_top_30_50(clientes: list, lote_atual_ids: set | None = None) -> list:
-    """Núcleo da seleção de lote (Davi):
-      • Top 30 elegíveis pra LIG por score (cap inat 10) → bucket=ligacao.
-      • Próximos top 50 elegíveis pra MSG, EXCLUINDO quem já está em LIG, por score
-        (cap inat 15) → bucket=mensagem. Sem cruzamento.
-      • Overflow: se LIG < 30 (pool seco), MSG cresce até completar 80
-        (mesma elegibilidade MSG, mesmo cap inat 15).
-
+    """Seleção de lote com ranking por score + fallback por inativos aleatórios.
+    
+    FASE 1: Seleção por Score (com limites de inativos)
+      • Top 30 elegíveis pra LIG por score (limite máx 10 inativos)
+      • Top 50 elegíveis pra MSG por score (limite máx 15 inativos, excluindo LIG)
+      • Para se atingir o teto da categoria (pode ser < 30 ou < 50 se pool seco)
+    
+    FASE 2: Fallback Aleatório de Inativos (SEM limites)
+      • Se LIG < 30: sorteia inativos aleatórios até completar 30
+      • Se MSG < 50: sorteia inativos aleatórios até completar 50
+      • Objetivo: garantir 80 total = 30 LIG + 50 MSG
+    
     Retorna lista de (id, bucket).
     """
+    import random
+    
     lote_atual_ids = lote_atual_ids or set()
-
-    cands = []  # (score, cid, eli_lig, eli_msg, inat)
+    
+    # ─────────────────────────────────────────────────────────────────
+    # FASE 1: Seleção por Score com Limites de Inativos
+    # ─────────────────────────────────────────────────────────────────
+    
+    # Constrói lista com (score, cid, cliente_dict)
+    cands_all = []
     for c in clientes:
         if c["id"] in lote_atual_ids:
             continue
-        info = _candidato_lote(c)
-        if info is None:
-            continue
-        eli_lig, eli_msg, inat = info
         score = calcular_score(c, get_hist(c["id"]))
-        cands.append((score, c["id"], eli_lig, eli_msg, inat))
-    cands.sort(reverse=True, key=lambda x: x[0])
-
+        cands_all.append((score, c["id"], c))
+    
+    # Ordena por score (decrescente)
+    cands_all.sort(reverse=True, key=lambda x: x[0])
+    
     novos = []
-    inat_lig = inat_msg = 0
+    inat_lig = 0
+    inat_msg = 0
     ids_lig = set()
-
-    # Top 30 LIG (cap inat 10)
-    for score, cid, eli_lig, _eli_msg, inat in cands:
-        if len([x for x in novos if x[1] == "ligacao"]) >= _LOTE_META_LIG:
+    ids_msg = set()
+    
+    # Top 30 LIG: pega elegíveis com limite 10 inativos
+    for score, cid, c in cands_all:
+        if len(ids_lig) >= _LOTE_META_LIG:
             break
-        if not eli_lig:
+        
+        # Verifica elegibilidade para LIG
+        acoes = recomendar_acao(c)
+        if not ("ligar" in acoes or "urgente" in acoes):
             continue
-        if inat and inat_lig >= _LOTE_MAX_INAT_LIG:
+        
+        # Verifica limite de inativos
+        eh_inativo = bool(c.get("_inativo"))
+        if eh_inativo and inat_lig >= _LOTE_MAX_INAT_LIG:
             continue
+        
         novos.append((cid, "ligacao"))
         ids_lig.add(cid)
-        if inat:
+        if eh_inativo:
             inat_lig += 1
-
-    # Top 50 MSG (excluindo IDs em LIG, cap inat 15) + overflow se LIG curto
-    cap_msg = _LOTE_META_MSG + max(_LOTE_META_LIG - len(ids_lig), 0)  # cresce se LIG < 30
-    msg_count = 0
-    for score, cid, _eli_lig, eli_msg, inat in cands:
-        if msg_count >= cap_msg:
+    
+    # Top 50 MSG: pega elegíveis (excluindo LIG) com limite 15 inativos
+    for score, cid, c in cands_all:
+        if len(ids_msg) >= _LOTE_META_MSG:
             break
+        
+        # Pula se já foi selecionado em LIG (sem cruzamento)
         if cid in ids_lig:
-            continue  # sem cruzamento
-        if not eli_msg:
             continue
-        if inat and inat_msg >= _LOTE_MAX_INAT_MSG:
+        
+        # Verifica elegibilidade para MSG
+        acoes = recomendar_acao(c)
+        if "mensagem" not in acoes:
             continue
+        
+        # Verifica limite de inativos
+        eh_inativo = bool(c.get("_inativo"))
+        if eh_inativo and inat_msg >= _LOTE_MAX_INAT_MSG:
+            continue
+        
         novos.append((cid, "mensagem"))
-        msg_count += 1
-        if inat:
+        ids_msg.add(cid)
+        if eh_inativo:
             inat_msg += 1
-
+    
+    # ─────────────────────────────────────────────────────────────────
+    # FASE 2: Fallback Aleatório (SEM limites de inativos)
+    # ─────────────────────────────────────────────────────────────────
+    
+    ids_selecionados = ids_lig | ids_msg
+    
+    # Pool de inativos disponíveis (não selecionados, não no lote atual)
+    inativos_disponiveis = []
+    for score, cid, c in cands_all:
+        if cid not in ids_selecionados and c.get("_inativo"):
+            inativos_disponiveis.append(cid)
+    
+    # Completar LIG até 30 com inativos aleatórios
+    while len(ids_lig) < _LOTE_META_LIG and inativos_disponiveis:
+        idx = random.randint(0, len(inativos_disponiveis) - 1)
+        cid = inativos_disponiveis.pop(idx)
+        novos.append((cid, "ligacao"))
+        ids_lig.add(cid)
+        ids_selecionados.add(cid)
+    
+    # Completar MSG até 50 com inativos aleatórios
+    while len(ids_msg) < _LOTE_META_MSG and inativos_disponiveis:
+        idx = random.randint(0, len(inativos_disponiveis) - 1)
+        cid = inativos_disponiveis.pop(idx)
+        novos.append((cid, "mensagem"))
+        ids_msg.add(cid)
+        ids_selecionados.add(cid)
+    
     return novos
 
 
@@ -717,10 +755,17 @@ def _quota_buckets_para(clientes_no_lote: list) -> dict:
 
 
 def selecionar_lote_com_quotas(grupo_clientes, lote_clientes=None):
-    """Geração nova do lote do dia. Retorna lista [(id, bucket)].
-    Algoritmo: top 30 LIG + top 50 MSG estrito (sem cruzamento, sem fallback).
-    Overflow MSG até 80 quando LIG < 30 (única exceção do Davi: ligamos pra base
-    inteira em 5 dias).
+    """Geração do lote do dia. Retorna lista [(id, bucket)].
+    
+    FASE 1: Top 30 LIG + Top 50 MSG (com limites de inativos)
+      • Ordena por score
+      • Top 30 elegíveis para LIG (máx 10 inativos)
+      • Top 50 elegíveis para MSG, excluindo LIG (máx 15 inativos)
+    
+    FASE 2: Fallback Aleatório (sem limites de inativos)
+      • Se LIG < 30: completa com inativos aleatórios
+      • Se MSG < 50: completa com inativos aleatórios
+      • Objetivo: garantir 80 total = 30 LIG + 50 MSG
     """
     lote_clientes = lote_clientes or []
     ids_no_lote = {c["id"] for c in lote_clientes}
