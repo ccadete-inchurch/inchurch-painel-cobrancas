@@ -1,0 +1,26 @@
+name: Gerar lote diário (08:15 BRT)
+
+on:
+  schedule:
+    # 11:15 UTC = 08:15 BRT (UTC-3). GitHub Actions pode atrasar até ~10min.
+    - cron: '15 11 * * *'
+  # Permite disparar manualmente pelo GitHub UI (Actions → Run workflow)
+  workflow_dispatch:
+
+jobs:
+  gerar-lote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Disparar geração de lote no painel
+        run: |
+          response=$(curl -s -o /tmp/body -w "%{http_code}" \
+            "https://painel-cobrancas-inchurch.streamlit.app/?cron_token=${{ secrets.CRON_TOKEN }}")
+          echo "HTTP status: $response"
+          echo "--- Resposta ---"
+          cat /tmp/body | head -50
+          if [ "$response" != "200" ]; then
+            echo "❌ Falha ao disparar geração (status $response)"
+            exit 1
+          fi
+          echo "✅ Geração disparada com sucesso"
