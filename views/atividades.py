@@ -450,14 +450,18 @@ def _render_atividades(store, clientes, role):
         
         def _metricas_lote_painel(ids_lote=None, buckets_map=None):
             acoes = st.session_state.get("_painel_acoes_hoje", {})
+            buckets_norm = None
+            if buckets_map is not None:
+                # BQ pode devolver id_sacado_sac como int; painel usa chave string.
+                buckets_norm = {str(cid): bucket for cid, bucket in buckets_map.items()}
             if ids_lote is None:
                 items = [(cid, a) for cid, a in acoes.items()]
             else:
                 items = [(str(cid), acoes.get(str(cid), {})) for cid in ids_lote]
-            if buckets_map is not None:
-                msg = sum(1 for cid, a in items if a.get("msg") and buckets_map.get(cid) == "mensagem")
-                lig = sum(1 for cid, a in items if a.get("lig") and buckets_map.get(cid) in ("ligacao",))
-                atd = sum(1 for cid, a in items if a.get("atend") and buckets_map.get(cid) in ("ligacao",))
+            if buckets_norm is not None:
+                msg = sum(1 for cid, a in items if a.get("msg") and buckets_norm.get(cid) == "mensagem")
+                lig = sum(1 for cid, a in items if a.get("lig") and buckets_norm.get(cid) in ("ligacao",))
+                atd = sum(1 for cid, a in items if a.get("atend") and buckets_norm.get(cid) in ("ligacao",))
             else:
                 msg = sum(1 for _, a in items if a.get("msg"))
                 lig = sum(1 for _, a in items if a.get("lig"))
