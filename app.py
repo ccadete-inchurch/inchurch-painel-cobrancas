@@ -40,29 +40,6 @@ def tela_principal():
 
 
 def main():
-    # Cron headless: dispara geração de lote sem login (GitHub Actions diário 08:15 BRT)
-    _ctok = st.query_params.get("cron_token")
-    if _ctok:
-        _expected = st.secrets.get("CRON_TOKEN", "")
-        if not _expected or _ctok != _expected:
-            st.write("❌ cron_token inválido")
-            st.stop()
-        try:
-            from data import gerar_tarefas_do_dia, processar_dados_bigquery, _EMAIL_GRUPO, load_mensagens_from_bq, load_cooldowns_from_painel
-            clientes, _ = processar_dados_bigquery()
-            load_mensagens_from_bq()
-            load_cooldowns_from_painel()
-            resumo = {}
-            for _email_atd in _EMAIL_GRUPO.keys():
-                buckets = gerar_tarefas_do_dia(clientes, _email_atd)
-                resumo[_email_atd] = len(buckets or {})
-            st.write("✅ Lote gerado")
-            st.write(resumo)
-        except Exception as e:
-            st.write(f"❌ Erro ao gerar lote: {e}")
-            raise
-        st.stop()
-
     # Popup OAuth callback: processa o código e fecha o popup
     _code  = st.query_params.get("code")
     _state = st.query_params.get("state", "")
