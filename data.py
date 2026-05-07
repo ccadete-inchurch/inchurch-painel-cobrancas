@@ -155,10 +155,14 @@ def fetch_cobrancas_competencia():
         GROUP BY id_sacado_sac
     ) p ON c.id_sacado_sac = p.id_sacado_sac
     LEFT JOIN (
+        -- Cliente só conta como "acordo" se tem cobrança categoria 1.2.13
+        -- VENCIDA (dt_vencimento <= hoje). Cobranças de acordo a vencer
+        -- não disparam a regra "acordo vencido há 7d".
         SELECT DISTINCT id_sacado_sac
         FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
         WHERE comp_st_conta_cont = '1.2.13'
           AND fl_status_recb = '0'
+          AND dt_vencimento_recb <= CURRENT_TIMESTAMP()
     ) ac ON c.id_sacado_sac = ac.id_sacado_sac
     WHERE c.fl_status_recb = '0'
     GROUP BY c.id_sacado_sac, c.id_recebimento_recb
