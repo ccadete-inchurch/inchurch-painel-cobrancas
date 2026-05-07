@@ -10,24 +10,20 @@ on:
 jobs:
   gerar-lote:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: Disparar geração de lote no painel
-        run: |
-          response=$(curl -sL -o /tmp/body -w "%{http_code}" \
-            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
-            -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
-            -H "Accept-Language: pt-BR,pt;q=0.9,en;q=0.8" \
-            "https://painel-cobrancas-inchurch.streamlit.app/?cron_token=${{ secrets.CRON_TOKEN }}")
-          echo "HTTP status: $response"
-          echo "--- Resposta ---"
-          cat /tmp/body | head -100
-          if [ "$response" != "200" ]; then
-            echo "❌ Falha ao disparar geração (status $response)"
-            exit 1
-          fi
-          if ! grep -q "Lote gerado" /tmp/body; then
-            echo "❌ Status 200 mas resposta não contém 'Lote gerado' — provável tela de login"
-            exit 1
-          fi
-          echo "✅ Geração disparada com sucesso"
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Gerar lote
+        env:
+          GCP_SA_JSON:     ${{ secrets.GCP_SA_JSON }}
+          PG_N8N_PASSWORD: ${{ secrets.PG_N8N_PASSWORD }}
+        run: python scripts/gerar_lote_cron.py
