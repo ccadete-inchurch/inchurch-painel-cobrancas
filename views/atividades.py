@@ -139,8 +139,6 @@ def _motivo(bucket, acoes, c) -> tuple:
     if acoes_hj.get("atend"):
         return "Ligação atendida hoje", "blue"
     if acoes_hj.get("lig"):
-        if dias_lig_tent is not None and dias_lig_tent > 0:
-            return f"Não atendeu ligação há {dias_lig_tent}d", "purple"
         return "Não atendeu ligação hoje", "purple"
 
     # Recebeu msg hoje sem ser bucket=msg (ex.: bucket=lig pegou pré-ligação):
@@ -561,20 +559,22 @@ def _render_atividades(store, clientes, role):
             # no _motivo.
             if regularizado:
                 return "concluida"
+            if bucket != "mensagem":
+                if acoes_hj.get("atend"):
+                    return "concluida"
+                if acoes_hj.get("lig"):
+                    return "tentar_novamente"
             if eh_acordo:
                 return "urgente"
             if bucket == "ligacao":
                 return "ligacao"
-            if bucket == "mensagem":
+            if bucket != "ligacao":
                 if acoes_hj.get("msg"):
                     return "concluida"
-                return "mensagem"
-            if acoes_hj.get("atend"):
-                return "concluida"
-            if acoes_hj.get("lig"):
-                return "tentar_novamente"
             if "urgente" in acoes:
                 return "urgente"
+            if bucket == "mensagem":
+                return "mensagem"
             if "ligar" in acoes:
                 return "ligacao"
             if "mensagem" in acoes:
