@@ -800,14 +800,26 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
     """Retorna {id: bucket} do lote do dia ('ligacao' | 'mensagem').
     Gera e persiste no BQ se ainda não existe lote para hoje.
     Bucket guia tanto a coluna inicial do kanban quanto o timestamp gravado no BQ.
+
+    Bloqueia geração em sábado/domingo: cobrança não opera no fim de semana,
+    então não polui BQ com lotes de dias que ninguém vai trabalhar.
     """
     atendente = _EMAIL_GRUPO.get(email_logado)
     if not atendente:
         # gestor vê todos — bucket fake só pra render (não usado em filtro)
         return {c["id"]: "ligacao" for c in clientes}
 
-    client = get_bq_client()
     hoje = hoje_lote()
+
+    # Bloqueia geração no fim de semana (sábado=5, domingo=6).
+    # Painel mostra lote vazio nesses dias.
+    try:
+        if date.fromisoformat(hoje).weekday() >= 5:
+            return {}
+    except Exception:
+        pass
+
+    client = get_bq_client()
 
     # Lote já gerado hoje? Lê bucket DIRETO do BQ (autoritativo).
     # O bucket foi gravado no INSERT inicial pelo algoritmo top 30/50 — a métrica
