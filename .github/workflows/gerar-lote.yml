@@ -1,10 +1,10 @@
 name: Gerar lote diário (08:15 BRT)
 
 on:
-  schedule:
-    # 11:15 UTC = 08:15 BRT (UTC-3). GitHub Actions pode atrasar até ~10min.
-    - cron: '15 11 * * *'
-  # Permite disparar manualmente pelo GitHub UI (Actions → Run workflow)
+  # Disparado pelo n8n via API (POST /actions/workflows/gerar-lote.yml/dispatches)
+  # ou manualmente pelo GitHub UI (Actions → Run workflow).
+  # Cron schedule do GitHub é best-effort (atrasa horas, drops em alta carga) —
+  # n8n é scheduler confiável e dispara essa action via repository_dispatch.
   workflow_dispatch:
 
 jobs:
