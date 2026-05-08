@@ -4,7 +4,7 @@ import streamlit as st
 
 import time as _time
 
-from helpers import get_hist, fmt_moeda_plain, dias_html, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote
+from helpers import get_hist, fmt_moeda_plain, dias_html, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias
 from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
@@ -100,6 +100,7 @@ def _motivo(bucket, acoes, c) -> tuple:
     dias_msg = get_painel_dias_msg(cid)
     if dias_msg is None:
         dias_msg = dsc_n8n
+    streak_lig = get_streak_cooldown_dias(cid)            # cooldown 7d (3 falhas em série)
 
     acordo_dias = c.get("dias_atraso") or 0
     tem_acordo  = bool(c.get("_tem_acordo")) and acordo_dias >= 7
@@ -121,6 +122,10 @@ def _motivo(bucket, acoes, c) -> tuple:
             return f"{prefixo_ac} · ligação realizada hoje · ligação prioritária", "blue"
         if acoes_hj.get("lig"):
             return f"{prefixo_ac} · não atendeu ligação hoje · ligação prioritária", "purple"
+
+        # Cliente em cooldown 7d por 3 tentativas falhadas — bloqueia ligação
+        if streak_lig is not None and streak_lig > 0:
+            return f"{prefixo_ac} · cooldown {streak_lig}d (3 tentativas falhadas) · ligação prioritária", "red"
 
         # Sem ação de ligação hoje — info de cooldown/histórico de ligação
         if tentou_sem_atender:
@@ -152,6 +157,8 @@ def _motivo(bucket, acoes, c) -> tuple:
         return f"{prefixo_ac} · ligação prioritária", "red"
 
     if bucket == "ligacao":
+        if streak_lig is not None and streak_lig > 0:
+            return f"Cooldown {streak_lig}d (3 tentativas falhadas) · Ligação", "purple"
         if tentou_sem_atender:
             return f"Não atendeu ligação há {dias_lig_tent}d · Ligação", "purple"
         if dias_lig_atend is not None:

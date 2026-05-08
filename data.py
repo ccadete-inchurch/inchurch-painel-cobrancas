@@ -527,11 +527,14 @@ def load_cooldowns_from_painel():
       _painel_dias_lig[id]            → dias desde dt_ligacao_atendida — cooldown 5d só conta atendida
       _painel_dias_lig_tentada[id]    → dias desde dt_ligacao_feita — qualquer tentativa (badge)
       _painel_acoes_hoje[id]          → {"msg": bool, "lig": bool, "atend": bool} do dia atual
+      _streak_cooldown_dias[id]       → dias restantes de cooldown 7d por 3 tentativas falhadas
+                                         consecutivas (None se cooldown não está ativo)
     """
     st.session_state.setdefault("_painel_dias_msg", {})
     st.session_state.setdefault("_painel_dias_lig", {})
     st.session_state.setdefault("_painel_dias_lig_tentada", {})
     st.session_state.setdefault("_painel_acoes_hoje", {})
+    st.session_state.setdefault("_streak_cooldown_dias", {})
 
     client = get_bq_client()
     if not client:
@@ -600,6 +603,53 @@ def load_cooldowns_from_painel():
     st.session_state["_painel_dias_lig"]         = dias_lig
     st.session_state["_painel_dias_lig_tentada"] = dias_lig_tentada
     st.session_state["_painel_acoes_hoje"]       = acoes_hoje
+
+    # 3-strikes cooldown: 3 tentativas falhadas consecutivas (lig_feita=TRUE,
+    # lig_atendida=FALSE) → bloqueia ligação por 7 dias a partir da última tentativa.
+    # Janela de busca: 14 dias (cobre o cooldown + algum histórico).
+    streak_cooldown = {}
+    try:
+        df_streak = client.query(f"""
+            WITH tentativas AS (
+                SELECT
+                    id_sacado_sac,
+                    data_tarefa,
+                    ligacao_atendida,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY id_sacado_sac
+                        ORDER BY data_tarefa DESC
+                    ) AS rn
+                FROM `{_TAREFAS_TABLE}`
+                WHERE data_tarefa >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 14 DAY)
+                  AND ligacao_feita = TRUE
+            )
+            SELECT
+                id_sacado_sac,
+                MAX(data_tarefa) AS ultima_tentativa
+            FROM tentativas
+            WHERE rn <= 3
+            GROUP BY id_sacado_sac
+            HAVING COUNT(*) >= 3
+               AND COUNTIF(ligacao_atendida) = 0
+        """).to_dataframe()
+
+        for _, row in df_streak.iterrows():
+            cid = str(row["id_sacado_sac"])
+            ultima = row.get("ultima_tentativa")
+            if ultima is None or pd.isna(ultima):
+                continue
+            try:
+                ultima_d = ultima if isinstance(ultima, date) else pd.to_datetime(ultima).date()
+                dias_desde = (hoje_brt_dt - ultima_d).days
+                restante = 7 - dias_desde
+                if restante > 0:
+                    streak_cooldown[cid] = restante
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    st.session_state["_streak_cooldown_dias"] = streak_cooldown
 
 
 def save_hist_to_bq(uid: str, cid: str, data: dict):
@@ -1408,7 +1458,7 @@ def recomendar_acao(cliente) -> list[str]:
     Nota: Ranking por score (2-fase) decide qual bucket (LIG ou MSG) o cliente cai.
     Clientes com 15d+ sem contato ≥3d são elegíveis, mas podem cair em MSG se score for menor.
     """
-    from helpers import get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg
+    from helpers import get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_streak_cooldown_dias
 
     cobracas = [c for c in cliente.get("_cobracas", []) if (c.get("dias_atraso") or 0) > 0]
     if cobracas:
@@ -1420,8 +1470,9 @@ def recomendar_acao(cliente) -> list[str]:
     dias_lig      = get_painel_dias_lig(cid)          # ligação atendida (cooldown 5d)
     dias_lig_tent = get_painel_dias_lig_tentada(cid)  # qualquer tentativa de lig
     dias_msg      = get_painel_dias_msg(cid)          # mensagem enviada (cooldown 3d)
+    streak_lig    = get_streak_cooldown_dias(cid)     # 3 tentativas falhadas → cooldown 7d (só lig)
 
-    cooldown_lig_ok = dias_lig is None or dias_lig >= 5
+    cooldown_lig_ok = (dias_lig is None or dias_lig >= 5) and (streak_lig is None or streak_lig <= 0)
     cooldown_msg_ok = dias_msg is None or dias_msg >= 3
     sem_contato_3d  = (
         (dias_msg is None or dias_msg >= 3)
