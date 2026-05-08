@@ -45,6 +45,15 @@ _MSG_CONCLUIDA    = ("além da ligação",)
 _MSG_NAO_ATENDIDA = ("não estava disponível",)
 _MSG_PRE_LIGACAO  = ("vou te ligar em instantes",)
 
+# Mensagens da IA/saudação automática — não devem contar como ação real do atendente.
+# Substring matching em LOWER(message). Se aparecer qualquer um desses padrões,
+# a mensagem é IGNORADA pelo load/MERGE (não vira interacao_hoje, não marca bools).
+_MSG_IA_IGNORAR = (
+    "atendente glória",
+    "oii, aqui é a priscila da inchurch. como posso te ajudar?",
+    "oii, aqui é a ana carolina da inchurch. como posso te ajudar?",
+)
+
 # ── Lote diário: caps de inativos (únicos hard caps) + alvo ──────────────────
 # Ligação = urgente OU ligar. Mensagem = só mensagem.
 # Caps duros: no máximo 10 inativos em ligação e 15 inativos em mensagem.
@@ -425,6 +434,11 @@ def load_mensagens_from_bq():
         if not chave:
             continue
         msg = str(msg_raw or "").lower()
+
+        # Ignora mensagens de IA/saudação automática — não viram ação real.
+        if any(p in msg for p in _MSG_IA_IGNORAR):
+            continue
+
         if ts is not None:
             ultimo_contato_ts[chave] = ts
 
@@ -466,12 +480,18 @@ def load_mensagens_from_bq():
         if d is not None:
             ultimo_contato_dias[phone] = d
 
-    # Último contato histórico completo (MAX por telefone, sem janela)
+    # Último contato histórico completo (MAX por telefone, sem janela).
+    # Filtra mensagens de IA/saudação automática pra ficar consistente com o loop acima.
+    ia_filter_sql = " AND ".join(
+        f"POSITION(LOWER('{p.replace(chr(39), chr(39)+chr(39))}') IN LOWER(message)) = 0"
+        for p in _MSG_IA_IGNORAR
+    )
     try:
         cur.execute(f"""
             SELECT telefone, MAX(created_at) AS ultimo_contato
             FROM {table}
             WHERE LOWER(fromme::text) = 'true'
+              AND {ia_filter_sql}
             GROUP BY telefone
         """)
         for tel_raw, ts in cur.fetchall():
@@ -492,6 +512,10 @@ def load_mensagens_from_bq():
     st.session_state["_msg_status"]              = status_map
     st.session_state["_msg_concluida_dias"]      = concluida_dias
     st.session_state["_msg_ultimo_contato_dias"] = ultimo_contato_dias
+    # Timestamps brutos (UTC) — usados pelo atualizar_tarefas_bq pra filtrar
+    # interações fora da janela [criação do lote, meia-noite BRT da data do lote).
+    st.session_state["_msg_concluida_ts"]        = concluida_ts
+    st.session_state["_msg_ultimo_contato_ts"]   = ultimo_contato_ts
 
 
 def load_cooldowns_from_painel():
@@ -966,6 +990,12 @@ def get_lote_buckets_bq(atendente: str, clientes: list) -> dict:
 def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
     """Atualiza bools na tabela de tarefas com base no status n8n do dia.
     Usa um único MERGE em vez de 80 UPDATEs individuais.
+
+    Janela temporal: só conta interações N8N que aconteceram **depois** do cliente
+    entrar no lote (`dt_entrou_coluna_*`) e **antes da meia-noite BRT** do dia do lote.
+    Isso garante:
+      • Bot/automação que dispara antes do lote ser criado não infla métricas
+      • Atividade depois das 24:00 BRT não atualiza mais o lote do dia anterior
     """
     client = get_bq_client()
     if not client:
@@ -979,12 +1009,49 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
             p = p[2:]
         return (p[:2] + p[-8:]) if len(p) >= 10 else p
 
-    # Filtra só interações de HOJE (não contamina com status do cache de 3 dias)
-    ultimo_contato_dias = st.session_state.get("_msg_ultimo_contato_dias", {})
-    concluida_dias      = st.session_state.get("_msg_concluida_dias", {})
+    # Timestamps das interações N8N (UTC) — filtra por janela do lote.
+    ultimo_contato_ts = st.session_state.get("_msg_ultimo_contato_ts", {})
+    concluida_ts      = st.session_state.get("_msg_concluida_ts", {})
+
+    # Lê o horário em que cada cliente do lote entrou na coluna (criação do lote).
+    # Janela = [dt_entrou_coluna_*, meia-noite BRT da data do lote).
+    try:
+        df_lote = client.query(f"""
+            SELECT id_sacado_sac,
+                   COALESCE(dt_entrou_coluna_msg, dt_entrou_coluna_ligacao) AS dt_entrada
+            FROM `{_TAREFAS_TABLE}`
+            WHERE atendente   = '{atendente}'
+              AND data_tarefa = '{hoje}'
+        """).to_dataframe()
+    except Exception:
+        return
+    if df_lote.empty:
+        return
+    dt_lote = {str(row["id_sacado_sac"]): row["dt_entrada"] for _, row in df_lote.iterrows()}
+
+    # Cutoff superior: meia-noite BRT do dia seguinte ao lote (= fim do dia operacional)
+    _BRT_TZ = timezone(timedelta(hours=-3))
+    try:
+        data_lote = datetime.strptime(hoje, "%Y-%m-%d").date()
+    except Exception:
+        return
+    dt_cutoff_fim = datetime.combine(data_lote + timedelta(days=1), datetime.min.time(), tzinfo=_BRT_TZ)
+
+    def _dentro_da_janela(ts, dt_entrada):
+        """ts (UTC) deve estar entre [dt_entrada, dt_cutoff_fim)."""
+        if ts is None or dt_entrada is None:
+            return False
+        if hasattr(ts, "tzinfo") and ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        if hasattr(dt_entrada, "tzinfo") and dt_entrada.tzinfo is None:
+            dt_entrada = dt_entrada.replace(tzinfo=timezone.utc)
+        return dt_entrada <= ts < dt_cutoff_fim
 
     rows = []
     for c in clientes:
+        cid = str(c.get("id", ""))
+        if cid not in dt_lote:
+            continue  # cliente não está no lote do dia
         tel = _norm(c.get("telefone", ""))
         if not tel:
             continue
@@ -992,16 +1059,16 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
         if not st_n8n:
             continue
 
-        interacao_hoje = (ultimo_contato_dias.get(tel) == 0)
-        concluida_hoje = (concluida_dias.get(tel) == 0)
+        dt_entrada    = dt_lote[cid]
+        ts_contato    = ultimo_contato_ts.get(tel)
+        ts_concluida  = concluida_ts.get(tel)
 
-        # mensagem_enviada=TRUE em qualquer interação do bot (inclui pré-ligação,
-        # "não estava disponível", etc). Atendente sabe que houve msg.
-        # A separação entre meta-msg e meta-lig é feita na contagem do card,
-        # filtrando por bucket: msg só conta bucket=mensagem.
-        msg_env   = interacao_hoje
-        lig_feit  = concluida_hoje or (interacao_hoje and st_n8n in ("ligacao_pendente", "tentar_novamente"))
-        lig_atend = concluida_hoje
+        interacao_post = _dentro_da_janela(ts_contato,   dt_entrada)
+        concluida_post = _dentro_da_janela(ts_concluida, dt_entrada)
+
+        msg_env   = interacao_post
+        lig_feit  = concluida_post or (interacao_post and st_n8n in ("ligacao_pendente", "tentar_novamente"))
+        lig_atend = concluida_post
 
         if msg_env or lig_feit or lig_atend:
             rows.append((c["id"], msg_env, lig_feit, lig_atend))

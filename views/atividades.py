@@ -4,7 +4,7 @@ import streamlit as st
 
 import time as _time
 
-from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_status, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote
+from helpers import get_hist, fmt_moeda_plain, dias_html, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote
 from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
@@ -90,7 +90,8 @@ def _motivo(bucket, acoes, c) -> tuple:
     cid = c.get("id")
     tel = c.get("telefone", "")
     acoes_hj = get_painel_acoes_hoje(cid)
-    msg_st_n8n  = get_msg_status(tel)
+    # N8N só é usado pra fallback informativo do "Última mensagem há Xd" —
+    # não decide mais estado de tarefa do dia (que vem só do BQ painel).
     dsc_n8n     = get_ultimo_contato_n8n_dias(tel)
     dias_lig_atend = get_painel_dias_lig(cid)             # atendida (concluída)
     dias_lig_tent  = get_painel_dias_lig_tentada(cid)     # qualquer tentativa
@@ -100,7 +101,6 @@ def _motivo(bucket, acoes, c) -> tuple:
     if dias_msg is None:
         dias_msg = dsc_n8n
 
-    n8n_hoje = (dsc_n8n == 0)
     acordo_dias = c.get("dias_atraso") or 0
     tem_acordo  = bool(c.get("_tem_acordo")) and acordo_dias >= 7
     prefixo_ac  = f"Acordo vencido há {acordo_dias}d"
@@ -113,11 +113,13 @@ def _motivo(bucket, acoes, c) -> tuple:
     # ═══ Cliente com ACORDO ═══
     # Acordo é SEMPRE ligação (regra) — mensagem é irrelevante, não aparece no badge.
     # Padrão: "Acordo vencido há Xd · {contexto} · ligação prioritária"
+    # Estado "hoje" lê SÓ BQ painel (acoes_hj). N8N session_state é informativo,
+    # não decide estado da tarefa do dia.
     if tem_acordo:
         # Estado HOJE — só liga (atendeu ou tentou e não atendeu)
-        if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
+        if acoes_hj.get("atend"):
             return f"{prefixo_ac} · ligação realizada hoje · ligação prioritária", "blue"
-        if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
+        if acoes_hj.get("lig"):
             return f"{prefixo_ac} · não atendeu ligação hoje · ligação prioritária", "purple"
 
         # Sem ação de ligação hoje — info de cooldown/histórico de ligação
@@ -134,14 +136,14 @@ def _motivo(bucket, acoes, c) -> tuple:
         return "Mensagem enviada hoje", "blue"
 
     # Bucket=ligacao: tarefa é ligar → atender ou tentar é o que importa
-    if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
+    if acoes_hj.get("atend"):
         return "Ligação atendida hoje", "blue"
-    if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
+    if acoes_hj.get("lig"):
         return "Não atendeu ligação hoje", "purple"
 
     # Recebeu msg hoje sem ser bucket=msg (ex.: bucket=lig pegou pré-ligação):
     # tarefa pendente, fica em LIGAÇÃO (laranja, alerta)
-    if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
+    if acoes_hj.get("msg"):
         if bucket == "ligacao":
             return "Mensagem enviada hoje · ligação pendente", "lig"
         return "Mensagem enviada hoje", "blue"
@@ -551,21 +553,23 @@ def _render_atividades(store, clientes, role):
             fila = [(s, a, c, h) for s, a, c, h in fila if _match(c)]
 
         # ── Separar por coluna ────────────────────────────────────────────────
-        def _canal(bucket, acoes, acoes_hj, msg_st_n8n, dsc_n8n, regularizado=False, eh_acordo=False):
+        def _canal(bucket, acoes, acoes_hj, regularizado=False, eh_acordo=False):
+            # Estado "hoje" lê SÓ BQ painel (acoes_hj). N8N não é mais usado pra
+            # decidir coluna — só pra badge informativo de "última mensagem há Xd"
+            # no _motivo.
             if regularizado:
                 return "concluida"
-            n8n_hoje = (dsc_n8n == 0)
             if bucket != "mensagem":
-                if acoes_hj.get("atend") or (msg_st_n8n == "concluida" and n8n_hoje):
+                if acoes_hj.get("atend"):
                     return "concluida"
-                if acoes_hj.get("lig") or (msg_st_n8n == "tentar_novamente" and n8n_hoje):
+                if acoes_hj.get("lig"):
                     return "tentar_novamente"
             if eh_acordo:
                 return "urgente"
             if bucket == "ligacao":
                 return "ligacao"
             if bucket != "ligacao":
-                if acoes_hj.get("msg") or (msg_st_n8n in ("mensagem", "ligacao_pendente") and n8n_hoje):
+                if acoes_hj.get("msg"):
                     return "concluida"
             if "urgente" in acoes:
                 return "urgente"
@@ -582,13 +586,10 @@ def _render_atividades(store, clientes, role):
         acordos = []; ligacao = []; so_msg = []; tentar_nov = []; concluida = []; aguardar = []
         for item in fila:
             s, a, c, h = item
-            tel = c.get("telefone", "")
             bucket = buckets_hoje.get(c["id"]) if isinstance(buckets_hoje, dict) else None
             acoes_hj = get_painel_acoes_hoje(c["id"])
-            ms_n8n = get_msg_status(tel)
-            dsc_n8n = get_ultimo_contato_n8n_dias(tel)
             eh_acordo = bool(c.get("_tem_acordo")) and (c.get("dias_atraso") or 0) >= 7
-            canal = _canal(bucket, a, acoes_hj, ms_n8n, dsc_n8n,
+            canal = _canal(bucket, a, acoes_hj,
                            regularizado=c.get("_regularizado_hoje", False),
                            eh_acordo=eh_acordo)
             if _e_lote and canal == "aguardar":
