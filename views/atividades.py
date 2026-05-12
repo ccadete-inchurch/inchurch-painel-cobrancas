@@ -566,13 +566,22 @@ def _render_atividades(store, clientes, role):
             # no _motivo.
             if regularizado:
                 return "concluida"
+            # Acordo prioritário: estado hoje vem primeiro (atendeu → concluída,
+            # tentou e não atendeu → tentar_novamente). Urgente é só o fallback
+            # quando nada foi tentado ainda. Antes, acordo+bucket=msg+lig_hoje
+            # caía direto em "urgente" ignorando que já foi tentado — inconsistente
+            # com o badge "não atendeu ligação hoje" do _motivo.
+            if eh_acordo:
+                if acoes_hj.get("atend"):
+                    return "concluida"
+                if acoes_hj.get("lig"):
+                    return "tentar_novamente"
+                return "urgente"
             if bucket != "mensagem":
                 if acoes_hj.get("atend"):
                     return "concluida"
                 if acoes_hj.get("lig"):
                     return "tentar_novamente"
-            if eh_acordo:
-                return "urgente"
             if bucket == "ligacao":
                 return "ligacao"
             if bucket != "ligacao":
