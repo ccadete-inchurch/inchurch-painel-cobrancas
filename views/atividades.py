@@ -116,7 +116,10 @@ def _motivo(bucket, acoes, c) -> tuple:
     # Padrão: "Acordo vencido há Xd · {contexto} · ligação prioritária"
     # Estado "hoje" lê SÓ BQ painel (acoes_hj). N8N session_state é informativo,
     # não decide estado da tarefa do dia.
-    if tem_acordo:
+    # Só aplica branch de acordo se bucket=lig (consistente com _canal). Se cliente
+    # virou acordo durante o dia mas bucket=msg, segue como msg normal — não muda
+    # de coluna no meio do expediente.
+    if tem_acordo and bucket == "ligacao":
         # Estado HOJE — só liga (atendeu ou tentou e não atendeu)
         if acoes_hj.get("atend"):
             return f"{prefixo_ac} · ligação realizada hoje · ligação prioritária", "blue"
@@ -566,12 +569,11 @@ def _render_atividades(store, clientes, role):
             # no _motivo.
             if regularizado:
                 return "concluida"
-            # Acordo prioritário: estado hoje vem primeiro (atendeu → concluída,
-            # tentou e não atendeu → tentar_novamente). Urgente é só o fallback
-            # quando nada foi tentado ainda. Antes, acordo+bucket=msg+lig_hoje
-            # caía direto em "urgente" ignorando que já foi tentado — inconsistente
-            # com o badge "não atendeu ligação hoje" do _motivo.
-            if eh_acordo:
+            # Bucket é congelado no nascimento do lote (08:30). Acordo é
+            # re-avaliado em tempo real — se cliente vira acordo durante o
+            # dia, NÃO pode mudar de coluna (confundiria a atendente).
+            # Só respeita acordo (URGENTE) se o bucket original já era lig.
+            if eh_acordo and bucket == "ligacao":
                 if acoes_hj.get("atend"):
                     return "concluida"
                 if acoes_hj.get("lig"):
