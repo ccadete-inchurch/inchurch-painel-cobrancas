@@ -742,27 +742,41 @@ def _selecionar_top_30_50(clientes: list, lote_atual_ids: set | None = None) -> 
     ids_lig = set()
     ids_msg = set()
     
-    # Top 30 LIG: pega elegíveis com limite 10 inativos.
-    # Acordo é prioridade absoluta — entra em LIG mesmo se passar do limite
-    # de 10 inativos (regra: acordo é sempre ligação, nunca pode cair em msg).
+    # Top 30 LIG: 2 passes pra dar prioridade a acordos.
+    # Pass A: pega ACORDOS primeiro (respeitando o limit estrito de 10 inativos).
+    # Pass B: completa LIG com NÃO-ACORDOS (respeitando o limit residual).
+    # Acordos que não couberem no limit ficam fora do lote (entram outro dia).
+
+    # ── Pass A: ACORDOS primeiro ─────────────────────────────────────
     for score, cid, c in cands_all:
         if len(ids_lig) >= _LOTE_META_LIG:
             break
-
-        # Verifica elegibilidade para LIG
         acoes = recomendar_acao(c)
-        if not ("ligar" in acoes or "urgente" in acoes):
+        if "urgente" not in acoes:
             continue
-
-        # Verifica limite de inativos — acordo bypassa
         eh_inativo = bool(c.get("_inativo"))
-        eh_acordo  = "urgente" in acoes
-        if eh_inativo and not eh_acordo and inat_lig >= _LOTE_MAX_INAT_LIG:
-            continue
-
+        if eh_inativo and inat_lig >= _LOTE_MAX_INAT_LIG:
+            continue  # respeita o limit estrito
         novos.append((cid, "ligacao"))
         ids_lig.add(cid)
-        if eh_inativo and not eh_acordo:
+        if eh_inativo:
+            inat_lig += 1
+
+    # ── Pass B: NÃO-ACORDOS completam ────────────────────────────────
+    for score, cid, c in cands_all:
+        if len(ids_lig) >= _LOTE_META_LIG:
+            break
+        if cid in ids_lig:
+            continue
+        acoes = recomendar_acao(c)
+        if "ligar" not in acoes or "urgente" in acoes:
+            continue  # só não-acordo
+        eh_inativo = bool(c.get("_inativo"))
+        if eh_inativo and inat_lig >= _LOTE_MAX_INAT_LIG:
+            continue
+        novos.append((cid, "ligacao"))
+        ids_lig.add(cid)
+        if eh_inativo:
             inat_lig += 1
     
     # Top 50 MSG: pega elegíveis (excluindo LIG) com limite 15 inativos
@@ -795,38 +809,26 @@ def _selecionar_top_30_50(clientes: list, lote_atual_ids: set | None = None) -> 
     
     ids_selecionados = ids_lig | ids_msg
 
-    # Pool de inativos disponíveis (não selecionados, não no lote atual).
-    # Separa acordos: acordo só pode ir pra LIG (regra de negócio).
-    inativos_acordo      = []  # vão pra LIG via fallback
-    inativos_disponiveis = []  # vão pra LIG ou MSG normalmente
+    # Pool de inativos NÃO-ACORDO pra fallback. Acordos sobrantes (que não
+    # couberam no limit de 10 inativos da Fase 1A) ficam fora do lote —
+    # entram em outro dia conforme as vagas se abrem.
+    inativos_disponiveis = []
     for score, cid, c in cands_all:
         if cid in ids_selecionados or not c.get("_inativo"):
             continue
         if c.get("_tem_acordo") and (c.get("dias_atraso") or 0) >= 7:
-            inativos_acordo.append(cid)
-        else:
-            inativos_disponiveis.append(cid)
+            continue  # acordo nunca cai em msg, e se não coube em LIG fica fora
+        inativos_disponiveis.append(cid)
 
-    # Completar LIG até 30: prioriza acordos primeiro, depois inativos aleatórios
-    while len(ids_lig) < _LOTE_META_LIG and (inativos_acordo or inativos_disponiveis):
-        if inativos_acordo:
-            cid = inativos_acordo.pop(0)
-        else:
-            idx = random.randint(0, len(inativos_disponiveis) - 1)
-            cid = inativos_disponiveis.pop(idx)
+    # Completar LIG até 30 com inativos não-acordo aleatórios
+    while len(ids_lig) < _LOTE_META_LIG and inativos_disponiveis:
+        idx = random.randint(0, len(inativos_disponiveis) - 1)
+        cid = inativos_disponiveis.pop(idx)
         novos.append((cid, "ligacao"))
         ids_lig.add(cid)
         ids_selecionados.add(cid)
 
-    # Acordos restantes que não couberam em LIG → também vão pra LIG
-    # (estoura o target de 30, mas acordo é prioridade — não pode virar msg)
-    while inativos_acordo:
-        cid = inativos_acordo.pop(0)
-        novos.append((cid, "ligacao"))
-        ids_lig.add(cid)
-        ids_selecionados.add(cid)
-
-    # Completar MSG até 50 com inativos NÃO-ACORDO aleatórios
+    # Completar MSG até 50 com inativos não-acordo aleatórios
     while len(ids_msg) < _LOTE_META_MSG and inativos_disponiveis:
         idx = random.randint(0, len(inativos_disponiveis) - 1)
         cid = inativos_disponiveis.pop(idx)
