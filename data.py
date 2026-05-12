@@ -149,7 +149,7 @@ def fetch_cobrancas_competencia():
     FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
     LEFT JOIN (
         SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(grupo) AS nm_grupo
-        FROM `business-intelligence-467516.Splgc.vw-splgc-clientes_unificada`
+        FROM `business-intelligence-467516.Splgc.splgc-grupo`
         GROUP BY id_sacado_sac
     ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
     LEFT JOIN (
@@ -239,7 +239,7 @@ def fetch_proximas_cobracas(days: int = 30) -> pd.DataFrame:
     FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
     LEFT JOIN (
         SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(grupo) AS nm_grupo
-        FROM `business-intelligence-467516.Splgc.vw-splgc-clientes_unificada`
+        FROM `business-intelligence-467516.Splgc.splgc-grupo`
         GROUP BY id_sacado_sac
     ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
     LEFT JOIN (
@@ -974,7 +974,7 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
                 FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
                 LEFT JOIN (
                     SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(grupo) AS nm_grupo
-                    FROM `business-intelligence-467516.Splgc.vw-splgc-clientes_unificada`
+                    FROM `business-intelligence-467516.Splgc.splgc-grupo`
                     GROUP BY id_sacado_sac
                 ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
                 LEFT JOIN (
