@@ -17,6 +17,9 @@ __pycache__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Documentação
+Documentacoes/
+
 # IDEs
 .vscode/
 .idea/
@@ -24,3 +27,4 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
