@@ -68,7 +68,7 @@ def _render_dashboard(store, clientes, role):
         im = {"promise": "🟠",      "retorno": "📞",       "semcontato": "⚠️"}
         st.markdown(
             f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
-            f'<span style="font-family:Syne,sans-serif;font-weight:700;font-size:16px">📌 Clientes Fixados</span>'
+            f'<span style="font-weight:700;font-size:16px;color:#e8eaf0;letter-spacing:0.3px">📌 Clientes Fixados</span>'
             f'<span style="background:#ef4444;color:white;font-size:12px;padding:3px 10px;border-radius:20px;font-weight:700">{len(pendencias)}</span>'
             f'</div>',
             unsafe_allow_html=True,
@@ -224,16 +224,24 @@ def _render_dashboard(store, clientes, role):
     col_w    = [3, 0.8, 1.5, 1, 1, 1.5, 1.5, 1.5] + ([0.8] if has_edit else [])
     hdrs_t   = ["Cliente", "Score", "Saldo devedor", "Atraso em dias", "Histórico", "Telefone", "Grupo", "Último Contato"] + ([""] if has_edit else [])
 
-    hdr_cells = "".join(
-        f'<div style="flex:{w};padding:14px 14px;font-size:12px;text-transform:uppercase;'
-        f'letter-spacing:1.2px;color:#8b94a5;font-weight:700;white-space:nowrap;min-width:0">{h}</div>'
-        for w, h in zip(col_w, hdrs_t)
-    )
+    # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
+    # Fundo escuro aplicado via container CSS abaixo.
     st.markdown(
-        f'<div style="display:flex;gap:1rem;background:#1e2333;border:1px solid #2a2f42;'
-        f'border-radius:12px 12px 0 0;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.1)">{hdr_cells}</div>',
+        '<div style="background:#1e2333;border:1px solid #2a2f42;'
+        'border-radius:12px 12px 0 0;padding:0;margin-bottom:0;'
+        'box-shadow:0 2px 8px rgba(0,0,0,.1)">',
         unsafe_allow_html=True,
     )
+    hdr_cols = st.columns(col_w, vertical_alignment="center")
+    for hcol, htxt in zip(hdr_cols, hdrs_t):
+        with hcol:
+            st.markdown(
+                f'<div style="padding:14px 14px;font-size:12px;text-transform:uppercase;'
+                f'letter-spacing:1.2px;color:#8b94a5;font-weight:700;white-space:nowrap;'
+                f'overflow:hidden;text-overflow:ellipsis">{htxt}</div>',
+                unsafe_allow_html=True,
+            )
+    st.markdown('</div>', unsafe_allow_html=True)
 
     if df_page.empty:
         st.markdown(
