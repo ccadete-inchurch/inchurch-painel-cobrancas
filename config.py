@@ -24,6 +24,8 @@ MAP_INAD = {
 
 # ── Ordenação da tabela ───────────────────────────────────────────────────────
 SORT_MAP = {
+    "↑ Maior score":  ("_score",      False),
+    "↓ Menor score":  ("_score",      True),
     "↑ Maior atraso": ("dias_atraso", False),
     "↓ Menor atraso": ("dias_atraso", True),
     "↑ Maior saldo":  ("valor",       False),

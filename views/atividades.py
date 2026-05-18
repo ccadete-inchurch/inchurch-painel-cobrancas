@@ -88,7 +88,7 @@ def _tels_html(c) -> str:
     outros_txt = " · ".join(tels[1:]).replace('"', '&quot;')
     return (
         f'<span title="Outros: {outros_txt}">{tels[0]} '
-        f'<span style="color:#5fa3ff;font-size:10px;font-weight:600">'
+        f'<span style="color:#6b7280;font-size:10px;font-weight:600">'
         f'+{extras}</span></span>'
     )
 

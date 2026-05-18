@@ -61,14 +61,14 @@ def _render_dashboard(store, clientes, role):
 
     st.markdown("")
 
-    # ── Pendências ────────────────────────────────────────────────────────────
+    # ── Clientes fixados ──────────────────────────────────────────────────────
     pendencias = calcular_pendencias(clientes)
     if pendencias:
         cm = {"promise": "#f97316", "retorno": "#4f7cff", "semcontato": "#f59e0b"}
         im = {"promise": "🟠",      "retorno": "📞",       "semcontato": "⚠️"}
         st.markdown(
             f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
-            f'<span style="font-family:Syne,sans-serif;font-weight:700;font-size:16px">🔔 Pendências do Dia</span>'
+            f'<span style="font-family:Syne,sans-serif;font-weight:700;font-size:16px">📌 Clientes Fixados</span>'
             f'<span style="background:#ef4444;color:white;font-size:12px;padding:3px 10px;border-radius:20px;font-weight:700">{len(pendencias)}</span>'
             f'</div>',
             unsafe_allow_html=True,
@@ -155,6 +155,10 @@ def _render_dashboard(store, clientes, role):
     df["_lastContact"] = df["id"].apply(lambda i: get_hist(i).get("lastContact", ""))
     df["_atendente"]   = df["id"].apply(lambda i: get_hist(i).get("atendente",   ""))
     df["_notes"]       = df["id"].apply(lambda i: get_hist(i).get("notes",       ""))
+    # Score do cliente (mesma fórmula usada na tela Atividades) — permite
+    # ordenar a tabela pelo score, igual ao painel de tarefas do dia.
+    from data import calcular_score
+    df["_score"]       = df.apply(lambda r: calcular_score(r.to_dict(), get_hist(r["id"])), axis=1)
 
     if busca:
         b = busca.lower()
@@ -217,8 +221,8 @@ def _render_dashboard(store, clientes, role):
 
     # ── Tabela ────────────────────────────────────────────────────────────────
     has_edit = (role != "gestor")
-    col_w    = [3, 1.5, 1, 1, 1.5, 1.5, 1.5] + ([0.8] if has_edit else [])
-    hdrs_t   = ["Cliente", "Saldo devedor", "Atraso em dias", "Histórico", "Telefone", "Grupo", "Último Contato"] + ([""] if has_edit else [])
+    col_w    = [3, 0.8, 1.5, 1, 1, 1.5, 1.5, 1.5] + ([0.8] if has_edit else [])
+    hdrs_t   = ["Cliente", "Score", "Saldo devedor", "Atraso em dias", "Histórico", "Telefone", "Grupo", "Último Contato"] + ([""] if has_edit else [])
 
     hdr_cells = "".join(
         f'<div style="flex:{w};padding:14px 14px;font-size:12px;text-transform:uppercase;'
@@ -266,10 +270,21 @@ def _render_dashboard(store, clientes, role):
                     unsafe_allow_html=True,
                 )
             with rcols[1]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:17px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
+                # Score (mesma escala do card de atividades)
+                _sc = int(row.get("_score") or 0)
+                cor_sc = "#ff5555" if _sc >= 150 else ("#f59e0b" if _sc >= 80 else "#5fa3ff")
+                st.markdown(
+                    f'<div style="padding:12px 12px;text-align:center">'
+                    f'<span style="color:{cor_sc};font-weight:800;font-size:17px">{_sc}</span>'
+                    f'<span style="color:#6b7280;font-size:11px;display:block">pts</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
             with rcols[2]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:14px">{dias_html(row.get("dias_atraso"))}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:17px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
             with rcols[3]:
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px">{dias_html(row.get("dias_atraso"))}</div>', unsafe_allow_html=True)
+            with rcols[4]:
                 m = int(row.get("_meses_atraso") or 0)
                 cor_m = "#ef4444" if m >= 9 else ("#f97316" if m >= 5 else "#f59e0b")
                 st.markdown(
@@ -279,14 +294,28 @@ def _render_dashboard(store, clientes, role):
                     f'</div>',
                     unsafe_allow_html=True,
                 )
-            with rcols[4]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row.get("telefone","—")}</div>', unsafe_allow_html=True)
             with rcols[5]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row.get("_grupo","—")}</div>', unsafe_allow_html=True)
+                # Telefone: primeiro + "+N" se cliente tem mais de 1 número
+                tels = row.get("telefones") or []
+                if not tels:
+                    tel_display = row.get("telefone", "—") or "—"
+                elif len(tels) == 1:
+                    tel_display = tels[0]
+                else:
+                    extras = len(tels) - 1
+                    outros = " · ".join(tels[1:]).replace('"', '&quot;')
+                    tel_display = (
+                        f'<span title="Outros: {outros}">{tels[0]} '
+                        f'<span style="color:#6b7280;font-size:11px;font-weight:600">'
+                        f'+{extras}</span></span>'
+                    )
+                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{tel_display}</div>', unsafe_allow_html=True)
             with rcols[6]:
+                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row.get("_grupo","—")}</div>', unsafe_allow_html=True)
+            with rcols[7]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
             if has_edit:
-                with rcols[7]:
+                with rcols[8]:
                     if st.button("✏", key=f"edit_{row['id']}_{ridx}", width="stretch", help=f"Editar {row['nome']}"):
                         dialog_editar(row["id"])
 
