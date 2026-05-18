@@ -78,16 +78,16 @@ _ICON_GROUP = (
 
 def _tels_html(c) -> str:
     """Renderiza telefones do cliente: primeiro + indicador '+N' se houver mais.
-    Tooltip (HTML title) mostra todos os números."""
+    Tooltip (HTML title) mostra SÓ os números extras (sem repetir o primeiro)."""
     tels = c.get("telefones") or []
     if not tels:
         return c.get("telefone", "—") or "—"
     if len(tels) == 1:
         return tels[0]
     extras = len(tels) - 1
-    all_tels_txt = " · ".join(tels).replace('"', '&quot;')
+    outros_txt = " · ".join(tels[1:]).replace('"', '&quot;')
     return (
-        f'<span title="{all_tels_txt}">{tels[0]} '
+        f'<span title="Outros: {outros_txt}">{tels[0]} '
         f'<span style="color:#5fa3ff;font-size:10px;font-weight:600">'
         f'+{extras}</span></span>'
     )
