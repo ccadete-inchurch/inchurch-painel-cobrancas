@@ -286,9 +286,9 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
     )
     # Botão "Detalhes" grudado no rodapé do card (visualmente integrado).
     # Streamlit não permite st.button dentro de markdown HTML, então usa
-    # st.button externo + CSS que remove a borda superior pra grudar no card.
+    # st.button externo + CSS (no _render_atividades) que reduz o tamanho.
     if role != "gestor":
-        if st.button("✎ Detalhes", key=f"atv_{c['id']}_{idx}", width="stretch"):
+        if st.button("Detalhes ›", key=f"atv_{c['id']}_{idx}", width="stretch"):
             dialog_editar(c["id"])
 
 
@@ -296,6 +296,19 @@ def _render_atividades(store, clientes, role):
     # Detecta virada do dia operacional (08:15 BRT) — força rerun pra renovar lote
     if _detectar_virada_dia():
         return
+
+    # CSS: deixa o botão "Detalhes" dos cards mais discreto (fonte menor).
+    # Aplica a todos os secondary buttons da página — harmoniza o visual.
+    st.markdown("""
+    <style>
+    .stButton > button[kind="secondary"] {
+        font-size: 12px;
+        padding-top: 4px;
+        padding-bottom: 4px;
+        font-weight: 500;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     hoje_str = date.today().strftime("%d/%m/%Y")
     nome  = current_nome()  or "usuário"
