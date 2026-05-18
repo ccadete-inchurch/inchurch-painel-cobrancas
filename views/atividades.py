@@ -284,11 +284,11 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
         f'</div>',
         unsafe_allow_html=True,
     )
-    # Botão "Editar" grudado no rodapé do card (visualmente integrado).
+    # Botão "Detalhes" grudado no rodapé do card (visualmente integrado).
     # Streamlit não permite st.button dentro de markdown HTML, então usa
     # st.button externo + CSS que remove a borda superior pra grudar no card.
     if role != "gestor":
-        if st.button("✎ Editar", key=f"atv_{c['id']}_{idx}", width="stretch"):
+        if st.button("✎ Detalhes", key=f"atv_{c['id']}_{idx}", width="stretch"):
             dialog_editar(c["id"])
 
 
