@@ -253,22 +253,21 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
         return  # sem botão "Detalhes" — não há histórico editável
 
     # Ícone "editar" clicável no canto superior direito (só pra atendente).
-    # O click adiciona ?ver_cliente=<id> à URL, que é capturado em
-    # _render_atividades pra abrir o dialog de detalhes.
+    # Estilo neutro/discreto — sem cor, vira mais claro no hover pra dar feedback.
     icone_editar = ""
     if role != "gestor":
         icone_editar = (
             f'<a href="?ver_cliente={c["id"]}" '
             f'style="position:absolute;top:10px;right:12px;'
             f'display:inline-flex;align-items:center;justify-content:center;'
-            f'width:26px;height:26px;border-radius:6px;'
-            f'background:rgba(95,163,255,0.12);color:#5fa3ff;'
-            f'text-decoration:none;font-size:14px;line-height:1;'
-            f'transition:background 0.15s" '
-            f'onmouseover="this.style.background=\'rgba(95,163,255,0.25)\'" '
-            f'onmouseout="this.style.background=\'rgba(95,163,255,0.12)\'" '
+            f'width:24px;height:24px;border-radius:4px;'
+            f'text-decoration:none;line-height:1;'
+            f'transition:background 0.15s, opacity 0.15s;'
+            f'opacity:0.6" '
+            f'onmouseover="this.style.opacity=1;this.style.background=\'rgba(255,255,255,0.06)\'" '
+            f'onmouseout="this.style.opacity=0.6;this.style.background=\'transparent\'" '
             f'title="Ver detalhes">'
-            f'<svg width="13" height="13" viewBox="0 0 24 24" fill="#5fa3ff" style="flex-shrink:0">'
+            f'<svg width="14" height="14" viewBox="0 0 24 24" fill="#9ca3af" style="flex-shrink:0">'
             f'<path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>'
             f'</svg>'
             f'</a>'
