@@ -252,9 +252,32 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
         )
         return  # sem botão "Detalhes" — não há histórico editável
 
+    # Ícone "editar" clicável no canto superior direito (só pra atendente).
+    # O click adiciona ?ver_cliente=<id> à URL, que é capturado em
+    # _render_atividades pra abrir o dialog de detalhes.
+    icone_editar = ""
+    if role != "gestor":
+        icone_editar = (
+            f'<a href="?ver_cliente={c["id"]}" '
+            f'style="position:absolute;top:10px;right:12px;'
+            f'display:inline-flex;align-items:center;justify-content:center;'
+            f'width:26px;height:26px;border-radius:6px;'
+            f'background:rgba(95,163,255,0.12);color:#5fa3ff;'
+            f'text-decoration:none;font-size:14px;line-height:1;'
+            f'transition:background 0.15s" '
+            f'onmouseover="this.style.background=\'rgba(95,163,255,0.25)\'" '
+            f'onmouseout="this.style.background=\'rgba(95,163,255,0.12)\'" '
+            f'title="Ver detalhes">'
+            f'<svg width="13" height="13" viewBox="0 0 24 24" fill="#5fa3ff" style="flex-shrink:0">'
+            f'<path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>'
+            f'</svg>'
+            f'</a>'
+        )
+
     st.markdown(
-        f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
+        f'<div style="position:relative;background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
         f'padding:14px 16px;margin-bottom:10px;border-top:2px solid {cor}99">'
+        f'{icone_editar}'
         f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
         f'<div style="font-weight:700;font-size:17px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
         f'{c["nome"]}'
@@ -263,7 +286,7 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
         f'{inativo_badge}{acordo_badge}'
         f'</div>'
         f'</div>'
-        f'<div style="text-align:right;flex-shrink:0">'
+        f'<div style="text-align:right;flex-shrink:0;margin-right:32px">'
         f'<div style="font-size:20px;font-weight:800;color:{cor};line-height:1">{score}</div>'
         f'<div style="font-size:14px;color:#6b7280">pts</div>'
         f'</div></div>'
@@ -283,15 +306,19 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
         f'</div>',
         unsafe_allow_html=True,
     )
-    if role != "gestor":
-        if st.button("⋯", key=f"atv_{c['id']}_{idx}", help="Ver detalhes"):
-            dialog_editar(c["id"])
 
 
 def _render_atividades(store, clientes, role):
     # Detecta virada do dia operacional (08:15 BRT) — força rerun pra renovar lote
     if _detectar_virada_dia():
         return
+
+    # Trigger do botão "⋯" no card: link HTML adiciona ?ver_cliente=<id>.
+    # Aqui detectamos, limpamos o param e abrimos o dialog de detalhes.
+    _ver_cliente = st.query_params.get("ver_cliente")
+    if _ver_cliente and role != "gestor":
+        st.query_params.clear()
+        dialog_editar(_ver_cliente)
 
     hoje_str = date.today().strftime("%d/%m/%Y")
     nome  = current_nome()  or "usuário"
