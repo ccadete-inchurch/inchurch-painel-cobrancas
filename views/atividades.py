@@ -297,15 +297,35 @@ def _render_atividades(store, clientes, role):
     if _detectar_virada_dia():
         return
 
-    # CSS: deixa o botão "Detalhes" dos cards mais discreto (fonte menor).
-    # Aplica a todos os secondary buttons da página — harmoniza o visual.
+    # CSS: faz o botão "Detalhes" parecer continuação do card.
+    # - Mesma cor de fundo e borda
+    # - Cantos superiores zerados, inferiores arredondados (encaixa no card)
+    # - Sem borda superior (visualmente une com o card que tem bottom-radius:0)
+    # - Fonte menor e discreta
     st.markdown("""
     <style>
     .stButton > button[kind="secondary"] {
+        background-color: #181c26;
+        border: 1px solid #2a2f42;
+        border-top: none;
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+        border-bottom-left-radius: 12px;
+        border-bottom-right-radius: 12px;
+        color: #9ca3af;
         font-size: 12px;
-        padding-top: 4px;
-        padding-bottom: 4px;
         font-weight: 500;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        margin-top: 0;
+        margin-bottom: 10px;
+        transition: background-color 0.15s, color 0.15s;
+    }
+    .stButton > button[kind="secondary"]:hover {
+        background-color: #1f2433;
+        color: #e8eaf0;
+        border-color: #3a3f55;
+        border-top: none;
     }
     </style>
     """, unsafe_allow_html=True)
