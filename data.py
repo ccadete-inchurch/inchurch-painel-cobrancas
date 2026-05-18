@@ -26,7 +26,7 @@ from google.cloud import bigquery
 
 from config import MAP_COB, MAP_INAD, DIAS_SEM_CONTATO
 from auth import get_store, current_nome
-from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel, hoje_lote
+from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel, fmt_tel_lista, hoje_lote
 
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
@@ -1136,19 +1136,36 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
         cid = str(c.get("id", ""))
         if cid not in dt_lote:
             continue  # cliente não está no lote do dia
-        tel = _norm(c.get("telefone", ""))
-        if not tel:
+
+        # Cliente pode ter múltiplos telefones — checa TODOS os números.
+        # Se qualquer um teve interação N8N, o cliente conta (cooldown
+        # e métricas são por id_sacado, então sem dupla contagem).
+        tels = [_norm(t) for t in (c.get("telefones") or [c.get("telefone", "")]) if t]
+        tels = [t for t in tels if t]
+        if not tels:
             continue
-        st_n8n = status_map.get(tel)
+
+        # Pega o ts mais recente entre todos os telefones do cliente
+        ts_contato_best = None
+        ts_concluida_best = None
+        st_n8n = None
+        for tel in tels:
+            st_aqui = status_map.get(tel)
+            if st_aqui and not st_n8n:
+                st_n8n = st_aqui
+            ts_c = ultimo_contato_ts.get(tel)
+            if ts_c and (ts_contato_best is None or ts_c > ts_contato_best):
+                ts_contato_best = ts_c
+            ts_co = concluida_ts.get(tel)
+            if ts_co and (ts_concluida_best is None or ts_co > ts_concluida_best):
+                ts_concluida_best = ts_co
         if not st_n8n:
             continue
 
         dt_entrada    = dt_lote[cid]
-        ts_contato    = ultimo_contato_ts.get(tel)
-        ts_concluida  = concluida_ts.get(tel)
-
-        interacao_post = _dentro_da_janela(ts_contato,   dt_entrada)
-        concluida_post = _dentro_da_janela(ts_concluida, dt_entrada)
+        # Usa os timestamps mais recentes entre os múltiplos telefones do cliente
+        interacao_post = _dentro_da_janela(ts_contato_best,   dt_entrada)
+        concluida_post = _dentro_da_janela(ts_concluida_best, dt_entrada)
 
         msg_env   = interacao_post
         lig_feit  = concluida_post or (interacao_post and st_n8n in ("ligacao_pendente", "tentar_novamente"))
@@ -1275,6 +1292,7 @@ def processar_dados_bigquery():
                 "nome":             str(row["nome"]     or ""),
                 "cnpj":             str(row["cnpj"]     or ""),
                 "telefone":         fmt_tel(row["telefone"]),
+                "telefones":        fmt_tel_lista(row["telefone"]),
                 "valor":            valor_devedor,
                 "vencimento":       vencimento,
                 "dias_atraso":      dias_atraso_num,

@@ -29,9 +29,25 @@ import json
 # ── Telefone ──────────────────────────────────────────────────────────────────
 
 def fmt_tel(valor) -> str:
+    """Retorna o primeiro telefone (legado — preservado pra compat)."""
     if not valor:
         return "—"
     return str(valor).split(";")[0].strip() or "—"
+
+
+def fmt_tel_lista(valor) -> list[str]:
+    """Retorna todos os telefones válidos do cliente (separados por ; no banco).
+    Filtra entradas vazias e duplicadas, mantendo a ordem original."""
+    if not valor:
+        return []
+    seen = set()
+    out = []
+    for raw in str(valor).split(";"):
+        tel = raw.strip()
+        if tel and tel not in seen:
+            seen.add(tel)
+            out.append(tel)
+    return out
 
 
 def _norm_tel(phone: str) -> str:

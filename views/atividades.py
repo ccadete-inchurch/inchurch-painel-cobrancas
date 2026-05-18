@@ -76,6 +76,23 @@ _ICON_GROUP = (
 )
 
 
+def _tels_html(c) -> str:
+    """Renderiza telefones do cliente: primeiro + indicador '+N' se houver mais.
+    Tooltip (HTML title) mostra todos os números."""
+    tels = c.get("telefones") or []
+    if not tels:
+        return c.get("telefone", "—") or "—"
+    if len(tels) == 1:
+        return tels[0]
+    extras = len(tels) - 1
+    all_tels_txt = " · ".join(tels).replace('"', '&quot;')
+    return (
+        f'<span title="{all_tels_txt}">{tels[0]} '
+        f'<span style="color:#5fa3ff;font-size:10px;font-weight:600">'
+        f'+{extras}</span></span>'
+    )
+
+
 def _motivo(bucket, acoes, c) -> tuple:
     """Retorna (texto, estilo) pro badge do card.
     Fonte primária: painel_tarefas_diarias. Fallback: N8N (histórico mais antigo).
@@ -224,7 +241,7 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
             f'{valor_html}'
             f'<div style="font-size:12px;color:#6b7280">'
             f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">'
-            f'{_ICON_PHONE}<span style="color:#9ca3af">{c.get("telefone","—")}</span>'
+            f'{_ICON_PHONE}<span style="color:#9ca3af">{_tels_html(c)}</span>'
             f'</div>'
             f'<div style="display:flex;align-items:center;gap:5px">'
             f'{_ICON_GROUP}<span style="color:#9ca3af">{c.get("_grupo","—")}</span>'
@@ -257,7 +274,7 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
         f'</div>'
         f'<div style="font-size:12px;color:#6b7280">'
         f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">'
-        f'{_ICON_PHONE}<span style="color:#9ca3af">{c.get("telefone","—")}</span>'
+        f'{_ICON_PHONE}<span style="color:#9ca3af">{_tels_html(c)}</span>'
         f'</div>'
         f'<div style="display:flex;align-items:center;gap:5px">'
         f'{_ICON_GROUP}<span style="color:#9ca3af">{c.get("_grupo","—")}</span>'
@@ -267,7 +284,7 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
         unsafe_allow_html=True,
     )
     if role != "gestor":
-        if st.button("📋 Detalhes", key=f"atv_{c['id']}_{idx}", width="stretch"):
+        if st.button("⋯", key=f"atv_{c['id']}_{idx}", help="Ver detalhes"):
             dialog_editar(c["id"])
 
 
