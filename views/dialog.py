@@ -33,7 +33,27 @@ def dialog_editar(eid):
     with c3:
         st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Vencimento</div><div class="dialog-info-value" style="font-size:16px">{cliente.get("vencimento","—")}</div><div style="font-size:12px;color:#8b94a5;margin-top:3px">{dias_html(cliente.get("dias_atraso"))}</div></div>', unsafe_allow_html=True)
     with c4:
-        st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Telefone</div><div class="dialog-info-value" style="font-size:16px">{cliente.get("telefone","—")}</div><div style="font-size:12px;color:#8b94a5;margin-top:3px">&nbsp;</div></div>', unsafe_allow_html=True)
+        # Todos os telefones do cliente — primeiro destacado, demais inline
+        # em fonte menor (igual aos cards). Todos selecionáveis/copiáveis.
+        tels = cliente.get("telefones") or ([cliente.get("telefone")] if cliente.get("telefone") else [])
+        tels = [t for t in tels if t]
+        if not tels:
+            tel_principal_html = "—"
+            tel_extras_html    = "&nbsp;"
+        elif len(tels) == 1:
+            tel_principal_html = tels[0]
+            tel_extras_html    = "&nbsp;"
+        else:
+            tel_principal_html = tels[0]
+            tel_extras_html    = " · ".join(tels[1:])
+        st.markdown(
+            f'<div class="dialog-info">'
+            f'<div class="dialog-info-label">Telefone{"s" if len(tels) > 1 else ""}</div>'
+            f'<div class="dialog-info-value" style="font-size:16px">{tel_principal_html}</div>'
+            f'<div style="font-size:12px;color:#8b94a5;margin-top:3px">{tel_extras_html}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
