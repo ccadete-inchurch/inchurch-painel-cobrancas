@@ -157,12 +157,12 @@ def _render_dashboard(store, clientes, role):
             rows = []
             for _, c in df.iterrows():
                 rows.append([
-                    c.get("_atendente", ""), c["nome"], c.get("cnpj", ""), c["valor"],
+                    c.get("_grupo", "") or "", c["nome"], c.get("cnpj", ""), c["valor"],
                     c.get("parcelas", ""), c.get("vencimento", ""), c.get("dias_atraso", ""),
                     sl.get(c.get("_status", "pending"), ""), c.get("_lastContact", ""), c.get("_notes", ""),
                     "Sim" if c.get("_tem_acordo") else "Não",
                 ])
-            df_exp = pd.DataFrame(rows, columns=["Atendente","Nome","CNPJ","Saldo","Competências","Vencimento","Dias Atraso","Status","Último Contato","Observações","Acordo"])
+            df_exp = pd.DataFrame(rows, columns=["Grupo","Nome","CNPJ","Saldo","Competências","Vencimento","Dias Atraso","Status","Último Contato","Observações","Acordo"])
             st.download_button(
                 "⬇ CSV",
                 df_exp.to_csv(index=False).encode("utf-8-sig"),
