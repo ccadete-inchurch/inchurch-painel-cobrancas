@@ -217,22 +217,14 @@ def _render_dashboard(store, clientes, role):
                     unsafe_allow_html=True,
                 )
                 if role != "gestor":
-                    # Admin vê só ✅ Concluir; atendente vê 👁 Ver e ✅ Concluir.
-                    # Atendente abre dialog em modo edição; admin não precisa abrir
-                    # pois já vê tudo no card (e dialog dele é read-only mesmo).
-                    eh_atendente = role not in ("admin", "gestor")
-                    if eh_atendente:
-                        ba, bb = st.columns(2)
-                        with ba:
-                            if st.button("👁 Ver", key=f"pend_atend_{i}_{c['id']}", width="stretch"):
-                                dialog_editar(c["id"])
-                        with bb:
-                            if st.button("✅ Concluir", key=f"pend_done_{i}_{c['id']}", width="stretch"):
-                                concluir_pendencia(c["id"])
-                                st.toast(f"✅ {c['nome']} concluído", icon="✅")
-                                st.rerun()
-                    else:
-                        # Admin: só Concluir (limpa pra todas as atendentes)
+                    # Tanto atendente quanto admin têm os 2 botões. A diferença é
+                    # que o dialog vem em modo edição pra atendente, read-only
+                    # pra admin (detectado dentro do próprio dialog).
+                    ba, bb = st.columns(2)
+                    with ba:
+                        if st.button("👁 Ver", key=f"pend_atend_{i}_{c['id']}", width="stretch"):
+                            dialog_editar(c["id"])
+                    with bb:
                         if st.button("✅ Concluir", key=f"pend_done_{i}_{c['id']}", width="stretch"):
                             concluir_pendencia(c["id"])
                             st.toast(f"✅ {c['nome']} concluído", icon="✅")
