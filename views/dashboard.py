@@ -6,7 +6,7 @@ import streamlit as st
 
 from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
 from auth import get_store, hash_senha, current_role
-from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente
+from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
 from data import calcular_pendencias
 from views.dialog import dialog_editar
 
@@ -94,16 +94,28 @@ def _render_dashboard(store, clientes, role):
         contacted = int(vc.get("contacted", 0))
         promise   = int(vc.get("promise", 0)) + int(vc.get("negotiating", 0))
 
-    hoje_str = date.today().strftime("%d/%m/%Y")
-    reg_hoje = len([r for r in store["regularizados"] if r.get("data") == hoje_str])
+    # ── Variação no mês: novos inadimplentes (↑) vs regularizados (↓) ────────
+    # Heurística pra "novos no mês": clientes cuja primeira parcela vencida
+    # está dentro do mês atual. Não é exato (snapshot diário seria) mas dá
+    # uma aproximação útil sem precisar de nova tabela.
+    hoje      = date.today()
+    mes_inicio = hoje.replace(day=1)
+    reg_mes = sum(
+        1 for r in store["regularizados"]
+        if (d := parse_date_br(r.get("data", ""))) and d >= mes_inicio
+    )
+    novos_mes = sum(
+        1 for c in clientes
+        if (vd := parse_date_br(c.get("vencimento", ""))) and mes_inicio <= vd <= hoje
+    )
+    saldo_mes = novos_mes - reg_mes
 
     s1, s2, s3, s4, s5 = st.columns(5)
     for col, label, val, cor, sub in [
         (s1, "Total Clientes",       total,     "#e8eaf0", "filtro atual"),
-        (s2, "Não Contactados",     pending,   "#ef4444", "aguardando contato"),
+        (s2, "Não Contactados",     pending,   "#ef4444", "nunca foi tocado"),
         (s3, "Contactados",         contacted, "#f59e0b", "em acompanhamento"),
         (s4, "Promessas",           promise,   "#f97316", "aguardando pagamento"),
-        (s5, "Regularizados Hoje",  reg_hoje,  "#22c55e", "ver histórico"),
     ]:
         with col:
             st.markdown(
@@ -113,6 +125,20 @@ def _render_dashboard(store, clientes, role):
                 f'<div class="metric-sub" style="font-size:14px">{sub}</div></div>',
                 unsafe_allow_html=True,
             )
+    # 5º card: variação no mês (substitui 'Regularizados Hoje')
+    with s5:
+        sinal = "+" if saldo_mes >= 0 else ""
+        cor_saldo = "#ef4444" if saldo_mes > 0 else ("#22c55e" if saldo_mes < 0 else "#e8eaf0")
+        st.markdown(
+            f'<div class="metric-card" style="min-height:150px;padding:24px 26px">'
+            f'<div class="metric-label" style="font-size:13px">Variação no Mês</div>'
+            f'<div class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</div>'
+            f'<div class="metric-sub" style="font-size:13px;margin-top:6px">'
+            f'<span style="color:#ef4444;font-weight:700">↑ {novos_mes}</span> novos · '
+            f'<span style="color:#22c55e;font-weight:700">↓ {reg_mes}</span> regularizados'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("")
 

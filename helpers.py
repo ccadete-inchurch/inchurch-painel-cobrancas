@@ -218,9 +218,14 @@ def get_hist(cid):
 def get_effective_status(cid) -> str:
     """Status visível na tela. Regra:
     - Decisões manuais (promise/negotiating/paid) sempre vencem
-    - Senão, se o bot agiu em qualquer dia (msg ou lig em painel_tarefas_diarias),
-      retorna 'contacted'
+    - Senão, se o bot agiu em QUALQUER momento do histórico (sem janela
+      temporal), retorna 'contacted'. Lê de _painel_ultimo_contato_dias
+      (alimentado por load_ultimo_contato_painel — query sem WHERE de data)
     - Senão, retorna o que o histórico manual tem (pending por default)
+
+    Mudança em 2026-05-19: antes usava janela de 6 dias (cooldown). Agora é
+    todo histórico. 'Não Contactados' passa a significar 'parcela virgem
+    da carteira' (nunca foi tocado, ponto), métrica que cai monotonicamente.
     """
     h = get_hist(cid)
     manual_st = h.get("status", "")
@@ -228,9 +233,7 @@ def get_effective_status(cid) -> str:
         return manual_st
     import streamlit as st
     cid_str = str(cid)
-    if (st.session_state.get("_painel_dias_msg",         {}).get(cid_str) is not None
-        or st.session_state.get("_painel_dias_lig",         {}).get(cid_str) is not None
-        or st.session_state.get("_painel_dias_lig_tentada", {}).get(cid_str) is not None):
+    if st.session_state.get("_painel_ultimo_contato_dias", {}).get(cid_str) is not None:
         return "contacted"
     return manual_st or "pending"
 
