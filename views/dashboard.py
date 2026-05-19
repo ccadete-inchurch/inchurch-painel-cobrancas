@@ -176,26 +176,28 @@ def _render_dashboard(store, clientes, role):
         </style>
         """, unsafe_allow_html=True)
 
-        # Header — tipografia profissional (sem emoji), badge de contagem maior
+        # Header — caixa alta, tipografia clean, badge da contagem maior
         hcol, fcol = st.columns([3, 1.2])
         with hcol:
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">'
                 f'<span style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;'
-                f'font-weight:700;font-size:26px;color:#e8eaf0;letter-spacing:-0.5px;line-height:1.2">'
+                f'font-weight:700;font-size:24px;color:#e8eaf0;letter-spacing:1.5px;'
+                f'line-height:1.2;text-transform:uppercase">'
                 f'Clientes Fixados</span>'
                 f'<span style="background:#ef4444;color:white;font-size:17px;padding:5px 14px;'
                 f'border-radius:20px;font-weight:700;letter-spacing:0.3px">{len(pendencias)}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
-        # Filtro por atendente — só admin/gestor (atendente vê só os próprios)
+        # Filtro por grupo (atendente) — só admin/gestor. Label 'Grupo' porque
+        # cada atendente gerencia um grupo de igrejas; faz mais sentido na UI.
         filtro_atend = "Todos"
         with fcol:
             if role in ("admin", "gestor"):
                 from data import _EMAIL_GRUPO as _EG
                 filtro_atend = st.selectbox(
-                    "Atendente",
+                    "Grupo",
                     ["Todos"] + list(_EG.values()),
                     key="fix_filtro_atendente",
                     label_visibility="collapsed",
