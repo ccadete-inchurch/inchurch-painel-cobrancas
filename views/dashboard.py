@@ -167,7 +167,7 @@ def _render_dashboard(store, clientes, role):
             unsafe_allow_html=True,
         )
         cols_p = st.columns(min(3, len(pendencias)))
-        for i, (c, _h, tipo, msg) in enumerate(pendencias[:9]):
+        for i, (c, _h, tipo, msg) in enumerate(pendencias):
             with cols_p[i % 3]:
                 st.markdown(
                     f'<div class="pend-card" style="border-left:4px solid {cm[tipo]}">'
