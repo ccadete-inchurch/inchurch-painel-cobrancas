@@ -24,12 +24,8 @@ def _reset_filtros():
 
 
 def _render_dashboard(store, clientes, role):
-    from auth import current_nome
-    nome = current_nome() or "usuário"
-    st.markdown(
-        f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;font-weight:800;color:#e8eaf0;margin-top:32px;margin-bottom:48px;letter-spacing:-1.5px;line-height:1.1">Bem-vindo(a), {nome}!</div>',
-        unsafe_allow_html=True,
-    )
+    # Pequeno espaço no topo (cards são o primeiro elemento agora).
+    st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
 
     # ── Lê filtros do session_state pra cards e tabela usarem o mesmo df ──
     # Widgets renderizam depois, mas session_state preserva seleção entre runs
@@ -111,9 +107,10 @@ def _render_dashboard(store, clientes, role):
     ]:
         with col:
             st.markdown(
-                f'<div class="metric-card"><div class="metric-label">{label}</div>'
-                f'<div class="metric-value" style="color:{cor};font-size:32px">{val:,}</div>'
-                f'<div class="metric-sub">{sub}</div></div>',
+                f'<div class="metric-card" style="min-height:150px;padding:24px 26px">'
+                f'<div class="metric-label" style="font-size:13px">{label}</div>'
+                f'<div class="metric-value" style="color:{cor};font-size:42px">{val:,}</div>'
+                f'<div class="metric-sub" style="font-size:14px">{sub}</div></div>',
                 unsafe_allow_html=True,
             )
 
@@ -328,19 +325,19 @@ def _render_dashboard(store, clientes, role):
                     unsafe_allow_html=True,
                 )
             with rcols[5]:
-                # Telefone: primeiro + "+N" se cliente tem mais de 1 número
+                # Telefones: primeiro destacado e os demais inline em fonte
+                # menor — selecionáveis/copiáveis (sem tooltip não-copiável).
                 tels = row.get("telefones") or []
                 if not tels:
                     tel_display = row.get("telefone", "—") or "—"
                 elif len(tels) == 1:
                     tel_display = tels[0]
                 else:
-                    extras = len(tels) - 1
-                    outros = " · ".join(tels[1:]).replace('"', '&quot;')
+                    extras_txt = " · ".join(tels[1:])
                     tel_display = (
-                        f'<span title="Outros: {outros}">{tels[0]} '
-                        f'<span style="color:#6b7280;font-size:11px;font-weight:600">'
-                        f'+{extras}</span></span>'
+                        f'{tels[0]} '
+                        f'<span style="color:#6b7280;font-size:11px;font-weight:500">'
+                        f'· {extras_txt}</span>'
                     )
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{tel_display}</div>', unsafe_allow_html=True)
             with rcols[6]:
