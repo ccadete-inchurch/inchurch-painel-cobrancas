@@ -137,6 +137,7 @@ from data import (  # noqa: E402
     load_mensagens_from_bq,
     load_cooldowns_from_painel,
     gerar_tarefas_do_dia,
+    salvar_snapshot_inadimplentes_hoje,
     _EMAIL_GRUPO,
 )
 
@@ -146,17 +147,17 @@ def main():
     print("Cron: gerando lote diário", flush=True)
     print("=" * 60, flush=True)
 
-    print("[1/4] Carregando clientes do BigQuery...", flush=True)
+    print("[1/5] Carregando clientes do BigQuery...", flush=True)
     clientes, n_reg = processar_dados_bigquery()
     print(f"      {len(clientes)} clientes inadimplentes, {n_reg} regularizados", flush=True)
 
-    print("[2/4] Lendo mensagens N8N (Postgres)...", flush=True)
+    print("[2/5] Lendo mensagens N8N (Postgres)...", flush=True)
     load_mensagens_from_bq()
 
-    print("[3/4] Lendo cooldowns do painel...", flush=True)
+    print("[3/5] Lendo cooldowns do painel...", flush=True)
     load_cooldowns_from_painel()
 
-    print("[4/4] Gerando lote por atendente...", flush=True)
+    print("[4/5] Gerando lote por atendente...", flush=True)
     resumo = {}
     for email_atd, nome_atd in _EMAIL_GRUPO.items():
         buckets = gerar_tarefas_do_dia(clientes, email_atd) or {}
@@ -164,6 +165,10 @@ def main():
         n_msg = sum(1 for b in buckets.values() if b == "mensagem")
         resumo[nome_atd] = {"total": len(buckets), "ligacao": n_lig, "mensagem": n_msg}
         print(f"      {nome_atd}: {len(buckets)} tarefas (lig={n_lig}, msg={n_msg})", flush=True)
+
+    print("[5/5] Salvando snapshot diário de inadimplentes...", flush=True)
+    salvar_snapshot_inadimplentes_hoje(clientes)
+    print(f"      snapshot de {len(clientes)} clientes gravado", flush=True)
 
     print("=" * 60, flush=True)
     print("✅ Lote gerado com sucesso", flush=True)

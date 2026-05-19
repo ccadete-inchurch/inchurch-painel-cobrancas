@@ -7,7 +7,7 @@ import streamlit as st
 from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
 from auth import get_store, hash_senha, current_role
 from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
-from data import calcular_pendencias, fetch_regularizados_mes_atual
+from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes
 from views.dialog import dialog_editar
 
 
@@ -95,21 +95,31 @@ def _render_dashboard(store, clientes, role):
         promise   = int(vc.get("promise", 0)) + int(vc.get("negotiating", 0))
 
     # ── Variação no mês: novos inadimplentes (↑) vs regularizados (↓) ────────
-    # Regularizados: query separada filtrando dt_liquidacao > dt_vencimento
-    # (só conta cliente que pagou cobrança que ESTAVA em atraso), excluindo
-    # quem ainda continua na lista de inadimplentes (pagou parcela mas tem
-    # outras vencidas). Conta clientes DISTINTOS, não recebimentos.
-    # Novos: heurística — primeira parcela vencida está no mês atual (cliente
-    # ficou inadimplente este mês, antes não tinha atraso).
+    # Fonte preferida: snapshot diário (cobrancas_snapshot_diario). Quando
+    # disponível, comparamos IDs do primeiro snapshot do mês com IDs atuais
+    # — diferença exata. Sem snapshot, cai pra heurística.
     hoje       = date.today()
     mes_inicio = hoje.replace(day=1)
-    ids_pagaram_em_atraso = fetch_regularizados_mes_atual()
-    ids_atuais            = {str(c["id"]) for c in clientes}
-    reg_mes               = len(ids_pagaram_em_atraso - ids_atuais)
-    novos_mes = sum(
-        1 for c in clientes
-        if (vd := parse_date_br(c.get("vencimento", ""))) and mes_inicio <= vd <= hoje
-    )
+    ids_atuais = {str(c["id"]) for c in clientes}
+    ids_inicio = fetch_snapshot_inicio_mes()
+
+    if ids_inicio:
+        # Snapshot disponível — matemática exata
+        novos_mes = len(ids_atuais - ids_inicio)  # ID em hoje, não em snapshot inicial
+        reg_mes   = len(ids_inicio - ids_atuais)  # ID em snapshot inicial, não em hoje
+        snapshot_dt = st.session_state.get("_snapshot_inicio_mes_data", "")
+        # Se snapshot começou depois do dia 1 (ex: implementação no meio do mês),
+        # exibe a data de referência no card pra ficar claro o que está medindo.
+        variacao_sub = f"desde {snapshot_dt}" if snapshot_dt and not snapshot_dt.startswith("01/") else "no mês"
+    else:
+        # Fallback heurístico — usado enquanto o snapshot não foi populado
+        ids_pagaram_em_atraso = fetch_regularizados_mes_atual()
+        reg_mes               = len(ids_pagaram_em_atraso - ids_atuais)
+        novos_mes = sum(
+            1 for c in clientes
+            if (vd := parse_date_br(c.get("vencimento", ""))) and mes_inicio <= vd <= hoje
+        )
+        variacao_sub = "no mês (aproximado)"
     saldo_mes = novos_mes - reg_mes
 
     s1, s2, s3, s4, s5 = st.columns(5)
@@ -133,7 +143,7 @@ def _render_dashboard(store, clientes, role):
         cor_saldo = "#ef4444" if saldo_mes > 0 else ("#22c55e" if saldo_mes < 0 else "#e8eaf0")
         st.markdown(
             f'<div class="metric-card" style="min-height:150px;padding:24px 26px">'
-            f'<div class="metric-label" style="font-size:13px">Variação no Mês</div>'
+            f'<div class="metric-label" style="font-size:13px">Variação {variacao_sub}</div>'
             f'<div class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</div>'
             f'<div class="metric-sub" style="font-size:13px;margin-top:6px">'
             f'<span style="color:#ef4444;font-weight:700">↑ {novos_mes}</span> novos · '

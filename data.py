@@ -296,6 +296,114 @@ def fetch_historico_meses_bulk() -> pd.DataFrame:
         return pd.DataFrame()
 
 
+_SNAPSHOT_TABLE = f"{_BQ_PROJECT}.{_BQ_DATASET}.cobrancas_snapshot_diario"
+
+
+def ensure_snapshot_table():
+    """Cria a tabela de snapshot diário de inadimplentes no BQ se não existir.
+    Estrutura mínima: data + id_sacado + valor + dias_atraso. Particionada por
+    data_snapshot pra query barata por mês."""
+    client = get_bq_client()
+    if not client:
+        return
+    from google.cloud import bigquery
+    schema = [
+        bigquery.SchemaField("data_snapshot", "DATE", mode="REQUIRED"),
+        bigquery.SchemaField("id_sacado_sac", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("valor_saldo",   "FLOAT64"),
+        bigquery.SchemaField("dias_atraso",   "INT64"),
+        bigquery.SchemaField("inativo",       "BOOL"),
+    ]
+    table = bigquery.Table(_SNAPSHOT_TABLE, schema=schema)
+    table.time_partitioning = bigquery.TimePartitioning(
+        type_=bigquery.TimePartitioningType.DAY, field="data_snapshot"
+    )
+    try:
+        client.create_table(table, exists_ok=True)
+    except Exception:
+        pass
+
+
+def salvar_snapshot_inadimplentes_hoje(clientes: list | None = None):
+    """Grava 1 linha por cliente inadimplente atual em cobrancas_snapshot_diario.
+    Idempotente — se já existe snapshot pra hoje, não duplica.
+
+    Roda diariamente pelo cron logo após processar_dados_bigquery. Sem snapshot,
+    'Variação no Mês' fica em modo heurística. Com snapshot, vira exata."""
+    client = get_bq_client()
+    if not client:
+        return
+    if clientes is None:
+        clientes = get_store().get("clientes", [])
+    if not clientes:
+        return
+
+    ensure_snapshot_table()
+    _BRT = timezone(timedelta(hours=-3))
+    hoje = datetime.now(_BRT).date().isoformat()
+
+    # Idempotência: não regrava se já tem snapshot do dia
+    try:
+        df_check = client.query(f"""
+            SELECT COUNT(*) AS cnt
+            FROM `{_SNAPSHOT_TABLE}`
+            WHERE data_snapshot = '{hoje}'
+        """).to_dataframe()
+        if int(df_check["cnt"].iloc[0]) > 0:
+            return
+    except Exception:
+        pass  # tabela acabou de ser criada — segue
+
+    rows = [{
+        "data_snapshot": hoje,
+        "id_sacado_sac": str(c.get("id", "")),
+        "valor_saldo":   float(c.get("valor", 0) or 0),
+        "dias_atraso":   int(c.get("dias_atraso") or 0),
+        "inativo":       bool(c.get("_inativo", False)),
+    } for c in clientes if c.get("id")]
+
+    try:
+        client.insert_rows_json(_SNAPSHOT_TABLE, rows)
+    except Exception:
+        pass
+
+
+@st.cache_data(ttl=3600)
+def fetch_snapshot_inicio_mes() -> set:
+    """IDs dos clientes do PRIMEIRO snapshot do mês atual (proxy do 'estado em
+    01/mês'). Vazio se ainda não tem snapshot do mês — sinaliza pro dashboard
+    cair no fallback heurístico."""
+    client = get_bq_client()
+    if not client:
+        return set()
+    try:
+        df = client.query(f"""
+            WITH primeiro AS (
+                SELECT MIN(data_snapshot) AS dt
+                FROM `{_SNAPSHOT_TABLE}`
+                WHERE data_snapshot >= DATE_TRUNC(CURRENT_DATE("America/Sao_Paulo"), MONTH)
+            )
+            SELECT DISTINCT s.id_sacado_sac, p.dt AS data_inicio
+            FROM `{_SNAPSHOT_TABLE}` s
+            CROSS JOIN primeiro p
+            WHERE s.data_snapshot = p.dt
+        """).to_dataframe()
+        if df.empty:
+            return set()
+        # Guarda a data do primeiro snapshot no session_state pra UI indicar
+        # 'desde XX/XX' quando o mês começou depois do dia 1.
+        try:
+            dt = df["data_inicio"].iloc[0]
+            st.session_state["_snapshot_inicio_mes_data"] = (
+                dt.strftime("%d/%m/%Y") if hasattr(dt, "strftime") else str(dt)
+            )
+        except Exception:
+            pass
+        return {str(r["id_sacado_sac"]) for _, r in df.iterrows()}
+    except Exception:
+        return set()
+
+
 @st.cache_data(ttl=3600)
 def fetch_regularizados_mes_atual() -> set:
     """IDs distintos de clientes que pagaram pelo menos uma cobrança EM ATRASO
@@ -1653,13 +1761,56 @@ def recomendar_acao(cliente) -> list[str]:
     return acoes
 
 
+def _hist_pra_pendencias(cid: str) -> dict:
+    """Lê histórico do cliente respeitando o role:
+      - atendente: só o próprio histórico (cada uma vê só os fixados dela)
+      - admin/gestor: união dos históricos das atendentes (Ana + Priscila),
+        usando o mais recente quando há sobreposição. Permite supervisão.
+
+    Histórico de admin/gestor é ignorado (não polui visão das atendentes nem
+    a própria visão de supervisão).
+    """
+    import hashlib
+    from auth import current_role, get_store as _gs
+    role = current_role()
+    if role not in ("admin", "gestor"):
+        return get_hist(cid)
+
+    # admin/gestor → união dos historicos de Ana e Priscila
+    historicos = _gs().get("historico", {}) or {}
+    atendente_uids = {hashlib.md5(e.encode()).hexdigest() for e in _EMAIL_GRUPO.keys()}
+    melhor = {}
+    for uid, ch in historicos.items():
+        if uid not in atendente_uids:
+            continue
+        h = ch.get(cid)
+        if not h:
+            continue
+        # Sem timestamp explícito: pra evitar inconsistência se Ana e Priscila
+        # editaram o mesmo cliente, mantém o de cada e mescla campos. promise/
+        # retorno vencidos viram pendências individuais (status='promise' do
+        # mais recente vence).
+        if not melhor:
+            melhor = dict(h)
+            continue
+        # Heurística: prefere o status mais "ativo" (promise > negotiating > contacted)
+        ordem = {"promise": 3, "negotiating": 2, "contacted": 1, "pending": 0, "paid": -1}
+        if ordem.get(h.get("status", "pending"), 0) > ordem.get(melhor.get("status", "pending"), 0):
+            melhor.update(h)
+        elif h.get("retorno") and not melhor.get("retorno"):
+            melhor["retorno"] = h["retorno"]
+    return melhor
+
+
 def calcular_pendencias(clientes):
     # "Sem contato há X dias" foi removido: esse fluxo é do kanban (Atividades),
     # não dos Clientes Fixados. Aqui ficam só compromissos explícitos da atendente.
+    # Admin/gestor vê fixados das duas atendentes (união); cada atendente vê só
+    # os próprios. Decidido via _hist_pra_pendencias.
     pendencias = []
     hoje       = date.today()
     for c in clientes:
-        h = get_hist(c["id"])
+        h = _hist_pra_pendencias(c["id"])
         s = h.get("status", "pending")
         if s == "promise" and h.get("promiseDate"):
             dt = parse_date_br(h["promiseDate"])
