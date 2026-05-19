@@ -7,7 +7,7 @@ import streamlit as st
 from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
 from auth import get_store, hash_senha, current_role
 from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
-from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes
+from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, concluir_pendencia
 from views.dialog import dialog_editar
 
 
@@ -155,10 +155,13 @@ def _render_dashboard(store, clientes, role):
     st.markdown("")
 
     # ── Clientes fixados ──────────────────────────────────────────────────────
+    # Lista vem ordenada por dias de atraso DESC (mais antigos primeiro).
+    # Cor da borda lateral reflete urgência: vermelho 7d+, laranja 3-6d,
+    # amarelo 1-2d, verde hoje. Botão Concluir limpa promiseDate/retorno
+    # sem precisar abrir Detalhes.
     pendencias = calcular_pendencias(clientes)
     if pendencias:
-        cm = {"promise": "#f97316", "retorno": "#4f7cff", "semcontato": "#f59e0b"}
-        im = {"promise": "🟠",      "retorno": "📞",       "semcontato": "⚠️"}
+        im = {"promise": "🟠", "retorno": "📞", "semcontato": "⚠️"}
         st.markdown(
             f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
             f'<span style="font-weight:700;font-size:16px;color:#e8eaf0;letter-spacing:0.3px">📌 Clientes Fixados</span>'
@@ -167,19 +170,35 @@ def _render_dashboard(store, clientes, role):
             unsafe_allow_html=True,
         )
         cols_p = st.columns(min(3, len(pendencias)))
-        for i, (c, _h, tipo, msg) in enumerate(pendencias):
+        for i, (c, _h, tipo, msg, dias_atraso) in enumerate(pendencias):
+            if dias_atraso >= 7:
+                cor_borda = "#ef4444"  # crítico
+            elif dias_atraso >= 3:
+                cor_borda = "#f97316"  # médio
+            elif dias_atraso >= 1:
+                cor_borda = "#eab308"  # leve
+            else:
+                cor_borda = "#22c55e"  # hoje
+            sufixo = "hoje" if dias_atraso == 0 else f"há {dias_atraso}d"
             with cols_p[i % 3]:
                 st.markdown(
-                    f'<div class="pend-card" style="border-left:4px solid {cm[tipo]}">'
+                    f'<div class="pend-card" style="border-left:4px solid {cor_borda}">'
                     f'<div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{im[tipo]} {c["nome"]}</div>'
-                    f'<div style="font-size:12px;color:#8b94a5;margin-top:4px">{msg}</div>'
+                    f'<div style="font-size:12px;color:#8b94a5;margin-top:4px">{msg} · <span style="color:{cor_borda};font-weight:700">{sufixo}</span></div>'
                     f'<div style="font-size:13px;color:#7cc243;margin-top:6px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
                 if role != "gestor":
-                    if st.button("✏ Atender", key=f"pend_{i}_{c['id']}", width="stretch"):
-                        dialog_editar(c["id"])
+                    ba, bb = st.columns(2)
+                    with ba:
+                        if st.button("✏ Atender", key=f"pend_atend_{i}_{c['id']}", width="stretch"):
+                            dialog_editar(c["id"])
+                    with bb:
+                        if st.button("✅ Concluir", key=f"pend_done_{i}_{c['id']}", width="stretch"):
+                            concluir_pendencia(c["id"])
+                            st.toast(f"✅ {c['nome']} concluído", icon="✅")
+                            st.rerun()
         st.markdown("---")
 
     # ── Barra de ações ────────────────────────────────────────────────────────

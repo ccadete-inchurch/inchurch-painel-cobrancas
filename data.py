@@ -1829,6 +1829,8 @@ def calcular_pendencias(clientes):
     # não dos Clientes Fixados. Aqui ficam só compromissos explícitos da atendente.
     # Admin/gestor vê fixados das duas atendentes (união); cada atendente vê só
     # os próprios. Decidido via _hist_pra_pendencias.
+    # Retorna tupla (cliente, hist, tipo, mensagem, dias_atraso) ordenada por
+    # dias_atraso DESC pra priorizar visualmente os mais antigos.
     pendencias = []
     hoje       = date.today()
     for c in clientes:
@@ -1837,14 +1839,63 @@ def calcular_pendencias(clientes):
         if s == "promise" and h.get("promiseDate"):
             dt = parse_date_br(h["promiseDate"])
             if dt and dt <= hoje:
-                pendencias.append((c, h, "promise", f"Prometeu pagar em {h['promiseDate']}"))
+                dias = (hoje - dt).days
+                pendencias.append((c, h, "promise", f"Prometeu pagar em {h['promiseDate']}", dias))
                 continue
         if h.get("retorno"):
             dt = parse_date_br(h["retorno"])
             if dt and dt <= hoje:
-                pendencias.append((c, h, "retorno", f"Retorno para {h['retorno']}"))
+                dias = (hoje - dt).days
+                pendencias.append((c, h, "retorno", f"Retorno para {h['retorno']}", dias))
                 continue
+    pendencias.sort(key=lambda x: x[4], reverse=True)
     return pendencias
+
+
+def concluir_pendencia(cid: str):
+    """Marca compromisso (promise/retorno) como concluído. Apaga promiseDate e
+    retorno; status 'promise' transita pra 'contacted'; atualiza lastContact.
+
+    Regra de quem modifica o quê:
+      - Atendente (Ana/Priscila): modifica só o próprio historico
+      - Admin/gestor: modifica TODAS as atendentes que têm o cliente marcado
+        (limpa o fixado da tela de todo mundo que estava vendo)
+    """
+    import hashlib
+    from datetime import date as _date
+    from auth import current_role, current_uid, get_store as _gs
+
+    role     = current_role()
+    hoje_str = _date.today().strftime("%d/%m/%Y")
+    store    = _gs()
+    historicos = store.get("historico", {}) or {}
+
+    if role in ("admin", "gestor"):
+        atendente_uids = {hashlib.md5(e.encode()).hexdigest() for e in _EMAIL_GRUPO.keys()}
+        uids_modificar = [u for u in atendente_uids if cid in historicos.get(u, {})]
+    else:
+        uids_modificar = [current_uid()]
+
+    for uid in uids_modificar:
+        if not uid or uid not in historicos or cid not in historicos[uid]:
+            continue
+        h = dict(historicos[uid][cid])
+        h.pop("promiseDate", None)
+        h.pop("retorno", None)
+        if h.get("status") == "promise":
+            h["status"] = "contacted"
+        h["lastContact"] = hoje_str
+        store["historico"][uid][cid] = h
+        try:
+            save_hist_to_bq(uid, cid, h)
+        except Exception:
+            pass
+
+    try:
+        from helpers import _persistir_historico
+        _persistir_historico(store)
+    except Exception:
+        pass
 
 
 # ── Cache local ───────────────────────────────────────────────────────────────
