@@ -151,8 +151,8 @@ def _render_dashboard(store, clientes, role):
             f'<div class="metric-label" style="font-size:12px">Variação {variacao_sub}</div>'
             f'<div class="metric-value" style="color:{cor_saldo};font-size:38px">{sinal}{saldo_mes:,}</div>'
             f'<div class="metric-sub" style="font-size:12px;margin-top:6px">'
-            f'<span style="color:#ef4444;font-weight:700">↑ {novos_mes}</span> · '
-            f'<span style="color:#22c55e;font-weight:700">↓ {reg_mes}</span>'
+            f'<span style="color:#ef4444;font-weight:700">↑ {novos_mes}</span> novos · '
+            f'<span style="color:#22c55e;font-weight:700">↓ {reg_mes}</span> regularizados'
             f'</div></div>',
             unsafe_allow_html=True,
         )
@@ -201,9 +201,11 @@ def _render_dashboard(store, clientes, role):
             origens = _h.get("_atendentes_origem") or []
             origem_tag = ""
             if origens and role in ("admin", "gestor"):
+                # Sem emoji 👤 — em vários SOs ele renderiza colorido (roxo,
+                # bege, etc) e quebra a paleta cinza. Usa bullet monocromático.
                 origem_tag = (
                     f'<div style="font-size:11px;color:#8b94a5;margin-top:4px;font-weight:500">'
-                    f'👤 {" / ".join(origens)}'
+                    f'• {" / ".join(origens)}'
                     f'</div>'
                 )
             with cols_p[i % 3]:
@@ -216,16 +218,15 @@ def _render_dashboard(store, clientes, role):
                     f'</div>',
                     unsafe_allow_html=True,
                 )
-                # Botões visíveis pra todos os roles. Dialog já vem em modo
-                # read-only pra admin/gestor (detectado em views/dialog.py).
-                # Concluir limpa promiseDate/retorno — admin/gestor afeta
-                # todas as atendentes, atendente afeta só o próprio histórico.
+                # Botões compactos com ícone só + tooltip via help.
+                # Streamlit não permite CSS escopado fácil pros botões, então
+                # texto minimal mantém o widget menor visualmente.
                 ba, bb = st.columns(2)
                 with ba:
-                    if st.button("👁 Ver", key=f"pend_atend_{i}_{c['id']}", width="stretch"):
+                    if st.button("👁", key=f"pend_atend_{i}_{c['id']}", width="stretch", help="Ver detalhes"):
                         dialog_editar(c["id"])
                 with bb:
-                    if st.button("✅ Concluir", key=f"pend_done_{i}_{c['id']}", width="stretch"):
+                    if st.button("✅", key=f"pend_done_{i}_{c['id']}", width="stretch", help="Concluir"):
                         concluir_pendencia(c["id"])
                         st.toast(f"✅ {c['nome']} concluído", icon="✅")
                         st.rerun()
