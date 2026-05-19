@@ -216,19 +216,19 @@ def _render_dashboard(store, clientes, role):
                     f'</div>',
                     unsafe_allow_html=True,
                 )
-                if role != "gestor":
-                    # Tanto atendente quanto admin têm os 2 botões. A diferença é
-                    # que o dialog vem em modo edição pra atendente, read-only
-                    # pra admin (detectado dentro do próprio dialog).
-                    ba, bb = st.columns(2)
-                    with ba:
-                        if st.button("👁 Ver", key=f"pend_atend_{i}_{c['id']}", width="stretch"):
-                            dialog_editar(c["id"])
-                    with bb:
-                        if st.button("✅ Concluir", key=f"pend_done_{i}_{c['id']}", width="stretch"):
-                            concluir_pendencia(c["id"])
-                            st.toast(f"✅ {c['nome']} concluído", icon="✅")
-                            st.rerun()
+                # Botões visíveis pra todos os roles. Dialog já vem em modo
+                # read-only pra admin/gestor (detectado em views/dialog.py).
+                # Concluir limpa promiseDate/retorno — admin/gestor afeta
+                # todas as atendentes, atendente afeta só o próprio histórico.
+                ba, bb = st.columns(2)
+                with ba:
+                    if st.button("👁 Ver", key=f"pend_atend_{i}_{c['id']}", width="stretch"):
+                        dialog_editar(c["id"])
+                with bb:
+                    if st.button("✅ Concluir", key=f"pend_done_{i}_{c['id']}", width="stretch"):
+                        concluir_pendencia(c["id"])
+                        st.toast(f"✅ {c['nome']} concluído", icon="✅")
+                        st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
         st.markdown("---")
 
