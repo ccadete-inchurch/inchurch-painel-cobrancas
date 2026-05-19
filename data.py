@@ -297,6 +297,32 @@ def fetch_historico_meses_bulk() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=3600)
+def fetch_regularizados_mes_atual() -> set:
+    """IDs distintos de clientes que pagaram pelo menos uma cobrança EM ATRASO
+    no mês atual. Filtra dt_liquidacao_recb > dt_vencimento_recb pra capturar
+    só os que estavam de fato em inadimplência quando quitaram.
+
+    Usado pelo card 'Variação no Mês' do dashboard — evita contar pagamentos
+    regulares (no prazo) como 'regularização'.
+    """
+    client = get_bq_client()
+    if not client:
+        return set()
+    try:
+        df = client.query("""
+            SELECT DISTINCT id_sacado_sac
+            FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+            WHERE fl_status_recb = '1'
+              AND DATE(dt_liquidacao_recb) >= DATE_TRUNC(CURRENT_DATE("America/Sao_Paulo"), MONTH)
+              AND dt_liquidacao_recb <= CURRENT_TIMESTAMP()
+              AND dt_liquidacao_recb > dt_vencimento_recb
+        """).to_dataframe()
+        return {str(row["id_sacado_sac"]) for _, row in df.iterrows()}
+    except Exception:
+        return set()
+
+
+@st.cache_data(ttl=3600)
 def fetch_cobrancas_liquidacao():
     client = get_bq_client()
     if not client:

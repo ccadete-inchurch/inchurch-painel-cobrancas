@@ -7,7 +7,7 @@ import streamlit as st
 from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
 from auth import get_store, hash_senha, current_role
 from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
-from data import calcular_pendencias
+from data import calcular_pendencias, fetch_regularizados_mes_atual
 from views.dialog import dialog_editar
 
 
@@ -95,15 +95,17 @@ def _render_dashboard(store, clientes, role):
         promise   = int(vc.get("promise", 0)) + int(vc.get("negotiating", 0))
 
     # ── Variação no mês: novos inadimplentes (↑) vs regularizados (↓) ────────
-    # Heurística pra "novos no mês": clientes cuja primeira parcela vencida
-    # está dentro do mês atual. Não é exato (snapshot diário seria) mas dá
-    # uma aproximação útil sem precisar de nova tabela.
-    hoje      = date.today()
+    # Regularizados: query separada filtrando dt_liquidacao > dt_vencimento
+    # (só conta cliente que pagou cobrança que ESTAVA em atraso), excluindo
+    # quem ainda continua na lista de inadimplentes (pagou parcela mas tem
+    # outras vencidas). Conta clientes DISTINTOS, não recebimentos.
+    # Novos: heurística — primeira parcela vencida está no mês atual (cliente
+    # ficou inadimplente este mês, antes não tinha atraso).
+    hoje       = date.today()
     mes_inicio = hoje.replace(day=1)
-    reg_mes = sum(
-        1 for r in store["regularizados"]
-        if (d := parse_date_br(r.get("data", ""))) and d >= mes_inicio
-    )
+    ids_pagaram_em_atraso = fetch_regularizados_mes_atual()
+    ids_atuais            = {str(c["id"]) for c in clientes}
+    reg_mes               = len(ids_pagaram_em_atraso - ids_atuais)
     novos_mes = sum(
         1 for c in clientes
         if (vd := parse_date_br(c.get("vencimento", ""))) and mes_inicio <= vd <= hoje
