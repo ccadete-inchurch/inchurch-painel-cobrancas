@@ -6,7 +6,7 @@ import streamlit as st
 
 from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
 from auth import get_store, hash_senha, current_role
-from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact
+from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente
 from data import calcular_pendencias
 from views.dialog import dialog_editar
 
@@ -44,7 +44,7 @@ def _render_dashboard(store, clientes, role):
     if not df.empty:
         df["_status"]      = df["id"].apply(get_effective_status)
         df["_lastContact"] = df["id"].apply(get_effective_lastContact)
-        df["_atendente"]   = df["id"].apply(lambda i: get_hist(i).get("atendente", ""))
+        df["_atendente"]   = df["id"].apply(get_effective_atendente)
         df["_notes"]       = df["id"].apply(lambda i: get_hist(i).get("notes", ""))
         from data import calcular_score
         df["_score"]       = df.apply(lambda r: calcular_score(r.to_dict(), get_hist(r["id"])), axis=1)

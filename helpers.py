@@ -235,6 +235,22 @@ def get_effective_status(cid) -> str:
     return manual_st or "pending"
 
 
+def get_effective_atendente(cid) -> str:
+    """Atendente dono do cliente. Prioridade:
+    1. Manual do histórico (gravado quando atendente editou via Detalhes)
+    2. Atendente atual em painel_tarefas_diarias (registro mais recente)
+
+    Garante que o nome apareça mesmo se ninguém editou manualmente — fonte
+    compartilhada (independe de quem está logado).
+    """
+    import streamlit as st
+    h = get_hist(cid)
+    manual = (h.get("atendente") or "").strip()
+    if manual:
+        return manual
+    return st.session_state.get("_painel_atendente_atual", {}).get(str(cid), "")
+
+
 def get_effective_lastContact(cid) -> str:
     """Último contato (formato DD/MM/AAAA). Mais recente entre:
     - lastContact manual (gravado via Detalhes)

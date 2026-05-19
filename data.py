@@ -706,6 +706,41 @@ def load_ultimo_contato_painel():
     st.session_state["_painel_ultimo_contato_dias"] = out
 
 
+def load_atendente_atual_painel():
+    """Lê o atendente mais recente por cliente em painel_tarefas_diarias.
+    Fonte compartilhada (não depende de quem está logado) pra responder
+    'quem é dona desse cliente hoje' nas telas. Usa o registro mais recente
+    por id_sacado.
+
+    Salva em session_state:
+      _painel_atendente_atual[cid] → 'Ana Carolina' | 'Priscila Oliveira'
+    """
+    st.session_state.setdefault("_painel_atendente_atual", {})
+
+    client = get_bq_client()
+    if not client:
+        return
+
+    try:
+        df = client.query(f"""
+            SELECT id_sacado_sac,
+                   ARRAY_AGG(atendente ORDER BY data_tarefa DESC LIMIT 1)[OFFSET(0)] AS atendente_atual
+            FROM `{_TAREFAS_TABLE}`
+            WHERE atendente IS NOT NULL
+            GROUP BY id_sacado_sac
+        """).to_dataframe()
+    except Exception:
+        return
+
+    out = {}
+    for _, row in df.iterrows():
+        cid = str(row["id_sacado_sac"])
+        atend = row.get("atendente_atual")
+        if atend is not None and not pd.isna(atend) and str(atend).strip():
+            out[cid] = str(atend).strip()
+    st.session_state["_painel_atendente_atual"] = out
+
+
 def save_hist_to_bq(uid: str, cid: str, data: dict):
     """Persiste uma entrada do historico no BQ (append; leitura sempre pega a mais recente)."""
     client = get_bq_client()
