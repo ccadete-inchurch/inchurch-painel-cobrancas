@@ -176,17 +176,18 @@ def _render_dashboard(store, clientes, role):
         </style>
         """, unsafe_allow_html=True)
 
-        # Header — caixa alta, tipografia clean, badge da contagem maior
+        # Header — caixa alta com peso 800 (mesma fórmula que funcionou bem
+        # antes do refactor). Badge da contagem maior.
         hcol, fcol = st.columns([3, 1.2])
         with hcol:
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">'
-                f'<span style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;'
-                f'font-weight:700;font-size:24px;color:#e8eaf0;letter-spacing:1.5px;'
-                f'line-height:1.2;text-transform:uppercase">'
+                f'<span style="font-weight:800;font-size:24px;color:#e8eaf0;'
+                f'text-transform:uppercase;letter-spacing:1.5px">'
                 f'Clientes Fixados</span>'
-                f'<span style="background:#ef4444;color:white;font-size:17px;padding:5px 14px;'
-                f'border-radius:20px;font-weight:700;letter-spacing:0.3px">{len(pendencias)}</span>'
+                f'<span style="background:#ef4444;color:white;font-size:22px;padding:7px 18px;'
+                f'border-radius:20px;font-weight:800;letter-spacing:0.3px;line-height:1">'
+                f'{len(pendencias)}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
