@@ -652,6 +652,60 @@ def load_cooldowns_from_painel():
     st.session_state["_streak_cooldown_dias"] = streak_cooldown
 
 
+def load_ultimo_contato_painel():
+    """Lê última interação por cliente em painel_tarefas_diarias SEM janela temporal.
+
+    Diferente de load_cooldowns_from_painel (que limita a 6 dias pra cooldown), aqui
+    pegamos o MAX de qualquer ação histórica. Usado pra alimentar 'Último Contato' na
+    tela Inadimplência — mesmo cliente tocado meses atrás aparece com a data correta.
+
+    Salva em session_state:
+      _painel_ultimo_contato_dias[cid] → dias desde a interação mais recente
+                                          (msg enviada, ligação atendida ou tentada)
+    """
+    st.session_state.setdefault("_painel_ultimo_contato_dias", {})
+
+    client = get_bq_client()
+    if not client:
+        return
+
+    _BRT = timezone(timedelta(hours=-3))
+    hoje_brt_dt = datetime.now(_BRT).date()
+
+    def _dias(ts):
+        if ts is None or pd.isna(ts):
+            return None
+        try:
+            return max((hoje_brt_dt - ts.astimezone(_BRT).date()).days, 0)
+        except Exception:
+            return None
+
+    try:
+        df = client.query(f"""
+            SELECT id_sacado_sac,
+                   GREATEST(
+                       COALESCE(MAX(dt_mensagem_enviada), TIMESTAMP('1970-01-01')),
+                       COALESCE(MAX(dt_ligacao_atendida), TIMESTAMP('1970-01-01')),
+                       COALESCE(MAX(dt_ligacao_feita),    TIMESTAMP('1970-01-01'))
+                   ) AS dt_ultimo
+            FROM `{_TAREFAS_TABLE}`
+            WHERE dt_mensagem_enviada IS NOT NULL
+               OR dt_ligacao_atendida IS NOT NULL
+               OR dt_ligacao_feita    IS NOT NULL
+            GROUP BY id_sacado_sac
+        """).to_dataframe()
+    except Exception:
+        return
+
+    out = {}
+    for _, row in df.iterrows():
+        cid = str(row["id_sacado_sac"])
+        d = _dias(row.get("dt_ultimo"))
+        if d is not None:
+            out[cid] = d
+    st.session_state["_painel_ultimo_contato_dias"] = out
+
+
 def save_hist_to_bq(uid: str, cid: str, data: dict):
     """Persiste uma entrada do historico no BQ (append; leitura sempre pega a mais recente)."""
     client = get_bq_client()

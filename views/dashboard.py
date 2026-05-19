@@ -31,22 +31,79 @@ def _render_dashboard(store, clientes, role):
         unsafe_allow_html=True,
     )
 
-    # ── Métricas ──────────────────────────────────────────────────────────────
-    # Status efetivo: combina manual + painel_tarefas_diarias (independe de login).
-    total = len(clientes)
+    # ── Lê filtros do session_state pra cards e tabela usarem o mesmo df ──
+    # Widgets renderizam depois, mas session_state preserva seleção entre runs
+    # (default na primeira renderização, valor do usuário daí em diante).
+    busca           = st.session_state.get("busca",     "") or ""
+    filtro_status   = st.session_state.get("fpills",    "Todos") or "Todos"
+    filtro_grupo    = st.session_state.get("fgrupo",    "Todos")
+    filtro_situacao = st.session_state.get("fsituacao", "Todos")
+    filtro_atraso   = st.session_state.get("fatraso",   "Todos")
+    filtro_valor    = st.session_state.get("fvalor",    "Todos")
+    filtro_acordo   = st.session_state.get("facordo",   "Todos")
+    ordenar         = st.session_state.get("fordenar",  list(SORT_MAP.keys())[0])
+
+    # ── Constrói df e aplica filtros (compartilhado: métricas, tabela, CSV) ──
+    df = pd.DataFrame(clientes)
+    if not df.empty:
+        df["_status"]      = df["id"].apply(get_effective_status)
+        df["_lastContact"] = df["id"].apply(get_effective_lastContact)
+        df["_atendente"]   = df["id"].apply(lambda i: get_hist(i).get("atendente", ""))
+        df["_notes"]       = df["id"].apply(lambda i: get_hist(i).get("notes", ""))
+        from data import calcular_score
+        df["_score"]       = df.apply(lambda r: calcular_score(r.to_dict(), get_hist(r["id"])), axis=1)
+        df["_score_pct"]   = df["_score"].rank(pct=True, method="max").fillna(0)
+
+        if busca:
+            b = busca.lower()
+            mask = df.apply(lambda r: b in str(r.get("nome", "")).lower() or b in str(r.get("cnpj", "")).lower() or b in str(r.get("id", "")).lower(), axis=1)
+            df = df[mask]
+        if filtro_status != "Todos":
+            df = df[df["_status"] == STATUS_FILTER_MAP.get(filtro_status, "pending")]
+        if filtro_atraso == "1-30 dias":
+            df = df[df["dias_atraso"].apply(lambda d: d is not None and 1 <= d <= 30)]
+        elif filtro_atraso == "31-60 dias":
+            df = df[df["dias_atraso"].apply(lambda d: d is not None and 31 <= d <= 60)]
+        elif filtro_atraso == "61-90 dias":
+            df = df[df["dias_atraso"].apply(lambda d: d is not None and 61 <= d <= 90)]
+        elif filtro_atraso == "+90 dias":
+            df = df[df["dias_atraso"].apply(lambda d: d is not None and d > 90)]
+        if filtro_valor == "≤ R$500":
+            df = df[df["valor"] <= 500]
+        elif filtro_valor == "R$500–2k":
+            df = df[(df["valor"] > 500) & (df["valor"] <= 2000)]
+        elif filtro_valor == "R$2k–5k":
+            df = df[(df["valor"] > 2000) & (df["valor"] <= 5000)]
+        elif filtro_valor == "> R$5k":
+            df = df[df["valor"] > 5000]
+        if filtro_acordo != "Todos":
+            tem_acordo = df["_tem_acordo"].fillna(False).astype(bool) if "_tem_acordo" in df.columns else pd.Series(False, index=df.index)
+            if filtro_acordo == "Com acordo":
+                df = df[tem_acordo]
+            elif filtro_acordo == "Sem acordo":
+                df = df[~tem_acordo]
+        if filtro_grupo != "Todos" and "_grupo" in df.columns:
+            df = df[df["_grupo"] == filtro_grupo]
+        if filtro_situacao == "Ativos" and "_inativo" in df.columns:
+            df = df[~df["_inativo"].fillna(False).astype(bool)]
+        elif filtro_situacao == "Inativos" and "_inativo" in df.columns:
+            df = df[df["_inativo"].fillna(False).astype(bool)]
+
+    # ── Métricas (do df filtrado — reagem aos filtros em tempo real) ─────────
+    total = len(df)
     pending = contacted = promise = 0
-    for c in clientes:
-        s = get_effective_status(c["id"])
-        if s == "pending":         pending   += 1
-        elif s == "contacted":     contacted += 1
-        elif s in ("promise", "negotiating"): promise += 1
+    if not df.empty:
+        vc = df["_status"].value_counts()
+        pending   = int(vc.get("pending", 0))
+        contacted = int(vc.get("contacted", 0))
+        promise   = int(vc.get("promise", 0)) + int(vc.get("negotiating", 0))
 
     hoje_str = date.today().strftime("%d/%m/%Y")
     reg_hoje = len([r for r in store["regularizados"] if r.get("data") == hoje_str])
 
     s1, s2, s3, s4, s5 = st.columns(5)
     for col, label, val, cor, sub in [
-        (s1, "Total Clientes",       total,     "#e8eaf0", "na carteira"),
+        (s1, "Total Clientes",       total,     "#e8eaf0", "filtro atual"),
         (s2, "Não Contactados",     pending,   "#ef4444", "aguardando contato"),
         (s3, "Contactados",         contacted, "#f59e0b", "em acompanhamento"),
         (s4, "Promessas",           promise,   "#f97316", "aguardando pagamento"),
@@ -97,15 +154,15 @@ def _render_dashboard(store, clientes, role):
             st.session_state["tela"] = "importar"
             st.rerun()
     with tb:
-        if clientes:
+        # CSV exporta a base FILTRADA atual (consistente com o que aparece na tela)
+        if not df.empty:
             sl   = {"pending": "Sem contato", "contacted": "Contactado", "promise": "Prometeu pagar", "negotiating": "Negociando", "paid": "Regularizado"}
             rows = []
-            for c in clientes:
-                h = get_hist(c["id"])
+            for _, c in df.iterrows():
                 rows.append([
-                    h.get("atendente", ""), c["nome"], c.get("cnpj", ""), c["valor"],
+                    c.get("_atendente", ""), c["nome"], c.get("cnpj", ""), c["valor"],
                     c.get("parcelas", ""), c.get("vencimento", ""), c.get("dias_atraso", ""),
-                    sl.get(h.get("status", "pending"), ""), h.get("lastContact", ""), h.get("notes", ""),
+                    sl.get(c.get("_status", "pending"), ""), c.get("_lastContact", ""), c.get("_notes", ""),
                     "Sim" if c.get("_tem_acordo") else "Não",
                 ])
             df_exp = pd.DataFrame(rows, columns=["Atendente","Nome","CNPJ","Saldo","Competências","Vencimento","Dias Atraso","Status","Último Contato","Observações","Acordo"])
@@ -115,7 +172,7 @@ def _render_dashboard(store, clientes, role):
                 f"cobrancas_{date.today()}.csv",
                 "text/csv",
                 width="stretch",
-                help="Exportar lista",
+                help="Exportar lista filtrada",
             )
 
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
@@ -140,67 +197,15 @@ def _render_dashboard(store, clientes, role):
 
     sb1, sb2 = st.columns([5, 1], vertical_alignment="bottom")
     with sb1:
-        busca = st.text_input("Buscar", placeholder="Buscar por nome do cliente, CNPJ ou código do sacado...", label_visibility="collapsed", key="busca")
+        st.text_input("Buscar", placeholder="Buscar por nome do cliente, CNPJ ou código do sacado...", label_visibility="collapsed", key="busca")
     with sb2:
         st.button("✕ Limpar", on_click=_reset_filtros, width="stretch")
-
-    filtro_status = pill_status or "Todos"
 
     if not clientes:
         st.info("Nenhum dado. Use ↑ Atualizar para importar as planilhas.")
         return
 
-    # ── Aplicar filtros ───────────────────────────────────────────────────────
-    # _status/_lastContact via getters efetivos: bot agindo no painel_tarefas_diarias
-    # já reflete na tela sem precisar de auto-update por usuário.
-    df = pd.DataFrame(clientes)
-    df["_status"]      = df["id"].apply(get_effective_status)
-    df["_lastContact"] = df["id"].apply(get_effective_lastContact)
-    df["_atendente"]   = df["id"].apply(lambda i: get_hist(i).get("atendente",   ""))
-    df["_notes"]       = df["id"].apply(lambda i: get_hist(i).get("notes",       ""))
-    # Score do cliente (mesma fórmula usada na tela Atividades) — permite
-    # ordenar a tabela pelo score, igual ao painel de tarefas do dia.
-    from data import calcular_score
-    df["_score"]       = df.apply(lambda r: calcular_score(r.to_dict(), get_hist(r["id"])), axis=1)
-    # Percentil do score na base atual — usado pra colorir a coluna em gradiente
-    # relativo (não em valor absoluto), porque scores variam muito (até +2000).
-    df["_score_pct"]   = df["_score"].rank(pct=True, method="max").fillna(0)
-
-    if busca:
-        b = busca.lower()
-        mask = df.apply(lambda r: b in str(r.get("nome", "")).lower() or b in str(r.get("cnpj", "")).lower() or b in str(r.get("id", "")).lower(), axis=1)
-        df = df[mask]
-    if filtro_status != "Todos":
-        df = df[df["_status"] == STATUS_FILTER_MAP.get(filtro_status, "pending")]
-    if filtro_atraso == "1-30 dias":
-        df = df[df["dias_atraso"].apply(lambda d: d is not None and 1 <= d <= 30)]
-    elif filtro_atraso == "31-60 dias":
-        df = df[df["dias_atraso"].apply(lambda d: d is not None and 31 <= d <= 60)]
-    elif filtro_atraso == "61-90 dias":
-        df = df[df["dias_atraso"].apply(lambda d: d is not None and 61 <= d <= 90)]
-    elif filtro_atraso == "+90 dias":
-        df = df[df["dias_atraso"].apply(lambda d: d is not None and d > 90)]
-    if filtro_valor == "≤ R$500":
-        df = df[df["valor"] <= 500]
-    elif filtro_valor == "R$500–2k":
-        df = df[(df["valor"] > 500) & (df["valor"] <= 2000)]
-    elif filtro_valor == "R$2k–5k":
-        df = df[(df["valor"] > 2000) & (df["valor"] <= 5000)]
-    elif filtro_valor == "> R$5k":
-        df = df[df["valor"] > 5000]
-    if filtro_acordo != "Todos":
-        tem_acordo = df["_tem_acordo"].fillna(False).astype(bool) if "_tem_acordo" in df.columns else pd.Series(False, index=df.index)
-        if filtro_acordo == "Com acordo":
-            df = df[tem_acordo]
-        elif filtro_acordo == "Sem acordo":
-            df = df[~tem_acordo]
-    if filtro_grupo != "Todos" and "_grupo" in df.columns:
-        df = df[df["_grupo"] == filtro_grupo]
-    if filtro_situacao == "Ativos" and "_inativo" in df.columns:
-        df = df[~df["_inativo"].fillna(False).astype(bool)]
-    elif filtro_situacao == "Inativos" and "_inativo" in df.columns:
-        df = df[df["_inativo"].fillna(False).astype(bool)]
-
+    # Ordenação (filtros já foram aplicados ao df no topo da função).
     sort_col_name, sort_asc = SORT_MAP[ordenar]
     if sort_col_name in df.columns:
         df = df.sort_values(sort_col_name, ascending=sort_asc, na_position="last")

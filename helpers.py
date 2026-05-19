@@ -238,22 +238,21 @@ def get_effective_status(cid) -> str:
 def get_effective_lastContact(cid) -> str:
     """Último contato (formato DD/MM/AAAA). Mais recente entre:
     - lastContact manual (gravado via Detalhes)
-    - última ação do bot em painel_tarefas_diarias (msg, lig atendida ou tentada)
+    - última ação do bot em painel_tarefas_diarias (sem janela temporal)
+
+    Lê de `_painel_ultimo_contato_dias` populado por `load_ultimo_contato_painel`,
+    que faz MAX por id_sacado sem filtro de data — assim ações de meses atrás
+    ainda alimentam o campo.
     """
     import streamlit as st
     h = get_hist(cid)
     manual_lc = h.get("lastContact", "") or ""
     cid_str = str(cid)
 
-    candidatos_dias = []
-    for k in ("_painel_dias_msg", "_painel_dias_lig", "_painel_dias_lig_tentada"):
-        v = st.session_state.get(k, {}).get(cid_str)
-        if v is not None:
-            candidatos_dias.append(v)
-    if not candidatos_dias:
+    dias_painel = st.session_state.get("_painel_ultimo_contato_dias", {}).get(cid_str)
+    if dias_painel is None:
         return manual_lc
 
-    dias_painel = min(candidatos_dias)
     painel_d = date.today() - timedelta(days=int(dias_painel))
     painel_lc = painel_d.strftime("%d/%m/%Y")
 
