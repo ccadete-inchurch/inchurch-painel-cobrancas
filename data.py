@@ -1784,44 +1784,11 @@ def recomendar_acao(cliente) -> list[str]:
 
 
 def _hist_pra_pendencias(cid: str) -> dict:
-    """Lê histórico do cliente respeitando o role:
-      - atendente: só o próprio histórico (cada uma vê só os fixados dela)
-      - admin/gestor: união dos históricos das atendentes (Ana + Priscila),
-        usando o mais recente quando há sobreposição. Permite supervisão.
-
-    Histórico de admin/gestor é ignorado (não polui visão das atendentes nem
-    a própria visão de supervisão).
+    """Wrapper legado — agora delega pra get_hist_unificado em helpers.py.
+    Mantido pra manter calcular_pendencias intacto sem mais ajustes.
     """
-    import hashlib
-    from auth import current_role, get_store as _gs
-    role = current_role()
-    if role not in ("admin", "gestor"):
-        return get_hist(cid)
-
-    # admin/gestor → união dos historicos de Ana e Priscila
-    historicos = _gs().get("historico", {}) or {}
-    atendente_uids = {hashlib.md5(e.encode()).hexdigest() for e in _EMAIL_GRUPO.keys()}
-    melhor = {}
-    for uid, ch in historicos.items():
-        if uid not in atendente_uids:
-            continue
-        h = ch.get(cid)
-        if not h:
-            continue
-        # Sem timestamp explícito: pra evitar inconsistência se Ana e Priscila
-        # editaram o mesmo cliente, mantém o de cada e mescla campos. promise/
-        # retorno vencidos viram pendências individuais (status='promise' do
-        # mais recente vence).
-        if not melhor:
-            melhor = dict(h)
-            continue
-        # Heurística: prefere o status mais "ativo" (promise > negotiating > contacted)
-        ordem = {"promise": 3, "negotiating": 2, "contacted": 1, "pending": 0, "paid": -1}
-        if ordem.get(h.get("status", "pending"), 0) > ordem.get(melhor.get("status", "pending"), 0):
-            melhor.update(h)
-        elif h.get("retorno") and not melhor.get("retorno"):
-            melhor["retorno"] = h["retorno"]
-    return melhor
+    from helpers import get_hist_unificado
+    return get_hist_unificado(cid)
 
 
 def calcular_pendencias(clientes):

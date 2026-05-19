@@ -2,8 +2,8 @@ from datetime import datetime, date
 import streamlit as st
 
 from config import STATUS_OPTS
-from auth import get_store, current_nome, current_email
-from helpers import get_hist, save_hist, fmt_moeda_plain, dias_html
+from auth import get_store, current_nome, current_email, current_role
+from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html
 
 
 @st.dialog("✏ Editar Registro", width="large")
@@ -14,7 +14,13 @@ def dialog_editar(eid):
         st.error("Cliente não encontrado.")
         return
 
-    h = get_hist(eid)
+    # Admin/gestor vê o registro como está salvo no histórico das atendentes
+    # (modo read-only). Atendente vê o próprio histórico (modo edição).
+    role = current_role()
+    somente_leitura = role in ("admin", "gestor")
+    h = get_hist_unificado(eid) if somente_leitura else get_hist(eid)
+    if somente_leitura:
+        st.info("👁 Modo visualização — admin/gestor não edita registros das atendentes")
 
     # Cabeçalho informativo
     c1, c2, c3, c4 = st.columns(4)
@@ -58,11 +64,12 @@ def dialog_editar(eid):
 
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    # Campos editáveis
+    # Campos (desabilitados se admin/gestor — modo só leitura)
     status_sel = st.selectbox(
         "Status de Cobrança",
         list(STATUS_OPTS.keys()),
         index=list(STATUS_OPTS.values()).index(h.get("status", "pending")),
+        disabled=somente_leitura,
     )
 
     d1, d2 = st.columns(2)
@@ -70,15 +77,17 @@ def dialog_editar(eid):
         last_contact = st.date_input(
             "Último Contato",
             value=datetime.strptime(h["lastContact"], "%d/%m/%Y").date() if h.get("lastContact") else date.today(),
+            disabled=somente_leitura,
         )
     with d2:
-        tem_retorno = st.checkbox("Agendar retorno", value=bool(h.get("retorno")))
+        tem_retorno = st.checkbox("Agendar retorno", value=bool(h.get("retorno")), disabled=somente_leitura)
         retorno = None
         if tem_retorno:
             retorno = st.date_input(
                 "Data de retorno",
                 value=datetime.strptime(h["retorno"], "%d/%m/%Y").date() if h.get("retorno") else date.today(),
                 label_visibility="collapsed",
+                disabled=somente_leitura,
             )
 
     promise_date = None
@@ -86,19 +95,20 @@ def dialog_editar(eid):
         promise_date = st.date_input(
             "Data que prometeu pagar",
             value=datetime.strptime(h["promiseDate"], "%d/%m/%Y").date() if h.get("promiseDate") else date.today(),
+            disabled=somente_leitura,
         )
 
-    notes = st.text_area("Observações", value=h.get("notes", ""), placeholder="Ex: Cliente pediu prazo até sexta...", height=100)
-    st.markdown(f'<div style="font-size:12px;color:#8b94a5;margin-top:6px;font-weight:500">Editado por: <span style="color:#e8eaf0;font-weight:700">{current_nome()}</span></div>', unsafe_allow_html=True)
+    notes = st.text_area("Observações", value=h.get("notes", ""), placeholder="Ex: Cliente pediu prazo até sexta...", height=100, disabled=somente_leitura)
+    # Linha "Editado por" só faz sentido em modo edição
+    if not somente_leitura:
+        st.markdown(f'<div style="font-size:12px;color:#8b94a5;margin-top:6px;font-weight:500">Editado por: <span style="color:#e8eaf0;font-weight:700">{current_nome()}</span></div>', unsafe_allow_html=True)
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
     b1, b2 = st.columns(2)
     with b1:
-        if st.button("💾 Salvar alterações", width="stretch"):
+        if not somente_leitura and st.button("💾 Salvar alterações", width="stretch"):
             new = STATUS_OPTS[status_sel]
             # Só grava atendente se o usuário logado é atendente real (Ana/Priscila).
-            # Admin/gestor edita mas o cliente continua sendo "dono" da atendente
-            # do lote — sem poluir o histórico com nome de gestor.
             from data import _EMAIL_GRUPO
             payload = {
                 "status":      new,
@@ -113,5 +123,6 @@ def dialog_editar(eid):
             st.toast(f"✅ {cliente['nome']} salvo!", icon="✅")
             st.rerun()
     with b2:
-        if st.button("✕ Cancelar", width="stretch"):
+        rotulo_cancel = "✕ Fechar" if somente_leitura else "✕ Cancelar"
+        if st.button(rotulo_cancel, width="stretch"):
             st.rerun()

@@ -210,6 +210,47 @@ def get_hist(cid):
     return get_store()["historico"].get(current_uid(), {}).get(cid, {})
 
 
+def get_hist_unificado(cid: str) -> dict:
+    """Histórico efetivo do cliente respeitando o role:
+      - Atendente (Ana/Priscila): só o próprio histórico
+      - Admin/gestor: união dos historicos das atendentes — escolhe estado
+        mais 'ativo' quando duas marcaram o mesmo cliente
+        (promise > negotiating > contacted > pending > paid)
+
+    O histórico do próprio admin/gestor é ignorado pra evitar poluição.
+    Usado por get_effective_status/lastContact/atendente e pelo dialog
+    quando admin visualiza.
+    """
+    import hashlib
+    from auth import current_role
+    role = current_role()
+    if role not in ("admin", "gestor"):
+        return get_hist(cid)
+
+    # Lazy import pra evitar ciclo helpers ↔ data
+    from data import _EMAIL_GRUPO as _EG
+    historicos = get_store().get("historico", {}) or {}
+    atendente_uids = {hashlib.md5(e.encode()).hexdigest() for e in _EG.keys()}
+    melhor = {}
+    ordem = {"promise": 3, "negotiating": 2, "contacted": 1, "pending": 0, "paid": -1}
+    for uid, ch in historicos.items():
+        if uid not in atendente_uids:
+            continue
+        h = ch.get(cid)
+        if not h:
+            continue
+        if not melhor:
+            melhor = dict(h)
+            continue
+        if ordem.get(h.get("status", "pending"), 0) > ordem.get(melhor.get("status", "pending"), 0):
+            melhor.update(h)
+        elif h.get("retorno") and not melhor.get("retorno"):
+            melhor["retorno"] = h["retorno"]
+        elif h.get("promiseDate") and not melhor.get("promiseDate"):
+            melhor["promiseDate"] = h["promiseDate"]
+    return melhor
+
+
 # ── Status efetivo (combina histórico manual + painel_tarefas_diarias) ────────
 # Garante que a tela Inadimplência reflete a mesma fonte de verdade do kanban,
 # independente de quem está logado. Painel_tarefas_diarias é o source-of-truth
@@ -217,17 +258,13 @@ def get_hist(cid):
 
 def get_effective_status(cid) -> str:
     """Status visível na tela. Regra:
-    - Decisões manuais (promise/negotiating/paid) sempre vencem
+    - Decisões manuais (promise/negotiating/paid) sempre vencem — lê do
+      histórico unificado (admin vê das atendentes, atendente vê próprio)
     - Senão, se o bot agiu em QUALQUER momento do histórico (sem janela
-      temporal), retorna 'contacted'. Lê de _painel_ultimo_contato_dias
-      (alimentado por load_ultimo_contato_painel — query sem WHERE de data)
+      temporal), retorna 'contacted'
     - Senão, retorna o que o histórico manual tem (pending por default)
-
-    Mudança em 2026-05-19: antes usava janela de 6 dias (cooldown). Agora é
-    todo histórico. 'Não Contactados' passa a significar 'parcela virgem
-    da carteira' (nunca foi tocado, ponto), métrica que cai monotonicamente.
     """
-    h = get_hist(cid)
+    h = get_hist_unificado(cid)
     manual_st = h.get("status", "")
     if manual_st in ("promise", "negotiating", "paid"):
         return manual_st
@@ -240,15 +277,14 @@ def get_effective_status(cid) -> str:
 
 def get_effective_atendente(cid) -> str:
     """Atendente dono do cliente. Prioridade:
-    1. Manual do histórico (gravado quando atendente editou via Detalhes)
+    1. Manual do histórico unificado (admin vê das atendentes; atendente vê próprio)
        — só vale se for nome de atendente REAL (Ana/Priscila). Filtra fora
-       qualquer outro nome que tenha caído no histórico (ex: edições de
-       admin/gestor antes da correção, ou nomes legados)
+       qualquer outro nome legado.
     2. Atendente atual em painel_tarefas_diarias (registro mais recente)
     """
     import streamlit as st
     from data import _EMAIL_GRUPO
-    h = get_hist(cid)
+    h = get_hist_unificado(cid)
     manual = (h.get("atendente") or "").strip()
     if manual and manual in _EMAIL_GRUPO.values():
         return manual
@@ -257,15 +293,11 @@ def get_effective_atendente(cid) -> str:
 
 def get_effective_lastContact(cid) -> str:
     """Último contato (formato DD/MM/AAAA). Mais recente entre:
-    - lastContact manual (gravado via Detalhes)
+    - lastContact manual (do histórico unificado — admin vê das atendentes)
     - última ação do bot em painel_tarefas_diarias (sem janela temporal)
-
-    Lê de `_painel_ultimo_contato_dias` populado por `load_ultimo_contato_painel`,
-    que faz MAX por id_sacado sem filtro de data — assim ações de meses atrás
-    ainda alimentam o campo.
     """
     import streamlit as st
-    h = get_hist(cid)
+    h = get_hist_unificado(cid)
     manual_lc = h.get("lastContact", "") or ""
     cid_str = str(cid)
 
