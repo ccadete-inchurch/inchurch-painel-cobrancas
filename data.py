@@ -669,6 +669,59 @@ def save_hist_to_bq(uid: str, cid: str, data: dict):
         pass
 
 
+def aplicar_auto_update_status(clientes: list | None = None):
+    """Promove status 'Sem contato' → 'Contactado' quando o bot já agiu no cliente hoje.
+
+    Regra (conservadora):
+      • Só promove pending/vazio → contacted. Nunca rebaixa nem sobrescreve promise/negotiating/paid.
+      • Preenche lastContact com a data BRT de hoje.
+      • Só roda pro usuário logado se ele for atendente do _EMAIL_GRUPO (Ana/Priscila).
+      • Idempotente — só chama save_hist quando há mudança real (evita escrita em BQ por nada).
+
+    Depende de _painel_acoes_hoje já ter sido populado por load_cooldowns_from_painel.
+    """
+    from auth import current_email, get_store
+    from helpers import get_hist, save_hist
+
+    email = current_email()
+    if email not in _EMAIL_GRUPO:
+        return  # admin/gestor não tem clientes próprios
+
+    acoes_hoje = st.session_state.get("_painel_acoes_hoje", {})
+    if not acoes_hoje:
+        return
+
+    if clientes is None:
+        clientes = get_store().get("clientes", [])
+
+    _BRT = timezone(timedelta(hours=-3))
+    hoje_str = datetime.now(_BRT).strftime("%d/%m/%Y")
+    nome_atend = _EMAIL_GRUPO[email]
+
+    for c in clientes:
+        cid = str(c.get("id", ""))
+        a = acoes_hoje.get(cid)
+        if not a:
+            continue
+        if not (a.get("msg") or a.get("lig") or a.get("atend")):
+            continue
+
+        h = get_hist(cid)
+        if h.get("status", "pending") not in ("pending", ""):
+            continue  # respeita decisão manual (contacted/promise/negotiating/paid)
+
+        # Já tá com lastContact de hoje e status promovido → nada a fazer
+        if h.get("status") == "contacted" and h.get("lastContact") == hoje_str:
+            continue
+
+        nova_h = dict(h)
+        nova_h["status"]      = "contacted"
+        nova_h["lastContact"] = hoje_str
+        if not nova_h.get("atendente"):
+            nova_h["atendente"] = nome_atend
+        save_hist(cid, nova_h)
+
+
 # ── Tarefas diárias ───────────────────────────────────────────────────────────
 
 def _classificar_lote(cliente):
@@ -1539,6 +1592,8 @@ def recomendar_acao(cliente) -> list[str]:
 
 
 def calcular_pendencias(clientes):
+    # "Sem contato há X dias" foi removido: esse fluxo é do kanban (Atividades),
+    # não dos Clientes Fixados. Aqui ficam só compromissos explícitos da atendente.
     pendencias = []
     hoje       = date.today()
     for c in clientes:
@@ -1554,12 +1609,6 @@ def calcular_pendencias(clientes):
             if dt and dt <= hoje:
                 pendencias.append((c, h, "retorno", f"Retorno para {h['retorno']}"))
                 continue
-        if h.get("lastContact"):
-            dt = parse_date_br(h["lastContact"])
-            if dt:
-                diff = (hoje - dt).days
-                if diff >= DIAS_SEM_CONTATO:
-                    pendencias.append((c, h, "semcontato", f"Sem contato há {diff} dias"))
     return pendencias
 
 

@@ -220,9 +220,11 @@ def _render_dashboard(store, clientes, role):
     )
 
     # ── Tabela ────────────────────────────────────────────────────────────────
+    # Score não tem coluna própria — vira chip discreto na linha de tags do Cliente.
+    # Continua ordenável via SORT_MAP (config.py).
     has_edit = (role != "gestor")
-    col_w    = [3, 0.8, 1.5, 1, 1, 1.5, 1.5, 1.5] + ([0.8] if has_edit else [])
-    hdrs_t   = ["Cliente", "Score", "Saldo devedor", "Atraso em dias", "Histórico", "Telefone", "Grupo", "Último Contato"] + ([""] if has_edit else [])
+    col_w    = [3, 1.5, 1, 1, 1.5, 1.5, 1.5] + ([0.7] if has_edit else [])
+    hdrs_t   = ["Cliente", "Saldo devedor", "Atraso em dias", "Histórico", "Telefone", "Grupo", "Último Contato"] + ([""] if has_edit else [])
 
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
     # Fundo escuro aplicado via container CSS abaixo.
@@ -254,8 +256,17 @@ def _render_dashboard(store, clientes, role):
         n_rows = len(df_page)
         for ridx, (_, row) in enumerate(df_page.iterrows()):
             is_top = row["id"] in top10
+            # Score discreto: laranja sutil pra >=150, cinza pra 80-149, nada abaixo
+            _sc = int(row.get("_score") or 0)
+            if _sc >= 150:
+                score_chip = f'<span title="Score {_sc}" style="background:rgba(245,158,11,.15);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;margin-right:4px">⚡ {_sc}</span>'
+            elif _sc >= 80:
+                score_chip = f'<span title="Score {_sc}" style="background:rgba(139,148,165,.12);color:#9ca3af;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;margin-right:4px">{_sc}</span>'
+            else:
+                score_chip = ""
             tags   = "".join([
                 '<span class="top-badge">★ TOP</span>'               if is_top                    else "",
+                score_chip,
                 '<span class="tag-novo">NOVO</span>'                 if row.get("_novo")          else "",
                 '<span class="tag-upd">ATUALIZADO</span>'           if row.get("_atualizado")    else "",
                 '<span class="tag-nova-cob">+ Nova cobrança</span>' if row.get("_nova_cobranca") else "",
@@ -278,21 +289,10 @@ def _render_dashboard(store, clientes, role):
                     unsafe_allow_html=True,
                 )
             with rcols[1]:
-                # Score (mesma escala do card de atividades)
-                _sc = int(row.get("_score") or 0)
-                cor_sc = "#ff5555" if _sc >= 150 else ("#f59e0b" if _sc >= 80 else "#5fa3ff")
-                st.markdown(
-                    f'<div style="padding:12px 12px;text-align:center">'
-                    f'<span style="color:{cor_sc};font-weight:800;font-size:17px">{_sc}</span>'
-                    f'<span style="color:#6b7280;font-size:11px;display:block">pts</span>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-            with rcols[2]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:17px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
-            with rcols[3]:
+            with rcols[2]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:14px">{dias_html(row.get("dias_atraso"))}</div>', unsafe_allow_html=True)
-            with rcols[4]:
+            with rcols[3]:
                 m = int(row.get("_meses_atraso") or 0)
                 cor_m = "#ef4444" if m >= 9 else ("#f97316" if m >= 5 else "#f59e0b")
                 st.markdown(
@@ -302,7 +302,7 @@ def _render_dashboard(store, clientes, role):
                     f'</div>',
                     unsafe_allow_html=True,
                 )
-            with rcols[5]:
+            with rcols[4]:
                 # Telefone: primeiro + "+N" se cliente tem mais de 1 número
                 tels = row.get("telefones") or []
                 if not tels:
@@ -318,12 +318,12 @@ def _render_dashboard(store, clientes, role):
                         f'+{extras}</span></span>'
                     )
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{tel_display}</div>', unsafe_allow_html=True)
-            with rcols[6]:
+            with rcols[5]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row.get("_grupo","—")}</div>', unsafe_allow_html=True)
-            with rcols[7]:
+            with rcols[6]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
             if has_edit:
-                with rcols[8]:
+                with rcols[7]:
                     if st.button("✏", key=f"edit_{row['id']}_{ridx}", width="stretch", help=f"Editar {row['nome']}"):
                         dialog_editar(row["id"])
 
