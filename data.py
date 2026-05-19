@@ -325,11 +325,15 @@ def ensure_snapshot_table():
 
 
 def salvar_snapshot_inadimplentes_hoje(clientes: list | None = None):
-    """Grava 1 linha por cliente inadimplente atual em cobrancas_snapshot_diario.
-    Idempotente — se já existe snapshot pra hoje, não duplica.
+    """Grava snapshot dos inadimplentes em cobrancas_snapshot_diario.
 
-    Roda diariamente pelo cron logo após processar_dados_bigquery. Sem snapshot,
-    'Variação no Mês' fica em modo heurística. Com snapshot, vira exata."""
+    Frequência: 1 vez por MÊS. O cron roda diariamente mas a função só
+    persiste se ainda não existe nenhum snapshot do mês corrente — assim
+    pegamos o estado do PRIMEIRO dia útil do mês como referência pra
+    'Variação no Mês'. Se cron falhar no dia 1, o snapshot do dia 2 vira
+    a referência do mês (resiliência sem inflar storage).
+
+    Volume: ~5k linhas/mês = ~60k/ano. Pequeno e simples de querytar."""
     client = get_bq_client()
     if not client:
         return
@@ -342,12 +346,14 @@ def salvar_snapshot_inadimplentes_hoje(clientes: list | None = None):
     _BRT = timezone(timedelta(hours=-3))
     hoje = datetime.now(_BRT).date().isoformat()
 
-    # Idempotência: não regrava se já tem snapshot do dia
+    # Idempotência MENSAL: se já existe snapshot em qualquer dia deste mês,
+    # não grava de novo. Garante 1 snapshot por mês como referência fixa.
     try:
         df_check = client.query(f"""
             SELECT COUNT(*) AS cnt
             FROM `{_SNAPSHOT_TABLE}`
-            WHERE data_snapshot = '{hoje}'
+            WHERE data_snapshot >= DATE_TRUNC(DATE '{hoje}', MONTH)
+              AND data_snapshot <= DATE '{hoje}'
         """).to_dataframe()
         if int(df_check["cnt"].iloc[0]) > 0:
             return
