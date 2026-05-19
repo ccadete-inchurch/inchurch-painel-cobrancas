@@ -167,13 +167,25 @@ def _render_dashboard(store, clientes, role):
     pendencias = calcular_pendencias(clientes)
     if pendencias:
         im = {"promise": "🟠", "retorno": "📞", "semcontato": "⚠️"}
+        # CSS local: botões compactos só pros cards de fixados (escopo via classe wrapper)
+        st.markdown("""
+        <style>
+        .pend-wrap .stButton > button {
+            font-size:11px!important;
+            padding:4px 8px!important;
+            min-height:0!important;
+            line-height:1.2!important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         st.markdown(
-            f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
-            f'<span style="font-weight:700;font-size:16px;color:#e8eaf0;letter-spacing:0.3px">📌 Clientes Fixados</span>'
-            f'<span style="background:#ef4444;color:white;font-size:12px;padding:3px 10px;border-radius:20px;font-weight:700">{len(pendencias)}</span>'
+            f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">'
+            f'<span style="font-weight:800;font-size:24px;color:#e8eaf0;text-transform:uppercase;letter-spacing:1.5px">📌 Clientes Fixados</span>'
+            f'<span style="background:#ef4444;color:white;font-size:14px;padding:4px 12px;border-radius:20px;font-weight:700">{len(pendencias)}</span>'
             f'</div>',
             unsafe_allow_html=True,
         )
+        st.markdown('<div class="pend-wrap">', unsafe_allow_html=True)
         cols_p = st.columns(min(3, len(pendencias)))
         for i, (c, _h, tipo, msg, dias_atraso) in enumerate(pendencias):
             if dias_atraso >= 7:
@@ -185,25 +197,47 @@ def _render_dashboard(store, clientes, role):
             else:
                 cor_borda = "#22c55e"  # hoje
             sufixo = "hoje" if dias_atraso == 0 else f"há {dias_atraso}d"
+            # Origem (Ana/Priscila) — só pra admin/gestor (atendente sabe que é dela)
+            origens = _h.get("_atendentes_origem") or []
+            origem_tag = ""
+            if origens and role in ("admin", "gestor"):
+                origem_tag = (
+                    f'<div style="font-size:11px;color:#8b94a5;margin-top:4px;font-weight:500">'
+                    f'👤 {" / ".join(origens)}'
+                    f'</div>'
+                )
             with cols_p[i % 3]:
                 st.markdown(
                     f'<div class="pend-card" style="border-left:4px solid {cor_borda}">'
                     f'<div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{im[tipo]} {c["nome"]}</div>'
                     f'<div style="font-size:12px;color:#8b94a5;margin-top:4px">{msg} · <span style="color:{cor_borda};font-weight:700">{sufixo}</span></div>'
                     f'<div style="font-size:13px;color:#7cc243;margin-top:6px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
+                    f'{origem_tag}'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
                 if role != "gestor":
-                    ba, bb = st.columns(2)
-                    with ba:
-                        if st.button("✏ Atender", key=f"pend_atend_{i}_{c['id']}", width="stretch"):
-                            dialog_editar(c["id"])
-                    with bb:
+                    # Admin vê só ✅ Concluir; atendente vê 👁 Ver e ✅ Concluir.
+                    # Atendente abre dialog em modo edição; admin não precisa abrir
+                    # pois já vê tudo no card (e dialog dele é read-only mesmo).
+                    eh_atendente = role not in ("admin", "gestor")
+                    if eh_atendente:
+                        ba, bb = st.columns(2)
+                        with ba:
+                            if st.button("👁 Ver", key=f"pend_atend_{i}_{c['id']}", width="stretch"):
+                                dialog_editar(c["id"])
+                        with bb:
+                            if st.button("✅ Concluir", key=f"pend_done_{i}_{c['id']}", width="stretch"):
+                                concluir_pendencia(c["id"])
+                                st.toast(f"✅ {c['nome']} concluído", icon="✅")
+                                st.rerun()
+                    else:
+                        # Admin: só Concluir (limpa pra todas as atendentes)
                         if st.button("✅ Concluir", key=f"pend_done_{i}_{c['id']}", width="stretch"):
                             concluir_pendencia(c["id"])
                             st.toast(f"✅ {c['nome']} concluído", icon="✅")
                             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
         st.markdown("---")
 
     # ── Barra de ações ────────────────────────────────────────────────────────

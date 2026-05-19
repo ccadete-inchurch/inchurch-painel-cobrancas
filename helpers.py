@@ -215,11 +215,10 @@ def get_hist_unificado(cid: str) -> dict:
       - Atendente (Ana/Priscila): só o próprio histórico
       - Admin/gestor: união dos historicos das atendentes — escolhe estado
         mais 'ativo' quando duas marcaram o mesmo cliente
-        (promise > negotiating > contacted > pending > paid)
+        (promise > negotiating > contacted > pending > paid). Também anota
+        `_atendentes_origem` (lista de nomes) pra UI mostrar de quem veio.
 
     O histórico do próprio admin/gestor é ignorado pra evitar poluição.
-    Usado por get_effective_status/lastContact/atendente e pelo dialog
-    quando admin visualiza.
     """
     import hashlib
     from auth import current_role
@@ -229,9 +228,11 @@ def get_hist_unificado(cid: str) -> dict:
 
     # Lazy import pra evitar ciclo helpers ↔ data
     from data import _EMAIL_GRUPO as _EG
+    nome_por_uid = {hashlib.md5(e.encode()).hexdigest(): nome for e, nome in _EG.items()}
     historicos = get_store().get("historico", {}) or {}
-    atendente_uids = {hashlib.md5(e.encode()).hexdigest() for e in _EG.keys()}
+    atendente_uids = set(nome_por_uid.keys())
     melhor = {}
+    origens = []
     ordem = {"promise": 3, "negotiating": 2, "contacted": 1, "pending": 0, "paid": -1}
     for uid, ch in historicos.items():
         if uid not in atendente_uids:
@@ -239,6 +240,7 @@ def get_hist_unificado(cid: str) -> dict:
         h = ch.get(cid)
         if not h:
             continue
+        origens.append(nome_por_uid[uid])
         if not melhor:
             melhor = dict(h)
             continue
@@ -248,6 +250,8 @@ def get_hist_unificado(cid: str) -> dict:
             melhor["retorno"] = h["retorno"]
         elif h.get("promiseDate") and not melhor.get("promiseDate"):
             melhor["promiseDate"] = h["promiseDate"]
+    if origens:
+        melhor["_atendentes_origem"] = origens
     return melhor
 
 
