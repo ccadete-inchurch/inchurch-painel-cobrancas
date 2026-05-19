@@ -241,15 +241,16 @@ def get_effective_status(cid) -> str:
 def get_effective_atendente(cid) -> str:
     """Atendente dono do cliente. Prioridade:
     1. Manual do histórico (gravado quando atendente editou via Detalhes)
+       — só vale se for nome de atendente REAL (Ana/Priscila). Filtra fora
+       qualquer outro nome que tenha caído no histórico (ex: edições de
+       admin/gestor antes da correção, ou nomes legados)
     2. Atendente atual em painel_tarefas_diarias (registro mais recente)
-
-    Garante que o nome apareça mesmo se ninguém editou manualmente — fonte
-    compartilhada (independe de quem está logado).
     """
     import streamlit as st
+    from data import _EMAIL_GRUPO
     h = get_hist(cid)
     manual = (h.get("atendente") or "").strip()
-    if manual:
+    if manual and manual in _EMAIL_GRUPO.values():
         return manual
     return st.session_state.get("_painel_atendente_atual", {}).get(str(cid), "")
 

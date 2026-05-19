@@ -2,7 +2,7 @@ from datetime import datetime, date
 import streamlit as st
 
 from config import STATUS_OPTS
-from auth import get_store, current_nome
+from auth import get_store, current_nome, current_email
 from helpers import get_hist, save_hist, fmt_moeda_plain, dias_html
 
 
@@ -89,21 +89,27 @@ def dialog_editar(eid):
         )
 
     notes = st.text_area("Observações", value=h.get("notes", ""), placeholder="Ex: Cliente pediu prazo até sexta...", height=100)
-    st.markdown(f'<div style="font-size:12px;color:#8b94a5;margin-top:6px;font-weight:500">Atendente: <span style="color:#e8eaf0;font-weight:700">{current_nome()}</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-size:12px;color:#8b94a5;margin-top:6px;font-weight:500">Editado por: <span style="color:#e8eaf0;font-weight:700">{current_nome()}</span></div>', unsafe_allow_html=True)
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
     b1, b2 = st.columns(2)
     with b1:
         if st.button("💾 Salvar alterações", width="stretch"):
             new = STATUS_OPTS[status_sel]
-            save_hist(eid, {
+            # Só grava atendente se o usuário logado é atendente real (Ana/Priscila).
+            # Admin/gestor edita mas o cliente continua sendo "dono" da atendente
+            # do lote — sem poluir o histórico com nome de gestor.
+            from data import _EMAIL_GRUPO
+            payload = {
                 "status":      new,
                 "lastContact": last_contact.strftime("%d/%m/%Y"),
                 "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
                 "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
                 "notes":       notes,
-                "atendente":   current_nome(),
-            })
+            }
+            if current_email() in _EMAIL_GRUPO:
+                payload["atendente"] = current_nome()
+            save_hist(eid, payload)
             st.toast(f"✅ {cliente['nome']} salvo!", icon="✅")
             st.rerun()
     with b2:
