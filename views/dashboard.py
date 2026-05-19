@@ -86,13 +86,17 @@ def _render_dashboard(store, clientes, role):
             df = df[df["_inativo"].fillna(False).astype(bool)]
 
     # ── Métricas (do df filtrado — reagem aos filtros em tempo real) ─────────
+    # Cards separados por status pra cada um casar com o filtro do pill.
+    # Antes 'Promessas' somava promise+negotiating, mas o filtro tem opções
+    # distintas ('Prometeu pagar' vs 'Negociando') — gerava inconsistência.
     total = len(df)
-    pending = contacted = promise = 0
+    pending = contacted = promise = negotiating = 0
     if not df.empty:
         vc = df["_status"].value_counts()
-        pending   = int(vc.get("pending", 0))
-        contacted = int(vc.get("contacted", 0))
-        promise   = int(vc.get("promise", 0)) + int(vc.get("negotiating", 0))
+        pending     = int(vc.get("pending", 0))
+        contacted   = int(vc.get("contacted", 0))
+        promise     = int(vc.get("promise", 0))
+        negotiating = int(vc.get("negotiating", 0))
 
     # ── Variação no mês: novos inadimplentes (↑) vs regularizados (↓) ────────
     # Fonte preferida: snapshot diário (cobrancas_snapshot_diario). Quando
@@ -122,32 +126,33 @@ def _render_dashboard(store, clientes, role):
         variacao_sub = "no mês (aproximado)"
     saldo_mes = novos_mes - reg_mes
 
-    s1, s2, s3, s4, s5 = st.columns(5)
+    s1, s2, s3, s4, s5, s6 = st.columns(6)
     for col, label, val, cor, sub in [
-        (s1, "Total Clientes",       total,     "#e8eaf0", "filtro atual"),
-        (s2, "Não Contactados",     pending,   "#ef4444", "nunca foi tocado"),
-        (s3, "Contactados",         contacted, "#f59e0b", "em acompanhamento"),
-        (s4, "Promessas",           promise,   "#f97316", "aguardando pagamento"),
+        (s1, "Total Clientes",       total,       "#e8eaf0", "filtro atual"),
+        (s2, "Não Contactados",     pending,     "#ef4444", "nunca foi tocado"),
+        (s3, "Contactados",         contacted,   "#f59e0b", "em acompanhamento"),
+        (s4, "Promessas",           promise,     "#f97316", "prometeu pagar"),
+        (s5, "Negociando",          negotiating, "#4f7cff", "em negociação"),
     ]:
         with col:
             st.markdown(
-                f'<div class="metric-card" style="min-height:150px;padding:24px 26px">'
-                f'<div class="metric-label" style="font-size:13px">{label}</div>'
-                f'<div class="metric-value" style="color:{cor};font-size:42px">{val:,}</div>'
-                f'<div class="metric-sub" style="font-size:14px">{sub}</div></div>',
+                f'<div class="metric-card" style="min-height:150px;padding:20px 18px">'
+                f'<div class="metric-label" style="font-size:12px">{label}</div>'
+                f'<div class="metric-value" style="color:{cor};font-size:38px">{val:,}</div>'
+                f'<div class="metric-sub" style="font-size:13px">{sub}</div></div>',
                 unsafe_allow_html=True,
             )
-    # 5º card: variação no mês (substitui 'Regularizados Hoje')
-    with s5:
+    # 6º card: variação no mês
+    with s6:
         sinal = "+" if saldo_mes >= 0 else ""
         cor_saldo = "#ef4444" if saldo_mes > 0 else ("#22c55e" if saldo_mes < 0 else "#e8eaf0")
         st.markdown(
-            f'<div class="metric-card" style="min-height:150px;padding:24px 26px">'
-            f'<div class="metric-label" style="font-size:13px">Variação {variacao_sub}</div>'
-            f'<div class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</div>'
-            f'<div class="metric-sub" style="font-size:13px;margin-top:6px">'
-            f'<span style="color:#ef4444;font-weight:700">↑ {novos_mes}</span> novos · '
-            f'<span style="color:#22c55e;font-weight:700">↓ {reg_mes}</span> regularizados'
+            f'<div class="metric-card" style="min-height:150px;padding:20px 18px">'
+            f'<div class="metric-label" style="font-size:12px">Variação {variacao_sub}</div>'
+            f'<div class="metric-value" style="color:{cor_saldo};font-size:38px">{sinal}{saldo_mes:,}</div>'
+            f'<div class="metric-sub" style="font-size:12px;margin-top:6px">'
+            f'<span style="color:#ef4444;font-weight:700">↑ {novos_mes}</span> · '
+            f'<span style="color:#22c55e;font-weight:700">↓ {reg_mes}</span>'
             f'</div></div>',
             unsafe_allow_html=True,
         )
