@@ -6,7 +6,7 @@ import streamlit as st
 
 from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
 from auth import get_store, hash_senha, current_role
-from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html
+from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact
 from data import calcular_pendencias
 from views.dialog import dialog_editar
 
@@ -32,10 +32,11 @@ def _render_dashboard(store, clientes, role):
     )
 
     # ── Métricas ──────────────────────────────────────────────────────────────
+    # Status efetivo: combina manual + painel_tarefas_diarias (independe de login).
     total = len(clientes)
     pending = contacted = promise = 0
     for c in clientes:
-        s = get_hist(c["id"]).get("status", "pending")
+        s = get_effective_status(c["id"])
         if s == "pending":         pending   += 1
         elif s == "contacted":     contacted += 1
         elif s in ("promise", "negotiating"): promise += 1
@@ -150,15 +151,20 @@ def _render_dashboard(store, clientes, role):
         return
 
     # ── Aplicar filtros ───────────────────────────────────────────────────────
+    # _status/_lastContact via getters efetivos: bot agindo no painel_tarefas_diarias
+    # já reflete na tela sem precisar de auto-update por usuário.
     df = pd.DataFrame(clientes)
-    df["_status"]      = df["id"].apply(lambda i: get_hist(i).get("status",      "pending"))
-    df["_lastContact"] = df["id"].apply(lambda i: get_hist(i).get("lastContact", ""))
+    df["_status"]      = df["id"].apply(get_effective_status)
+    df["_lastContact"] = df["id"].apply(get_effective_lastContact)
     df["_atendente"]   = df["id"].apply(lambda i: get_hist(i).get("atendente",   ""))
     df["_notes"]       = df["id"].apply(lambda i: get_hist(i).get("notes",       ""))
     # Score do cliente (mesma fórmula usada na tela Atividades) — permite
     # ordenar a tabela pelo score, igual ao painel de tarefas do dia.
     from data import calcular_score
     df["_score"]       = df.apply(lambda r: calcular_score(r.to_dict(), get_hist(r["id"])), axis=1)
+    # Percentil do score na base atual — usado pra colorir a coluna em gradiente
+    # relativo (não em valor absoluto), porque scores variam muito (até +2000).
+    df["_score_pct"]   = df["_score"].rank(pct=True, method="max").fillna(0)
 
     if busca:
         b = busca.lower()
@@ -220,11 +226,11 @@ def _render_dashboard(store, clientes, role):
     )
 
     # ── Tabela ────────────────────────────────────────────────────────────────
-    # Score não tem coluna própria — vira chip discreto na linha de tags do Cliente.
-    # Continua ordenável via SORT_MAP (config.py).
+    # Score: coluna dedicada com gradiente branco→cinza pra valores baixos,
+    # laranja só pra score alto (>=150). Reduz ruído visual sem perder a info.
     has_edit = (role != "gestor")
-    col_w    = [3, 1.5, 1, 1, 1.5, 1.5, 1.5] + ([0.7] if has_edit else [])
-    hdrs_t   = ["Cliente", "Saldo devedor", "Atraso em dias", "Histórico", "Telefone", "Grupo", "Último Contato"] + ([""] if has_edit else [])
+    col_w    = [2.8, 1.1, 1.4, 1, 1, 1.5, 1.5, 1.5] + ([0.7] if has_edit else [])
+    hdrs_t   = ["Cliente", "Score", "Saldo devedor", "Atraso em dias", "Histórico", "Telefone", "Grupo", "Último Contato"] + ([""] if has_edit else [])
 
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
     # Fundo escuro aplicado via container CSS abaixo.
@@ -256,17 +262,8 @@ def _render_dashboard(store, clientes, role):
         n_rows = len(df_page)
         for ridx, (_, row) in enumerate(df_page.iterrows()):
             is_top = row["id"] in top10
-            # Score discreto: laranja sutil pra >=150, cinza pra 80-149, nada abaixo
-            _sc = int(row.get("_score") or 0)
-            if _sc >= 150:
-                score_chip = f'<span title="Score {_sc}" style="background:rgba(245,158,11,.15);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;margin-right:4px">⚡ {_sc}</span>'
-            elif _sc >= 80:
-                score_chip = f'<span title="Score {_sc}" style="background:rgba(139,148,165,.12);color:#9ca3af;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;margin-right:4px">{_sc}</span>'
-            else:
-                score_chip = ""
             tags   = "".join([
                 '<span class="top-badge">★ TOP</span>'               if is_top                    else "",
-                score_chip,
                 '<span class="tag-novo">NOVO</span>'                 if row.get("_novo")          else "",
                 '<span class="tag-upd">ATUALIZADO</span>'           if row.get("_atualizado")    else "",
                 '<span class="tag-nova-cob">+ Nova cobrança</span>' if row.get("_nova_cobranca") else "",
@@ -289,10 +286,33 @@ def _render_dashboard(store, clientes, role):
                     unsafe_allow_html=True,
                 )
             with rcols[1]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:17px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
+                # Gradiente relativo ao ranking, não ao valor: top 10% laranja,
+                # resto interpola branco (top 10-90%) até cinza (baixo). Assim
+                # scores muito altos (+2000) não distorcem a escala dos outros.
+                _sc  = int(row.get("_score") or 0)
+                _pct = float(row.get("_score_pct") or 0)  # 0..1, percentil na base
+                if _pct >= 0.90:
+                    cor_sc = "#f59e0b"  # top 10% — laranja
+                else:
+                    _ratio = _pct / 0.90  # 0..1 dentro dos 90% inferiores
+                    _r1, _g1, _b1 = 0x6b, 0x72, 0x80  # cinza (low percentile)
+                    _r2, _g2, _b2 = 0xe8, 0xea, 0xf0  # branco (high percentile)
+                    _r = int(_r1 + (_r2 - _r1) * _ratio)
+                    _g = int(_g1 + (_g2 - _g1) * _ratio)
+                    _b = int(_b1 + (_b2 - _b1) * _ratio)
+                    cor_sc = f"#{_r:02x}{_g:02x}{_b:02x}"
+                st.markdown(
+                    f'<div style="padding:12px 6px;text-align:center;white-space:nowrap">'
+                    f'<span style="color:{cor_sc};font-weight:800;font-size:17px">{_sc}</span>'
+                    f'<span style="color:#6b7280;font-size:10px;margin-left:3px">pts</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
             with rcols[2]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:14px">{dias_html(row.get("dias_atraso"))}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:17px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
             with rcols[3]:
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px">{dias_html(row.get("dias_atraso"))}</div>', unsafe_allow_html=True)
+            with rcols[4]:
                 m = int(row.get("_meses_atraso") or 0)
                 cor_m = "#ef4444" if m >= 9 else ("#f97316" if m >= 5 else "#f59e0b")
                 st.markdown(
@@ -302,7 +322,7 @@ def _render_dashboard(store, clientes, role):
                     f'</div>',
                     unsafe_allow_html=True,
                 )
-            with rcols[4]:
+            with rcols[5]:
                 # Telefone: primeiro + "+N" se cliente tem mais de 1 número
                 tels = row.get("telefones") or []
                 if not tels:
@@ -318,12 +338,12 @@ def _render_dashboard(store, clientes, role):
                         f'+{extras}</span></span>'
                     )
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{tel_display}</div>', unsafe_allow_html=True)
-            with rcols[5]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row.get("_grupo","—")}</div>', unsafe_allow_html=True)
             with rcols[6]:
+                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row.get("_grupo","—")}</div>', unsafe_allow_html=True)
+            with rcols[7]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
             if has_edit:
-                with rcols[7]:
+                with rcols[8]:
                     if st.button("✏", key=f"edit_{row['id']}_{ridx}", width="stretch", help=f"Editar {row['nome']}"):
                         dialog_editar(row["id"])
 

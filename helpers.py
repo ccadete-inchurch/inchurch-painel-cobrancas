@@ -210,6 +210,62 @@ def get_hist(cid):
     return get_store()["historico"].get(current_uid(), {}).get(cid, {})
 
 
+# ── Status efetivo (combina histórico manual + painel_tarefas_diarias) ────────
+# Garante que a tela Inadimplência reflete a mesma fonte de verdade do kanban,
+# independente de quem está logado. Painel_tarefas_diarias é o source-of-truth
+# pra ações do bot; historico manual prevalece pra promise/negotiating/paid.
+
+def get_effective_status(cid) -> str:
+    """Status visível na tela. Regra:
+    - Decisões manuais (promise/negotiating/paid) sempre vencem
+    - Senão, se o bot agiu em qualquer dia (msg ou lig em painel_tarefas_diarias),
+      retorna 'contacted'
+    - Senão, retorna o que o histórico manual tem (pending por default)
+    """
+    h = get_hist(cid)
+    manual_st = h.get("status", "")
+    if manual_st in ("promise", "negotiating", "paid"):
+        return manual_st
+    import streamlit as st
+    cid_str = str(cid)
+    if (st.session_state.get("_painel_dias_msg",         {}).get(cid_str) is not None
+        or st.session_state.get("_painel_dias_lig",         {}).get(cid_str) is not None
+        or st.session_state.get("_painel_dias_lig_tentada", {}).get(cid_str) is not None):
+        return "contacted"
+    return manual_st or "pending"
+
+
+def get_effective_lastContact(cid) -> str:
+    """Último contato (formato DD/MM/AAAA). Mais recente entre:
+    - lastContact manual (gravado via Detalhes)
+    - última ação do bot em painel_tarefas_diarias (msg, lig atendida ou tentada)
+    """
+    import streamlit as st
+    h = get_hist(cid)
+    manual_lc = h.get("lastContact", "") or ""
+    cid_str = str(cid)
+
+    candidatos_dias = []
+    for k in ("_painel_dias_msg", "_painel_dias_lig", "_painel_dias_lig_tentada"):
+        v = st.session_state.get(k, {}).get(cid_str)
+        if v is not None:
+            candidatos_dias.append(v)
+    if not candidatos_dias:
+        return manual_lc
+
+    dias_painel = min(candidatos_dias)
+    painel_d = date.today() - timedelta(days=int(dias_painel))
+    painel_lc = painel_d.strftime("%d/%m/%Y")
+
+    if not manual_lc:
+        return painel_lc
+
+    m_d = parse_date_br(manual_lc)
+    if m_d is None:
+        return painel_lc
+    return (m_d if m_d > painel_d else painel_d).strftime("%d/%m/%Y")
+
+
 def save_hist(cid, data):
     store = get_store()
     uid   = current_uid()

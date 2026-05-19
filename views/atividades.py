@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, aplicar_auto_update_status, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -36,7 +36,6 @@ def _atualizar_dados_periodicos(store_clientes):
             for _atd in _EMAIL_GRUPO.values():
                 atualizar_tarefas_bq(_atd, status_map, store_clientes)
         load_cooldowns_from_painel()
-        aplicar_auto_update_status(store_clientes)
         st.session_state["_painel_refresh_ts"] = _time.time()
 
 
@@ -443,11 +442,6 @@ def _render_atividades(store, clientes, role):
                             load_cooldowns_from_painel()
                         except Exception as e:
                             st.error(f"❌ load_cooldowns_from_painel FALHOU: {e}")
-
-                        try:
-                            aplicar_auto_update_status(cli_all)
-                        except Exception as e:
-                            st.error(f"❌ aplicar_auto_update_status FALHOU: {e}")
 
                         ah = st.session_state.get("_painel_acoes_hoje", {})
                         atendidos = sum(1 for v in ah.values() if v.get("atend"))
