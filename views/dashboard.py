@@ -176,9 +176,9 @@ def _render_dashboard(store, clientes, role):
         </style>
         """, unsafe_allow_html=True)
 
-        # Header — caixa alta com peso 800. Botão "Ocultar/Mostrar" colapsa
-        # a seção pra atendente focar na tabela quando não precisa do bloco.
-        hcol, fcol, tcol = st.columns([3, 1.2, 0.8])
+        # Header — caixa alta com peso 800. Toggle pequeno (▴/▾) pra ocultar
+        # a seção. Filtro 'Grupo' (atendente) ao lado pra admin/gestor.
+        hcol, fcol, tcol = st.columns([3.4, 1.2, 0.35])
         with hcol:
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">'
@@ -191,8 +191,6 @@ def _render_dashboard(store, clientes, role):
                 f'</div>',
                 unsafe_allow_html=True,
             )
-        # Filtro por grupo (atendente) — só admin/gestor. Label 'Grupo' porque
-        # cada atendente gerencia um grupo de igrejas; faz mais sentido na UI.
         filtro_atend = "Todos"
         with fcol:
             if role in ("admin", "gestor"):
@@ -203,11 +201,12 @@ def _render_dashboard(store, clientes, role):
                     key="fix_filtro_atendente",
                     label_visibility="collapsed",
                 )
-        # Toggle ocultar/mostrar
         mostrar_fixados = st.session_state.setdefault("_fix_mostrar", True)
         with tcol:
-            rotulo_toggle = "Ocultar" if mostrar_fixados else "Mostrar"
-            if st.button(rotulo_toggle, key="_btn_toggle_fixados", width="stretch"):
+            icone_toggle = "▴" if mostrar_fixados else "▾"
+            help_toggle  = "Ocultar fixados" if mostrar_fixados else "Mostrar fixados"
+            if st.button(icone_toggle, key="_btn_toggle_fixados",
+                         width="stretch", help=help_toggle):
                 st.session_state["_fix_mostrar"] = not mostrar_fixados
                 st.rerun()
 
@@ -227,8 +226,9 @@ def _render_dashboard(store, clientes, role):
                 unsafe_allow_html=True,
             )
         else:
-            # Paginação: 9 fixados por página (3 colunas × 3 linhas)
-            PAGE_SIZE_FIX = 9
+            # Paginação: 5 cards por linha × 2 linhas = 10 por página
+            CARDS_POR_LINHA = 5
+            PAGE_SIZE_FIX   = 10
             total_fix    = len(pendencias)
             total_pg_fix = max(1, -(-total_fix // PAGE_SIZE_FIX))
             page_fix     = max(1, min(st.session_state.get("_fix_page", 1), total_pg_fix))
@@ -237,7 +237,7 @@ def _render_dashboard(store, clientes, role):
             pend_pag     = pendencias[inicio:fim]
 
             st.markdown('<div class="pend-wrap">', unsafe_allow_html=True)
-            cols_p = st.columns(min(3, len(pend_pag)))
+            cols_p = st.columns(min(CARDS_POR_LINHA, len(pend_pag)))
             # Ícone do botão adapta por role: atendente → ✏ (ação/edição),
             # admin/gestor → 👁 (observação, dialog é read-only)
             icone_btn = "✏" if role not in ("admin", "gestor") else "👁"
@@ -260,12 +260,12 @@ def _render_dashboard(store, clientes, role):
                         f'• {" / ".join(origens)}'
                         f'</div>'
                     )
-                with cols_p[i % 3]:
+                with cols_p[i % CARDS_POR_LINHA]:
                     st.markdown(
                         f'<div class="pend-card" style="border-left:4px solid {cor_borda}">'
-                        f'<div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{im[tipo]} {c["nome"]}</div>'
-                        f'<div style="font-size:12px;color:#8b94a5;margin-top:4px">{msg} · <span style="color:{cor_borda};font-weight:700">{sufixo}</span></div>'
-                        f'<div style="font-size:13px;color:#7cc243;margin-top:6px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
+                        f'<div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{im[tipo]} {c["nome"]}</div>'
+                        f'<div style="font-size:11px;color:#8b94a5;margin-top:4px">{msg} · <span style="color:{cor_borda};font-weight:700">{sufixo}</span></div>'
+                        f'<div style="font-size:12px;color:#7cc243;margin-top:6px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
                         f'{origem_tag}'
                         f'</div>',
                         unsafe_allow_html=True,
@@ -275,25 +275,24 @@ def _render_dashboard(store, clientes, role):
                         dialog_editar(c["id"])
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # Paginação 9 por página
+            # Paginação minimalista: só setas + indicador 'X / Y'
             if total_pg_fix > 1:
-                pc1, pc2, pc3 = st.columns([1, 2, 1])
+                pc1, pc2, pc3 = st.columns([0.4, 1, 0.4])
                 with pc1:
-                    if st.button("← Anterior", disabled=(page_fix <= 1),
-                                 width="stretch", key="_fix_prev"):
+                    if st.button("←", disabled=(page_fix <= 1),
+                                 key="_fix_prev", help="Página anterior"):
                         st.session_state["_fix_page"] = page_fix - 1
                         st.rerun()
                 with pc2:
                     st.markdown(
-                        f'<div style="text-align:center;color:#6b7280;font-size:12px;padding-top:6px">'
-                        f'Página {page_fix} de {total_pg_fix}'
-                        f' · mostrando {inicio + 1}–{min(fim, total_fix)} de {total_fix}'
+                        f'<div style="text-align:center;color:#6b7280;font-size:12px;padding-top:8px">'
+                        f'{page_fix} / {total_pg_fix}'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
                 with pc3:
-                    if st.button("Próxima →", disabled=(page_fix >= total_pg_fix),
-                                 width="stretch", key="_fix_next"):
+                    if st.button("→", disabled=(page_fix >= total_pg_fix),
+                                 key="_fix_next", help="Próxima página"):
                         st.session_state["_fix_page"] = page_fix + 1
                         st.rerun()
         st.markdown("---")
