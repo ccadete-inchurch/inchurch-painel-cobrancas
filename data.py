@@ -478,36 +478,52 @@ def ensure_historico_table():
 
 
 def load_historico_from_bq():
-    """Carrega todo o historico do usuário logado do BQ para o session_state."""
-    from auth import current_uid, get_store as _get_store
-    uid = current_uid()
-    if not uid:
+    """Carrega historico do BQ para o session_state.
+
+    Atendente: carrega só o próprio historico.
+    Admin/gestor: carrega o próprio + o das atendentes (Ana/Priscila), pra
+        que `_hist_pra_pendencias` consiga montar a união dos fixados.
+    """
+    import hashlib
+    from auth import current_uid, current_role, get_store as _get_store
+    uid_logado = current_uid()
+    if not uid_logado:
         return
     client = get_bq_client()
     if not client:
         return
     ensure_historico_table()
+
+    # Decide quais uids carregar: atendente carrega só o próprio; admin/gestor
+    # carrega o próprio + Ana e Priscila (uids derivados via md5 do email).
+    role = current_role()
+    uids = {uid_logado}
+    if role in ("admin", "gestor"):
+        for email in _EMAIL_GRUPO.keys():
+            uids.add(hashlib.md5(email.encode()).hexdigest())
+
     query = """
-    SELECT cliente_id, historico_json
+    SELECT uid, cliente_id, historico_json
     FROM (
-        SELECT cliente_id, historico_json,
-               ROW_NUMBER() OVER (PARTITION BY cliente_id ORDER BY updated_at DESC) AS rn
+        SELECT uid, cliente_id, historico_json,
+               ROW_NUMBER() OVER (PARTITION BY uid, cliente_id ORDER BY updated_at DESC) AS rn
         FROM `{table}`
-        WHERE uid = @uid
+        WHERE uid IN UNNEST(@uids)
     )
     WHERE rn = 1
     """.format(table=_HIST_TABLE)
     job_config = bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("uid", "STRING", uid)]
+        query_parameters=[bigquery.ArrayQueryParameter("uids", "STRING", list(uids))]
     )
     try:
         df = client.query(query, job_config=job_config).to_dataframe()
         store = _get_store()
-        if uid not in store["historico"]:
-            store["historico"][uid] = {}
+        for u in uids:
+            if u not in store["historico"]:
+                store["historico"][u] = {}
         for _, row in df.iterrows():
             try:
-                store["historico"][uid][row["cliente_id"]] = json.loads(row["historico_json"])
+                store["historico"][row["uid"]][row["cliente_id"]] = json.loads(row["historico_json"])
             except Exception:
                 pass
     except Exception:
