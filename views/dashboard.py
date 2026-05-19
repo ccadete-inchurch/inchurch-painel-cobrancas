@@ -160,14 +160,11 @@ def _render_dashboard(store, clientes, role):
     st.markdown("")
 
     # ── Clientes fixados ──────────────────────────────────────────────────────
-    # Lista vem ordenada por dias de atraso DESC (mais antigos primeiro).
-    # Cor da borda lateral reflete urgência: vermelho 7d+, laranja 3-6d,
-    # amarelo 1-2d, verde hoje. Botão Concluir limpa promiseDate/retorno
-    # sem precisar abrir Detalhes.
+    # Lista ordenada por dias_atraso DESC. Cor da borda reflete urgência.
+    # Concluir agora vive dentro do dialog (botão Ver abre, ✅ Concluir fica lá).
     pendencias = calcular_pendencias(clientes)
     if pendencias:
         im = {"promise": "🟠", "retorno": "📞", "semcontato": "⚠️"}
-        # CSS local: botões compactos só pros cards de fixados (escopo via classe wrapper)
         st.markdown("""
         <style>
         .pend-wrap .stButton > button {
@@ -178,59 +175,80 @@ def _render_dashboard(store, clientes, role):
         }
         </style>
         """, unsafe_allow_html=True)
-        st.markdown(
-            f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">'
-            f'<span style="font-weight:800;font-size:24px;color:#e8eaf0;text-transform:uppercase;letter-spacing:1.5px">📌 Clientes Fixados</span>'
-            f'<span style="background:#ef4444;color:white;font-size:14px;padding:4px 12px;border-radius:20px;font-weight:700">{len(pendencias)}</span>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown('<div class="pend-wrap">', unsafe_allow_html=True)
-        cols_p = st.columns(min(3, len(pendencias)))
-        for i, (c, _h, tipo, msg, dias_atraso) in enumerate(pendencias):
-            if dias_atraso >= 7:
-                cor_borda = "#ef4444"  # crítico
-            elif dias_atraso >= 3:
-                cor_borda = "#f97316"  # médio
-            elif dias_atraso >= 1:
-                cor_borda = "#eab308"  # leve
-            else:
-                cor_borda = "#22c55e"  # hoje
-            sufixo = "hoje" if dias_atraso == 0 else f"há {dias_atraso}d"
-            # Origem (Ana/Priscila) — só pra admin/gestor (atendente sabe que é dela)
-            origens = _h.get("_atendentes_origem") or []
-            origem_tag = ""
-            if origens and role in ("admin", "gestor"):
-                # Sem emoji 👤 — em vários SOs ele renderiza colorido (roxo,
-                # bege, etc) e quebra a paleta cinza. Usa bullet monocromático.
-                origem_tag = (
-                    f'<div style="font-size:11px;color:#8b94a5;margin-top:4px;font-weight:500">'
-                    f'• {" / ".join(origens)}'
-                    f'</div>'
+
+        # Header — tipografia profissional (sem emoji), badge de contagem maior
+        hcol, fcol = st.columns([3, 1.2])
+        with hcol:
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">'
+                f'<span style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;'
+                f'font-weight:700;font-size:26px;color:#e8eaf0;letter-spacing:-0.5px;line-height:1.2">'
+                f'Clientes Fixados</span>'
+                f'<span style="background:#ef4444;color:white;font-size:17px;padding:5px 14px;'
+                f'border-radius:20px;font-weight:700;letter-spacing:0.3px">{len(pendencias)}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        # Filtro por atendente — só admin/gestor (atendente vê só os próprios)
+        filtro_atend = "Todos"
+        with fcol:
+            if role in ("admin", "gestor"):
+                from data import _EMAIL_GRUPO as _EG
+                filtro_atend = st.selectbox(
+                    "Atendente",
+                    ["Todos"] + list(_EG.values()),
+                    key="fix_filtro_atendente",
+                    label_visibility="collapsed",
                 )
-            with cols_p[i % 3]:
-                st.markdown(
-                    f'<div class="pend-card" style="border-left:4px solid {cor_borda}">'
-                    f'<div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{im[tipo]} {c["nome"]}</div>'
-                    f'<div style="font-size:12px;color:#8b94a5;margin-top:4px">{msg} · <span style="color:{cor_borda};font-weight:700">{sufixo}</span></div>'
-                    f'<div style="font-size:13px;color:#7cc243;margin-top:6px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
-                    f'{origem_tag}'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-                # Botões compactos com ícone só + tooltip via help.
-                # Streamlit não permite CSS escopado fácil pros botões, então
-                # texto minimal mantém o widget menor visualmente.
-                ba, bb = st.columns(2)
-                with ba:
-                    if st.button("👁", key=f"pend_atend_{i}_{c['id']}", width="stretch", help="Ver detalhes"):
+
+        # Aplica filtro de atendente nas pendências
+        if filtro_atend != "Todos":
+            pendencias = [
+                p for p in pendencias
+                if filtro_atend in (p[1].get("_atendentes_origem") or [])
+            ]
+
+        if not pendencias:
+            st.markdown(
+                '<div style="color:#6b7280;font-size:13px;padding:14px 0">'
+                'Nenhum fixado nesse filtro.</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown('<div class="pend-wrap">', unsafe_allow_html=True)
+            cols_p = st.columns(min(3, len(pendencias)))
+            for i, (c, _h, tipo, msg, dias_atraso) in enumerate(pendencias):
+                if dias_atraso >= 7:
+                    cor_borda = "#ef4444"
+                elif dias_atraso >= 3:
+                    cor_borda = "#f97316"
+                elif dias_atraso >= 1:
+                    cor_borda = "#eab308"
+                else:
+                    cor_borda = "#22c55e"
+                sufixo = "hoje" if dias_atraso == 0 else f"há {dias_atraso}d"
+                origens = _h.get("_atendentes_origem") or []
+                origem_tag = ""
+                if origens and role in ("admin", "gestor"):
+                    origem_tag = (
+                        f'<div style="font-size:11px;color:#8b94a5;margin-top:4px;font-weight:500">'
+                        f'• {" / ".join(origens)}'
+                        f'</div>'
+                    )
+                with cols_p[i % 3]:
+                    st.markdown(
+                        f'<div class="pend-card" style="border-left:4px solid {cor_borda}">'
+                        f'<div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{im[tipo]} {c["nome"]}</div>'
+                        f'<div style="font-size:12px;color:#8b94a5;margin-top:4px">{msg} · <span style="color:{cor_borda};font-weight:700">{sufixo}</span></div>'
+                        f'<div style="font-size:13px;color:#7cc243;margin-top:6px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
+                        f'{origem_tag}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                    # Único botão: 👁 abre dialog. Concluir vive lá dentro agora.
+                    if st.button("👁", key=f"pend_atend_{i}_{c['id']}", width="stretch", help="Ver detalhes / Concluir"):
                         dialog_editar(c["id"])
-                with bb:
-                    if st.button("✅", key=f"pend_done_{i}_{c['id']}", width="stretch", help="Concluir"):
-                        concluir_pendencia(c["id"])
-                        st.toast(f"✅ {c['nome']} concluído", icon="✅")
-                        st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
         st.markdown("---")
 
     # ── Barra de ações ────────────────────────────────────────────────────────

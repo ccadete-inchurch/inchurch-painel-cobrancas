@@ -104,25 +104,54 @@ def dialog_editar(eid):
         st.markdown(f'<div style="font-size:12px;color:#8b94a5;margin-top:6px;font-weight:500">Editado por: <span style="color:#e8eaf0;font-weight:700">{current_nome()}</span></div>', unsafe_allow_html=True)
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    b1, b2 = st.columns(2)
-    with b1:
-        if not somente_leitura and st.button("💾 Salvar alterações", width="stretch"):
-            new = STATUS_OPTS[status_sel]
-            # Só grava atendente se o usuário logado é atendente real (Ana/Priscila).
-            from data import _EMAIL_GRUPO
-            payload = {
-                "status":      new,
-                "lastContact": last_contact.strftime("%d/%m/%Y"),
-                "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
-                "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
-                "notes":       notes,
-            }
-            if current_email() in _EMAIL_GRUPO:
-                payload["atendente"] = current_nome()
-            save_hist(eid, payload)
-            st.toast(f"✅ {cliente['nome']} salvo!", icon="✅")
-            st.rerun()
-    with b2:
-        rotulo_cancel = "✕ Fechar" if somente_leitura else "✕ Cancelar"
-        if st.button(rotulo_cancel, width="stretch"):
-            st.rerun()
+    # Detecta se cliente está fixado (promise vencida OU retorno vencido)
+    # pra exibir o botão Concluir junto com Salvar/Cancelar.
+    from datetime import date as _d
+    from helpers import parse_date_br
+    hoje = _d.today()
+    eh_fixado = False
+    if h.get("status") == "promise" and h.get("promiseDate"):
+        d = parse_date_br(h["promiseDate"])
+        eh_fixado = bool(d and d <= hoje)
+    if not eh_fixado and h.get("retorno"):
+        d = parse_date_br(h["retorno"])
+        eh_fixado = bool(d and d <= hoje)
+
+    # Monta lista de botões dinamicamente baseado em role + se é fixado.
+    botoes = []
+    if not somente_leitura:
+        botoes.append("salvar")
+    if eh_fixado:
+        botoes.append("concluir")
+    botoes.append("cancelar")
+
+    cols = st.columns(len(botoes))
+    for col, acao in zip(cols, botoes):
+        with col:
+            if acao == "salvar":
+                if st.button("💾 Salvar alterações", width="stretch"):
+                    new = STATUS_OPTS[status_sel]
+                    from data import _EMAIL_GRUPO
+                    payload = {
+                        "status":      new,
+                        "lastContact": last_contact.strftime("%d/%m/%Y"),
+                        "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
+                        "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
+                        "notes":       notes,
+                    }
+                    if current_email() in _EMAIL_GRUPO:
+                        payload["atendente"] = current_nome()
+                    save_hist(eid, payload)
+                    st.toast(f"✅ {cliente['nome']} salvo!", icon="✅")
+                    st.rerun()
+            elif acao == "concluir":
+                if st.button("✅ Concluir fixado", width="stretch", type="primary",
+                             help="Apaga promessa/retorno; status 'promise' → 'contacted'"):
+                    from data import concluir_pendencia
+                    concluir_pendencia(eid)
+                    st.toast(f"✅ {cliente['nome']} concluído", icon="✅")
+                    st.rerun()
+            elif acao == "cancelar":
+                rotulo = "✕ Fechar" if somente_leitura else "✕ Cancelar"
+                if st.button(rotulo, width="stretch"):
+                    st.rerun()
