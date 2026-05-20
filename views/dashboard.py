@@ -352,23 +352,19 @@ def _render_dashboard(store, clientes, role):
                         f'</div>'
                     )
                 # Badge da mensagem em CAIXA ALTA com cor do status.
-                # 'há Xd' embutido no fim do badge, separado por bullet.
-                # Quando crítico (≥7d) o 'há Xd' vira vermelho dentro do badge.
+                # 'há Xd' fica em linha separada, neutro (cinza). Urgência
+                # já é comunicada pela cor do badge + ordenação (mais antigos
+                # no topo) — sem precisar de vermelho dentro do badge.
                 bg_badge = _hex_to_rgba(cor_borda, 0.15)
-                if dias_atraso >= 7:
-                    atraso_inner = (
-                        f'<span style="color:#ef4444">{sufixo}</span>'
-                    )
-                else:
-                    atraso_inner = (
-                        f'<span style="opacity:0.75">{sufixo}</span>'
-                    )
                 msg_badge = (
                     f'<span style="background:{bg_badge};color:{cor_borda};'
                     f'font-size:10px;font-weight:700;padding:3px 9px;'
                     f'border-radius:6px;display:inline-block;'
-                    f'text-transform:uppercase;letter-spacing:0.5px">'
-                    f'{msg} • {atraso_inner}</span>'
+                    f'text-transform:uppercase;letter-spacing:0.5px">{msg}</span>'
+                )
+                atraso_html = (
+                    f'<div style="font-size:11px;color:#8b94a5;margin-top:5px">'
+                    f'{sufixo}</div>'
                 )
                 # Grupo (igreja) com ícone — mesmo padrão dos cards de
                 # Atividades. Pra atendente só (admin já vê origem '• Ana').
@@ -386,6 +382,7 @@ def _render_dashboard(store, clientes, role):
                         f'<div class="pend-card" style="border-left:4px solid {cor_borda}">'
                         f'<div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{c["nome"]}</div>'
                         f'<div style="margin-top:7px">{msg_badge}</div>'
+                        f'{atraso_html}'
                         f'<div style="font-size:15px;color:#7cc243;margin-top:7px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
                         f'{tel_html}'
                         f'{grupo_html}'
