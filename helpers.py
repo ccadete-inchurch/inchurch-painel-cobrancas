@@ -260,22 +260,52 @@ def get_hist_unificado(cid: str) -> dict:
 # independente de quem está logado. Painel_tarefas_diarias é o source-of-truth
 # pra ações do bot; historico manual prevalece pra promise/negotiating/paid.
 
+def _any_atendente_engaged(cid, except_uid=None) -> bool:
+    """True se QUALQUER atendente (_EMAIL_GRUPO) marcou o cliente com algum
+    status != 'pending' (i.e., houve interação manual). Opcionalmente
+    exclui um uid específico (pra checar 'algum COLEGA', não a própria).
+    """
+    import hashlib
+    from data import _EMAIL_GRUPO as _EG
+    historicos = get_store().get("historico", {}) or {}
+    uids = {hashlib.md5(e.encode()).hexdigest() for e in _EG.keys()}
+    if except_uid:
+        uids.discard(except_uid)
+    for uid in uids:
+        h = historicos.get(uid, {}).get(str(cid), {})
+        s = h.get("status", "")
+        if s and s != "pending":
+            return True
+    return False
+
+
 def get_effective_status(cid) -> str:
     """Status visível na tela. Regra:
-    - Decisões manuais (promise/negotiating/paid) sempre vencem — lê do
-      histórico unificado (admin vê das atendentes, atendente vê próprio)
-    - Senão, se o bot agiu em QUALQUER momento do histórico (sem janela
-      temporal), retorna 'contacted'
-    - Senão, retorna o que o histórico manual tem (pending por default)
+    - Promise/negotiating/paid: do histórico unificado (admin = união,
+      atendente = próprio). Decisão pessoal vence.
+    - Contacted: se o BOT agiu OU outra ATENDENTE marcou algo (qualquer
+      status != pending) — reflete que o time tocou no cliente.
+    - Pending: ninguém tocou.
+
+    Pra atendente, 'contacted' agora também inclui clientes que a colega
+    cuidou — assim os cards Contactados/Não Contactados refletem trabalho
+    do time, enquanto Promessas/Negociando permanecem individuais.
     """
     h = get_hist_unificado(cid)
     manual_st = h.get("status", "")
     if manual_st in ("promise", "negotiating", "paid"):
         return manual_st
     import streamlit as st
+    from auth import current_role, current_uid
     cid_str = str(cid)
+    # Bot agiu (painel_tarefas_diarias) → contacted
     if st.session_state.get("_painel_ultimo_contato_dias", {}).get(cid_str) is not None:
         return "contacted"
+    # Atendente: checa se uma COLEGA marcou algo (admin já vê união acima)
+    role = current_role()
+    if role not in ("admin", "gestor"):
+        if _any_atendente_engaged(cid, except_uid=current_uid()):
+            return "contacted"
     return manual_st or "pending"
 
 
