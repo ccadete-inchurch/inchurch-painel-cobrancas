@@ -236,38 +236,8 @@ def _render_dashboard(store, clientes, role):
         </style>
         """, unsafe_allow_html=True)
 
-        # Toggle do bloco de fixados — chevron próximo ao badge [17].
-        # Streamlit Cloud quebra sessão se a URL muda (testado), então usa
-        # st.button em coluna aninhada estreita pra ficar próximo do título.
-        mostrar_fixados = st.session_state.setdefault("_fix_mostrar", True)
-        icone_toggle = "▾" if mostrar_fixados else "▸"
-        help_toggle  = "Ocultar fixados" if mostrar_fixados else "Mostrar fixados"
-        # CSS local pro chevron minimalista (sem fundo, transparente)
-        st.markdown("""
-        <style>
-        .pend-chev .stButton > button {
-            background:transparent!important;
-            border:none!important;
-            color:#8b94a5!important;
-            font-size:22px!important;
-            padding:0 6px!important;
-            min-height:0!important;
-            line-height:1!important;
-            box-shadow:none!important;
-            font-weight:700!important;
-        }
-        .pend-chev .stButton > button:hover {
-            color:#e8eaf0!important;
-            background:transparent!important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        # Colunas no nível externo (sem nesting). Título estreito + chev
-        # estreito + filtro à direita. Tamanhos ajustados pra título
-        # "CLIENTES FIXADOS [17]" ficar perto do chev na maioria das
-        # resoluções.
-        hcol, c_col, _spacer, fcol = st.columns([1.0, 0.3, 1.9, 1.2])
+        # Header — título + badge da contagem + filtro de atendente (admin)
+        hcol, fcol = st.columns([3.4, 1.2])
         with hcol:
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">'
@@ -280,12 +250,6 @@ def _render_dashboard(store, clientes, role):
                 f'</div>',
                 unsafe_allow_html=True,
             )
-        with c_col:
-            st.markdown('<div class="pend-chev">', unsafe_allow_html=True)
-            if st.button(icone_toggle, key="_btn_toggle_fixados", help=help_toggle):
-                st.session_state["_fix_mostrar"] = not mostrar_fixados
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
         filtro_atend = "Todos"
         with fcol:
             if role in ("admin", "gestor"):
@@ -304,9 +268,7 @@ def _render_dashboard(store, clientes, role):
                 if filtro_atend in (p[1].get("_atendentes_origem") or [])
             ]
 
-        if not mostrar_fixados:
-            pass  # seção colapsada, pula renderização e divisor
-        elif not pendencias:
+        if not pendencias:
             st.markdown(
                 '<div style="color:#6b7280;font-size:13px;padding:14px 0">'
                 'Nenhum fixado nesse filtro.</div>',
