@@ -236,9 +236,39 @@ def _render_dashboard(store, clientes, role):
         </style>
         """, unsafe_allow_html=True)
 
-        # Header — caixa alta com peso 800. Toggle pequeno (▴/▾) pra ocultar
-        # a seção. Filtro 'Grupo' (atendente) ao lado pra admin/gestor.
-        hcol, fcol, tcol = st.columns([3.4, 1.2, 0.35])
+        # Toggle minimalista ACIMA do título — seta que expande/colapsa
+        mostrar_fixados = st.session_state.setdefault("_fix_mostrar", True)
+        icone_toggle = "▾" if mostrar_fixados else "▸"
+        help_toggle  = "Ocultar fixados" if mostrar_fixados else "Mostrar fixados"
+        # CSS local pra deixar o botão da seta minimalista (sem fundo)
+        st.markdown("""
+        <style>
+        .pend-chev .stButton > button {
+            background:transparent!important;
+            border:none!important;
+            color:#8b94a5!important;
+            font-size:16px!important;
+            padding:0 4px!important;
+            min-height:0!important;
+            line-height:1!important;
+            box-shadow:none!important;
+        }
+        .pend-chev .stButton > button:hover {
+            color:#e8eaf0!important;
+            background:transparent!important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        chev_col, _spacer = st.columns([0.3, 10])
+        with chev_col:
+            st.markdown('<div class="pend-chev">', unsafe_allow_html=True)
+            if st.button(icone_toggle, key="_btn_toggle_fixados", help=help_toggle):
+                st.session_state["_fix_mostrar"] = not mostrar_fixados
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # Título + filtro 'Grupo' (admin/gestor) — sem toggle aqui agora
+        hcol, fcol = st.columns([3.4, 1.2])
         with hcol:
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">'
@@ -261,14 +291,6 @@ def _render_dashboard(store, clientes, role):
                     key="fix_filtro_atendente",
                     label_visibility="collapsed",
                 )
-        mostrar_fixados = st.session_state.setdefault("_fix_mostrar", True)
-        with tcol:
-            icone_toggle = "▴" if mostrar_fixados else "▾"
-            help_toggle  = "Ocultar fixados" if mostrar_fixados else "Mostrar fixados"
-            if st.button(icone_toggle, key="_btn_toggle_fixados",
-                         width="stretch", help=help_toggle):
-                st.session_state["_fix_mostrar"] = not mostrar_fixados
-                st.rerun()
 
         # Aplica filtro de atendente nas pendências
         if filtro_atend != "Todos":
@@ -386,29 +408,34 @@ def _render_dashboard(store, clientes, role):
                         f'</div>'
                     )
 
-                # Tags ACORDO / INATIVO acima do nome (mesmo padrão da tabela)
-                tags_fix = ""
+                # Tags ACORDO / INATIVO inline com o nome (à direita)
+                tags_inline = ""
                 if c.get("_tem_acordo"):
-                    tags_fix += (
+                    tags_inline += (
                         '<span style="background:#4f7cff;color:#fff;font-size:9px;'
                         'font-weight:700;padding:2px 6px;border-radius:4px;'
-                        'margin-right:4px">ACORDO</span>'
+                        'flex-shrink:0">ACORDO</span>'
                     )
                 if c.get("_inativo"):
-                    tags_fix += (
+                    tags_inline += (
                         '<span style="background:#6b7280;color:#fff;font-size:9px;'
                         'font-weight:700;padding:2px 6px;border-radius:4px;'
-                        'margin-right:4px">INATIVO</span>'
+                        'flex-shrink:0;margin-left:4px">INATIVO</span>'
                     )
-                tags_html_fix = (
-                    f'<div style="margin-bottom:4px">{tags_fix}</div>'
-                ) if tags_fix else ""
+                # Layout flex pra nome (com ellipsis) + tags à direita
+                nome_row = (
+                    f'<div style="display:flex;align-items:center;gap:6px">'
+                    f'<span style="font-weight:700;font-size:15px;overflow:hidden;'
+                    f'text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1">'
+                    f'{c["nome"]}</span>'
+                    f'{tags_inline}'
+                    f'</div>'
+                )
 
                 with cols_p[i % CARDS_POR_LINHA]:
                     st.markdown(
                         f'<div class="pend-card" style="border-left:4px solid {cor_borda}">'
-                        f'{tags_html_fix}'
-                        f'<div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{c["nome"]}</div>'
+                        f'{nome_row}'
                         f'<div style="margin-top:7px">{msg_badge}</div>'
                         f'<div style="font-size:15px;color:#ef4444;margin-top:7px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
                         f'{tel_html}'
