@@ -20,6 +20,16 @@ _ICON_FIX_PHONE = (
     '1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>'
     '</svg>'
 )
+_ICON_FIX_GROUP = (
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" '
+    'style="flex-shrink:0;vertical-align:middle">'
+    '<path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 '
+    '3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 '
+    '8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5z'
+    'm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33'
+    '-4.67-3.5-7-3.5z"/>'
+    '</svg>'
+)
 _ICON_FIX_WHATSAPP = (
     '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" '
     'style="flex-shrink:0;vertical-align:middle">'
@@ -341,20 +351,29 @@ def _render_dashboard(store, clientes, role):
                         f'• {" / ".join(origens)}'
                         f'</div>'
                     )
-                # Badge da mensagem ('Prometeu pagar...' / 'Retorno para...')
-                # com background tintado da cor do status — estilo igual aos
-                # badges da Atividades (_acao_badge).
+                # Badge da mensagem em CAIXA ALTA com cor do status.
                 bg_badge = _hex_to_rgba(cor_borda, 0.15)
                 msg_badge = (
                     f'<span style="background:{bg_badge};color:{cor_borda};'
-                    f'font-size:11px;font-weight:700;padding:3px 9px;'
-                    f'border-radius:6px;display:inline-block">{msg}</span>'
+                    f'font-size:10px;font-weight:700;padding:3px 9px;'
+                    f'border-radius:6px;display:inline-block;'
+                    f'text-transform:uppercase;letter-spacing:0.5px">{msg}</span>'
                 )
                 # 'há Xd' em linha separada, neutro (vermelho só ≥7d)
                 atraso_html = (
                     f'<div style="font-size:11px;color:{cor_atraso};margin-top:5px;font-weight:600">'
                     f'{sufixo}</div>'
                 )
+                # Grupo (igreja) com ícone — mesmo padrão dos cards de
+                # Atividades. Pra atendente só (admin já vê origem '• Ana').
+                grupo_html = ""
+                if role not in ("admin", "gestor") and c.get("_grupo"):
+                    grupo_html = (
+                        f'<div style="display:flex;align-items:center;gap:5px;'
+                        f'margin-top:4px;font-size:11px;color:#9ca3af">'
+                        f'{_ICON_FIX_GROUP}<span>{c.get("_grupo", "—")}</span>'
+                        f'</div>'
+                    )
 
                 with cols_p[i % CARDS_POR_LINHA]:
                     st.markdown(
@@ -364,6 +383,7 @@ def _render_dashboard(store, clientes, role):
                         f'{atraso_html}'
                         f'<div style="font-size:15px;color:#7cc243;margin-top:7px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
                         f'{tel_html}'
+                        f'{grupo_html}'
                         f'{origem_tag}'
                         f'</div>',
                         unsafe_allow_html=True,
