@@ -8,6 +8,38 @@ from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
 from auth import get_store, hash_senha, current_role
 from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
 from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, concluir_pendencia
+import re as _re_tel
+
+
+# Ícones monocromáticos pros cards de fixado (mesmo padrão da Atividades)
+_ICON_FIX_PHONE = (
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" '
+    'style="flex-shrink:0;vertical-align:middle">'
+    '<path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 '
+    '2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 '
+    '1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>'
+    '</svg>'
+)
+_ICON_FIX_WHATSAPP = (
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" '
+    'style="flex-shrink:0;vertical-align:middle">'
+    '<path d="M17.5 14.4c-.3-.1-1.7-.8-2-.9-.3-.1-.5-.1-.7.1-.2.3-.7.9-.9 '
+    '1.1-.2.2-.3.2-.6.1-1.8-.9-3-1.6-4.2-3.6-.3-.5.3-.5.9-1.6.1-.2.1-.4 '
+    '0-.5-.1-.1-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 '
+    '1-1 2.5s1 2.9 1.2 3.1c.1.2 2 3.1 4.9 4.3 1.8.8 2.5.9 3.4.7.5-.1 '
+    '1.7-.7 1.9-1.4.2-.7.2-1.3.2-1.4-.2-.1-.4-.2-.7-.2zM12 22c-1.7 '
+    '0-3.3-.5-4.7-1.3L3 22l1.3-4.4C3.5 16.2 3 14.7 3 13c0-5 4-9 9-9s9 4 '
+    '9 9-4 9-9 9z"/>'
+    '</svg>'
+)
+
+
+def _tel_only_digits(tel: str) -> str:
+    """Normaliza telefone pra links tel:/wa.me. Adiciona DDI 55 se faltando."""
+    digits = _re_tel.sub(r"\D", "", tel or "")
+    if len(digits) >= 10 and not digits.startswith("55"):
+        digits = "55" + digits
+    return digits
 from views.dialog import dialog_editar
 
 
@@ -254,21 +286,38 @@ def _render_dashboard(store, clientes, role):
                 cor_atraso = "#ef4444" if dias_atraso >= 7 else "#8b94a5"
                 sufixo = "hoje" if dias_atraso == 0 else f"há {dias_atraso}d"
 
-                # Telefones do cliente — mesmo estilo do card de Atividades
+                # Telefones do cliente — formato igual ao card de Atividades:
+                # SVG monocromático + primeiro tel destacado + extras inline.
+                # Pra retorno, adiciona ícone WhatsApp clicável (wa.me).
+                # Pra qualquer fixado, ícone de telefone clicável (tel:).
                 tels = c.get("telefones") or ([c.get("telefone")] if c.get("telefone") else [])
                 tels = [t for t in tels if t]
                 if not tels:
                     tel_html = ""
-                elif len(tels) == 1:
-                    tel_html = (
-                        f'<div style="font-size:11px;color:#8b94a5;margin-top:6px">'
-                        f'{tels[0]}</div>'
-                    )
                 else:
-                    extras = " · ".join(tels[1:])
+                    if len(tels) == 1:
+                        tels_text = tels[0]
+                    else:
+                        extras = " · ".join(tels[1:])
+                        tels_text = (
+                            f'{tels[0]} '
+                            f'<span style="color:#6b7280;font-size:10px;font-weight:500">'
+                            f'· {extras}</span>'
+                        )
+                    digits = _tel_only_digits(tels[0])
+                    tel_link = (
+                        f'<a href="tel:+{digits}" style="text-decoration:none">{_ICON_FIX_PHONE}</a>'
+                    ) if digits else _ICON_FIX_PHONE
+                    wa_link = ""
+                    if tipo == "retorno" and digits:
+                        wa_link = (
+                            f'<a href="https://wa.me/{digits}" target="_blank" '
+                            f'style="text-decoration:none;margin-left:4px">{_ICON_FIX_WHATSAPP}</a>'
+                        )
                     tel_html = (
-                        f'<div style="font-size:11px;color:#8b94a5;margin-top:6px">'
-                        f'{tels[0]} <span style="font-size:10px">· {extras}</span>'
+                        f'<div style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:12px">'
+                        f'{tel_link}{wa_link}'
+                        f'<span style="color:#9ca3af;margin-left:2px">{tels_text}</span>'
                         f'</div>'
                     )
 
