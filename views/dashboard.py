@@ -126,21 +126,18 @@ def _render_dashboard(store, clientes, role):
         variacao_sub = "no mês (aproximado)"
     saldo_mes = novos_mes - reg_mes
 
-    # Ícones semânticos por status — ajudam a identificação visual rápida.
-    # ⏳ aguardando (não tocado), 💬 conversou, 🤝 promessa, ⚖ negociando.
     s1, s2, s3, s4, s5, s6 = st.columns(6)
-    for col, icone, label, val, cor, sub in [
-        (s1, "",   "Total Clientes",       total,       "#e8eaf0", "filtro atual"),
-        (s2, "⏳", "Não Contactados",     pending,     "#ef4444", "nunca foi tocado"),
-        (s3, "💬", "Contactados",         contacted,   "#f59e0b", "em acompanhamento"),
-        (s4, "🤝", "Promessas",           promise,     "#f97316", "prometeu pagar"),
-        (s5, "⚖", "Negociando",          negotiating, "#4f7cff", "em negociação"),
+    for col, label, val, cor, sub in [
+        (s1, "Total Clientes",       total,       "#e8eaf0", "filtro atual"),
+        (s2, "Não Contactados",     pending,     "#ef4444", "nunca foi tocado"),
+        (s3, "Contactados",         contacted,   "#f59e0b", "em acompanhamento"),
+        (s4, "Promessas",           promise,     "#f97316", "prometeu pagar"),
+        (s5, "Negociando",          negotiating, "#4f7cff", "em negociação"),
     ]:
         with col:
-            label_html = f'{icone} {label}' if icone else label
             st.markdown(
                 f'<div class="metric-card" style="min-height:150px;padding:20px 18px">'
-                f'<div class="metric-label" style="font-size:12px">{label_html}</div>'
+                f'<div class="metric-label" style="font-size:12px">{label}</div>'
                 f'<div class="metric-value" style="color:{cor};font-size:38px">{val:,}</div>'
                 f'<div class="metric-sub" style="font-size:13px">{sub}</div></div>',
                 unsafe_allow_html=True,
@@ -167,7 +164,7 @@ def _render_dashboard(store, clientes, role):
     # Concluir agora vive dentro do dialog (botão Ver abre, ✅ Concluir fica lá).
     pendencias = calcular_pendencias(clientes)
     if pendencias:
-        im = {"promise": "🟠", "retorno": "📞", "semcontato": "⚠️"}
+        im = {"promise": "🤝", "retorno": "📞", "semcontato": "⚠️"}
         st.markdown("""
         <style>
         .pend-wrap .stButton > button {

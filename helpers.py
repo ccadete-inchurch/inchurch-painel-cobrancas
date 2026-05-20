@@ -168,10 +168,10 @@ def status_html(s):
         "paid":        "badge-paid",
     }
     lbl = {
-        "pending":     "🔴 Sem contato",
-        "contacted":   "🟡 Contactado",
-        "promise":     "🟠 Prometeu pagar",
-        "negotiating": "🔵 Negociando",
+        "pending":     "⏳ Sem contato",
+        "contacted":   "💬 Contactado",
+        "promise":     "🤝 Prometeu pagar",
+        "negotiating": "⚖ Negociando",
         "paid":        "✅ Regularizado",
     }
     return f'<span class="badge {cls.get(s, "badge-pending")}">{lbl.get(s, "Sem contato")}</span>'
