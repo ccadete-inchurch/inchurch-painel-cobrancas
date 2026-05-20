@@ -126,18 +126,21 @@ def _render_dashboard(store, clientes, role):
         variacao_sub = "no mês (aproximado)"
     saldo_mes = novos_mes - reg_mes
 
+    # Ícones semânticos por status — ajudam a identificação visual rápida.
+    # ⏳ aguardando (não tocado), 💬 conversou, 🤝 promessa, ⚖ negociando.
     s1, s2, s3, s4, s5, s6 = st.columns(6)
-    for col, label, val, cor, sub in [
-        (s1, "Total Clientes",       total,       "#e8eaf0", "filtro atual"),
-        (s2, "Não Contactados",     pending,     "#ef4444", "nunca foi tocado"),
-        (s3, "Contactados",         contacted,   "#f59e0b", "em acompanhamento"),
-        (s4, "Promessas",           promise,     "#f97316", "prometeu pagar"),
-        (s5, "Negociando",          negotiating, "#4f7cff", "em negociação"),
+    for col, icone, label, val, cor, sub in [
+        (s1, "",   "Total Clientes",       total,       "#e8eaf0", "filtro atual"),
+        (s2, "⏳", "Não Contactados",     pending,     "#ef4444", "nunca foi tocado"),
+        (s3, "💬", "Contactados",         contacted,   "#f59e0b", "em acompanhamento"),
+        (s4, "🤝", "Promessas",           promise,     "#f97316", "prometeu pagar"),
+        (s5, "⚖", "Negociando",          negotiating, "#4f7cff", "em negociação"),
     ]:
         with col:
+            label_html = f'{icone} {label}' if icone else label
             st.markdown(
                 f'<div class="metric-card" style="min-height:150px;padding:20px 18px">'
-                f'<div class="metric-label" style="font-size:12px">{label}</div>'
+                f'<div class="metric-label" style="font-size:12px">{label_html}</div>'
                 f'<div class="metric-value" style="color:{cor};font-size:38px">{val:,}</div>'
                 f'<div class="metric-sub" style="font-size:13px">{sub}</div></div>',
                 unsafe_allow_html=True,
@@ -263,9 +266,9 @@ def _render_dashboard(store, clientes, role):
                 with cols_p[i % CARDS_POR_LINHA]:
                     st.markdown(
                         f'<div class="pend-card" style="border-left:4px solid {cor_borda}">'
-                        f'<div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{im[tipo]} {c["nome"]}</div>'
-                        f'<div style="font-size:11px;color:#8b94a5;margin-top:4px">{msg} · <span style="color:{cor_borda};font-weight:700">{sufixo}</span></div>'
-                        f'<div style="font-size:12px;color:#7cc243;margin-top:6px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
+                        f'<div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{im[tipo]} {c["nome"]}</div>'
+                        f'<div style="font-size:13px;color:#8b94a5;margin-top:5px">{msg} · <span style="color:{cor_borda};font-weight:700">{sufixo}</span></div>'
+                        f'<div style="font-size:15px;color:#7cc243;margin-top:7px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
                         f'{origem_tag}'
                         f'</div>',
                         unsafe_allow_html=True,
@@ -275,24 +278,30 @@ def _render_dashboard(store, clientes, role):
                         dialog_editar(c["id"])
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # Paginação minimalista: só setas + indicador 'X / Y'
+            # Paginação minimalista: só setas + indicador 'X / Y'.
+            # vertical_alignment="center" alinha os 3 itens visualmente
+            # (botão tem altura diferente do texto, sem isso fica torto).
             if total_pg_fix > 1:
-                pc1, pc2, pc3 = st.columns([0.4, 1, 0.4])
-                with pc1:
+                pc1, pc2, pc3, pc4, pc5 = st.columns(
+                    [4, 0.5, 0.7, 0.5, 4], vertical_alignment="center"
+                )
+                with pc2:
                     if st.button("←", disabled=(page_fix <= 1),
-                                 key="_fix_prev", help="Página anterior"):
+                                 key="_fix_prev", help="Página anterior",
+                                 width="stretch"):
                         st.session_state["_fix_page"] = page_fix - 1
                         st.rerun()
-                with pc2:
+                with pc3:
                     st.markdown(
-                        f'<div style="text-align:center;color:#6b7280;font-size:12px;padding-top:8px">'
+                        f'<div style="text-align:center;color:#6b7280;font-size:13px;font-weight:600">'
                         f'{page_fix} / {total_pg_fix}'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
-                with pc3:
+                with pc4:
                     if st.button("→", disabled=(page_fix >= total_pg_fix),
-                                 key="_fix_next", help="Próxima página"):
+                                 key="_fix_next", help="Próxima página",
+                                 width="stretch"):
                         st.session_state["_fix_page"] = page_fix + 1
                         st.rerun()
         st.markdown("---")
