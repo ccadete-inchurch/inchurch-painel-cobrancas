@@ -236,37 +236,55 @@ def _render_dashboard(store, clientes, role):
         </style>
         """, unsafe_allow_html=True)
 
-        # Toggle do bloco de fixados — seta INLINE com o badge da contagem.
-        # Usa query_params como ponte porque st.button não fica colado no HTML
-        # do título. Click no chevron muda a URL ?_fix_t=1; render capta e
-        # vira o estado em session_state.
+        # Toggle do bloco de fixados — chevron próximo ao badge [17].
+        # Streamlit Cloud quebra sessão se a URL muda (testado), então usa
+        # st.button em coluna aninhada estreita pra ficar próximo do título.
         mostrar_fixados = st.session_state.setdefault("_fix_mostrar", True)
-        if "_fix_t" in st.query_params:
-            st.session_state["_fix_mostrar"] = not mostrar_fixados
-            try:
-                del st.query_params["_fix_t"]
-            except Exception:
-                pass
-            st.rerun()
         icone_toggle = "▾" if mostrar_fixados else "▸"
+        help_toggle  = "Ocultar fixados" if mostrar_fixados else "Mostrar fixados"
+        # CSS local pro chevron minimalista (sem fundo, transparente)
+        st.markdown("""
+        <style>
+        .pend-chev .stButton > button {
+            background:transparent!important;
+            border:none!important;
+            color:#8b94a5!important;
+            font-size:22px!important;
+            padding:0 6px!important;
+            min-height:0!important;
+            line-height:1!important;
+            box-shadow:none!important;
+            font-weight:700!important;
+        }
+        .pend-chev .stButton > button:hover {
+            color:#e8eaf0!important;
+            background:transparent!important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
         hcol, fcol = st.columns([3.4, 1.2])
         with hcol:
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">'
-                f'<span style="font-weight:800;font-size:24px;color:#e8eaf0;'
-                f'text-transform:uppercase;letter-spacing:1.5px">'
-                f'Clientes Fixados</span>'
-                f'<span style="background:#ef4444;color:white;font-size:22px;padding:7px 18px;'
-                f'border-radius:20px;font-weight:800;letter-spacing:0.3px;line-height:1">'
-                f'{len(pendencias)}</span>'
-                f'<a href="?_fix_t=1" target="_self" '
-                f'style="text-decoration:none;color:#8b94a5;font-size:20px;'
-                f'line-height:1;cursor:pointer;margin-left:4px;font-weight:700"'
-                f' title="Ocultar/Mostrar fixados">{icone_toggle}</a>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
+            # Colunas aninhadas: título estreito + chevron grudado + spacer
+            t_col, c_col, _t_spacer = st.columns([2, 0.25, 2])
+            with t_col:
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">'
+                    f'<span style="font-weight:800;font-size:24px;color:#e8eaf0;'
+                    f'text-transform:uppercase;letter-spacing:1.5px;white-space:nowrap">'
+                    f'Clientes Fixados</span>'
+                    f'<span style="background:#ef4444;color:white;font-size:22px;padding:7px 18px;'
+                    f'border-radius:20px;font-weight:800;letter-spacing:0.3px;line-height:1">'
+                    f'{len(pendencias)}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            with c_col:
+                st.markdown('<div class="pend-chev">', unsafe_allow_html=True)
+                if st.button(icone_toggle, key="_btn_toggle_fixados", help=help_toggle):
+                    st.session_state["_fix_mostrar"] = not mostrar_fixados
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
         filtro_atend = "Todos"
         with fcol:
             if role in ("admin", "gestor"):
