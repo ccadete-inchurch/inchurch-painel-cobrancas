@@ -51,10 +51,10 @@ STATUS_COLORS = {
 }
 # Chave de exibição (com emoji) → chave interna  (usado no dialog de edição)
 STATUS_OPTS = {
-    "⏳ Sem contato":    "pending",
-    "💬 Contactado":     "contacted",
-    "🤝 Prometeu pagar": "promise",
-    "⚖ Negociando":      "negotiating",
+    "Sem contato":    "pending",
+    "Contactado":     "contacted",
+    "Prometeu pagar": "promise",
+    "Negociando":     "negotiating",
 }
 # Rótulo da pill → chave interna  (usado no filtro do dashboard)
 STATUS_FILTER_MAP = {
