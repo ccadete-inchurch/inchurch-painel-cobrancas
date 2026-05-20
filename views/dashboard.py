@@ -40,6 +40,18 @@ def _tel_only_digits(tel: str) -> str:
     if len(digits) >= 10 and not digits.startswith("55"):
         digits = "55" + digits
     return digits
+
+
+def _hex_to_rgba(hex_color: str, alpha: float = 0.15) -> str:
+    """Converte cor hex (#rrggbb) pra rgba pra background tintado de badge."""
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return f"rgba(107,114,128,{alpha})"
+    try:
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        return f"rgba({r},{g},{b},{alpha})"
+    except ValueError:
+        return f"rgba(107,114,128,{alpha})"
 from views.dialog import dialog_editar
 
 
@@ -329,11 +341,27 @@ def _render_dashboard(store, clientes, role):
                         f'• {" / ".join(origens)}'
                         f'</div>'
                     )
+                # Badge da mensagem ('Prometeu pagar...' / 'Retorno para...')
+                # com background tintado da cor do status — estilo igual aos
+                # badges da Atividades (_acao_badge).
+                bg_badge = _hex_to_rgba(cor_borda, 0.15)
+                msg_badge = (
+                    f'<span style="background:{bg_badge};color:{cor_borda};'
+                    f'font-size:11px;font-weight:700;padding:3px 9px;'
+                    f'border-radius:6px;display:inline-block">{msg}</span>'
+                )
+                # 'há Xd' em linha separada, neutro (vermelho só ≥7d)
+                atraso_html = (
+                    f'<div style="font-size:11px;color:{cor_atraso};margin-top:5px;font-weight:600">'
+                    f'{sufixo}</div>'
+                )
+
                 with cols_p[i % CARDS_POR_LINHA]:
                     st.markdown(
                         f'<div class="pend-card" style="border-left:4px solid {cor_borda}">'
                         f'<div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{c["nome"]}</div>'
-                        f'<div style="font-size:13px;color:#8b94a5;margin-top:5px">{msg} · <span style="color:{cor_atraso};font-weight:700">{sufixo}</span></div>'
+                        f'<div style="margin-top:7px">{msg_badge}</div>'
+                        f'{atraso_html}'
                         f'<div style="font-size:15px;color:#7cc243;margin-top:7px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
                         f'{tel_html}'
                         f'{origem_tag}'
