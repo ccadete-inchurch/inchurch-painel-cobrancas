@@ -68,7 +68,10 @@ _LOTE_MAX_INAT_MSG = 15
 
 @st.cache_resource
 def get_pg_n8n_conn():
-    """Conexão direta ao Postgres do N8N. Substitui o BQ Data Transfer (atrasado 30min)."""
+    """Conexão direta ao Postgres do N8N. Substitui o BQ Data Transfer (atrasado 30min).
+    Caching pelo Streamlit pode reter conexão morta após timeout do servidor —
+    use _pg_n8n_conn_alive() pra garantir conn viva (faz health check e reconecta).
+    """
     try:
         import psycopg2
     except ImportError:
@@ -94,6 +97,36 @@ def get_pg_n8n_conn():
             last_err = e
     st.error(f"Falha ao conectar Postgres N8N: {last_err}")
     return None
+
+
+def _pg_n8n_conn_alive():
+    """Retorna conn PG garantidamente viva. Faz health check (SELECT 1) e, se
+    a cached conn estiver morta (psycopg2.InterfaceError/OperationalError ou
+    conn.closed != 0), limpa o cache e tenta reconectar uma vez.
+
+    Use sempre que for usar a conn pra evitar 'connection already closed'
+    quando Streamlit segura conn idle por muito tempo."""
+    try:
+        import psycopg2
+    except ImportError:
+        return None
+
+    conn = get_pg_n8n_conn()
+    if conn is None:
+        return None
+
+    try:
+        if getattr(conn, "closed", 0) != 0:
+            raise psycopg2.InterfaceError("conn closed")
+        with conn.cursor() as _cur:
+            _cur.execute("SELECT 1")
+        return conn
+    except (psycopg2.InterfaceError, psycopg2.OperationalError, AttributeError):
+        try:
+            get_pg_n8n_conn.clear()
+        except Exception:
+            pass
+        return get_pg_n8n_conn()
 
 
 def _pg_table_ref():
@@ -555,7 +588,9 @@ def load_mensagens_from_bq():
     st.session_state.setdefault("_msg_concluida_dias", {})
     st.session_state.setdefault("_msg_ultimo_contato_dias", {})
 
-    conn = get_pg_n8n_conn()
+    # Garante conn viva — Streamlit @st.cache_resource pode reter conn morta
+    # após timeout do servidor, causando 'cursor on closed connection'.
+    conn = _pg_n8n_conn_alive()
     if not conn:
         return
 
