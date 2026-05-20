@@ -386,9 +386,28 @@ def _render_dashboard(store, clientes, role):
                         f'</div>'
                     )
 
+                # Tags ACORDO / INATIVO acima do nome (mesmo padrão da tabela)
+                tags_fix = ""
+                if c.get("_tem_acordo"):
+                    tags_fix += (
+                        '<span style="background:#4f7cff;color:#fff;font-size:9px;'
+                        'font-weight:700;padding:2px 6px;border-radius:4px;'
+                        'margin-right:4px">ACORDO</span>'
+                    )
+                if c.get("_inativo"):
+                    tags_fix += (
+                        '<span style="background:#6b7280;color:#fff;font-size:9px;'
+                        'font-weight:700;padding:2px 6px;border-radius:4px;'
+                        'margin-right:4px">INATIVO</span>'
+                    )
+                tags_html_fix = (
+                    f'<div style="margin-bottom:4px">{tags_fix}</div>'
+                ) if tags_fix else ""
+
                 with cols_p[i % CARDS_POR_LINHA]:
                     st.markdown(
                         f'<div class="pend-card" style="border-left:4px solid {cor_borda}">'
+                        f'{tags_html_fix}'
                         f'<div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{c["nome"]}</div>'
                         f'<div style="margin-top:7px">{msg_badge}</div>'
                         f'<div style="font-size:15px;color:#ef4444;margin-top:7px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
