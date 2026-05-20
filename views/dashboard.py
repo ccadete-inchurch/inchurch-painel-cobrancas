@@ -30,6 +30,13 @@ _ICON_FIX_GROUP = (
     '-4.67-3.5-7-3.5z"/>'
     '</svg>'
 )
+_ICON_FIX_PERSON = (
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" '
+    'style="flex-shrink:0;vertical-align:middle">'
+    '<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 '
+    '2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>'
+    '</svg>'
+)
 _ICON_FIX_WHATSAPP = (
     '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" '
     'style="flex-shrink:0;vertical-align:middle">'
@@ -308,10 +315,9 @@ def _render_dashboard(store, clientes, role):
                 cor_atraso = "#ef4444" if dias_atraso >= 7 else "#8b94a5"
                 sufixo = "hoje" if dias_atraso == 0 else f"há {dias_atraso}d"
 
-                # Telefones do cliente — formato igual ao card de Atividades:
-                # SVG monocromático + primeiro tel destacado + extras inline.
-                # Pra retorno, adiciona ícone WhatsApp clicável (wa.me).
-                # Pra qualquer fixado, ícone de telefone clicável (tel:).
+                # Telefones do cliente com ícones clicáveis (tel: + wa.me).
+                # WhatsApp aparece pra QUALQUER fixado — atendente pode
+                # precisar contatar por ambos os canais independente do tipo.
                 tels = c.get("telefones") or ([c.get("telefone")] if c.get("telefone") else [])
                 tels = [t for t in tels if t]
                 if not tels:
@@ -327,15 +333,19 @@ def _render_dashboard(store, clientes, role):
                             f'· {extras}</span>'
                         )
                     digits = _tel_only_digits(tels[0])
-                    tel_link = (
-                        f'<a href="tel:+{digits}" style="text-decoration:none">{_ICON_FIX_PHONE}</a>'
-                    ) if digits else _ICON_FIX_PHONE
-                    wa_link = ""
-                    if tipo == "retorno" and digits:
+                    if digits:
+                        tel_link = (
+                            f'<a href="tel:+{digits}" style="text-decoration:none">'
+                            f'{_ICON_FIX_PHONE}</a>'
+                        )
                         wa_link = (
                             f'<a href="https://wa.me/{digits}" target="_blank" '
-                            f'style="text-decoration:none;margin-left:4px">{_ICON_FIX_WHATSAPP}</a>'
+                            f'style="text-decoration:none;margin-left:4px">'
+                            f'{_ICON_FIX_WHATSAPP}</a>'
                         )
+                    else:
+                        tel_link = _ICON_FIX_PHONE
+                        wa_link  = _ICON_FIX_WHATSAPP
                     tel_html = (
                         f'<div style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:12px">'
                         f'{tel_link}{wa_link}'
@@ -346,25 +356,24 @@ def _render_dashboard(store, clientes, role):
                 origens = _h.get("_atendentes_origem") or []
                 origem_tag = ""
                 if origens and role in ("admin", "gestor"):
+                    # Ícone de pessoa (mesmo SVG da tela Atividades) + nome
                     origem_tag = (
-                        f'<div style="font-size:11px;color:#8b94a5;margin-top:4px;font-weight:500">'
-                        f'• {" / ".join(origens)}'
+                        f'<div style="display:flex;align-items:center;gap:5px;'
+                        f'margin-top:4px;font-size:11px;color:#9ca3af;font-weight:500">'
+                        f'{_ICON_FIX_PERSON}<span>{" / ".join(origens)}</span>'
                         f'</div>'
                     )
-                # Badge da mensagem em CAIXA ALTA com cor do status.
-                # 'há Xd' fica em linha separada, neutro (cinza). Urgência
-                # já é comunicada pela cor do badge + ordenação (mais antigos
-                # no topo) — sem precisar de vermelho dentro do badge.
+                # Badge em CAIXA ALTA com 'há Xd' embutido — tudo na mesma
+                # cor do status (sem vermelho conflitando). Diferenciação
+                # sutil via opacity no 'há Xd'.
                 bg_badge = _hex_to_rgba(cor_borda, 0.15)
                 msg_badge = (
                     f'<span style="background:{bg_badge};color:{cor_borda};'
                     f'font-size:10px;font-weight:700;padding:3px 9px;'
                     f'border-radius:6px;display:inline-block;'
-                    f'text-transform:uppercase;letter-spacing:0.5px">{msg}</span>'
-                )
-                atraso_html = (
-                    f'<div style="font-size:11px;color:#8b94a5;margin-top:5px">'
-                    f'{sufixo}</div>'
+                    f'text-transform:uppercase;letter-spacing:0.5px">'
+                    f'{msg} <span style="opacity:0.7">• {sufixo}</span>'
+                    f'</span>'
                 )
                 # Grupo (igreja) com ícone — mesmo padrão dos cards de
                 # Atividades. Pra atendente só (admin já vê origem '• Ana').
@@ -382,8 +391,7 @@ def _render_dashboard(store, clientes, role):
                         f'<div class="pend-card" style="border-left:4px solid {cor_borda}">'
                         f'<div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{c["nome"]}</div>'
                         f'<div style="margin-top:7px">{msg_badge}</div>'
-                        f'{atraso_html}'
-                        f'<div style="font-size:15px;color:#7cc243;margin-top:7px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
+                        f'<div style="font-size:15px;color:#ef4444;margin-top:7px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
                         f'{tel_html}'
                         f'{grupo_html}'
                         f'{origem_tag}'
