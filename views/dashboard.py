@@ -164,7 +164,6 @@ def _render_dashboard(store, clientes, role):
     # Concluir agora vive dentro do dialog (botão Ver abre, ✅ Concluir fica lá).
     pendencias = calcular_pendencias(clientes)
     if pendencias:
-        im = {"promise": "🤝", "retorno": "📞", "semcontato": "⚠️"}
         st.markdown("""
         <style>
         .pend-wrap .stButton > button {
@@ -238,20 +237,41 @@ def _render_dashboard(store, clientes, role):
 
             st.markdown('<div class="pend-wrap">', unsafe_allow_html=True)
             cols_p = st.columns(min(CARDS_POR_LINHA, len(pend_pag)))
-            # Ícone do botão adapta por role: atendente → ✏ (ação/edição),
-            # admin/gestor → 👁 (observação, dialog é read-only)
+            # Ícone do botão adapta por role
             icone_btn = "✏" if role not in ("admin", "gestor") else "👁"
             help_btn  = "Atender" if role not in ("admin", "gestor") else "Ver detalhes"
+            # Cor do card vem do STATUS efetivo da cobrança (não do prazo).
+            # Promessa vencida normalmente vem com status='promise', mas o
+            # cliente pode ter status='negotiating' com retorno vencido — daí
+            # a cor reflete a fase real de cobrança.
+            from config import STATUS_COLORS
             for i, (c, _h, tipo, msg, dias_atraso) in enumerate(pend_pag):
-                if dias_atraso >= 7:
-                    cor_borda = "#ef4444"
-                elif dias_atraso >= 3:
-                    cor_borda = "#f97316"
-                elif dias_atraso >= 1:
-                    cor_borda = "#eab308"
-                else:
-                    cor_borda = "#22c55e"
+                status_c = _h.get("status", "pending")
+                cor_borda = STATUS_COLORS.get(status_c, "#8b94a5")
+                # Cor secundária pro 'há Xd' — vermelho intenso só pra muito
+                # atrasado (≥7d); senão usa cinza neutro pra não competir
+                # visualmente com a borda.
+                cor_atraso = "#ef4444" if dias_atraso >= 7 else "#8b94a5"
                 sufixo = "hoje" if dias_atraso == 0 else f"há {dias_atraso}d"
+
+                # Telefones do cliente — mesmo estilo do card de Atividades
+                tels = c.get("telefones") or ([c.get("telefone")] if c.get("telefone") else [])
+                tels = [t for t in tels if t]
+                if not tels:
+                    tel_html = ""
+                elif len(tels) == 1:
+                    tel_html = (
+                        f'<div style="font-size:11px;color:#8b94a5;margin-top:6px">'
+                        f'{tels[0]}</div>'
+                    )
+                else:
+                    extras = " · ".join(tels[1:])
+                    tel_html = (
+                        f'<div style="font-size:11px;color:#8b94a5;margin-top:6px">'
+                        f'{tels[0]} <span style="font-size:10px">· {extras}</span>'
+                        f'</div>'
+                    )
+
                 origens = _h.get("_atendentes_origem") or []
                 origem_tag = ""
                 if origens and role in ("admin", "gestor"):
@@ -263,14 +283,14 @@ def _render_dashboard(store, clientes, role):
                 with cols_p[i % CARDS_POR_LINHA]:
                     st.markdown(
                         f'<div class="pend-card" style="border-left:4px solid {cor_borda}">'
-                        f'<div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{im[tipo]} {c["nome"]}</div>'
-                        f'<div style="font-size:13px;color:#8b94a5;margin-top:5px">{msg} · <span style="color:{cor_borda};font-weight:700">{sufixo}</span></div>'
+                        f'<div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{c["nome"]}</div>'
+                        f'<div style="font-size:13px;color:#8b94a5;margin-top:5px">{msg} · <span style="color:{cor_atraso};font-weight:700">{sufixo}</span></div>'
                         f'<div style="font-size:15px;color:#7cc243;margin-top:7px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
+                        f'{tel_html}'
                         f'{origem_tag}'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
-                    # Ícone do botão adapta por role (✏ atendente, 👁 admin/gestor)
                     if st.button(icone_btn, key=f"pend_atend_{i}_{c['id']}", width="stretch", help=help_btn):
                         dialog_editar(c["id"])
             st.markdown('</div>', unsafe_allow_html=True)
