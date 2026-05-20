@@ -263,28 +263,29 @@ def _render_dashboard(store, clientes, role):
         </style>
         """, unsafe_allow_html=True)
 
-        hcol, fcol = st.columns([3.4, 1.2])
+        # Colunas no nível externo (sem nesting). Título estreito + chev
+        # estreito + filtro à direita. Tamanhos ajustados pra título
+        # "CLIENTES FIXADOS [17]" ficar perto do chev na maioria das
+        # resoluções.
+        hcol, c_col, _spacer, fcol = st.columns([1.0, 0.3, 1.9, 1.2])
         with hcol:
-            # Colunas aninhadas: título estreito + chevron grudado + spacer
-            t_col, c_col, _t_spacer = st.columns([2, 0.25, 2])
-            with t_col:
-                st.markdown(
-                    f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">'
-                    f'<span style="font-weight:800;font-size:24px;color:#e8eaf0;'
-                    f'text-transform:uppercase;letter-spacing:1.5px;white-space:nowrap">'
-                    f'Clientes Fixados</span>'
-                    f'<span style="background:#ef4444;color:white;font-size:22px;padding:7px 18px;'
-                    f'border-radius:20px;font-weight:800;letter-spacing:0.3px;line-height:1">'
-                    f'{len(pendencias)}</span>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-            with c_col:
-                st.markdown('<div class="pend-chev">', unsafe_allow_html=True)
-                if st.button(icone_toggle, key="_btn_toggle_fixados", help=help_toggle):
-                    st.session_state["_fix_mostrar"] = not mostrar_fixados
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">'
+                f'<span style="font-weight:800;font-size:24px;color:#e8eaf0;'
+                f'text-transform:uppercase;letter-spacing:1.5px;white-space:nowrap">'
+                f'Clientes Fixados</span>'
+                f'<span style="background:#ef4444;color:white;font-size:22px;padding:7px 18px;'
+                f'border-radius:20px;font-weight:800;letter-spacing:0.3px;line-height:1">'
+                f'{len(pendencias)}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        with c_col:
+            st.markdown('<div class="pend-chev">', unsafe_allow_html=True)
+            if st.button(icone_toggle, key="_btn_toggle_fixados", help=help_toggle):
+                st.session_state["_fix_mostrar"] = not mostrar_fixados
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
         filtro_atend = "Todos"
         with fcol:
             if role in ("admin", "gestor"):
