@@ -1084,34 +1084,46 @@ def _selecionar_top_30_50(clientes: list, lote_atual_ids: set | None = None) -> 
             inat_msg += 1
     
     # ─────────────────────────────────────────────────────────────────
-    # FASE 2: Fallback Aleatório (SEM limites de inativos)
+    # FASE 2: Fallback Aleatório (SEM limites de inativos, MAS respeita cooldown)
     # ─────────────────────────────────────────────────────────────────
-    
+    # Pools separados por bucket — filtrados por recomendar_acao pra evitar
+    # enviar msg/ligar pra cliente em cooldown ativo. Limit de 10/15 inativos
+    # da FASE 1 não vale aqui (por desenho — fallback ignora caps mas mantém
+    # integridade de cooldown).
+
     ids_selecionados = ids_lig | ids_msg
 
-    # Pool de inativos NÃO-ACORDO pra fallback. Acordos sobrantes (que não
-    # couberam no limit de 10 inativos da Fase 1A) ficam fora do lote —
-    # entram em outro dia conforme as vagas se abrem.
-    inativos_disponiveis = []
+    inativos_pool_lig = []
+    inativos_pool_msg = []
     for score, cid, c in cands_all:
         if cid in ids_selecionados or not c.get("_inativo"):
             continue
         if c.get("_tem_acordo") and (c.get("dias_atraso") or 0) >= 7:
             continue  # acordo nunca cai em msg, e se não coube em LIG fica fora
-        inativos_disponiveis.append(cid)
+        acoes = recomendar_acao(c)
+        if "ligar" in acoes:
+            inativos_pool_lig.append(cid)
+        if "mensagem" in acoes:
+            inativos_pool_msg.append(cid)
 
-    # Completar LIG até 30 com inativos não-acordo aleatórios
-    while len(ids_lig) < _LOTE_META_LIG and inativos_disponiveis:
-        idx = random.randint(0, len(inativos_disponiveis) - 1)
-        cid = inativos_disponiveis.pop(idx)
+    # Completar LIG até 30 com inativos cuja ligação não está em cooldown
+    while len(ids_lig) < _LOTE_META_LIG and inativos_pool_lig:
+        idx = random.randint(0, len(inativos_pool_lig) - 1)
+        cid = inativos_pool_lig.pop(idx)
+        if cid in ids_selecionados:
+            continue  # foi sorteado em outro bucket antes
         novos.append((cid, "ligacao"))
         ids_lig.add(cid)
         ids_selecionados.add(cid)
+        if cid in inativos_pool_msg:
+            inativos_pool_msg.remove(cid)  # tira do pool MSG, já comprometido
 
-    # Completar MSG até 50 com inativos não-acordo aleatórios
-    while len(ids_msg) < _LOTE_META_MSG and inativos_disponiveis:
-        idx = random.randint(0, len(inativos_disponiveis) - 1)
-        cid = inativos_disponiveis.pop(idx)
+    # Completar MSG até 50 com inativos cuja mensagem não está em cooldown
+    while len(ids_msg) < _LOTE_META_MSG and inativos_pool_msg:
+        idx = random.randint(0, len(inativos_pool_msg) - 1)
+        cid = inativos_pool_msg.pop(idx)
+        if cid in ids_selecionados:
+            continue
         novos.append((cid, "mensagem"))
         ids_msg.add(cid)
         ids_selecionados.add(cid)
