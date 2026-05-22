@@ -85,49 +85,34 @@ def main():
     if not store["clientes"]:
         carregar_cache_local()
 
-    # Refresh do BQ Splgc com TTL de 1h — pega clientes que pagaram durante o
-    # dia (vira regularizado) e novos inadimplentes (faturas que venceram).
-    # Sem isso, store["clientes"] congelava na primeira carga da sessão.
-    import time as _time
+    # Guard de sessão: evita recarregar BQ mais de uma vez por dia na mesma sessão
+    # NOTA: BQ Splgc é replicado 1x/dia (madrugada). Re-query intra-day não traz
+    # dado novo, então gate diário é suficiente. Pra detectar pagamentos durante
+    # o dia, precisaria consultar o banco Splgc original (futuro).
     from datetime import date as _date
     from helpers import hoje_brt as _hoje_brt
     _hoje = _hoje_brt()
-    _BQ_TTL_SEC = 3600  # 1h
-    _bq_key = f"_bq_loaded_{_hoje}"   # invalida se o dia BRT virar
-    _ts_key = "_bq_load_ts"
-    _last_ts = st.session_state.get(_ts_key, 0)
-    _age = _time.time() - _last_ts
+    _bq_key = f"_bq_loaded_{_hoje}"
 
-    # Fresh = já carregou nesta sessão pra hoje E dentro do TTL
-    _ja_fresh = st.session_state.get(_bq_key) and _last_ts and _age < _BQ_TTL_SEC
-
-    if not _ja_fresh:
-        if not store["clientes"]:
-            # Sessão nova / sem dados — carga visível
+    if not store["clientes"] and not st.session_state.get(_bq_key):
+        # Sessão nova ou dados ausentes
+        with st.spinner("Carregando dados do BigQuery..."):
+            processar_dados_bigquery()
+        st.session_state[_bq_key] = True
+    elif store["clientes"] and not st.session_state.get(_bq_key):
+        # Dados de cache local — verifica se são de ontem
+        ultima = store.get("ultima_atualizacao") or ""
+        cache_desatualizado = True
+        if ultima:
+            try:
+                from datetime import datetime as _datetime
+                cache_desatualizado = _datetime.strptime(ultima[:10], "%d/%m/%Y").date() < _date.today()
+            except Exception:
+                pass
+        if cache_desatualizado:
             with st.spinner("Carregando dados do BigQuery..."):
                 processar_dados_bigquery()
-        elif not st.session_state.get(_bq_key):
-            # Primeira passagem nesta sessão pra hoje — confere se cache local
-            # é de ontem (refresh visível) ou pula
-            ultima = store.get("ultima_atualizacao") or ""
-            cache_desatualizado = True
-            if ultima:
-                try:
-                    from datetime import datetime as _datetime
-                    cache_desatualizado = _datetime.strptime(ultima[:10], "%d/%m/%Y").date() < _date.today()
-                except Exception:
-                    pass
-            if cache_desatualizado:
-                with st.spinner("Carregando dados do BigQuery..."):
-                    processar_dados_bigquery()
-        else:
-            # TTL expirou (1h+) — refresh silencioso, sem spinner, atendente
-            # nem percebe. Cards de regularizados aparecem na coluna CONCLUÍDA
-            # automaticamente no próximo tick do fragment do kanban (~60s).
-            processar_dados_bigquery()
-
         st.session_state[_bq_key] = True
-        st.session_state[_ts_key]  = _time.time()
 
     # Carrega historico de atendimento do BQ uma vez por sessão
     if not st.session_state.get("_historico_loaded"):
