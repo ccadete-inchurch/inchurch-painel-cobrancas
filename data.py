@@ -21,12 +21,114 @@ def get_pending_oauth(nonce: str) -> dict | None:
     return None
 
 import pandas as pd
+import requests
 import streamlit as st
 from google.cloud import bigquery
 
 from config import MAP_COB, MAP_INAD, DIAS_SEM_CONTATO
 from auth import get_store, current_nome
 from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel, fmt_tel_lista, hoje_lote
+
+
+# ── Superlógica API ──────────────────────────────────────────────────────────
+# Fonte real-time do Splgc (banco original). BQ é replica diária; a API permite
+# consultar estado atual de clientes/cobranças/pagamentos sem defasagem.
+# Docs: https://apiassinaturas.superlogica.com/
+
+_SUPERLOGICA_BASE = "https://api.superlogica.net/v2/financeiro"
+
+
+@st.cache_resource
+def _superlogica_session():
+    """Sessão HTTP com headers de auth do Superlógica. Cacheada como recurso
+    (igual conn PG/BQ) — reusa entre requests dentro da sessão Streamlit."""
+    if "superlogica" not in st.secrets:
+        return None
+    s = st.secrets["superlogica"]
+    sess = requests.Session()
+    sess.headers.update({
+        "Content-Type": "application/x-www-form-urlencoded",
+        "app_token":    s.get("app_token", ""),
+        "access_token": s.get("access_token", ""),
+    })
+    return sess
+
+
+def _superlogica_get(path: str, params: dict | None = None) -> tuple[int, dict | list | None, str]:
+    """Helper genérico de GET na API. Retorna (status_code, json_body, error_msg).
+
+    Centraliza tratamento de erro pra debug ficar fácil — qualquer falha (sem
+    sessão, timeout, status != 200, JSON inválido) retorna mensagem clara."""
+    sess = _superlogica_session()
+    if sess is None:
+        return 0, None, "Sessão não disponível — secrets[superlogica] ausente"
+    url = f"{_SUPERLOGICA_BASE}{path}"
+    try:
+        r = sess.get(url, params=params or {}, timeout=15)
+    except requests.RequestException as e:
+        return 0, None, f"Erro de rede: {type(e).__name__}: {e}"
+    try:
+        body = r.json()
+    except ValueError:
+        return r.status_code, None, f"Resposta não-JSON: {r.text[:200]}"
+    if r.status_code != 200:
+        return r.status_code, body, f"HTTP {r.status_code}"
+    return 200, body, ""
+
+
+def fetch_cliente_superlogica(cliente_id: int | str) -> dict | None:
+    """Busca um cliente pelo ID no Superlógica. Retorna o dict do cliente ou None.
+    GET /financeiro/clientes?id=<id>"""
+    status, body, _ = _superlogica_get("/clientes", {"id": cliente_id})
+    if status != 200 or not isinstance(body, list) or not body:
+        return None
+    return body[0]
+
+
+def buscar_cliente_por_cnpj(cnpj: str) -> dict | None:
+    """Busca cliente pelo CNPJ/CPF (param 'pesquisa' do Superlógica).
+    Retorna o primeiro match ou None."""
+    cnpj_limpo = "".join(c for c in str(cnpj or "") if c.isdigit())
+    if not cnpj_limpo:
+        return None
+    status, body, _ = _superlogica_get("/clientes", {
+        "pesquisa": cnpj_limpo,
+        "status": 2,
+        "itensPorPagina": 5,
+        "apenasColunasPrincipais": 0,
+    })
+    if status != 200 or not isinstance(body, list) or not body:
+        return None
+    return body[0]
+
+
+def testar_superlogica_api() -> dict:
+    """Função de diagnóstico — chama GET /clientes?itensPorPagina=1 e retorna
+    estrutura com status, sucesso, primeiros campos da resposta. Usado pela
+    tela de debug pra validar conectividade."""
+    sess = _superlogica_session()
+    if sess is None:
+        return {
+            "ok": False,
+            "msg": "Configuração [superlogica] ausente no secrets.toml",
+            "detalhes": None,
+        }
+    status, body, err = _superlogica_get("/clientes", {
+        "itensPorPagina": 1,
+        "apenasColunasPrincipais": 1,
+        "status": 2,
+    })
+    if status != 200:
+        return {
+            "ok": False,
+            "msg": f"Falha ({status}): {err}",
+            "detalhes": body if isinstance(body, dict) else None,
+        }
+    return {
+        "ok": True,
+        "msg": "API respondeu OK",
+        "amostra": body[0] if isinstance(body, list) and body else body,
+    }
 
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
