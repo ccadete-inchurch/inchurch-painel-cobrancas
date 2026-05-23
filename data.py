@@ -77,9 +77,14 @@ def _superlogica_get(path: str, params: dict | None = None) -> tuple[int, dict |
 
 
 def fetch_cliente_superlogica(cliente_id: int | str) -> dict | None:
-    """Busca um cliente pelo ID no Superlógica. Retorna o dict do cliente ou None.
-    GET /financeiro/clientes?id=<id>"""
-    status, body, _ = _superlogica_get("/clientes", {"id": cliente_id})
+    """Busca um cliente pelo ID no Superlógica. Retorna o dict ou None.
+    Inclui status=2 (todos) — sem isso, default é só ativos e clientes
+    inativos somem da resposta.
+    GET /financeiro/clientes?id=<id>&status=2"""
+    status, body, _ = _superlogica_get("/clientes", {
+        "id": cliente_id,
+        "status": 2,
+    })
     if status != 200 or not isinstance(body, list) or not body:
         return None
     return body[0]
