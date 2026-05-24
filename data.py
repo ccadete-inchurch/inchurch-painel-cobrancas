@@ -134,10 +134,15 @@ def aplicar_pagamentos_hoje_no_store():
     """Overlay real-time no store atual a partir do delta da API Superlógica.
     Idempotente — pode ser chamado a cada render (fetch é cacheado).
 
+    Distingue pagamento TOTAL (todas cobranças vencidas pagas → regularizado)
+    de PARCIAL (algumas pagas → continua na inadimplência com valor reduzido).
+
     Efeitos:
-      - Marca _regularizado_hoje=True nos clientes que pagaram hoje
-      - Salva _valor_pago_hoje pra exibição
-      - Adiciona em store['regularizados'] os IDs que ainda não estão lá
+      - _regularizado_hoje=True só pra quem quitou TODOS os atrasos hoje
+      - _pago_parcial_hoje=True pra quem pagou só parte
+      - _valor_pago_hoje sempre populado pra exibição
+      - 'valor' ajustado pra refletir o saldo após pagamento parcial
+      - Adiciona em store['regularizados'] TODOS os que pagaram (parcial+total)
     """
     from datetime import date as _date
 
@@ -152,12 +157,41 @@ def aplicar_pagamentos_hoje_no_store():
     store = get_store()
     ids_pagos = set(pagamentos.keys())
 
-    # 1) Marcar inadimplentes que pagaram hoje
+    # 1) Marcar clientes que pagaram — total vs parcial
     for c in store["clientes"]:
         cid = str(c.get("id") or "")
-        if cid in ids_pagos:
+        if cid not in ids_pagos:
+            continue
+
+        info = pagamentos[cid]
+        c["_valor_pago_hoje"] = info["valor_total"]
+
+        # Cobranças vencidas atuais do cliente (do BQ via processar_dados)
+        cobs_vencidas = {
+            str(cob.get("id_recebimento") or "")
+            for cob in c.get("_cobracas", [])
+            if (cob.get("dias_atraso") or 0) > 0 and cob.get("id_recebimento")
+        }
+        cobs_pagas_hoje = {str(x) for x in info["cobrancas_ids"] if x}
+
+        # Sobram cobranças vencidas após o pagamento de hoje?
+        cobs_ainda_vencidas = cobs_vencidas - cobs_pagas_hoje
+
+        if not cobs_ainda_vencidas:
+            # Totalmente regularizado — sai da inadimplência
             c["_regularizado_hoje"] = True
-            c["_valor_pago_hoje"]   = pagamentos[cid]["valor_total"]
+        else:
+            # Pagou só parte — fica na inadimplência com saldo reduzido
+            c["_pago_parcial_hoje"] = True
+            # Ajusta valor visível subtraindo o que foi pago. Aproximação:
+            # vl_total_recb inclui juros/multa, então pode sobrar diferença
+            # pequena vs o saldo "limpo". BQ amanhã corrige.
+            try:
+                saldo_antigo = float(c.get("valor") or 0)
+                pago = float(info["valor_total"])
+                c["valor"] = max(0.0, saldo_antigo - pago)
+            except (TypeError, ValueError):
+                pass
 
     # 2) Adicionar a regularizados (dedup por id)
     ids_existentes = {str(r.get("id") or "") for r in store["regularizados"]}
