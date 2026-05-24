@@ -119,14 +119,14 @@ def _render_debug_superlogica():
         "`GET /cobranca?filtrarpor=liquidacao&dtInicio=hoje&dtFim=hoje`. "
         "Mede latência, conta registros, mostra IDs únicos de sacados e amostra do primeiro item."
     )
-    hoje_br = _date.today().strftime("%d/%m/%Y")
-    st.caption(f"Data alvo: **{hoje_br}**")
+    hoje_iso = _date.today().strftime("%Y-%m-%d")
+    st.caption(f"Data alvo: **{hoje_iso}**")
 
     if st.button("▶ Buscar pagamentos de hoje", key="sl_pag_hoje"):
         params = {
             "filtrarpor": "liquidacao",
-            "dtInicio": hoje_br,
-            "dtFim": hoje_br,
+            "dtInicio": hoje_iso,
+            "dtFim": hoje_iso,
             "apenasColunasPrincipais": 1,
             "exibirComposicaoDosBoletos": 1,
             "itensPorPagina": 200,
