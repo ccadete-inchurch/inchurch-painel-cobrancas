@@ -17,6 +17,13 @@ def _render_historico(store):
 
     df = pd.DataFrame(reg)
 
+    # Ordena por data desc (mais recentes primeiro). Pagamentos via overlay
+    # da API entram com data de hoje — sem sort ficariam escondidos no fim
+    # da lista, depois dos registros históricos do BQ.
+    if not df.empty and "data" in df.columns:
+        df["_data_dt"] = pd.to_datetime(df["data"], format="%d/%m/%Y", errors="coerce")
+        df = df.sort_values("_data_dt", ascending=False, na_position="last").drop(columns=["_data_dt"])
+
     # ── Filtros ───────────────────────────────────────────────────────────────
     fb, fs, _ = st.columns([3, 2, 3])
     with fb:
