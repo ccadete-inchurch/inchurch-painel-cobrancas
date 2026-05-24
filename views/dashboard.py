@@ -252,14 +252,17 @@ def _render_dashboard(store, clientes, role):
     if regs_hoje:
         total_regs_v = sum(float(r.get("valor") or 0) for r in regs_hoje)
 
-        # Header da seção: ícone + título + count + total à direita
+        # Header da seção — mesmo padrão visual de 'Clientes Fixados':
+        # título em caixa alta + badge de count com mesmas dimensões.
+        # Badge usa verde (#7cc243) em vez de vermelho pra refletir resultado positivo.
         st.markdown(
             f'<div style="display:flex;align-items:center;gap:14px;margin:24px 0 14px">'
-            f'<span style="color:#7cc243;font-size:24px;font-weight:800;line-height:1">✓</span>'
-            f'<span style="font-weight:800;font-size:20px;color:#e8eaf0;letter-spacing:0.3px">'
-            f'Regularizados hoje</span>'
-            f'<span style="background:rgba(124,194,67,.15);color:#7cc243;font-size:16px;'
-            f'padding:4px 14px;border-radius:18px;font-weight:800">{len(regs_hoje)}</span>'
+            f'<span style="font-weight:800;font-size:24px;color:#e8eaf0;'
+            f'text-transform:uppercase;letter-spacing:1.5px;white-space:nowrap">'
+            f'Clientes Regularizados Hoje</span>'
+            f'<span style="background:#7cc243;color:white;font-size:22px;padding:7px 18px;'
+            f'border-radius:20px;font-weight:800;letter-spacing:0.3px;line-height:1">'
+            f'{len(regs_hoje)}</span>'
             f'<span style="color:#9ca3af;font-size:14px;font-weight:600;margin-left:auto">'
             f'Total: <span style="color:#7cc243;font-weight:800">{fmt_moeda_plain(total_regs_v)}</span></span>'
             f'</div>',
