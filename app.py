@@ -127,14 +127,17 @@ def main():
         # Última interação por cliente sem janela temporal — alimenta o
         # "Último Contato" do dashboard mesmo pra ações antigas (>6 dias).
         load_ultimo_contato_painel()
-        # Mapa cliente → grupo (atendente). Fonte primária — todos os
-        # clientes do splgc-grupo. Usado pelo get_effective_atendente.
-        load_grupo_atendente_map()
         # Atendente atual no lote (painel_tarefas_diarias) — fallback do grupo.
         # Tem só clientes que já entraram em algum lote.
         load_atendente_atual_painel()
         st.session_state["_metricas_ts"] = _t.time()
         st.session_state["_mensagens_loaded"] = True
+
+    # Mapa cliente → grupo (atendente). Fonte primária — todos os clientes
+    # do splgc-grupo. Gate próprio pra não depender do _mensagens_loaded
+    # (sessão antiga pode ter pulado o load se foi setado antes do deploy).
+    if not st.session_state.get("_grupo_atendente"):
+        load_grupo_atendente_map()
 
     # Overlay real-time de pagamentos do dia via API Superlógica.
     # Roda a cada render — fetch é cacheado (TTL 5min), apply é O(n) idempotente.
