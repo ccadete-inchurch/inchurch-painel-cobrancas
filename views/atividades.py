@@ -490,8 +490,19 @@ def _render_atividades(store, clientes, role):
         meta_msg, meta_lig, meta_atend = 50, 30, 15
         n_msg, n_lig, n_atend = dados_m.get("mensagens", 0), dados_m.get("ligacoes", 0), dados_m.get("atendidas", 0)
 
+        # 4º card: regularizados hoje (escopo visível — lote ou "Todos"). Sem
+        # /meta porque não há cota diária; mostra count + valor pago real-time.
+        _regs_hoje = [c for c in clientes if c.get("_regularizado_hoje")]
+        n_regs = len(_regs_hoje)
+        vl_regs = sum(float(c.get("_valor_pago_hoje") or 0) for c in _regs_hoje)
+        vl_regs_html = (
+            f'<div style="font-size:14px;color:#7cc243;font-weight:600;margin-top:8px">{fmt_moeda_plain(vl_regs)}</div>'
+            if vl_regs > 0 else
+            '<div style="font-size:14px;color:#6b7280;margin-top:8px">—</div>'
+        )
+
         st.markdown(f'<div style="font-size:13px;font-weight:700;color:#6b7280;margin-bottom:6px">{label_m}</div>', unsafe_allow_html=True)
-        m1, m2, m3 = st.columns(3)
+        m1, m2, m3, m4 = st.columns(4)
         with m1:
             pct = min(int(n_msg / meta_msg * 100), 100)
             st.markdown(
@@ -519,34 +530,17 @@ def _render_atividades(store, clientes, role):
                 f'<div style="background:#7cc243;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
                 unsafe_allow_html=True,
             )
-
-        st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
-
-        # ── Badge: regularizados hoje (overlay real-time via API Superlógica) ─
-        # IMPORTANTE: conta SÓ clientes do escopo visível aqui (lote do dia /
-        # lote selecionado / 'Todos' no modo gestor). Cliente da atendente que
-        # pagou hoje mas NÃO estava no lote aparece em Inadimplência (não aqui).
-        # Esconde se zero — sem rúido quando não há ação.
-        _regs_hoje = [c for c in clientes if c.get("_regularizado_hoje")]
-        if _regs_hoje:
-            _n = len(_regs_hoje)
-            _vl = sum(float(c.get("_valor_pago_hoje") or 0) for c in _regs_hoje)
-            _vl_html = f' · {fmt_moeda_plain(_vl)}' if _vl > 0 else ''
-            _label = "regularizado" if _n == 1 else "regularizados"
-            # Sufixo "do lote" pra atendente — deixa claro que só conta lote dela.
-            # Pra admin em "Todos os clientes" não faz sentido (não há lote ali).
-            _sufixo = " do lote" if email in _EMAIL_GRUPO else ""
+        with m4:
+            # Label muda conforme escopo: "do lote" só faz sentido pra atendente.
+            _label_reg = "Regularizados Hoje do Lote" if email in _EMAIL_GRUPO else "Regularizados Hoje"
             st.markdown(
-                f'<div style="display:flex;justify-content:center;margin:0 0 12px">'
-                f'<div style="display:inline-flex;align-items:center;gap:8px;'
-                f'background:rgba(124,194,67,.08);border:1px solid rgba(124,194,67,.3);'
-                f'border-radius:8px;padding:6px 14px">'
-                f'<span style="color:#7cc243;font-size:14px;font-weight:800;line-height:1">✓</span>'
-                f'<span style="color:#e8eaf0;font-size:13px;font-weight:600">'
-                f'{_n} {_label} hoje{_sufixo}{_vl_html}</span>'
-                f'</div></div>',
+                f'<div class="metric-card"><div class="metric-label">{_label_reg}</div>'
+                f'<div class="metric-value" style="color:#7cc243;font-size:32px">{n_regs}</div>'
+                f'{vl_regs_html}</div>',
                 unsafe_allow_html=True,
             )
+
+        st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
 
         # ── Monta fila ────────────────────────────────────────────────────────
         fila = []
