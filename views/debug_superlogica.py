@@ -3,6 +3,8 @@ Visível só pra admin/gestor enquanto a integração está em desenvolvimento.
 Remover quando a integração estiver estável.
 """
 import json as _json
+import time as _time
+from datetime import date as _date
 import streamlit as st
 
 from auth import current_role
@@ -105,3 +107,68 @@ def _render_debug_superlogica():
         if body is not None:
             st.markdown("**Resposta:**")
             st.json(body)
+
+    st.divider()
+
+    # ── Teste 5: pagamentos liquidados hoje ───────────────────────────────────
+    # Esse é o endpoint-chave pro delta real-time. Single call retorna só
+    # cobranças liquidadas hoje → barato e rápido pra rodar a cada N minutos.
+    st.markdown("### 5. Pagamentos liquidados hoje")
+    st.caption(
+        "Endpoint-alvo da integração real-time. "
+        "`GET /cobranca?filtrarpor=liquidacao&dtInicio=hoje&dtFim=hoje`. "
+        "Mede latência, conta registros, mostra IDs únicos de sacados e amostra do primeiro item."
+    )
+    hoje_br = _date.today().strftime("%d/%m/%Y")
+    st.caption(f"Data alvo: **{hoje_br}**")
+
+    if st.button("▶ Buscar pagamentos de hoje", key="sl_pag_hoje"):
+        params = {
+            "filtrarpor": "liquidacao",
+            "dtInicio": hoje_br,
+            "dtFim": hoje_br,
+            "apenasColunasPrincipais": 1,
+            "exibirComposicaoDosBoletos": 1,
+            "itensPorPagina": 200,
+            "pagina": 1,
+        }
+        with st.spinner("Consultando..."):
+            t0 = _time.perf_counter()
+            status, body, err = _superlogica_get("/cobranca", params)
+            elapsed = _time.perf_counter() - t0
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("HTTP Status", status)
+        with col2:
+            st.metric("Latência", f"{elapsed:.2f}s")
+        with col3:
+            qtd = len(body) if isinstance(body, list) else 0
+            st.metric("Registros", qtd)
+
+        if err:
+            st.error(f"❌ {err}")
+            if body is not None:
+                st.json(body)
+            return
+
+        if not isinstance(body, list) or not body:
+            st.warning("Sem cobranças liquidadas hoje (ou resposta vazia).")
+            return
+
+        # IDs únicos de sacados — pra estimar quantos clientes "regularizam" no dia
+        sacados = set()
+        for item in body:
+            sid = item.get("id_sacado_sac") or item.get("st_idsacado_sac")
+            if sid is not None:
+                sacados.add(str(sid))
+        st.markdown(f"**Clientes únicos (id_sacado_sac):** {len(sacados)}")
+        st.caption(
+            f"Capacidade da página (200) {'**ok**' if qtd < 200 else '⚠️ **lotada** — provavelmente precisa paginar'}"
+        )
+
+        st.markdown("**Campos disponíveis no primeiro registro:**")
+        st.code(", ".join(sorted(body[0].keys())), language="text")
+
+        st.markdown("**Amostra (primeiro registro completo):**")
+        st.json(body[0])
