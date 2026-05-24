@@ -4,7 +4,7 @@ Remover quando a integração estiver estável.
 """
 import json as _json
 import time as _time
-from datetime import date as _date
+from datetime import date as _date, timedelta as _timedelta
 import streamlit as st
 
 from auth import current_role
@@ -119,14 +119,20 @@ def _render_debug_superlogica():
         "`GET /cobranca?filtrarpor=liquidacao&dtInicio=hoje&dtFim=hoje`. "
         "Mede latência, conta registros, mostra IDs únicos de sacados e amostra do primeiro item."
     )
-    hoje_iso = _date.today().strftime("%Y-%m-%d")
-    st.caption(f"Data alvo: **{hoje_iso}**")
+    hoje = _date.today()
+    # Default: últimos 7 dias — cobre gap de fim de semana e mostra estrutura
+    # mesmo se hoje for sábado/domingo (banco não liquida).
+    col_dt1, col_dt2 = st.columns(2)
+    with col_dt1:
+        dt_ini = st.date_input("dtInicio", value=hoje - _timedelta(days=7), key="sl_pag_dt_ini")
+    with col_dt2:
+        dt_fim = st.date_input("dtFim", value=hoje, key="sl_pag_dt_fim")
 
-    if st.button("▶ Buscar pagamentos de hoje", key="sl_pag_hoje"):
+    if st.button("▶ Buscar pagamentos", key="sl_pag_hoje"):
         params = {
             "filtrarpor": "liquidacao",
-            "dtInicio": hoje_iso,
-            "dtFim": hoje_iso,
+            "dtInicio": dt_ini.strftime("%Y-%m-%d"),
+            "dtFim": dt_fim.strftime("%Y-%m-%d"),
             "apenasColunasPrincipais": 1,
             "exibirComposicaoDosBoletos": 1,
             "itensPorPagina": 200,
