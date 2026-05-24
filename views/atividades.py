@@ -523,14 +523,19 @@ def _render_atividades(store, clientes, role):
         st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
 
         # ── Badge: regularizados hoje (overlay real-time via API Superlógica) ─
-        # Conta clientes do escopo atual (lote do atendente / lote selecionado /
-        # todos no modo gestor). Esconde se zero — sem rúido quando não há ação.
+        # IMPORTANTE: conta SÓ clientes do escopo visível aqui (lote do dia /
+        # lote selecionado / 'Todos' no modo gestor). Cliente da atendente que
+        # pagou hoje mas NÃO estava no lote aparece em Inadimplência (não aqui).
+        # Esconde se zero — sem rúido quando não há ação.
         _regs_hoje = [c for c in clientes if c.get("_regularizado_hoje")]
         if _regs_hoje:
             _n = len(_regs_hoje)
             _vl = sum(float(c.get("_valor_pago_hoje") or 0) for c in _regs_hoje)
             _vl_html = f' · {fmt_moeda_plain(_vl)}' if _vl > 0 else ''
             _label = "regularizado" if _n == 1 else "regularizados"
+            # Sufixo "do lote" pra atendente — deixa claro que só conta lote dela.
+            # Pra admin em "Todos os clientes" não faz sentido (não há lote ali).
+            _sufixo = " do lote" if email in _EMAIL_GRUPO else ""
             st.markdown(
                 f'<div style="display:flex;justify-content:center;margin:0 0 12px">'
                 f'<div style="display:inline-flex;align-items:center;gap:8px;'
@@ -538,7 +543,7 @@ def _render_atividades(store, clientes, role):
                 f'border-radius:8px;padding:6px 14px">'
                 f'<span style="color:#7cc243;font-size:14px;font-weight:800;line-height:1">✓</span>'
                 f'<span style="color:#e8eaf0;font-size:13px;font-weight:600">'
-                f'{_n} {_label} hoje{_vl_html}</span>'
+                f'{_n} {_label} hoje{_sufixo}{_vl_html}</span>'
                 f'</div></div>',
                 unsafe_allow_html=True,
             )
