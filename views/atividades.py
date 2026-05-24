@@ -490,19 +490,33 @@ def _render_atividades(store, clientes, role):
         meta_msg, meta_lig, meta_atend = 50, 30, 15
         n_msg, n_lig, n_atend = dados_m.get("mensagens", 0), dados_m.get("ligacoes", 0), dados_m.get("atendidas", 0)
 
-        # 4º card: regularizados hoje (escopo visível — lote ou "Todos"). Sem
-        # /meta porque não há cota diária; mostra count + valor pago real-time.
+        # Badge de regularizados hoje — alinhado à direita do label do escopo.
+        # Mantém os 3 cards de meta intactos. Só renderiza se houver pagamentos.
         _regs_hoje = [c for c in clientes if c.get("_regularizado_hoje")]
-        n_regs = len(_regs_hoje)
-        vl_regs = sum(float(c.get("_valor_pago_hoje") or 0) for c in _regs_hoje)
-        vl_regs_html = (
-            f'<div style="font-size:14px;color:#7cc243;font-weight:600;margin-top:8px">{fmt_moeda_plain(vl_regs)}</div>'
-            if vl_regs > 0 else
-            '<div style="font-size:14px;color:#6b7280;margin-top:8px">—</div>'
-        )
+        _badge_reg_html = ""
+        if _regs_hoje:
+            _n_reg = len(_regs_hoje)
+            _vl_reg = sum(float(c.get("_valor_pago_hoje") or 0) for c in _regs_hoje)
+            _vl_txt = f' · {fmt_moeda_plain(_vl_reg)}' if _vl_reg > 0 else ''
+            _label_reg = "regularizado" if _n_reg == 1 else "regularizados"
+            _suf_reg = " do lote" if email in _EMAIL_GRUPO else ""
+            _badge_reg_html = (
+                f'<span style="display:inline-flex;align-items:center;gap:6px;'
+                f'background:rgba(124,194,67,.08);border:1px solid rgba(124,194,67,.3);'
+                f'border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;color:#e8eaf0">'
+                f'<span style="color:#7cc243;font-weight:800;line-height:1">✓</span>'
+                f'{_n_reg} {_label_reg} hoje{_suf_reg}{_vl_txt}'
+                f'</span>'
+            )
 
-        st.markdown(f'<div style="font-size:13px;font-weight:700;color:#6b7280;margin-bottom:6px">{label_m}</div>', unsafe_allow_html=True)
-        m1, m2, m3, m4 = st.columns(4)
+        st.markdown(
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+            f'<span style="font-size:13px;font-weight:700;color:#6b7280">{label_m}</span>'
+            f'{_badge_reg_html}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        m1, m2, m3 = st.columns(3)
         with m1:
             pct = min(int(n_msg / meta_msg * 100), 100)
             st.markdown(
@@ -528,15 +542,6 @@ def _render_atividades(store, clientes, role):
                 f'<div class="metric-value" style="color:#7cc243;font-size:32px">{n_atend}<span style="font-size:18px;color:#6b7280">/{meta_atend}</span></div>'
                 f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
                 f'<div style="background:#7cc243;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
-                unsafe_allow_html=True,
-            )
-        with m4:
-            # Label muda conforme escopo: "do lote" só faz sentido pra atendente.
-            _label_reg = "Regularizados Hoje do Lote" if email in _EMAIL_GRUPO else "Regularizados Hoje"
-            st.markdown(
-                f'<div class="metric-card"><div class="metric-label">{_label_reg}</div>'
-                f'<div class="metric-value" style="color:#7cc243;font-size:32px">{n_regs}</div>'
-                f'{vl_regs_html}</div>',
                 unsafe_allow_html=True,
             )
 
