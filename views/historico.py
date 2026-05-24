@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from helpers import fmt_moeda_plain, fmt_moeda
+from helpers import fmt_moeda_plain, fmt_moeda, get_effective_atendente
 
 
 def _render_historico(store):
@@ -17,6 +17,18 @@ def _render_historico(store):
 
     df = pd.DataFrame(reg)
 
+    # Resolve atendente atual via _painel_atendente_atual quando o registro
+    # vem do BQ histórico (campo 'Sistema (BigQuery)' ou vazio). Pagamentos
+    # via overlay já trazem o atendente real.
+    def _resolve_atendente(row):
+        at = str(row.get("atendente") or "").strip()
+        if at and "BigQuery" not in at:
+            return at
+        return get_effective_atendente(str(row.get("id") or "")) or "—"
+
+    if not df.empty:
+        df["atendente"] = df.apply(_resolve_atendente, axis=1)
+
     # Ordena por data desc (mais recentes primeiro). Pagamentos via overlay
     # da API entram com data de hoje — sem sort ficariam escondidos no fim
     # da lista, depois dos registros históricos do BQ.
@@ -25,11 +37,18 @@ def _render_historico(store):
         df = df.sort_values("_data_dt", ascending=False, na_position="last").drop(columns=["_data_dt"])
 
     # ── Filtros ───────────────────────────────────────────────────────────────
-    fb, fs, _ = st.columns([3, 2, 3])
+    atendentes_disp = sorted({a for a in df["atendente"].unique() if a and a != "—"}) if not df.empty else []
+    fb, fs, fa = st.columns([3, 2, 2])
     with fb:
         busca = st.text_input("Buscar", placeholder="Nome ou CNPJ...", key="reg_busca")
     with fs:
         filtro_sit = st.selectbox("Situação", ["Todos", "Apenas ativos", "Apenas inativos"], key="reg_sit")
+    with fa:
+        filtro_atd = st.selectbox(
+            "Atendente",
+            ["Todos"] + atendentes_disp + (["Sem atendente"] if (not df.empty and (df["atendente"] == "—").any()) else []),
+            key="reg_atd",
+        )
 
     if busca:
         b = busca.lower()
@@ -38,6 +57,10 @@ def _render_historico(store):
         df = df[~df["inativo"].fillna(False).astype(bool)]
     elif filtro_sit == "Apenas inativos" and "inativo" in df.columns:
         df = df[df["inativo"].fillna(False).astype(bool)]
+    if filtro_atd == "Sem atendente":
+        df = df[df["atendente"] == "—"]
+    elif filtro_atd != "Todos":
+        df = df[df["atendente"] == filtro_atd]
 
     # ── Métricas ──────────────────────────────────────────────────────────────
     total_valor = df["valor"].sum() if not df.empty else 0
@@ -59,8 +82,8 @@ def _render_historico(store):
     st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
 
     # ── Tabela ────────────────────────────────────────────────────────────────
-    col_w = [1.2, 3, 1.8, 1.5]
-    hdrs  = ["Data", "Cliente", "CNPJ", "Valor"]
+    col_w = [1.2, 3, 1.8, 1.5, 1.5]
+    hdrs  = ["Data", "Cliente", "CNPJ", "Valor", "Atendente"]
 
     hdr_cells = "".join(
         f'<div style="flex:{w};padding:14px 14px;font-size:12px;text-transform:uppercase;'
@@ -105,6 +128,9 @@ def _render_historico(store):
             st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{row.get("cnpj","—")}</div>', unsafe_allow_html=True)
         with rcols[3]:
             st.markdown(f'<div style="padding:12px 14px;font-size:14px;font-weight:600;color:#2dd36f">{fmt_moeda(row.get("valor",0))}</div>', unsafe_allow_html=True)
+        with rcols[4]:
+            _at_txt = str(row.get("atendente") or "—")
+            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{_at_txt}</div>', unsafe_allow_html=True)
 
         if i < n - 1:
             st.markdown('<div style="height:0.5px;background:#2a2f42;margin:0"></div>', unsafe_allow_html=True)
