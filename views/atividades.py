@@ -220,10 +220,14 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
     )
 
     if _regularizado:
-        # Valor pago oculto por enquanto — pode haver casos onde a tabela do BQ
-        # ainda não refletiu liquidações exatamente do dia, deixando "Pago hoje"
-        # com valor desatualizado/incompleto. Quando confiável, reativar.
-        valor_html = ""
+        # Valor pago vem do overlay real-time da API Superlógica
+        # (_valor_pago_hoje = vl_total_recb do pagamento). Confiável — não
+        # depende mais do BQ Splgc (que é replicado 1x/dia).
+        _vl_pago = float(c.get("_valor_pago_hoje") or 0)
+        valor_html = (
+            f'<div style="font-size:14px;color:#7cc243;font-weight:700;margin-bottom:10px">'
+            f'Pago: {fmt_moeda_plain(_vl_pago)}</div>'
+        ) if _vl_pago > 0 else ""
         st.markdown(
             f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
             f'padding:14px 16px;margin-bottom:10px;border-top:2px solid #7cc243">'
