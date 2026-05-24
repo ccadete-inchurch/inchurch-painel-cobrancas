@@ -209,13 +209,17 @@ def aplicar_pagamentos_hoje_no_store():
             continue  # pagamento parcial — não adiciona em regularizados
         cliente_match = next((c for c in store["clientes"] if str(c.get("id")) == cid), None)
         inativo = bool(cliente_match.get("_inativo")) if cliente_match else False
+        # Atendente associada ao cliente — pega do mapa carregado por
+        # load_atendente_atual_painel(). Vazio se cliente sem dono.
+        atendente = st.session_state.get("_painel_atendente_atual", {}).get(cid, "")
         store["regularizados"].append({
-            "id":       cid,
-            "data":     hoje_br,
-            "nome":     info["nome"],
-            "cnpj":     info["cnpj"],
-            "valor":    info["valor_total"],
-            "inativo":  inativo,
+            "id":        cid,
+            "data":      hoje_br,
+            "nome":      info["nome"],
+            "cnpj":      info["cnpj"],
+            "valor":     info["valor_total"],
+            "atendente": atendente,
+            "inativo":   inativo,
         })
 
 
