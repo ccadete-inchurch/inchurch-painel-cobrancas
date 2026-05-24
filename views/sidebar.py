@@ -42,10 +42,6 @@ def render_sidebar():
     nav_item("Regularizados",      "historico")
     nav_item("Cliente",            "cliente")
 
-    # Debug Superlógica — só admin/gestor enquanto integração tá em validação
-    if current_role() in ("admin", "gestor"):
-        nav_item("🧪 Debug Superlógica", "debug_superlogica")
-
     st.sidebar.markdown(f"""
     <div style="position:fixed;bottom:0;width:248px;padding:16px 20px;border-top:1px solid #1e2333;background:#13161f">
         <div style="font-size:12px;color:#e8eaf0;font-weight:600">{current_nome()}</div>

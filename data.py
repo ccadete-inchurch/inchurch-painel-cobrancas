@@ -76,66 +76,6 @@ def _superlogica_get(path: str, params: dict | None = None) -> tuple[int, dict |
     return 200, body, ""
 
 
-def fetch_cliente_superlogica(cliente_id: int | str) -> dict | None:
-    """Busca um cliente pelo ID no Superlógica. Retorna o dict ou None.
-    Inclui status=2 (todos) — sem isso, default é só ativos e clientes
-    inativos somem da resposta.
-    GET /financeiro/clientes?id=<id>&status=2"""
-    status, body, _ = _superlogica_get("/clientes", {
-        "id": cliente_id,
-        "status": 2,
-    })
-    if status != 200 or not isinstance(body, list) or not body:
-        return None
-    return body[0]
-
-
-def buscar_cliente_por_cnpj(cnpj: str) -> dict | None:
-    """Busca cliente pelo CNPJ/CPF (param 'pesquisa' do Superlógica).
-    Retorna o primeiro match ou None."""
-    cnpj_limpo = "".join(c for c in str(cnpj or "") if c.isdigit())
-    if not cnpj_limpo:
-        return None
-    status, body, _ = _superlogica_get("/clientes", {
-        "pesquisa": cnpj_limpo,
-        "status": 2,
-        "itensPorPagina": 5,
-        "apenasColunasPrincipais": 0,
-    })
-    if status != 200 or not isinstance(body, list) or not body:
-        return None
-    return body[0]
-
-
-def testar_superlogica_api() -> dict:
-    """Função de diagnóstico — chama GET /clientes?itensPorPagina=1 e retorna
-    estrutura com status, sucesso, primeiros campos da resposta. Usado pela
-    tela de debug pra validar conectividade."""
-    sess = _superlogica_session()
-    if sess is None:
-        return {
-            "ok": False,
-            "msg": "Configuração [superlogica] ausente no secrets.toml",
-            "detalhes": None,
-        }
-    status, body, err = _superlogica_get("/clientes", {
-        "itensPorPagina": 1,
-        "apenasColunasPrincipais": 1,
-        "status": 2,
-    })
-    if status != 200:
-        return {
-            "ok": False,
-            "msg": f"Falha ({status}): {err}",
-            "detalhes": body if isinstance(body, dict) else None,
-        }
-    return {
-        "ok": True,
-        "msg": "API respondeu OK",
-        "amostra": body[0] if isinstance(body, list) and body else body,
-    }
-
-
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_pagamentos_hoje_api() -> dict:
     """Delta real-time: agrega cobranças liquidadas hoje via API Superlógica,

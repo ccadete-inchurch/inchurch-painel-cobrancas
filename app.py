@@ -13,7 +13,7 @@ from data import get_store, carregar_cache_local, processar_dados_bigquery, load
 from views import (
     render_sidebar, render_header, tela_login, tela_importar,
     _render_dashboard, _render_historico, _render_cliente, _render_proximas,
-    _render_atividades, _render_debug_superlogica,
+    _render_atividades,
 )
 
 st.markdown(CSS, unsafe_allow_html=True)
@@ -37,8 +37,6 @@ def tela_principal():
         _render_proximas(store, clientes)
     elif page == "atividades":
         _render_atividades(store, clientes, role)
-    elif page == "debug_superlogica":
-        _render_debug_superlogica()
 
 
 def main():

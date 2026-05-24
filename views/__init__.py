@@ -8,4 +8,3 @@ from views.historico import _render_historico
 from views.cliente   import _render_cliente
 from views.proximas   import _render_proximas
 from views.atividades import _render_atividades
-from views.debug_superlogica import _render_debug_superlogica
