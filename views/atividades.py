@@ -410,6 +410,14 @@ def _render_atividades(store, clientes, role):
                         except Exception:
                             pass
 
+                        # Refresh imediato do overlay de pagamentos do dia
+                        # via API Superlógica — força re-fetch fora do TTL.
+                        try:
+                            from data import fetch_pagamentos_hoje_api
+                            fetch_pagamentos_hoje_api.clear()
+                        except Exception:
+                            pass
+
                         try:
                             load_mensagens_from_bq()
                         except Exception as e:

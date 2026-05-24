@@ -173,10 +173,22 @@ def _render_dashboard(store, clientes, role):
     ids_atuais = {str(c["id"]) for c in clientes}
     ids_inicio = fetch_snapshot_inicio_mes()
 
+    # IDs que pagaram hoje via API Superlógica (overlay real-time). Lê do
+    # store original — `clientes` aqui já tá filtrado, mas precisamos saber
+    # quais foram tirados pra somar manualmente no edge case (cliente que
+    # virou inadimplente no meio do mês — não estava no snapshot inicial).
+    ids_pagos_hoje = {
+        str(c["id"]) for c in store["clientes"] if c.get("_regularizado_hoje")
+    }
+
     if ids_inicio:
         # Snapshot disponível — matemática exata
         novos_mes = len(ids_atuais - ids_inicio)  # ID em hoje, não em snapshot inicial
         reg_mes   = len(ids_inicio - ids_atuais)  # ID em snapshot inicial, não em hoje
+        # Edge case: cliente virou inadimplente DEPOIS do snapshot e pagou
+        # hoje. Não está em ids_inicio nem em ids_atuais → some da conta.
+        # Soma esses manualmente (dedup contra ids_inicio pra não contar 2×).
+        reg_mes += len(ids_pagos_hoje - ids_inicio)
         snapshot_dt = st.session_state.get("_snapshot_inicio_mes_data", "")
         # Se snapshot começou depois do dia 1 (ex: implementação no meio do mês),
         # exibe a data de referência no card pra ficar claro o que está medindo.
@@ -185,6 +197,8 @@ def _render_dashboard(store, clientes, role):
         # Fallback heurístico — usado enquanto o snapshot não foi populado
         ids_pagaram_em_atraso = fetch_regularizados_mes_atual()
         reg_mes               = len(ids_pagaram_em_atraso - ids_atuais)
+        # Mesmo edge case no fallback (dedup contra ids_pagaram_em_atraso)
+        reg_mes += len(ids_pagos_hoje - ids_pagaram_em_atraso)
         novos_mes = sum(
             1 for c in clientes
             if (vd := parse_date_br(c.get("vencimento", ""))) and mes_inicio <= vd <= hoje
@@ -452,6 +466,13 @@ def _render_dashboard(store, clientes, role):
     _, ta, tb = st.columns([6, 1, 1])
     with ta:
         if st.button("↑ Atualizar", width="stretch", help="Recarregar dados do BigQuery"):
+            # Limpa também o cache do overlay de pagamentos hoje pra forçar
+            # re-fetch da API Superlógica no próximo render.
+            try:
+                from data import fetch_pagamentos_hoje_api
+                fetch_pagamentos_hoje_api.clear()
+            except Exception:
+                pass
             st.session_state["tela"] = "importar"
             st.rerun()
     with tb:
