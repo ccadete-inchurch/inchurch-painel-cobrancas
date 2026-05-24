@@ -518,6 +518,27 @@ def _render_atividades(store, clientes, role):
 
         st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
 
+        # ── Badge: regularizados hoje (overlay real-time via API Superlógica) ─
+        # Conta clientes do escopo atual (lote do atendente / lote selecionado /
+        # todos no modo gestor). Esconde se zero — sem rúido quando não há ação.
+        _regs_hoje = [c for c in clientes if c.get("_regularizado_hoje")]
+        if _regs_hoje:
+            _n = len(_regs_hoje)
+            _vl = sum(float(c.get("_valor_pago_hoje") or 0) for c in _regs_hoje)
+            _vl_html = f' · {fmt_moeda_plain(_vl)}' if _vl > 0 else ''
+            _label = "regularizado" if _n == 1 else "regularizados"
+            st.markdown(
+                f'<div style="display:flex;justify-content:center;margin:0 0 12px">'
+                f'<div style="display:inline-flex;align-items:center;gap:8px;'
+                f'background:rgba(124,194,67,.08);border:1px solid rgba(124,194,67,.3);'
+                f'border-radius:8px;padding:6px 14px">'
+                f'<span style="color:#7cc243;font-size:14px;font-weight:800;line-height:1">✓</span>'
+                f'<span style="color:#e8eaf0;font-size:13px;font-weight:600">'
+                f'{_n} {_label} hoje{_vl_html}</span>'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
+
         # ── Monta fila ────────────────────────────────────────────────────────
         fila = []
         for c in clientes:
