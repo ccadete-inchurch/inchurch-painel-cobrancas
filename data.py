@@ -136,6 +136,107 @@ def testar_superlogica_api() -> dict:
     }
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_pagamentos_hoje_api() -> dict:
+    """Delta real-time: agrega cobranças liquidadas hoje via API Superlógica,
+    contornando o lag de 1 dia do BQ Splgc. Pagina até esgotar (limite 200/pg).
+    Cache TTL 5min — atualiza automaticamente sem precisar de refresh manual.
+
+    Retorno: {cliente_id (str): {valor_total, nome, cnpj, dt_liquidacao, cobrancas_ids}}.
+    Match no store é direto: cliente_id ↔ store['clientes'][i]['id'].
+    """
+    from datetime import date as _date
+    hoje_iso = _date.today().strftime("%Y-%m-%d")
+
+    agg: dict[str, dict] = {}
+    pagina = 1
+    while True:
+        status, body, _ = _superlogica_get("/cobranca", {
+            "filtrarpor": "liquidacao",
+            "dtInicio":   hoje_iso,
+            "dtFim":      hoje_iso,
+            "apenasColunasPrincipais": 1,
+            "itensPorPagina": 200,
+            "pagina": pagina,
+        })
+        if status != 200 or not isinstance(body, list) or not body:
+            break
+        for item in body:
+            cid = str(item.get("id_sacado_sac") or "")
+            if not cid:
+                continue
+            try:
+                valor = float(item.get("vl_total_recb") or 0)
+            except (TypeError, ValueError):
+                valor = 0.0
+            id_receb = str(item.get("id_recebimento_recb") or "")
+            if cid in agg:
+                agg[cid]["valor_total"] += valor
+                if id_receb:
+                    agg[cid]["cobrancas_ids"].append(id_receb)
+            else:
+                agg[cid] = {
+                    "valor_total":   valor,
+                    "nome":          str(item.get("st_nome_sac") or ""),
+                    "cnpj":          str(item.get("st_cgc_sac") or ""),
+                    "dt_liquidacao": str(item.get("dt_liquidacao_recb") or ""),
+                    "cobrancas_ids": [id_receb] if id_receb else [],
+                }
+        if len(body) < 200:
+            break
+        pagina += 1
+        if pagina > 20:  # ~4k pagamentos/dia — limite de segurança, jamais alcançado
+            break
+    return agg
+
+
+def aplicar_pagamentos_hoje_no_store():
+    """Overlay real-time no store atual a partir do delta da API Superlógica.
+    Idempotente — pode ser chamado a cada render (fetch é cacheado).
+
+    Efeitos:
+      - Marca _regularizado_hoje=True nos clientes que pagaram hoje
+      - Salva _valor_pago_hoje pra exibição
+      - Adiciona em store['regularizados'] os IDs que ainda não estão lá
+    """
+    from datetime import date as _date
+
+    try:
+        pagamentos = fetch_pagamentos_hoje_api()
+    except Exception:
+        return
+
+    if not pagamentos:
+        return
+
+    store = get_store()
+    ids_pagos = set(pagamentos.keys())
+
+    # 1) Marcar inadimplentes que pagaram hoje
+    for c in store["clientes"]:
+        cid = str(c.get("id") or "")
+        if cid in ids_pagos:
+            c["_regularizado_hoje"] = True
+            c["_valor_pago_hoje"]   = pagamentos[cid]["valor_total"]
+
+    # 2) Adicionar a regularizados (dedup por id)
+    ids_existentes = {str(r.get("id") or "") for r in store["regularizados"]}
+    hoje_br = _date.today().strftime("%d/%m/%Y")
+    for cid, info in pagamentos.items():
+        if cid in ids_existentes:
+            continue
+        cliente_match = next((c for c in store["clientes"] if str(c.get("id")) == cid), None)
+        inativo = bool(cliente_match.get("_inativo")) if cliente_match else False
+        store["regularizados"].append({
+            "id":       cid,
+            "data":     hoje_br,
+            "nome":     info["nome"],
+            "cnpj":     info["cnpj"],
+            "valor":    info["valor_total"],
+            "inativo":  inativo,
+        })
+
+
 # ── BigQuery ──────────────────────────────────────────────────────────────────
 
 _BQ_PROJECT    = "business-intelligence-467516"

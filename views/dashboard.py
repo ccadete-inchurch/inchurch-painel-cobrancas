@@ -88,6 +88,11 @@ def _render_dashboard(store, clientes, role):
     # Pequeno espaço no topo (cards são o primeiro elemento agora).
     st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
 
+    # Remove regularizados-hoje (pagaram hoje via API Superlógica) de TODAS
+    # as métricas/tabela. Saem da inadimplência em tempo real, aparecem na
+    # aba Regularizados via overlay aplicado em app.py.
+    clientes = [c for c in clientes if not c.get("_regularizado_hoje")]
+
     # ── Lê filtros do session_state pra cards e tabela usarem o mesmo df ──
     # Widgets renderizam depois, mas session_state preserva seleção entre runs
     # (default na primeira renderização, valor do usuário daí em diante).

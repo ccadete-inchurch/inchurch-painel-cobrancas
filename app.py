@@ -9,7 +9,7 @@ st.set_page_config(
 
 from config import CSS
 from auth import is_logged, current_role
-from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq, load_cooldowns_from_painel, load_ultimo_contato_painel, load_atendente_atual_painel
+from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq, load_cooldowns_from_painel, load_ultimo_contato_painel, load_atendente_atual_painel, aplicar_pagamentos_hoje_no_store
 from views import (
     render_sidebar, render_header, tela_login, tela_importar,
     _render_dashboard, _render_historico, _render_cliente, _render_proximas,
@@ -134,6 +134,10 @@ def main():
         load_atendente_atual_painel()
         st.session_state["_metricas_ts"] = _t.time()
         st.session_state["_mensagens_loaded"] = True
+
+    # Overlay real-time de pagamentos do dia via API Superlógica.
+    # Roda a cada render — fetch é cacheado (TTL 5min), apply é O(n) idempotente.
+    aplicar_pagamentos_hoje_no_store()
 
     tela = st.session_state.get("tela", "principal")
     if not store["clientes"] or tela == "importar":
