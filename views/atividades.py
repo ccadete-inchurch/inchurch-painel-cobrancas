@@ -220,29 +220,36 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
     )
 
     if _regularizado:
-        # Valor pago vem do overlay real-time da API Superlógica
-        # (_valor_pago_hoje = vl_total_recb do pagamento). Confiável — não
-        # depende mais do BQ Splgc (que é replicado 1x/dia).
+        # Card regularizado: motivo + valor pago com fontes maiores que o
+        # padrão pra compensar a ausência do score (20px) e do badge de
+        # dias_atraso que dão peso visual aos cards normais.
         _vl_pago = float(c.get("_valor_pago_hoje") or 0)
+        # Motivo customizado pro regularizado: 13px (vs 11px padrão), bold
+        motivo_reg_html = (
+            f'<div style="font-size:13px;font-weight:700;margin-bottom:10px;'
+            f'color:#7cc243;background:rgba(124,194,67,.1);border-left:3px solid #7cc243;'
+            f'padding:6px 10px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px">'
+            f'Regularizado hoje · pagamento confirmado</div>'
+        )
         valor_html = (
-            f'<div style="font-size:14px;color:#7cc243;font-weight:700;margin-bottom:10px">'
+            f'<div style="font-size:18px;color:#7cc243;font-weight:800;margin-bottom:10px;line-height:1.2">'
             f'Pago: {fmt_moeda_plain(_vl_pago)}</div>'
         ) if _vl_pago > 0 else ""
         st.markdown(
             f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
             f'padding:14px 16px;margin-bottom:10px;border-top:2px solid #7cc243">'
-            f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
-            f'<div style="font-weight:700;font-size:17px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
+            f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">'
+            f'<div style="font-weight:700;font-size:18px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
             f'{c["nome"]}'
-            f'<div style="font-size:11px;color:#9ca3af;font-weight:400;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
+            f'<div style="font-size:12px;color:#9ca3af;font-weight:500;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
             f'<span>{c.get("cnpj","—")} · ID {c.get("id","—")}</span>'
             f'{inativo_badge}'
             f'</div>'
             f'</div>'
             f'</div>'
-            f'{motivo_html}'
+            f'{motivo_reg_html}'
             f'{valor_html}'
-            f'<div style="font-size:12px;color:#6b7280">'
+            f'<div style="font-size:13px;color:#9ca3af">'
             f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">'
             f'{_ICON_PHONE}<span style="color:#9ca3af">{_tels_html(c)}</span>'
             f'</div>'
