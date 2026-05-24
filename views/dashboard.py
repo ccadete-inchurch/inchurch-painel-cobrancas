@@ -463,18 +463,7 @@ def _render_dashboard(store, clientes, role):
         st.markdown("---")
 
     # ── Barra de ações ────────────────────────────────────────────────────────
-    _, ta, tb = st.columns([6, 1, 1])
-    with ta:
-        if st.button("↑ Atualizar", width="stretch", help="Recarregar dados do BigQuery"):
-            # Limpa também o cache do overlay de pagamentos hoje pra forçar
-            # re-fetch da API Superlógica no próximo render.
-            try:
-                from data import fetch_pagamentos_hoje_api
-                fetch_pagamentos_hoje_api.clear()
-            except Exception:
-                pass
-            st.session_state["tela"] = "importar"
-            st.rerun()
+    _, tb = st.columns([7, 1])
     with tb:
         # CSV exporta a base FILTRADA atual (consistente com o que aparece na tela)
         if not df.empty:
@@ -524,7 +513,7 @@ def _render_dashboard(store, clientes, role):
         st.button("✕ Limpar", on_click=_reset_filtros, width="stretch")
 
     if not clientes:
-        st.info("Nenhum dado. Use ↑ Atualizar para importar as planilhas.")
+        st.info("Nenhum dado disponível. Aguarde o carregamento automático do BigQuery.")
         return
 
     # Ordenação (filtros já foram aplicados ao df no topo da função).
