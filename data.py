@@ -196,14 +196,20 @@ def aplicar_pagamentos_hoje_no_store():
     # 2) Adicionar a regularizados — APENAS TOTAIS. Parciais ficam invisíveis
     # como evento de pagamento (saldo do cliente cai silenciosamente). Simplifica
     # o modelo mental do atendente: "regularizado" = pagou tudo. Sem confusão.
-    ids_existentes = {str(r.get("id") or "") for r in store["regularizados"]}
+    # Dedup por (id, data): um mesmo cliente pode ter pagamentos em dias
+    # diferentes (BQ historical traz com data de liquidação real, overlay
+    # adiciona com data de hoje — são eventos distintos).
+    hoje_br = _date.today().strftime("%d/%m/%Y")
+    ids_existentes_hoje = {
+        str(r.get("id") or "") for r in store["regularizados"]
+        if str(r.get("data") or "") == hoje_br
+    }
     ids_total = {
         str(c.get("id") or "") for c in store["clientes"]
         if c.get("_regularizado_hoje")
     }
-    hoje_br = _date.today().strftime("%d/%m/%Y")
     for cid, info in pagamentos.items():
-        if cid in ids_existentes:
+        if cid in ids_existentes_hoje:
             continue
         if cid not in ids_total:
             continue  # pagamento parcial — não adiciona em regularizados
