@@ -193,12 +193,20 @@ def aplicar_pagamentos_hoje_no_store():
             except (TypeError, ValueError):
                 pass
 
-    # 2) Adicionar a regularizados (dedup por id)
+    # 2) Adicionar a regularizados — APENAS TOTAIS. Parciais ficam invisíveis
+    # como evento de pagamento (saldo do cliente cai silenciosamente). Simplifica
+    # o modelo mental do atendente: "regularizado" = pagou tudo. Sem confusão.
     ids_existentes = {str(r.get("id") or "") for r in store["regularizados"]}
+    ids_total = {
+        str(c.get("id") or "") for c in store["clientes"]
+        if c.get("_regularizado_hoje")
+    }
     hoje_br = _date.today().strftime("%d/%m/%Y")
     for cid, info in pagamentos.items():
         if cid in ids_existentes:
             continue
+        if cid not in ids_total:
+            continue  # pagamento parcial — não adiciona em regularizados
         cliente_match = next((c for c in store["clientes"] if str(c.get("id")) == cid), None)
         inativo = bool(cliente_match.get("_inativo")) if cliente_match else False
         store["regularizados"].append({
