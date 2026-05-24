@@ -314,7 +314,8 @@ def get_effective_atendente(cid) -> str:
     1. Manual do histórico unificado (admin vê das atendentes; atendente vê próprio)
        — só vale se for nome de atendente REAL (Ana/Priscila). Filtra fora
        qualquer outro nome legado.
-    2. Atendente atual em painel_tarefas_diarias (registro mais recente)
+    2. Grupo do cliente em splgc-grupo (fonte primária — cobertura ampla)
+    3. Atendente atual em painel_tarefas_diarias (fallback — só clientes do lote)
     """
     import streamlit as st
     from data import _EMAIL_GRUPO
@@ -322,7 +323,11 @@ def get_effective_atendente(cid) -> str:
     manual = (h.get("atendente") or "").strip()
     if manual and manual in _EMAIL_GRUPO.values():
         return manual
-    return st.session_state.get("_painel_atendente_atual", {}).get(str(cid), "")
+    cid_s = str(cid)
+    grupo = st.session_state.get("_grupo_atendente", {}).get(cid_s, "")
+    if grupo:
+        return grupo
+    return st.session_state.get("_painel_atendente_atual", {}).get(cid_s, "")
 
 
 def get_effective_lastContact(cid) -> str:

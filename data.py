@@ -1090,11 +1090,46 @@ def load_ultimo_contato_painel():
     st.session_state["_painel_ultimo_contato_dias"] = out
 
 
+def load_grupo_atendente_map():
+    """Lê splgc-grupo e mapeia cliente_id → grupo (que é o nome do atendente
+    responsável). Fonte PRIMÁRIA de 'quem é dona desse cliente' — cobertura
+    ampla (todos os clientes têm grupo). painel_tarefas_diarias é fallback.
+
+    Salva em session_state:
+      _grupo_atendente[cid] → 'Ana Carolina' | 'Priscila Oliveira'
+
+    Filtra valores que não batem com atendentes conhecidos (_EMAIL_GRUPO)
+    pra não vazar grupos genéricos (regiões, denominações).
+    """
+    st.session_state.setdefault("_grupo_atendente", {})
+
+    client = get_bq_client()
+    if not client:
+        return
+
+    try:
+        df = client.query(f"""
+            SELECT CAST(id_sacado_sac AS STRING) AS id, MAX(grupo) AS grupo
+            FROM `business-intelligence-467516.Splgc.splgc-grupo`
+            WHERE grupo IS NOT NULL
+            GROUP BY id_sacado_sac
+        """).to_dataframe()
+    except Exception:
+        return
+
+    nomes_validos = set(_EMAIL_GRUPO.values())
+    out = {}
+    for _, row in df.iterrows():
+        cid = str(row["id"]).strip()
+        grupo = str(row.get("grupo") or "").strip()
+        if cid and grupo in nomes_validos:
+            out[cid] = grupo
+    st.session_state["_grupo_atendente"] = out
+
+
 def load_atendente_atual_painel():
     """Lê o atendente mais recente por cliente em painel_tarefas_diarias.
-    Fonte compartilhada (não depende de quem está logado) pra responder
-    'quem é dona desse cliente hoje' nas telas. Usa o registro mais recente
-    por id_sacado.
+    FALLBACK (após splgc-grupo) — só tem clientes que entraram em algum lote.
 
     Salva em session_state:
       _painel_atendente_atual[cid] → 'Ana Carolina' | 'Priscila Oliveira'

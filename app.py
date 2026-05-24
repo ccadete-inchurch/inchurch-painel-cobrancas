@@ -9,7 +9,7 @@ st.set_page_config(
 
 from config import CSS
 from auth import is_logged, current_role
-from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq, load_cooldowns_from_painel, load_ultimo_contato_painel, load_atendente_atual_painel, aplicar_pagamentos_hoje_no_store
+from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq, load_cooldowns_from_painel, load_ultimo_contato_painel, load_atendente_atual_painel, load_grupo_atendente_map, aplicar_pagamentos_hoje_no_store
 from views import (
     render_sidebar, render_header, tela_login, tela_importar,
     _render_dashboard, _render_historico, _render_cliente, _render_proximas,
@@ -127,8 +127,11 @@ def main():
         # Última interação por cliente sem janela temporal — alimenta o
         # "Último Contato" do dashboard mesmo pra ações antigas (>6 dias).
         load_ultimo_contato_painel()
-        # Atendente atual por cliente (fonte compartilhada — não depende
-        # de quem está logado). Preenche coluna Atendente no CSV/tela.
+        # Mapa cliente → grupo (atendente). Fonte primária — todos os
+        # clientes do splgc-grupo. Usado pelo get_effective_atendente.
+        load_grupo_atendente_map()
+        # Atendente atual no lote (painel_tarefas_diarias) — fallback do grupo.
+        # Tem só clientes que já entraram em algum lote.
         load_atendente_atual_painel()
         st.session_state["_metricas_ts"] = _t.time()
         st.session_state["_mensagens_loaded"] = True
