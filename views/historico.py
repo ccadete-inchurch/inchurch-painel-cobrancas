@@ -19,22 +19,6 @@ def _render_historico(store):
 
     df = pd.DataFrame(reg)
 
-    # Filtra só clientes ATUALMENTE sem dívida.
-    # - Cliente NÃO está em store['clientes'] → sem dívida (zerou em algum momento)
-    # - Cliente está em store['clientes'] mas _regularizado_hoje=True → pagou
-    #   tudo hoje, BQ amanhã reflete saída da inadimplência
-    # Parciais ficam fora (cliente continua em store['clientes'] sem o flag).
-    ids_inadimplentes = {
-        str(c.get("id") or "") for c in store.get("clientes", [])
-        if not c.get("_regularizado_hoje")
-    }
-    if not df.empty and "id" in df.columns:
-        df = df[~df["id"].astype(str).isin(ids_inadimplentes)]
-
-    if df.empty:
-        st.info("Nenhum cliente atualmente regularizado.")
-        return
-
     # Resolve atendente: grupo (splgc-grupo) primeiro, painel_tarefas_diarias
     # como fallback. get_effective_atendente já encapsula essa lógica.
     def _resolve_atendente(row):
