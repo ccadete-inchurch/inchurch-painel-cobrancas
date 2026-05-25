@@ -42,6 +42,25 @@ def render_sidebar():
     nav_item("Regularizados",      "historico")
     nav_item("Cliente",            "cliente")
 
+    # Atualizar dados — admin/gestor. Útil quando o BQ é atualizado depois
+    # do load inicial (ex: pipeline atrasado retroativamente).
+    if current_role() in ("admin", "gestor"):
+        st.sidebar.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
+        if st.sidebar.button("↻ Atualizar dados", key="btn_force_refresh", width="stretch",
+                              help="Força re-pull do BQ + limpa cache do overlay API"):
+            # Limpa todos os gates de carga
+            for k in list(st.session_state.keys()):
+                if k.startswith(("_bq_loaded_", "_historico_loaded", "_mensagens_loaded",
+                                 "_grupo_atendente", "_painel_", "_msg_", "_snapshot_")):
+                    st.session_state.pop(k, None)
+            # Limpa cache do overlay API
+            try:
+                from data import fetch_pagamentos_hoje_api
+                fetch_pagamentos_hoje_api.clear()
+            except Exception:
+                pass
+            st.rerun()
+
     st.sidebar.markdown(f"""
     <div style="position:fixed;bottom:0;width:248px;padding:16px 20px;border-top:1px solid #1e2333;background:#13161f">
         <div style="font-size:12px;color:#e8eaf0;font-weight:600">{current_nome()}</div>
@@ -51,6 +70,8 @@ def render_sidebar():
     st.sidebar.markdown('<div style="height:80px"></div>', unsafe_allow_html=True)
 
     if st.sidebar.button("Sair da conta", width="stretch"):
-        for k in ["user_uid", "user_nome", "user_role", "tela", "page"]:
+        # Limpa TODAS as chaves do session_state — garante que o login
+        # subsequente faça fresh load do BQ + cache, sem heranças.
+        for k in list(st.session_state.keys()):
             st.session_state.pop(k, None)
         st.rerun()
