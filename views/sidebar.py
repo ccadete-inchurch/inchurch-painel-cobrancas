@@ -48,7 +48,7 @@ def render_sidebar():
         st.sidebar.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
         if st.sidebar.button("↻ Atualizar dados", key="btn_force_refresh", width="stretch",
                               help="Força re-pull do BQ + limpa cache do overlay API"):
-            # Limpa todos os gates de carga
+            # Limpa gates de carga pra futuras consistências
             for k in list(st.session_state.keys()):
                 if k.startswith(("_bq_loaded_", "_historico_loaded", "_mensagens_loaded",
                                  "_grupo_atendente", "_painel_", "_msg_", "_snapshot_")):
@@ -59,6 +59,15 @@ def render_sidebar():
                 fetch_pagamentos_hoje_api.clear()
             except Exception:
                 pass
+            # Força processar BQ DIRETAMENTE — bypassa o check 'cache_desatualizado'
+            # do app.py (que só compara data, não hora). Sem isso, processar não roda
+            # se o cache for de hoje cedo.
+            try:
+                from data import processar_dados_bigquery
+                with st.spinner("Atualizando dados do BigQuery..."):
+                    processar_dados_bigquery()
+            except Exception as e:
+                st.error(f"Erro ao atualizar: {e}")
             st.rerun()
 
     st.sidebar.markdown(f"""
