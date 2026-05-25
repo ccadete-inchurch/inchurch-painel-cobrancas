@@ -1,3 +1,5 @@
+from datetime import date
+
 import pandas as pd
 import streamlit as st
 
@@ -78,18 +80,34 @@ def _render_historico(store):
         df = df[df["atendente"] == filtro_atd]
 
     # ── Métricas ──────────────────────────────────────────────────────────────
-    total_valor = df["valor"].sum() if not df.empty else 0
-    m1, m2, _ , _ = st.columns(4)
-    for col, label, val, sub in [
-        (m1, "Total Regularizado", fmt_moeda_plain(total_valor), "soma dos pagamentos"),
-        (m2, "Pagamentos",         str(len(df)),                 "faturas liquidadas"),
+    # 3 horizontes: hoje, mês corrente, total histórico. Cada um mostra
+    # nº de faturas liquidadas + valor somado. Reflete o df FILTRADO (busca,
+    # situação, atendente) pra ficar consistente com o que aparece na tabela.
+    hoje_br = date.today()
+    hoje_str = hoje_br.strftime("%d/%m/%Y")
+    sufixo_mes = hoje_br.strftime("/%m/%Y")  # "/MM/AAAA" — match endswith
+
+    if df.empty:
+        df_hoje = df_mes = df
+    else:
+        df_hoje = df[df["data"].astype(str) == hoje_str]
+        df_mes  = df[df["data"].astype(str).str.endswith(sufixo_mes, na=False)]
+
+    def _sum_v(d): return float(d["valor"].sum()) if not d.empty else 0.0
+    def _cnt(d):   return len(d)
+
+    m1, m2, m3, _m4 = st.columns(4)
+    for col, label, val_moeda, sub_cnt in [
+        (m1, "Pagamentos Hoje",   _sum_v(df_hoje), _cnt(df_hoje)),
+        (m2, "Pagamentos no Mês", _sum_v(df_mes),  _cnt(df_mes)),
+        (m3, "Total Histórico",   _sum_v(df),      _cnt(df)),
     ]:
         with col:
             st.markdown(
                 f'<div class="metric-card">'
                 f'<div class="metric-label">{label}</div>'
-                f'<div style="font-size:15px;font-weight:600;color:#2dd36f;margin-top:4px">{val}</div>'
-                f'<div class="metric-sub">{sub}</div>'
+                f'<div style="font-size:15px;font-weight:600;color:#2dd36f;margin-top:4px">{fmt_moeda_plain(val_moeda)}</div>'
+                f'<div class="metric-sub">{sub_cnt} {"fatura" if sub_cnt == 1 else "faturas"}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
