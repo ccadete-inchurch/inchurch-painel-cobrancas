@@ -80,34 +80,39 @@ def _render_historico(store):
         df = df[df["atendente"] == filtro_atd]
 
     # ── Métricas ──────────────────────────────────────────────────────────────
-    # 3 horizontes: hoje, mês corrente, total histórico. Cada um mostra
-    # nº de faturas liquidadas + valor somado. Reflete o df FILTRADO (busca,
-    # situação, atendente) pra ficar consistente com o que aparece na tabela.
+    # Hoje: count baseado em FLAG (_regularizado_hoje | _pago_parcial_hoje) —
+    # unifica com o badge da Atividades. Não depende do registro com data=hoje
+    # estar no df (overlay pode ter falhado em adicionar mas flag persiste).
+    # Mês/Histórico: count baseado em FATURAS no df (BQ historical é por boleto).
     hoje_br = date.today()
-    hoje_str = hoje_br.strftime("%d/%m/%Y")
     sufixo_mes = hoje_br.strftime("/%m/%Y")  # "/MM/AAAA" — match endswith
 
-    if df.empty:
-        df_hoje = df_mes = df
-    else:
-        df_hoje = df[df["data"].astype(str) == hoje_str]
-        df_mes  = df[df["data"].astype(str).str.endswith(sufixo_mes, na=False)]
+    # Pagamentos Hoje (por cliente, via flag do overlay)
+    clientes_hoje = [
+        c for c in store.get("clientes", [])
+        if c.get("_regularizado_hoje") or c.get("_pago_parcial_hoje")
+    ]
+    n_hoje = len(clientes_hoje)
+    v_hoje = sum(float(c.get("_valor_pago_hoje") or 0) for c in clientes_hoje)
 
-    def _sum_v(d): return float(d["valor"].sum()) if not d.empty else 0.0
-    def _cnt(d):   return len(d)
+    # Mês / Histórico (por fatura, via df)
+    df_mes = df[df["data"].astype(str).str.endswith(sufixo_mes, na=False)] if not df.empty else df
+    n_mes, v_mes = (len(df_mes), float(df_mes["valor"].sum())) if not df_mes.empty else (0, 0.0)
+    n_total, v_total = (len(df), float(df["valor"].sum())) if not df.empty else (0, 0.0)
 
     m1, m2, m3, _m4 = st.columns(4)
-    for col, label, val_moeda, sub_cnt in [
-        (m1, "Pagamentos Hoje",   _sum_v(df_hoje), _cnt(df_hoje)),
-        (m2, "Pagamentos no Mês", _sum_v(df_mes),  _cnt(df_mes)),
-        (m3, "Total Histórico",   _sum_v(df),      _cnt(df)),
+    for col, label, valor, qtd, unidade in [
+        (m1, "Pagamentos Hoje",   v_hoje,  n_hoje,  "cliente"),
+        (m2, "Pagamentos no Mês", v_mes,   n_mes,   "fatura"),
+        (m3, "Total Histórico",   v_total, n_total, "fatura"),
     ]:
         with col:
+            sub = f'{qtd} {unidade if qtd == 1 else unidade + "s"}'
             st.markdown(
                 f'<div class="metric-card">'
                 f'<div class="metric-label">{label}</div>'
-                f'<div style="font-size:15px;font-weight:600;color:#2dd36f;margin-top:4px">{fmt_moeda_plain(val_moeda)}</div>'
-                f'<div class="metric-sub">{sub_cnt} {"fatura" if sub_cnt == 1 else "faturas"}</div>'
+                f'<div style="font-size:15px;font-weight:600;color:#2dd36f;margin-top:4px">{fmt_moeda_plain(valor)}</div>'
+                f'<div class="metric-sub">{sub}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
