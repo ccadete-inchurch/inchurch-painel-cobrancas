@@ -206,6 +206,15 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
     _regularizado = bool(c.get("_regularizado_hoje"))
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
     acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if _eh_acordo and not _regularizado else ""
+    # Badge de pagamento parcial — cliente pagou algum boleto hoje mas ainda
+    # tem vencidas. Só mostra fora da coluna CONCLUÍDA (lá já é regularização
+    # total). Mesmo estilo de INATIVO/ACORDO mas em verde inChurch.
+    _vl_parcial = float(c.get("_valor_pago_hoje") or 0)
+    parcial_badge = (
+        f'<span style="background:rgba(124,194,67,.18);color:#7cc243;font-size:10px;'
+        f'font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;'
+        f'vertical-align:middle">PAGOU {fmt_moeda_plain(_vl_parcial)} HOJE</span>'
+    ) if c.get("_pago_parcial_hoje") and not _regularizado and _vl_parcial > 0 else ""
     motivo_txt, motivo_style = _motivo(bucket, acoes, c)
     _motivo_css = {
         "red":    "color:#ff5555;background:rgba(239,68,68,.08);border-left:2px solid #ff5555;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
@@ -264,7 +273,7 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
         f'{c["nome"]}'
         f'<div style="font-size:11px;color:#9ca3af;font-weight:400;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
         f'<span>{c.get("cnpj","—")} · ID {c.get("id","—")}</span>'
-        f'{inativo_badge}{acordo_badge}'
+        f'{inativo_badge}{acordo_badge}{parcial_badge}'
         f'</div>'
         f'</div>'
         f'<div style="text-align:right;flex-shrink:0">'
