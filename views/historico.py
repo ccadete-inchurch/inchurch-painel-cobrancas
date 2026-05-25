@@ -80,14 +80,14 @@ def _render_historico(store):
         df = df[df["atendente"] == filtro_atd]
 
     # ── Métricas ──────────────────────────────────────────────────────────────
-    # Hoje: count baseado em FLAG (_regularizado_hoje | _pago_parcial_hoje) —
-    # unifica com o badge da Atividades. Não depende do registro com data=hoje
-    # estar no df (overlay pode ter falhado em adicionar mas flag persiste).
-    # Mês/Histórico: count baseado em FATURAS no df (BQ historical é por boleto).
+    # Todos por CLIENTES ÚNICOS (não por faturas) — consistente com o badge
+    # da Atividades. Cliente que paga vários boletos no mesmo dia/mês/ano
+    # conta como 1. Valor é a soma real dos pagamentos (sem deduplicar).
+    # Hoje usa FLAG do overlay (robusto contra falha de adicionar registro).
     hoje_br = date.today()
     sufixo_mes = hoje_br.strftime("/%m/%Y")  # "/MM/AAAA" — match endswith
 
-    # Pagamentos Hoje (por cliente, via flag do overlay)
+    # Pagamentos Hoje (via flag — pode incluir parcial e total)
     clientes_hoje = [
         c for c in store.get("clientes", [])
         if c.get("_regularizado_hoje") or c.get("_pago_parcial_hoje")
@@ -95,19 +95,25 @@ def _render_historico(store):
     n_hoje = len(clientes_hoje)
     v_hoje = sum(float(c.get("_valor_pago_hoje") or 0) for c in clientes_hoje)
 
-    # Mês / Histórico (por fatura, via df)
-    df_mes = df[df["data"].astype(str).str.endswith(sufixo_mes, na=False)] if not df.empty else df
-    n_mes, v_mes = (len(df_mes), float(df_mes["valor"].sum())) if not df_mes.empty else (0, 0.0)
-    n_total, v_total = (len(df), float(df["valor"].sum())) if not df.empty else (0, 0.0)
+    # Mês / Histórico (clientes únicos via df)
+    if df.empty:
+        n_mes = n_total = 0
+        v_mes = v_total = 0.0
+    else:
+        df_mes = df[df["data"].astype(str).str.endswith(sufixo_mes, na=False)]
+        n_mes   = int(df_mes["id"].astype(str).nunique()) if not df_mes.empty else 0
+        v_mes   = float(df_mes["valor"].sum()) if not df_mes.empty else 0.0
+        n_total = int(df["id"].astype(str).nunique())
+        v_total = float(df["valor"].sum())
 
     m1, m2, m3, _m4 = st.columns(4)
-    for col, label, valor, qtd, unidade in [
-        (m1, "Pagamentos Hoje",   v_hoje,  n_hoje,  "cliente"),
-        (m2, "Pagamentos no Mês", v_mes,   n_mes,   "fatura"),
-        (m3, "Total Histórico",   v_total, n_total, "fatura"),
+    for col, label, valor, qtd in [
+        (m1, "Pagamentos Hoje",   v_hoje,  n_hoje),
+        (m2, "Pagamentos no Mês", v_mes,   n_mes),
+        (m3, "Total Histórico",   v_total, n_total),
     ]:
         with col:
-            sub = f'{qtd} {unidade if qtd == 1 else unidade + "s"}'
+            sub = f'{qtd} {"cliente" if qtd == 1 else "clientes"}'
             st.markdown(
                 f'<div class="metric-card">'
                 f'<div class="metric-label">{label}</div>'
