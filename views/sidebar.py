@@ -42,37 +42,6 @@ def render_sidebar():
     nav_item("Regularizados",      "historico")
     nav_item("Cliente",            "cliente")
 
-    # Atualizar dados — admin/gestor. Força re-pull do BQ ignorando o gate
-    # diário. Usado quando pipeline atrasou e BQ replicou depois do load
-    # inicial. O 'Atualizado' do header é setado dentro de
-    # processar_dados_bigquery() — então fica sincronizado.
-    if current_role() in ("admin", "gestor"):
-        st.sidebar.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
-        if st.sidebar.button("↻ Atualizar dados", key="btn_force_refresh", width="stretch",
-                              help="Força re-pull do BigQuery + limpa cache do overlay"):
-            # 1. Limpa gates de carga (pra outros loads também rerodarem)
-            for k in list(st.session_state.keys()):
-                if k.startswith(("_bq_loaded_", "_historico_loaded", "_mensagens_loaded",
-                                 "_grupo_atendente", "_painel_", "_msg_", "_snapshot_")):
-                    st.session_state.pop(k, None)
-            # 2. Limpa cache do overlay API (TTL 5min seria respeitado senão)
-            try:
-                from data import fetch_pagamentos_hoje_api
-                fetch_pagamentos_hoje_api.clear()
-            except Exception:
-                pass
-            # 3. Força processar BQ DIRETAMENTE — o check 'cache_desatualizado'
-            # do app.py só compara data, não hora. Sem chamar aqui direto,
-            # cache de hoje cedo seria considerado "OK" e processar não rodaria.
-            try:
-                from data import processar_dados_bigquery
-                with st.spinner("Atualizando dados do BigQuery..."):
-                    processar_dados_bigquery()
-                st.toast("Dados atualizados", icon="✅")
-            except Exception as e:
-                st.error(f"Erro ao atualizar: {e}")
-            st.rerun()
-
     st.sidebar.markdown(f"""
     <div style="position:fixed;bottom:0;width:248px;padding:16px 20px;border-top:1px solid #1e2333;background:#13161f">
         <div style="font-size:12px;color:#e8eaf0;font-weight:600">{current_nome()}</div>
