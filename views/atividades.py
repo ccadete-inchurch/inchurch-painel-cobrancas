@@ -499,22 +499,28 @@ def _render_atividades(store, clientes, role):
         meta_msg, meta_lig, meta_atend = 50, 30, 15
         n_msg, n_lig, n_atend = dados_m.get("mensagens", 0), dados_m.get("ligacoes", 0), dados_m.get("atendidas", 0)
 
-        # Badge de regularizados hoje — alinhado à direita do label do escopo.
-        # Mantém os 3 cards de meta intactos. Só renderiza se houver pagamentos.
+        # Badge de regularizados hoje — só conta clientes que QUITARAM TUDO
+        # (flag _regularizado_hoje). Pagamentos parciais NÃO contam aqui (eles
+        # aparecem só na aba Regularizados como "Pagamentos do Dia").
+        # Tooltip explica a diferença pra evitar confusão com o card da aba.
         _regs_hoje = [c for c in clientes if c.get("_regularizado_hoje")]
         _badge_reg_html = ""
         if _regs_hoje:
             _n_reg = len(_regs_hoje)
             _vl_reg = sum(float(c.get("_valor_pago_hoje") or 0) for c in _regs_hoje)
             _vl_txt = f' · {fmt_moeda_plain(_vl_reg)}' if _vl_reg > 0 else ''
-            _label_reg = "regularizado" if _n_reg == 1 else "regularizados"
             _suf_reg = " do lote" if email in _EMAIL_GRUPO else ""
+            _label_reg = "regularização" if _n_reg == 1 else "regularizações"
+            _tooltip = (
+                "Clientes que quitaram TODAS as cobranças vencidas hoje. "
+                "Pagamentos parciais não entram aqui — ver aba Regularizados."
+            )
             _badge_reg_html = (
-                f'<span style="display:inline-flex;align-items:center;gap:8px;'
+                f'<span title="{_tooltip}" style="display:inline-flex;align-items:center;gap:8px;'
                 f'background:rgba(124,194,67,.1);border:1px solid rgba(124,194,67,.4);'
-                f'border-radius:8px;padding:8px 16px;font-size:15px;font-weight:700;color:#e8eaf0">'
+                f'border-radius:8px;padding:8px 16px;font-size:15px;font-weight:700;color:#e8eaf0;cursor:help">'
                 f'<span style="color:#7cc243;font-weight:900;font-size:17px;line-height:1">✓</span>'
-                f'{_n_reg} {_label_reg} hoje{_suf_reg}{_vl_txt}'
+                f'{_n_reg} {_label_reg}{_suf_reg} hoje{_vl_txt}'
                 f'</span>'
             )
 

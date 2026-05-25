@@ -91,15 +91,22 @@ def _render_historico(store):
         v_total = float(df["valor"].sum())
 
     m1, m2, m3, _m4 = st.columns(4)
-    for col, label, valor, qtd in [
-        (m1, "Pagamentos Hoje",   v_hoje,  n_hoje),
-        (m2, "Pagamentos no Mês", v_mes,   n_mes),
-        (m3, "Total Histórico",   v_total, n_total),
+    _tooltip_dia = (
+        "Inclui pagamentos parciais (cliente continua com cobranças vencidas) "
+        "e regularizações totais. Difere do card 'regularizações' da Atividades, "
+        "que conta só quem quitou TUDO."
+    )
+    for col, label, valor, qtd, tooltip in [
+        (m1, "Pagamentos do Dia",   v_hoje,  n_hoje,  _tooltip_dia),
+        (m2, "Pagamentos no Mês",   v_mes,   n_mes,   ""),
+        (m3, "Total Histórico",     v_total, n_total, ""),
     ]:
         with col:
-            sub = f'{qtd} {"cliente" if qtd == 1 else "clientes"}'
+            sub = f'{qtd} {"cliente pagou" if qtd == 1 else "clientes pagaram"}'
+            title_attr = f' title="{tooltip}"' if tooltip else ""
+            cursor = "help" if tooltip else "default"
             st.markdown(
-                f'<div class="metric-card">'
+                f'<div class="metric-card" style="cursor:{cursor}"{title_attr}>'
                 f'<div class="metric-label">{label}</div>'
                 f'<div style="font-size:15px;font-weight:600;color:#2dd36f;margin-top:4px">{fmt_moeda_plain(valor)}</div>'
                 f'<div class="metric-sub">{sub}</div>'
