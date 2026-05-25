@@ -12,6 +12,47 @@ def _render_historico(store):
         unsafe_allow_html=True,
     )
 
+    # ── Diagnóstico (admin/gestor) — TEMPORÁRIO ───────────────────────────────
+    # Ajuda a investigar gaps tipo "cliente X tá em CONCLUÍDA mas não aparece
+    # aqui". Remover quando questão estiver fechada.
+    from auth import current_role
+    if current_role() in ("admin", "gestor"):
+        with st.expander("🔧 Diagnóstico (admin)", expanded=False):
+            cid_debug = st.text_input("ID do cliente pra checar", value="2514", key="dbg_cid")
+            if cid_debug:
+                _cli = next((c for c in store.get("clientes", []) if str(c.get("id")) == cid_debug), None)
+                _regs = [r for r in store.get("regularizados", []) if str(r.get("id")) == cid_debug]
+                st.markdown(f"**Cliente em store['clientes']:** {'sim' if _cli else 'não'}")
+                if _cli:
+                    st.markdown(
+                        f"- `_regularizado_hoje`: `{_cli.get('_regularizado_hoje')}`\n"
+                        f"- `_pago_parcial_hoje`: `{_cli.get('_pago_parcial_hoje')}`\n"
+                        f"- `_valor_pago_hoje`: `{_cli.get('_valor_pago_hoje')}`\n"
+                        f"- `valor` atual: `{_cli.get('valor')}`\n"
+                        f"- cobranças no `_cobracas`: `{len(_cli.get('_cobracas', []))}`"
+                    )
+                    cobs_venc = [
+                        (cob.get("id_recebimento"), cob.get("dias_atraso"), cob.get("status"))
+                        for cob in _cli.get("_cobracas", [])
+                        if (cob.get("dias_atraso") or 0) > 0
+                    ]
+                    st.markdown(f"- Vencidas (dias_atraso > 0): `{cobs_venc}`")
+                st.markdown(f"**Registros em store['regularizados']:** {len(_regs)}")
+                if _regs:
+                    for r in _regs:
+                        st.markdown(f"- data=`{r.get('data')}` · valor=`{r.get('valor')}` · atendente=`{r.get('atendente')}`")
+
+                # Mostra o que a API retornou pra esse cliente
+                try:
+                    from data import fetch_pagamentos_hoje_api
+                    _pags = fetch_pagamentos_hoje_api()
+                    _info = _pags.get(cid_debug)
+                    st.markdown(f"**API hoje retornou pra esse cliente?** {'sim' if _info else 'não'}")
+                    if _info:
+                        st.json(_info)
+                except Exception as e:
+                    st.error(f"Erro ao consultar API: {e}")
+
     reg = store["regularizados"]
     if not reg:
         st.info("Nenhum cliente regularizado ainda.")
