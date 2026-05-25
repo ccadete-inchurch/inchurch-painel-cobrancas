@@ -100,21 +100,13 @@ def main():
             processar_dados_bigquery()
         st.session_state[_bq_key] = True
     elif store["clientes"] and not st.session_state.get(_bq_key):
-        # Cache existente — atualiza se data anterior OU se mais de 4h
-        # desde a última carga (cobre caso de pipeline atrasado replicando
-        # depois do load inicial da manhã).
+        # Dados de cache local — verifica se são de ontem
         ultima = store.get("ultima_atualizacao") or ""
         cache_desatualizado = True
         if ultima:
             try:
                 from datetime import datetime as _datetime
-                ultima_dt = _datetime.strptime(ultima, "%d/%m/%Y %H:%M")
-                _agora = _datetime.now()
-                horas_passadas = (_agora - ultima_dt).total_seconds() / 3600
-                cache_desatualizado = (
-                    ultima_dt.date() < _date.today() or
-                    horas_passadas > 4
-                )
+                cache_desatualizado = _datetime.strptime(ultima[:10], "%d/%m/%Y").date() < _date.today()
             except Exception:
                 pass
         if cache_desatualizado:
