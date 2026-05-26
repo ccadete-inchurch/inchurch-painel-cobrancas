@@ -85,8 +85,9 @@ def fetch_pagamentos_hoje_api() -> dict:
     Retorno: {cliente_id (str): {valor_total, nome, cnpj, dt_liquidacao, cobrancas_ids}}.
     Match no store é direto: cliente_id ↔ store['clientes'][i]['id'].
     """
-    from datetime import date as _date
-    hoje_iso = _date.today().strftime("%Y-%m-%d")
+    from datetime import date as _date, datetime as _datetime
+    hoje = _date.today()
+    hoje_iso = hoje.strftime("%Y-%m-%d")
 
     agg: dict[str, dict] = {}
     pagina = 1
@@ -105,6 +106,21 @@ def fetch_pagamentos_hoje_api() -> dict:
             cid = str(item.get("id_sacado_sac") or "")
             if not cid:
                 continue
+            # Validação defensiva: a API SL não filtra estritamente por
+            # dtInicio/dtFim — retorna itens com dt_liquidacao_recb de dias
+            # passados também (provavelmente por causa de dt_recebimento_recb
+            # futura — janela de compensação bancária). Confirmamos via BQ que
+            # dia 24/05 (domingo) a API retornou itens liquidados em 20-22/05.
+            # Filtramos aqui pra só aceitar liquidações realmente de hoje.
+            dt_liq_str = str(item.get("dt_liquidacao_recb") or "")
+            try:
+                # API retorna em MM/DD/YYYY (formato US)
+                dt_liq = _datetime.strptime(dt_liq_str[:10], "%m/%d/%Y").date()
+                if dt_liq != hoje:
+                    continue
+            except (ValueError, TypeError):
+                # Sem data parseável — descarta por segurança
+                continue
             try:
                 valor = float(item.get("vl_total_recb") or 0)
             except (TypeError, ValueError):
@@ -119,7 +135,7 @@ def fetch_pagamentos_hoje_api() -> dict:
                     "valor_total":   valor,
                     "nome":          str(item.get("st_nome_sac") or ""),
                     "cnpj":          str(item.get("st_cgc_sac") or ""),
-                    "dt_liquidacao": str(item.get("dt_liquidacao_recb") or ""),
+                    "dt_liquidacao": dt_liq_str,
                     "cobrancas_ids": [id_receb] if id_receb else [],
                 }
         if len(body) < 200:
