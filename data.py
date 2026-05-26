@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import datetime, date, timezone, timedelta
+from datetime import datetime, date, time, timezone, timedelta
 from pathlib import Path
 
 # ── OAuth popup: armazenamento temporário compartilhado entre sessões ─────────
@@ -1488,6 +1488,31 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
                 return buckets
         except Exception:
             pass
+
+    # Vamos GERAR novo lote. Garante que store['clientes'] não está stale —
+    # cache pode ter sido populado em sessão anterior antes do pipeline
+    # terminar (ex: admin abriu painel às 04:00). Sem este check, lote pode
+    # incluir clientes que já regularizaram durante a madrugada.
+    # Pipeline normalmente termina ~07:00 BRT. Se cache é de antes das 08:00,
+    # força refresh do BQ pra ter certeza que estamos pegando dados completos.
+    _BRT_tz = timezone(timedelta(hours=-3))
+    ultima_str = get_store().get("ultima_atualizacao") or ""
+    cache_stale_pre_pipeline = True
+    if ultima_str:
+        try:
+            ultima_dt = datetime.strptime(ultima_str, "%d/%m/%Y %H:%M")
+            hoje_brt_date = datetime.now(_BRT_tz).date()
+            hoje_8h_brt = datetime.combine(hoje_brt_date, time(8, 0))
+            cache_stale_pre_pipeline = ultima_dt < hoje_8h_brt
+        except Exception:
+            pass
+    if cache_stale_pre_pipeline:
+        # Re-processa pra ter dados pós-pipeline
+        try:
+            processar_dados_bigquery()
+            clientes = get_store().get("clientes", [])
+        except Exception:
+            pass  # Em caso de erro, segue com cache atual
 
     # Geração inicial: 4 fases (30 lig + 50 msg, ≤10/15 inativos, overflow B)
     grupo_clientes = [c for c in clientes if c.get("_grupo") == atendente]
