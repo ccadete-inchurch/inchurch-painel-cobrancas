@@ -205,15 +205,20 @@ def aplicar_pagamentos_hoje_no_store():
         else:
             # Pagou só parte — fica na inadimplência com saldo reduzido
             c["_pago_parcial_hoje"] = True
-            # Ajusta valor visível subtraindo o que foi pago. Aproximação:
-            # vl_total_recb inclui juros/multa, então pode sobrar diferença
-            # pequena vs o saldo "limpo". BQ amanhã corrige.
-            try:
-                saldo_antigo = float(c.get("valor") or 0)
-                pago = float(info["valor_total"])
-                c["valor"] = max(0.0, saldo_antigo - pago)
-            except (TypeError, ValueError):
-                pass
+            # Ajusta valor visível subtraindo o que foi pago — UMA SÓ VEZ.
+            # O overlay roda a cada render; sem o gate '_valor_ajustado_parcial',
+            # cada execução subtrai de novo e o saldo zera artificialmente
+            # após poucos reruns. Aproximação: vl_total_recb inclui juros/multa,
+            # então pode sobrar diferença pequena vs o saldo 'limpo'. BQ amanhã
+            # corrige tudo via replicação normal.
+            if not c.get("_valor_ajustado_parcial"):
+                try:
+                    saldo_antigo = float(c.get("valor") or 0)
+                    pago = float(info["valor_total"])
+                    c["valor"] = max(0.0, saldo_antigo - pago)
+                    c["_valor_ajustado_parcial"] = True
+                except (TypeError, ValueError):
+                    pass
 
     # 2) Adicionar a regularizados — TODOS os pagamentos (parcial + total).
     # Mantém consistência com o BQ histórico (que também não distingue).
