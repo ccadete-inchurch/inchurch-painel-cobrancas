@@ -102,6 +102,10 @@ def _motivo(bucket, acoes, c) -> tuple:
     """
     if c.get("_regularizado_hoje"):
         return "Regularizado hoje · pagamento confirmado", "blue"
+    if c.get("_regularizado_antes_hoje"):
+        # Cliente já tinha pago em dia anterior — BQ só refletiu agora.
+        # Label diferente pra atendente saber que não foi hoje (sem valor).
+        return "Já regularizado · pagamento anterior", "blue"
 
     cid = c.get("id")
     tel = c.get("telefone", "")
@@ -203,7 +207,9 @@ def _motivo(bucket, acoes, c) -> tuple:
 def _render_card(score, acoes, c, role, idx, bucket=None):
     cor           = _score_cor(score)
     _eh_acordo    = bool(c.get("_tem_acordo")) and (c.get("dias_atraso") or 0) >= 7
-    _regularizado = bool(c.get("_regularizado_hoje"))
+    # Ambos os tipos de regularizado renderizam o mesmo layout simplificado
+    # (sem score, sem botão Detalhes). Distinção visual fica no motivo.
+    _regularizado = bool(c.get("_regularizado_hoje")) or bool(c.get("_regularizado_antes_hoje"))
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
     acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if _eh_acordo and not _regularizado else ""
     # Badge de pagamento parcial — cliente pagou algum boleto hoje mas ainda
@@ -644,7 +650,7 @@ def _render_atividades(store, clientes, role):
             acoes_hj = get_painel_acoes_hoje(c["id"])
             eh_acordo = bool(c.get("_tem_acordo")) and (c.get("dias_atraso") or 0) >= 7
             canal = _canal(bucket, a, acoes_hj,
-                           regularizado=c.get("_regularizado_hoje", False),
+                           regularizado=bool(c.get("_regularizado_hoje")) or bool(c.get("_regularizado_antes_hoje")),
                            eh_acordo=eh_acordo)
             if _e_lote and canal == "aguardar":
                 continue

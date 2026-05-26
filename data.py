@@ -1582,9 +1582,17 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
             "_tem_acordo":        False,
             "_inativo":           bool(row.get("inativo", False)),
             "_cobracas":          [],
-            "_regularizado_hoje": True,
-            "_valor_pago_hoje":   float(row.get("valor_pago_hoje") or 0),
         })
+        # Distinguir quem pagou HOJE vs quem JÁ TINHA pago (saiu da
+        # inadimplência só agora porque BQ atualizou). Ambos vão pra
+        # coluna CONCLUÍDA mas com labels diferentes pra atendente
+        # entender o contexto.
+        vlr_hoje = float(row.get("valor_pago_hoje") or 0)
+        if vlr_hoje > 0:
+            out[-1]["_regularizado_hoje"] = True
+            out[-1]["_valor_pago_hoje"] = vlr_hoje
+        else:
+            out[-1]["_regularizado_antes_hoje"] = True
     return out
 
 
