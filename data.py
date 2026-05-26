@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import datetime, date, time, timezone, timedelta
+from datetime import datetime, date, time as _dt_time, timezone, timedelta
 from pathlib import Path
 
 # ── OAuth popup: armazenamento temporário compartilhado entre sessões ─────────
@@ -1502,7 +1502,7 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
         try:
             ultima_dt = datetime.strptime(ultima_str, "%d/%m/%Y %H:%M")
             hoje_brt_date = datetime.now(_BRT_tz).date()
-            hoje_8h_brt = datetime.combine(hoje_brt_date, time(8, 0))
+            hoje_8h_brt = datetime.combine(hoje_brt_date, _dt_time(8, 0))
             cache_stale_pre_pipeline = ultima_dt < hoje_8h_brt
         except Exception:
             pass
