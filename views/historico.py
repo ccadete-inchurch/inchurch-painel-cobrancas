@@ -1,11 +1,9 @@
-from datetime import date, datetime, timezone, timedelta
+from datetime import date
 
 import pandas as pd
 import streamlit as st
 
-from helpers import fmt_moeda_plain, fmt_moeda, get_effective_atendente
-
-_BRT = timezone(timedelta(hours=-3))
+from helpers import fmt_moeda_plain, fmt_moeda, get_effective_atendente, hoje_lote
 
 
 def _render_historico(store):
@@ -69,9 +67,10 @@ def _render_historico(store):
     # Todos por CLIENTES ÚNICOS (não por faturas) — consistente com o badge
     # da Atividades. Cliente que paga vários boletos no mesmo dia/mês/ano
     # conta como 1. Valor é a soma real dos pagamentos (sem deduplicar).
-    # CRÍTICO: BRT — server roda em UTC, date.today() avança madrugada e
-    # quebra o match com 'data' (que é gravado em BRT no painel).
-    hoje_br = datetime.now(_BRT).date()
+    # 'hoje' = dia OPERACIONAL (vira 08:15 BRT) pra alinhar com o ciclo do
+    # lote — evita resetar contador à meia-noite enquanto cards do dia
+    # anterior ainda estão visíveis em CONCLUÍDA.
+    hoje_br = date.fromisoformat(hoje_lote())
     sufixo_mes = hoje_br.strftime("/%m/%Y")  # "/MM/AAAA" — match endswith
 
     # Pagamentos Hoje (via flag — pode incluir parcial e total)

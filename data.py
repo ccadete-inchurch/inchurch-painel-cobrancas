@@ -85,12 +85,13 @@ def fetch_pagamentos_hoje_api() -> dict:
     Retorno: {cliente_id (str): {valor_total, nome, cnpj, dt_liquidacao, cobrancas_ids}}.
     Match no store é direto: cliente_id ↔ store['clientes'][i]['id'].
     """
-    from datetime import datetime as _datetime, timezone as _tz, timedelta as _td
-    # CRÍTICO: usar BRT, não UTC. Server do Streamlit Cloud roda em UTC e
-    # após meia-noite UTC date.today() já avança pro dia seguinte enquanto
-    # BRT ainda está no dia anterior — quebra o filtro de 'liquidação hoje'.
+    from datetime import date as _date, datetime as _datetime, timezone as _tz, timedelta as _td
+    from helpers import hoje_lote as _hoje_lote
+    # Alinhamos 'hoje' com o ciclo operacional do lote (vira 08:15 BRT),
+    # não com a meia-noite. Evita que contadores resetem às 00:00 enquanto
+    # cards do lote do dia anterior ainda estão em CONCLUÍDA.
     _BRT = _tz(_td(hours=-3))
-    hoje = _datetime.now(_BRT).date()
+    hoje = _date.fromisoformat(_hoje_lote())
     hoje_iso = hoje.strftime("%Y-%m-%d")
 
     agg: dict[str, dict] = {}
@@ -164,8 +165,8 @@ def aplicar_pagamentos_hoje_no_store():
       - 'valor' ajustado pra refletir o saldo após pagamento parcial
       - Adiciona em store['regularizados'] TODOS os que pagaram (parcial+total)
     """
-    from datetime import datetime as _datetime, timezone as _tz, timedelta as _td
-    _BRT = _tz(_td(hours=-3))
+    from datetime import date as _date
+    from helpers import hoje_lote as _hoje_lote
 
     try:
         pagamentos = fetch_pagamentos_hoje_api()
@@ -218,8 +219,9 @@ def aplicar_pagamentos_hoje_no_store():
     # Mantém consistência com o BQ histórico (que também não distingue).
     # Dedup por (id, data): mesmo cliente pode ter pagamentos em dias
     # diferentes (BQ traz com data de liquidação real, overlay adiciona com
-    # data de hoje — eventos distintos). Data em BRT.
-    hoje_br = _datetime.now(_BRT).date().strftime("%d/%m/%Y")
+    # data de hoje — eventos distintos). 'hoje' = dia operacional do lote
+    # (vira 08:15 BRT), não meia-noite — alinhado com o resto do painel.
+    hoje_br = _date.fromisoformat(_hoje_lote()).strftime("%d/%m/%Y")
     ids_existentes_hoje = {
         str(r.get("id") or "") for r in store["regularizados"]
         if str(r.get("data") or "") == hoje_br
@@ -1524,6 +1526,9 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
     if not client:
         return []
     ids_str = ", ".join(f"'{cid}'" for cid in ids_lote)
+    # Dia operacional (vira 08:15 BRT) — alinha 'hoje' com o ciclo do lote.
+    from helpers import hoje_lote as _hoje_lote_fn
+    hoje_op = _hoje_lote_fn()
     try:
         df = client.query(f"""
             WITH base AS (
@@ -1556,7 +1561,9 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
                   -- como 'YYYY-MM-DD 00:00:00 UTC' representando o dia BRT que
                   -- a liquidação aconteceu. Converter pra BRT volta pro dia
                   -- anterior às 21h e quebra o filtro.
-                  AND DATE(dt_liquidacao_recb) = CURRENT_DATE("America/Sao_Paulo")
+                  -- Usa o dia OPERACIONAL (hoje_lote) em vez de CURRENT_DATE
+                  -- pra alinhar com o ciclo do lote (vira 08:15 BRT).
+                  AND DATE(dt_liquidacao_recb) = DATE '{hoje_op}'
                   AND CAST(id_sacado_sac AS STRING) IN ({ids_str})
                 GROUP BY id_sacado_sac
             )
