@@ -668,6 +668,30 @@ def fetch_snapshot_inicio_mes() -> set:
 
 
 @st.cache_data(ttl=3600)
+def fetch_snapshot_ontem() -> set:
+    """IDs do snapshot do DIA ANTERIOR (operacional). Usado pra calcular
+    novos/regularizados de HOJE comparando com ontem. Vazio se não há
+    snapshot de ontem (primeiro dia da feature, falha no cron, etc).
+    """
+    client = get_bq_client()
+    if not client:
+        return set()
+    try:
+        df = client.query(f"""
+            SELECT DISTINCT id_sacado_sac
+            FROM `{_SNAPSHOT_TABLE}`
+            WHERE data_snapshot = DATE_SUB(
+                CURRENT_DATE("America/Sao_Paulo"), INTERVAL 1 DAY
+            )
+        """).to_dataframe()
+        if df.empty:
+            return set()
+        return {str(r["id_sacado_sac"]) for _, r in df.iterrows()}
+    except Exception:
+        return set()
+
+
+@st.cache_data(ttl=3600)
 def fetch_regularizados_mes_atual() -> set:
     """IDs distintos de clientes que pagaram pelo menos uma cobrança EM ATRASO
     no mês atual. Filtra dt_liquidacao_recb > dt_vencimento_recb pra capturar

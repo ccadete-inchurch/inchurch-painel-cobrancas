@@ -7,7 +7,7 @@ import streamlit as st
 from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
 from auth import get_store, hash_senha, current_role
 from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
-from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, concluir_pendencia
+from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, concluir_pendencia
 import re as _re_tel
 
 
@@ -222,10 +222,28 @@ def _render_dashboard(store, clientes, role):
                 f'<div class="metric-sub" style="font-size:13px">{sub}</div></div>',
                 unsafe_allow_html=True,
             )
-    # 6º card: variação no mês
+    # 6º card: variação no mês + sub-linha "hoje"
     with s6:
         sinal = "+" if saldo_mes >= 0 else ""
         cor_saldo = "#ef4444" if saldo_mes > 0 else ("#22c55e" if saldo_mes < 0 else "#e8eaf0")
+
+        # Métricas do DIA — comparam snapshot de ontem com store atual.
+        # Regularizados hoje vem do overlay (real-time, mesma fonte do badge
+        # da Atividades). Novos hoje precisa snapshot de ontem; se ainda
+        # não existe (1º dia da feature, cron falhou), exibe '—'.
+        ids_ontem = fetch_snapshot_ontem()
+        ids_atuais_set = ids_atuais  # já calculado acima
+        regs_hoje_n = sum(
+            1 for c in store.get("clientes", [])
+            if c.get("_regularizado_hoje")
+        )
+        novos_hoje_n = len(ids_atuais_set - ids_ontem) if ids_ontem else None
+        novos_hoje_html = (
+            f'<span style="color:#ef4444;font-weight:700">↑ {novos_hoje_n}</span> novos · '
+            if novos_hoje_n is not None else
+            f'<span style="color:#6b7280;font-weight:700">↑ —</span> novos · '
+        )
+
         st.markdown(
             f'<div class="metric-card" style="min-height:150px;padding:20px 18px">'
             f'<div class="metric-label" style="font-size:12px">Variação {variacao_sub}</div>'
@@ -233,7 +251,13 @@ def _render_dashboard(store, clientes, role):
             f'<div class="metric-sub" style="font-size:12px;margin-top:6px">'
             f'<span style="color:#ef4444;font-weight:700">↑ {novos_mes}</span> novos · '
             f'<span style="color:#22c55e;font-weight:700">↓ {reg_mes}</span> regularizados'
-            f'</div></div>',
+            f'</div>'
+            f'<div class="metric-sub" style="font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid #2a2f42">'
+            f'<span style="color:#8b94a5">Hoje: </span>'
+            f'{novos_hoje_html}'
+            f'<span style="color:#22c55e;font-weight:700">↓ {regs_hoje_n}</span> regularizados'
+            f'</div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
