@@ -52,7 +52,8 @@ def render_sidebar():
                               help="Força re-pull do BigQuery + limpa cache do overlay"):
             for k in list(st.session_state.keys()):
                 if k.startswith(("_bq_loaded_", "_historico_loaded", "_mensagens_loaded",
-                                 "_grupo_atendente", "_painel_", "_msg_", "_snapshot_")):
+                                 "_grupo_atendente", "_painel_", "_msg_", "_snapshot_",
+                                 "_tarefas_")):
                     st.session_state.pop(k, None)
             try:
                 from data import fetch_pagamentos_hoje_api
