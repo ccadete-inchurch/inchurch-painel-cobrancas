@@ -255,22 +255,23 @@ def _render_dashboard(store, clientes, role):
             reg_semana_n   = None
 
         # Helpers de formatação. Primeira linha (Mês) tem label completo
-        # 'novos'/'regularizados'. Linhas seguintes só números coloridos —
-        # evita repetição.
+        # 'novos'/'regularizados'. Linhas seguintes só seta + número.
         def _fmt_full(n, kind):
-            """Com label ('8 novos' / '59 regularizados')"""
+            """Com seta + número + label ('↑ 8 novos' / '↓ 59 regularizados')"""
+            seta = "↑" if kind == "novos" else "↓"
             cor = "#ef4444" if kind == "novos" else "#22c55e"
             label = "regularizados" if kind == "reg" else "novos"
             if n is None:
-                return f'<span style="color:#6b7280;font-weight:700">— {label}</span>'
-            return f'<span style="color:{cor};font-weight:700">{n}</span> <span style="color:#8b94a5">{label}</span>'
+                return f'<span style="color:#6b7280;font-weight:700">{seta} —</span> <span style="color:#8b94a5">{label}</span>'
+            return f'<span style="color:{cor};font-weight:700">{seta} {n}</span> <span style="color:#8b94a5">{label}</span>'
 
         def _fmt_short(n, kind):
-            """Só número colorido ('8' vermelho / '59' verde)"""
+            """Seta + número colorido ('↑ 8' / '↓ 59')"""
+            seta = "↑" if kind == "novos" else "↓"
             cor = "#ef4444" if kind == "novos" else "#22c55e"
             if n is None:
-                return f'<span style="color:#6b7280;font-weight:700">—</span>'
-            return f'<span style="color:{cor};font-weight:700">{n}</span>'
+                return f'<span style="color:#6b7280;font-weight:700">{seta} —</span>'
+            return f'<span style="color:{cor};font-weight:700">{seta} {n}</span>'
 
         # Tooltips
         _tt_saldo = "Saldo = novos inadimplentes − regularizados. Negativo é bom (caiu)."
@@ -283,19 +284,19 @@ def _render_dashboard(store, clientes, role):
             f'<div class="metric-label" style="font-size:13px">Variação {variacao_sub}</div>'
             f'<div title="{_tt_saldo}" style="cursor:help;display:flex;align-items:baseline;gap:8px;margin-top:4px">'
             f'<span class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</span>'
-            f'<span style="font-size:12px;color:{cor_saldo};font-weight:600;text-transform:uppercase;letter-spacing:.5px">INADIMPLENTES</span>'
+            f'<span style="font-size:10px;color:{cor_saldo};font-weight:600;text-transform:uppercase;letter-spacing:.5px">INADIMPLENTES</span>'
             f'</div>'
             f'<div title="{_tt_mes}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#8b94a5">Mês: </span>'
             f'{_fmt_full(novos_mes, "novos")} · {_fmt_full(reg_mes, "reg")}'
             f'</div>'
-            f'<div title="{_tt_hoje}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid #2a2f42;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-            f'<span style="color:#8b94a5">Hoje: </span>'
-            f'{_fmt_short(novos_hoje_n, "novos")} · {_fmt_short(regs_hoje_n, "reg")}'
-            f'</div>'
-            f'<div title="{_tt_sem}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+            f'<div title="{_tt_sem}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid #2a2f42;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#8b94a5">Semana: </span>'
             f'{_fmt_short(novos_semana_n, "novos")} · {_fmt_short(reg_semana_n, "reg")}'
+            f'</div>'
+            f'<div title="{_tt_hoje}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+            f'<span style="color:#8b94a5">Hoje: </span>'
+            f'{_fmt_short(novos_hoje_n, "novos")} · {_fmt_short(regs_hoje_n, "reg")}'
             f'</div>'
             f'</div>',
             unsafe_allow_html=True,
