@@ -519,7 +519,7 @@ def _render_atividades(store, clientes, role):
             _label_reg = "regularização" if _n_reg == 1 else "regularizações"
             _tooltip = (
                 "Clientes que quitaram TODAS as cobranças vencidas hoje. "
-                "Pagamentos parciais não entram aqui — ver aba Regularizados."
+                "Pagamentos parciais não entram aqui — ver aba Pagamentos."
             )
             _badge_reg_html = (
                 f'<span title="{_tooltip}" style="display:inline-flex;align-items:center;gap:8px;'

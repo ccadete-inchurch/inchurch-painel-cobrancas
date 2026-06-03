@@ -8,7 +8,7 @@ from helpers import fmt_moeda_plain, fmt_moeda, get_effective_atendente, hoje_lo
 
 def _render_historico(store):
     st.markdown(
-        '<div style="font-family:Syne,sans-serif;font-size:20px;font-weight:700;margin-bottom:20px">Regularizados</div>',
+        '<div style="font-family:Syne,sans-serif;font-size:20px;font-weight:700;margin-bottom:20px">Pagamentos</div>',
         unsafe_allow_html=True,
     )
 
