@@ -780,29 +780,37 @@ def fetch_inadimplentes_uniao_mes() -> set:
 
 
 @st.cache_data(ttl=3600)
-def fetch_snapshot_semana_passada() -> set:
-    """IDs do snapshot mais próximo de 7 dias atrás.
-    Usado pra calcular NOVOS na semana: atuais − semana_passada.
+def fetch_snapshot_inicio_semana() -> set:
+    """IDs do snapshot no INÍCIO DA SEMANA ATUAL (segunda-feira), com cap
+    no início do mês — baseline = MAX(seg da semana, dia 1 do mês).
+
+    Usado pra calcular NOVOS desta semana:
+        novos = atuais − inicio_semana
+
+    Cap garante que 'Esta semana' nunca cruza fronteira de mês.
+    Quando dia 1 cai no meio da semana (ex: quinta 01/05), baseline é
+    capada em 01/05 — 'Esta semana' fica igual a 'Mês' temporariamente.
     """
     client = get_bq_client()
     if not client:
         return set()
     try:
         df = client.query(f"""
-            WITH alvo AS (
-                SELECT MAX(data_snapshot) AS dt
+            WITH bound AS (
+                SELECT GREATEST(
+                    DATE_TRUNC(CURRENT_DATE("America/Sao_Paulo"), WEEK(MONDAY)),
+                    DATE_TRUNC(CURRENT_DATE("America/Sao_Paulo"), MONTH)
+                ) AS dt_min
+            ),
+            primeiro AS (
+                SELECT MIN(data_snapshot) AS dt
                 FROM `{_SNAPSHOT_TABLE}`
-                WHERE data_snapshot <= DATE_SUB(
-                    CURRENT_DATE("America/Sao_Paulo"), INTERVAL 7 DAY
-                )
-                  AND data_snapshot >= DATE_SUB(
-                    CURRENT_DATE("America/Sao_Paulo"), INTERVAL 12 DAY
-                )
+                WHERE data_snapshot >= (SELECT dt_min FROM bound)
             )
-            SELECT DISTINCT s.id_sacado_sac, a.dt AS data_ref
+            SELECT DISTINCT s.id_sacado_sac, p.dt AS data_ref
             FROM `{_SNAPSHOT_TABLE}` s
-            CROSS JOIN alvo a
-            WHERE s.data_snapshot = a.dt
+            CROSS JOIN primeiro p
+            WHERE s.data_snapshot = p.dt
         """).to_dataframe()
         if df.empty:
             return set()
@@ -818,14 +826,19 @@ def fetch_snapshot_semana_passada() -> set:
         return set()
 
 
-@st.cache_data(ttl=3600)
-def fetch_inadimplentes_uniao_semana() -> set:
-    """IDs DISTINTOS de clientes que estiveram inadimplentes em ALGUM dia
-    dos últimos 7 dias — UNIÃO dos snapshots na janela [hoje-7d, ontem].
+# Alias retrocompatível — quem ainda importar o nome antigo continua funcionando.
+fetch_snapshot_semana_passada = fetch_snapshot_inicio_semana
 
-    Usado pra calcular REGULARIZADOS na semana:
-        regularizados = uniao_semana − atuais
-    Garante semana ⊆ mês sempre (consistência matemática).
+
+@st.cache_data(ttl=3600)
+def fetch_inadimplentes_uniao_esta_semana() -> set:
+    """IDs DISTINTOS de clientes inadimplentes em ALGUM dia desta semana
+    (segunda → hoje), capada no início do mês.
+
+    Usado pra calcular REGULARIZADOS desta semana:
+        regularizados = uniao_esta_semana − atuais
+
+    Garantia: Esta semana ⊆ Mês sempre (cap no início do mês).
     """
     client = get_bq_client()
     if not client:
@@ -834,16 +847,20 @@ def fetch_inadimplentes_uniao_semana() -> set:
         df = client.query(f"""
             SELECT DISTINCT id_sacado_sac
             FROM `{_SNAPSHOT_TABLE}`
-            WHERE data_snapshot >= DATE_SUB(
-                CURRENT_DATE("America/Sao_Paulo"), INTERVAL 7 DAY
+            WHERE data_snapshot >= GREATEST(
+                DATE_TRUNC(CURRENT_DATE("America/Sao_Paulo"), WEEK(MONDAY)),
+                DATE_TRUNC(CURRENT_DATE("America/Sao_Paulo"), MONTH)
             )
-              AND data_snapshot < CURRENT_DATE("America/Sao_Paulo")
         """).to_dataframe()
         if df.empty:
             return set()
         return {str(r["id_sacado_sac"]) for _, r in df.iterrows()}
     except Exception:
         return set()
+
+
+# Alias retrocompatível
+fetch_inadimplentes_uniao_semana = fetch_inadimplentes_uniao_esta_semana
 
 
 @st.cache_data(ttl=3600)

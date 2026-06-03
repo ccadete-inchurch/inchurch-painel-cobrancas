@@ -6,7 +6,7 @@ import streamlit as st
 from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
 from auth import get_store, current_role
 from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
-from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_semana_passada, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_semana, concluir_pendencia
+from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_esta_semana, concluir_pendencia
 import re as _re_tel
 
 
@@ -221,7 +221,7 @@ def _render_dashboard(store, clientes, role):
         with col:
             st.markdown(
                 f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
-                f'<div class="metric-label" style="font-size:14px">{label}</div>'
+                f'<div class="metric-label" style="font-size:13px">{label}</div>'
                 f'<div class="metric-value" style="color:{cor};font-size:46px">{val:,}</div>'
                 f'<div class="metric-sub" style="font-size:13px">{sub}</div></div>',
                 unsafe_allow_html=True,
@@ -240,11 +240,14 @@ def _render_dashboard(store, clientes, role):
         )
         novos_hoje_n = len(ids_atuais_set - ids_ontem) if ids_ontem else None
 
-        # Métricas da SEMANA (janela rolante 7d, união pra reg)
-        ids_semana = fetch_snapshot_semana_passada()
+        # Métricas de ESTA SEMANA (seg → hoje, cap no início do mês).
+        # Garante que Esta semana ⊆ Mês sempre. Quando dia 1 do mês cai
+        # no meio da semana, baseline é capada — Esta semana coincide
+        # com Mês até a próxima segunda.
+        ids_semana = fetch_snapshot_inicio_semana()
         if ids_semana:
             novos_semana_n = len(ids_atuais_set - ids_semana)
-            ids_uniao_semana = fetch_inadimplentes_uniao_semana()
+            ids_uniao_semana = fetch_inadimplentes_uniao_esta_semana()
             reg_semana_n   = len(ids_uniao_semana - ids_atuais_set) if ids_uniao_semana else len(ids_semana - ids_atuais_set)
             reg_semana_n  += len(ids_pagos_hoje - ids_uniao_semana - ids_semana)
         else:
@@ -265,11 +268,11 @@ def _render_dashboard(store, clientes, role):
         _tt_saldo = "Saldo = novos inadimplentes − regularizados. Negativo é bom (caiu)."
         _tt_mes   = "Período: do dia 01 do mês atual até agora."
         _tt_hoje  = "Comparado com snapshot de ontem (+ regularizações capturadas em tempo real)."
-        _tt_7d    = "Janela rolante de 7 dias — pode cruzar fronteira de mês."
+        _tt_7d    = "Da segunda-feira da semana atual até hoje. Capada no início do mês — Esta semana ⊆ Mês sempre."
 
         st.markdown(
             f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
-            f'<div class="metric-label" style="font-size:14px">Variação {variacao_sub}</div>'
+            f'<div class="metric-label" style="font-size:13px">Variação {variacao_sub}</div>'
             f'<div title="{_tt_saldo}" style="cursor:help;display:flex;align-items:baseline;gap:8px;margin-top:4px">'
             f'<span class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</span>'
             f'<span style="font-size:12px;color:{cor_saldo};font-weight:600">inadimplentes</span>'
@@ -283,7 +286,7 @@ def _render_dashboard(store, clientes, role):
             f'{_fmt_v(novos_hoje_n, "novos")} · {_fmt_v(regs_hoje_n, "reg")}'
             f'</div>'
             f'<div title="{_tt_7d}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-            f'<span style="color:#8b94a5">Últimos 7 dias: </span>'
+            f'<span style="color:#8b94a5">Esta semana: </span>'
             f'{_fmt_v(novos_semana_n, "novos")} · {_fmt_v(reg_semana_n, "reg")}'
             f'</div>'
             f'</div>',
