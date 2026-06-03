@@ -272,7 +272,7 @@ def _render_dashboard(store, clientes, role):
             f'<div class="metric-label" style="font-size:14px">Variação {variacao_sub}</div>'
             f'<div title="{_tt_saldo}" style="cursor:help;display:flex;align-items:baseline;gap:8px;margin-top:4px">'
             f'<span class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</span>'
-            f'<span style="font-size:13px;color:#8b94a5;font-weight:600">inadimplentes</span>'
+            f'<span style="font-size:12px;color:{cor_saldo};font-weight:600">inadimplentes</span>'
             f'</div>'
             f'<div title="{_tt_mes}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#8b94a5">Mês: </span>'
