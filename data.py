@@ -707,6 +707,54 @@ def fetch_snapshot_inicio_mes() -> set:
 
 
 @st.cache_data(ttl=3600)
+def fetch_snapshot_semana_passada() -> set:
+    """IDs do snapshot mais próximo de 7 dias atrás (alvo) — pra calcular
+    novos/regularizados da SEMANA comparando com hoje.
+
+    Estratégia: usa o snapshot mais recente dentro da janela [hoje-12d, hoje-7d].
+    Isso cobre o caso comum onde 7 dias atrás caiu em sábado/domingo (cron não
+    rodou) e usa o sexta-feira anterior. Limite máximo de 12 dias evita
+    comparar com snapshot muito velho que distorceria a métrica.
+
+    Vazio se não há snapshot no intervalo (primeira semana após ativar
+    snapshot diário, feriado prolongado, falha do cron).
+    """
+    client = get_bq_client()
+    if not client:
+        return set()
+    try:
+        df = client.query(f"""
+            WITH alvo AS (
+                SELECT MAX(data_snapshot) AS dt
+                FROM `{_SNAPSHOT_TABLE}`
+                WHERE data_snapshot <= DATE_SUB(
+                    CURRENT_DATE("America/Sao_Paulo"), INTERVAL 7 DAY
+                )
+                  AND data_snapshot >= DATE_SUB(
+                    CURRENT_DATE("America/Sao_Paulo"), INTERVAL 12 DAY
+                )
+            )
+            SELECT DISTINCT s.id_sacado_sac, a.dt AS data_ref
+            FROM `{_SNAPSHOT_TABLE}` s
+            CROSS JOIN alvo a
+            WHERE s.data_snapshot = a.dt
+        """).to_dataframe()
+        if df.empty:
+            return set()
+        # Guarda data de referência usada (pra UI indicar 'desde XX/XX')
+        try:
+            dt = df["data_ref"].iloc[0]
+            st.session_state["_snapshot_semana_data"] = (
+                dt.strftime("%d/%m/%Y") if hasattr(dt, "strftime") else str(dt)
+            )
+        except Exception:
+            pass
+        return {str(r["id_sacado_sac"]) for _, r in df.iterrows()}
+    except Exception:
+        return set()
+
+
+@st.cache_data(ttl=3600)
 def fetch_snapshot_ontem() -> set:
     """IDs do snapshot do DIA ANTERIOR (operacional). Usado pra calcular
     novos/regularizados de HOJE comparando com ontem. Vazio se não há

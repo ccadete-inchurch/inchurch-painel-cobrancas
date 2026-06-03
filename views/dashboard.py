@@ -7,7 +7,7 @@ import streamlit as st
 from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
 from auth import get_store, hash_senha, current_role
 from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
-from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, concluir_pendencia
+from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_semana_passada, concluir_pendencia
 import re as _re_tel
 
 
@@ -228,9 +228,6 @@ def _render_dashboard(store, clientes, role):
         cor_saldo = "#ef4444" if saldo_mes > 0 else ("#22c55e" if saldo_mes < 0 else "#e8eaf0")
 
         # Métricas do DIA — comparam snapshot de ontem com store atual.
-        # Regularizados hoje vem do overlay (real-time, mesma fonte do badge
-        # da Atividades). Novos hoje precisa snapshot de ontem; se ainda
-        # não existe (1º dia da feature, cron falhou), exibe '—'.
         ids_ontem = fetch_snapshot_ontem()
         ids_atuais_set = ids_atuais  # já calculado acima
         regs_hoje_n = sum(
@@ -244,6 +241,20 @@ def _render_dashboard(store, clientes, role):
             f'<span style="color:#6b7280;font-weight:700">↑ —</span> novos · '
         )
 
+        # Métricas da SEMANA — compara snapshot de ~7 dias atrás (com fallback
+        # ao mais próximo dentro de 12d). Edge case: clientes que pagaram hoje
+        # mas não estavam no snapshot da semana — soma manual com dedup.
+        ids_semana = fetch_snapshot_semana_passada()
+        if ids_semana:
+            novos_semana_n = len(ids_atuais_set - ids_semana)
+            reg_semana_n   = len(ids_semana - ids_atuais_set)
+            reg_semana_n  += len(ids_pagos_hoje - ids_semana)
+            novos_semana_html = f'<span style="color:#ef4444;font-weight:700">↑ {novos_semana_n}</span> novos · '
+            reg_semana_html   = f'<span style="color:#22c55e;font-weight:700">↓ {reg_semana_n}</span> regularizados'
+        else:
+            novos_semana_html = '<span style="color:#6b7280;font-weight:700">↑ —</span> novos · '
+            reg_semana_html   = '<span style="color:#6b7280;font-weight:700">↓ —</span> regularizados'
+
         st.markdown(
             f'<div class="metric-card" style="min-height:150px;padding:20px 18px">'
             f'<div class="metric-label" style="font-size:12px">Variação {variacao_sub}</div>'
@@ -256,6 +267,11 @@ def _render_dashboard(store, clientes, role):
             f'<span style="color:#8b94a5">Hoje: </span>'
             f'{novos_hoje_html}'
             f'<span style="color:#22c55e;font-weight:700">↓ {regs_hoje_n}</span> regularizados'
+            f'</div>'
+            f'<div class="metric-sub" style="font-size:11px;margin-top:4px">'
+            f'<span style="color:#8b94a5">Semana: </span>'
+            f'{novos_semana_html}'
+            f'{reg_semana_html}'
             f'</div>'
             f'</div>',
             unsafe_allow_html=True,
