@@ -1,11 +1,10 @@
-import hashlib
 from datetime import date
 
 import pandas as pd
 import streamlit as st
 
 from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
-from auth import get_store, hash_senha, current_role
+from auth import get_store, current_role
 from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
 from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_semana_passada, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_semana, concluir_pendencia
 import re as _re_tel
@@ -227,61 +226,82 @@ def _render_dashboard(store, clientes, role):
                 f'<div class="metric-sub" style="font-size:13px">{sub}</div></div>',
                 unsafe_allow_html=True,
             )
-    # 6º card: variação no mês + sub-linha "hoje"
+    # 6º card: variação no mês — mini-tabela com 3 períodos
     with s6:
-        sinal = "+" if saldo_mes >= 0 else ""
         cor_saldo = "#ef4444" if saldo_mes > 0 else ("#22c55e" if saldo_mes < 0 else "#e8eaf0")
+        if saldo_mes > 0:
+            desc_saldo = f"cresceu {saldo_mes} no mês"
+        elif saldo_mes < 0:
+            desc_saldo = f"caiu {abs(saldo_mes)} no mês"
+        else:
+            desc_saldo = "estável no mês"
 
-        # Métricas do DIA — comparam snapshot de ontem com store atual.
+        # Hoje
         ids_ontem = fetch_snapshot_ontem()
-        ids_atuais_set = ids_atuais  # já calculado acima
-        regs_hoje_n = sum(
-            1 for c in store.get("clientes", [])
-            if c.get("_regularizado_hoje")
-        )
+        ids_atuais_set = ids_atuais
+        regs_hoje_n = sum(1 for c in store.get("clientes", []) if c.get("_regularizado_hoje"))
         novos_hoje_n = len(ids_atuais_set - ids_ontem) if ids_ontem else None
-        novos_hoje_html = (
-            f'<span style="color:#ef4444;font-weight:700">↑ {novos_hoje_n}</span> novos · '
-            if novos_hoje_n is not None else
-            f'<span style="color:#6b7280;font-weight:700">↑ —</span> novos · '
-        )
+        saldo_hoje = (novos_hoje_n - regs_hoje_n) if novos_hoje_n is not None else None
 
-        # Métricas da SEMANA:
-        # - NOVOS: snapshot único de ~7 dias atrás (cliente novo = está agora,
-        #   não estava há 7 dias)
-        # - REGULARIZADOS: UNIÃO dos últimos 7 snapshots (captura quem virou
-        #   inadimplente no meio da semana e pagou)
+        # Últimos 7 dias
         ids_semana = fetch_snapshot_semana_passada()
         if ids_semana:
             novos_semana_n = len(ids_atuais_set - ids_semana)
             ids_uniao_semana = fetch_inadimplentes_uniao_semana()
-            reg_semana_n   = len(ids_uniao_semana - ids_atuais_set) if ids_uniao_semana else len(ids_semana - ids_atuais_set)
-            reg_semana_n  += len(ids_pagos_hoje - ids_uniao_semana - ids_semana)
-            novos_semana_html = f'<span style="color:#ef4444;font-weight:700">↑ {novos_semana_n}</span> novos · '
-            reg_semana_html   = f'<span style="color:#22c55e;font-weight:700">↓ {reg_semana_n}</span> regularizados'
+            reg_semana_n = len(ids_uniao_semana - ids_atuais_set) if ids_uniao_semana else len(ids_semana - ids_atuais_set)
+            reg_semana_n += len(ids_pagos_hoje - ids_uniao_semana - ids_semana)
+            saldo_semana = novos_semana_n - reg_semana_n
         else:
-            novos_semana_html = '<span style="color:#6b7280;font-weight:700">↑ —</span> novos · '
-            reg_semana_html   = '<span style="color:#6b7280;font-weight:700">↓ —</span> regularizados'
+            novos_semana_n = reg_semana_n = saldo_semana = None
+
+        def _fmt(n):
+            return "—" if n is None else f"{n:,}"
+
+        def _saldo_cor(s):
+            if s is None:
+                return "#6b7280"
+            return "#ef4444" if s > 0 else ("#22c55e" if s < 0 else "#e8eaf0")
+
+        def _saldo_fmt(s):
+            if s is None:
+                return "—"
+            return f"+{s}" if s > 0 else str(s)
+
+        # Linhas da tabela
+        linhas = [
+            ("Hoje",          novos_hoje_n,  regs_hoje_n,  saldo_hoje),
+            ("Últimos 7d",    novos_semana_n, reg_semana_n, saldo_semana),
+            ("Mês",           novos_mes,     reg_mes,      saldo_mes),
+        ]
+        linhas_html = ""
+        for label_p, ent, sai, sal in linhas:
+            linhas_html += (
+                f'<tr>'
+                f'<td style="padding:3px 0;color:#8b94a5;font-size:10px">{label_p}</td>'
+                f'<td style="text-align:right;padding:3px 4px;color:#ef4444;font-weight:600;font-size:11px">{_fmt(ent)}</td>'
+                f'<td style="text-align:right;padding:3px 4px;color:#22c55e;font-weight:600;font-size:11px">{_fmt(sai)}</td>'
+                f'<td style="text-align:right;padding:3px 0;color:{_saldo_cor(sal)};font-weight:700;font-size:11px">{_saldo_fmt(sal)}</td>'
+                f'</tr>'
+            )
 
         st.markdown(
             f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
             f'<div class="metric-label" style="font-size:12px">Variação {variacao_sub}</div>'
-            f'<div class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</div>'
-            f'<div class="metric-sub" style="font-size:11px;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-            f'<span style="color:#ef4444;font-weight:700">↑ {novos_mes}</span> novos · '
-            f'<span style="color:#22c55e;font-weight:700">↓ {reg_mes}</span> reg.'
+            f'<div style="text-align:center;margin:6px 0 8px">'
+            f'<div style="color:{cor_saldo};font-size:42px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums">{_saldo_fmt(saldo_mes)}</div>'
+            f'<div style="font-size:10px;color:#8b94a5;margin-top:2px">{desc_saldo}</div>'
             f'</div>'
-            f'<div class="metric-sub" style="font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid #2a2f42;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-            f'<span style="color:#8b94a5">Hoje: </span>'
-            f'{novos_hoje_html.replace(" novos · ", " · ")}'
-            f'<span style="color:#22c55e;font-weight:700">↓ {regs_hoje_n}</span>'
-            f'</div>'
-            f'<div class="metric-sub" style="font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" '
-            f'title="Janela rolante de 7 dias — pode cruzar fronteira de mês">'
-            f'<span style="color:#8b94a5">Últimos 7 dias: </span>'
-            f'{novos_semana_html.replace(" novos · ", " · ")}'
-            f'{reg_semana_html.replace(" regularizados", "")}'
-            f'</div>'
+            f'<table style="width:100%;border-collapse:collapse;margin-top:auto;font-variant-numeric:tabular-nums">'
+            f'<thead>'
+            f'<tr style="border-bottom:1px solid #2a2f42">'
+            f'<th style="text-align:left;padding:4px 0;font-size:9px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.6px">Período</th>'
+            f'<th style="text-align:right;padding:4px;font-size:9px;color:#6b7280;font-weight:700" title="Novos inadimplentes">↑</th>'
+            f'<th style="text-align:right;padding:4px;font-size:9px;color:#6b7280;font-weight:700" title="Regularizados">↓</th>'
+            f'<th style="text-align:right;padding:4px 0;font-size:9px;color:#6b7280;font-weight:700">Δ</th>'
+            f'</tr>'
+            f'</thead>'
+            f'<tbody>{linhas_html}</tbody>'
+            f'</table>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -737,26 +757,3 @@ def _render_dashboard(store, clientes, role):
                 st.session_state["page_num"] = page + 1
                 st.rerun()
 
-    # ── Gerenciar usuários (admin) ─────────────────────────────────────────────
-    if role == "admin":
-        st.markdown("---")
-        with st.expander("⚙️ Gerenciar Usuários"):
-            store2 = get_store()
-            c1, c2, c3, c4 = st.columns(4)
-            with c1: u_nome  = st.text_input("Nome",   key="u_nome")
-            with c2: u_email = st.text_input("E-mail", key="u_email")
-            with c3: u_senha = st.text_input("Senha",  type="password", key="u_senha")
-            with c4: u_role  = st.selectbox("Perfil",  ["atendente", "gestor", "admin"], key="u_role")
-            if st.button("➕ Criar usuário"):
-                if u_nome and u_email and u_senha:
-                    uid = hashlib.md5(u_email.encode()).hexdigest()
-                    store2["usuarios"][uid] = {
-                        "nome": u_nome, "email": u_email,
-                        "senha_hash": hash_senha(u_senha), "role": u_role,
-                    }
-                    st.toast(f"✅ Usuário {u_nome} criado!", icon="✅")
-                else:
-                    st.error("Preencha todos os campos.")
-            st.markdown("**Usuários cadastrados:**")
-            for u in store2["usuarios"].values():
-                st.markdown(f'• **{u["nome"]}** ({u["email"]}) — `{u["role"]}`')
