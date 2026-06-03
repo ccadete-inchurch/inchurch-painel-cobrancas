@@ -204,8 +204,11 @@ def _motivo(bucket, acoes, c) -> tuple:
     return "", ""
 
 
-def _render_card(score, acoes, c, role, idx, bucket=None):
+def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     cor           = _score_cor(score)
+    # Opacity reduzida = card visualmente secundário (ex: admin 'Todos os
+    # clientes' vê tudo, mas quem não está em lote fica esmaecido).
+    _op_style     = f'opacity:{opacity};' if opacity < 1.0 else ''
     _eh_acordo    = bool(c.get("_tem_acordo")) and (c.get("dias_atraso") or 0) >= 7
     # Ambos os tipos de regularizado renderizam o mesmo layout simplificado
     # (sem score, sem botão Detalhes). Distinção visual fica no motivo.
@@ -244,7 +247,7 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
             f'Pago: {fmt_moeda_plain(_vl_pago)}</div>'
         ) if _vl_pago > 0 else ""
         st.markdown(
-            f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
+            f'<div style="{_op_style}background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
             f'padding:14px 16px;margin-bottom:10px;border-top:2px solid #7cc243">'
             f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
             f'<div style="font-weight:700;font-size:17px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
@@ -271,7 +274,7 @@ def _render_card(score, acoes, c, role, idx, bucket=None):
         return  # sem botão "Detalhes" — não há histórico editável
 
     st.markdown(
-        f'<div style="background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
+        f'<div style="{_op_style}background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
         f'padding:14px 16px;margin-bottom:0;border-top:2px solid {cor}99;'
         f'border-bottom-left-radius:0;border-bottom-right-radius:0">'
         f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
@@ -443,11 +446,11 @@ def _render_atividades(store, clientes, role):
     grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
     fa, fb, fc = st.columns([1.3, 1.3, 2])
     with fa:
-        st.selectbox("Grupo", ["Todos"] + grupos_disp, label_visibility="collapsed", key="atv_filtro_grupo")
+        st.selectbox("Grupo", ["Todos"] + grupos_disp, key="atv_filtro_grupo")
     with fb:
-        st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], label_visibility="collapsed", key="atv_filtro_inativo")
+        st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], key="atv_filtro_inativo")
     with fc:
-        st.text_input("Buscar", placeholder="Nome, CNPJ ou ID...", label_visibility="collapsed", key="atv_busca")
+        st.text_input("Buscar", placeholder="Nome, CNPJ ou ID...", key="atv_busca")
 
     # ── Conteúdo dinâmico (métricas + kanban) — fragment com run_every=60s
     # Atualiza a cada 60s sem fazer rerun do app inteiro: filtros (acima) ficam
@@ -727,20 +730,20 @@ def _render_atividades(store, clientes, role):
                         # Admin em 'Todos os clientes': cards FORA de qualquer
                         # lote ficam com opacidade reduzida (visualmente
                         # secundários — não estão sendo trabalhados hoje).
+                        # NOTA: wrapping com st.markdown('<div>') NÃO funciona
+                        # porque Streamlit renderiza cada bloco como SIBLING
+                        # no DOM, não nested. Precisa aplicar opacity direto
+                        # no estilo do card (via param do _render_card).
                         fora_do_lote = (
                             _modo_todos_admin
                             and str(c.get("id", "")) not in ids_em_lote_hoje
                         )
-                        if fora_do_lote:
-                            st.markdown(
-                                '<div style="opacity:.55;transition:opacity .2s" '
-                                'title="Fora do lote do dia — nenhum atendente está trabalhando este cliente hoje">',
-                                unsafe_allow_html=True,
-                            )
                         with st.container():
-                            _render_card(score, acoes, c, role, f"{titulo}_{idx}", bucket=bk)
-                        if fora_do_lote:
-                            st.markdown('</div>', unsafe_allow_html=True)
+                            _render_card(
+                                score, acoes, c, role, f"{titulo}_{idx}",
+                                bucket=bk,
+                                opacity=0.45 if fora_do_lote else 1.0,
+                            )
 
     _kanban_dinamico()
 

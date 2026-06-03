@@ -126,26 +126,26 @@ def tela_login():
           Painel de<br><span style="color:#7cc243">Cobranças</span>
         </h1>
         <p style="font-size:20px;color:#6b7280;line-height:1.7;margin:0 0 52px;max-width:400px">
-          Gestão de inadimplência em tempo real com histórico de atendimento e carteira completa.
+          Gestão de inadimplência com pagamentos em tempo real via API Superlógica e carteira completa do BigQuery.
         </p>
         <div style="display:flex;flex-direction:column;gap:24px">
           <div style="display:flex;align-items:center;gap:18px">
             <div style="width:44px;height:44px;border-radius:10px;flex-shrink:0;
                         background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
+                        display:flex;align-items:center;justify-content:center;font-size:20px">⚡</div>
+            <span style="color:#9ca3af;font-size:17px">Pagamentos do dia em tempo real via API</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:18px">
+            <div style="width:44px;height:44px;border-radius:10px;flex-shrink:0;
+                        background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
                         display:flex;align-items:center;justify-content:center;font-size:20px">📊</div>
-            <span style="color:#9ca3af;font-size:17px">Carteira atualizada diariamente via BigQuery</span>
+            <span style="color:#9ca3af;font-size:17px">Carteira de inadimplentes do BigQuery</span>
           </div>
           <div style="display:flex;align-items:center;gap:18px">
             <div style="width:44px;height:44px;border-radius:10px;flex-shrink:0;
                         background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
                         display:flex;align-items:center;justify-content:center;font-size:20px">💬</div>
             <span style="color:#9ca3af;font-size:17px">Histórico de contatos e negociações por cliente</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:18px">
-            <div style="width:44px;height:44px;border-radius:10px;flex-shrink:0;
-                        background:rgba(124,194,67,0.1);border:1px solid rgba(124,194,67,0.2);
-                        display:flex;align-items:center;justify-content:center;font-size:20px">🔔</div>
-            <span style="color:#9ca3af;font-size:17px">Alertas de próximas cobranças e vencimentos</span>
           </div>
         </div>
       </div>
