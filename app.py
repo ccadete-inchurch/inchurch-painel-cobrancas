@@ -9,7 +9,7 @@ st.set_page_config(
 
 from config import CSS
 from auth import is_logged, current_role
-from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq, load_cooldowns_from_painel, load_ultimo_contato_painel, load_atendente_atual_painel, load_grupo_atendente_map, aplicar_pagamentos_hoje_no_store
+from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq, load_cooldowns_from_painel, load_ultimo_contato_painel, load_atendente_atual_painel, load_grupo_atendente_map, aplicar_pagamentos_hoje_no_store, precisa_processar_bq
 from views import (
     render_sidebar, render_header, tela_login, tela_importar,
     _render_dashboard, _render_historico, _render_cliente, _render_proximas,
@@ -85,34 +85,14 @@ def main():
     if not store["clientes"]:
         carregar_cache_local()
 
-    # Guard de sessão: evita recarregar BQ mais de uma vez por dia na mesma sessão
-    # NOTA: BQ Splgc é replicado 1x/dia (madrugada). Re-query intra-day não traz
-    # dado novo, então gate diário é suficiente. Pra detectar pagamentos durante
-    # o dia, precisaria consultar o banco Splgc original (futuro).
-    from datetime import date as _date
-    from helpers import hoje_brt as _hoje_brt
-    _hoje = _hoje_brt()
-    _bq_key = f"_bq_loaded_{_hoje}"
-
-    if not store["clientes"] and not st.session_state.get(_bq_key):
-        # Sessão nova ou dados ausentes
+    # Decide se precisa re-processar BQ.
+    # Check time-based (data anterior OU pre-08:00 BRT) — sem gate de sessão.
+    # Pipeline normalmente termina ~07:30 BRT. Sessões abertas antes (ou
+    # cache_resource compartilhado de sessão anterior madrugada) ficam stale
+    # até cruzar 08:00. O check detecta e re-processa automaticamente.
+    if precisa_processar_bq(store):
         with st.spinner("Carregando dados do BigQuery..."):
             processar_dados_bigquery()
-        st.session_state[_bq_key] = True
-    elif store["clientes"] and not st.session_state.get(_bq_key):
-        # Dados de cache local — verifica se são de ontem
-        ultima = store.get("ultima_atualizacao") or ""
-        cache_desatualizado = True
-        if ultima:
-            try:
-                from datetime import datetime as _datetime
-                cache_desatualizado = _datetime.strptime(ultima[:10], "%d/%m/%Y").date() < _date.today()
-            except Exception:
-                pass
-        if cache_desatualizado:
-            with st.spinner("Carregando dados do BigQuery..."):
-                processar_dados_bigquery()
-        st.session_state[_bq_key] = True
 
     # Carrega historico de atendimento do BQ uma vez por sessão
     if not st.session_state.get("_historico_loaded"):

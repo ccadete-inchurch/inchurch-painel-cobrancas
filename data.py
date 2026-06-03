@@ -6,6 +6,45 @@ from pathlib import Path
 # ── OAuth popup: armazenamento temporário compartilhado entre sessões ─────────
 _pending_oauth: dict = {}
 
+
+def precisa_processar_bq(store: dict) -> bool:
+    """Decide se precisa rodar processar_dados_bigquery agora.
+
+    Retorna True quando:
+      - store['clientes'] está vazio (primeira carga)
+      - ultima_atualizacao é de um dia anterior (cache de ontem)
+      - ultima_atualizacao é de hoje cedo (antes das 08:00 BRT, pré-pipeline)
+        E o horário atual já passou das 08:00 (pipeline já terminou)
+
+    O check de 08:00 BRT é defensivo: pipelines normalmente terminam até as
+    07:30. Se cache foi populado antes disso (ex: admin logando 4 da manhã),
+    fica stale até o painel detectar via esse check e re-puxar.
+    """
+    if not store.get("clientes"):
+        return True
+    ultima_str = store.get("ultima_atualizacao") or ""
+    if not ultima_str:
+        return True
+    try:
+        ultima_dt = datetime.strptime(ultima_str, "%d/%m/%Y %H:%M")
+    except (ValueError, TypeError):
+        return True
+
+    _BRT = timezone(timedelta(hours=-3))
+    agora = datetime.now(_BRT).replace(tzinfo=None)
+
+    # Cache de dia anterior → sempre stale
+    if ultima_dt.date() < agora.date():
+        return True
+
+    # Cache de hoje cedo (pre-08:00) — re-processa quando passar das 08:00
+    if ultima_dt.date() == agora.date():
+        hoje_8h = datetime.combine(agora.date(), _dt_time(8, 0))
+        if ultima_dt < hoje_8h and agora >= hoje_8h:
+            return True
+
+    return False
+
 def set_pending_oauth(nonce: str, email: str, nome: str) -> None:
     cutoff = time.time() - 120
     for k in list(_pending_oauth):
