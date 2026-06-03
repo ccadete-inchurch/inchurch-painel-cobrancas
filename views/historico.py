@@ -219,6 +219,7 @@ def _render_historico(store):
     )
 
     if total_pg > 1:
+        st.markdown('<div style="height:14px"></div>', unsafe_allow_html=True)
         pc1, pc2, pc3 = st.columns([1, 2, 1])
         with pc1:
             if st.button("← Anterior", key="reg_prev", disabled=(page <= 1), width="stretch"):

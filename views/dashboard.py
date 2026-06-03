@@ -226,82 +226,76 @@ def _render_dashboard(store, clientes, role):
                 f'<div class="metric-sub" style="font-size:13px">{sub}</div></div>',
                 unsafe_allow_html=True,
             )
-    # 6º card: variação no mês — mini-tabela com 3 períodos
+    # 6º card: variação no mês (layout vertical com sub-linhas)
     with s6:
+        sinal = "+" if saldo_mes >= 0 else ""
         cor_saldo = "#ef4444" if saldo_mes > 0 else ("#22c55e" if saldo_mes < 0 else "#e8eaf0")
+        # Descrição contextual do saldo (deixa explícito se é melhora ou piora)
         if saldo_mes > 0:
-            desc_saldo = f"cresceu {saldo_mes} no mês"
+            desc_saldo = f"cresceu {saldo_mes} (piora)"
+            cor_desc = "#ef4444"
         elif saldo_mes < 0:
-            desc_saldo = f"caiu {abs(saldo_mes)} no mês"
+            desc_saldo = f"caiu {abs(saldo_mes)} (melhora)"
+            cor_desc = "#22c55e"
         else:
-            desc_saldo = "estável no mês"
+            desc_saldo = "estável"
+            cor_desc = "#8b94a5"
 
-        # Hoje
+        # Métricas do DIA — comparam snapshot de ontem com store atual.
         ids_ontem = fetch_snapshot_ontem()
         ids_atuais_set = ids_atuais
-        regs_hoje_n = sum(1 for c in store.get("clientes", []) if c.get("_regularizado_hoje"))
+        regs_hoje_n = sum(
+            1 for c in store.get("clientes", [])
+            if c.get("_regularizado_hoje")
+        )
         novos_hoje_n = len(ids_atuais_set - ids_ontem) if ids_ontem else None
-        saldo_hoje = (novos_hoje_n - regs_hoje_n) if novos_hoje_n is not None else None
+        novos_hoje_html = (
+            f'<span style="color:#ef4444;font-weight:700">↑ {novos_hoje_n}</span> novos · '
+            if novos_hoje_n is not None else
+            f'<span style="color:#6b7280;font-weight:700">↑ —</span> novos · '
+        )
 
-        # Últimos 7 dias
+        # Métricas da SEMANA (janela rolante 7d, união pra reg)
         ids_semana = fetch_snapshot_semana_passada()
         if ids_semana:
             novos_semana_n = len(ids_atuais_set - ids_semana)
             ids_uniao_semana = fetch_inadimplentes_uniao_semana()
-            reg_semana_n = len(ids_uniao_semana - ids_atuais_set) if ids_uniao_semana else len(ids_semana - ids_atuais_set)
-            reg_semana_n += len(ids_pagos_hoje - ids_uniao_semana - ids_semana)
-            saldo_semana = novos_semana_n - reg_semana_n
+            reg_semana_n   = len(ids_uniao_semana - ids_atuais_set) if ids_uniao_semana else len(ids_semana - ids_atuais_set)
+            reg_semana_n  += len(ids_pagos_hoje - ids_uniao_semana - ids_semana)
+            novos_semana_html = f'<span style="color:#ef4444;font-weight:700">↑ {novos_semana_n}</span> novos · '
+            reg_semana_html   = f'<span style="color:#22c55e;font-weight:700">↓ {reg_semana_n}</span> regularizados'
         else:
-            novos_semana_n = reg_semana_n = saldo_semana = None
+            novos_semana_html = '<span style="color:#6b7280;font-weight:700">↑ —</span> novos · '
+            reg_semana_html   = '<span style="color:#6b7280;font-weight:700">↓ —</span> regularizados'
 
-        def _fmt(n):
-            return "—" if n is None else f"{n:,}"
-
-        def _saldo_cor(s):
-            if s is None:
-                return "#6b7280"
-            return "#ef4444" if s > 0 else ("#22c55e" if s < 0 else "#e8eaf0")
-
-        def _saldo_fmt(s):
-            if s is None:
-                return "—"
-            return f"+{s}" if s > 0 else str(s)
-
-        # Linhas da tabela
-        linhas = [
-            ("Hoje",          novos_hoje_n,  regs_hoje_n,  saldo_hoje),
-            ("Últimos 7d",    novos_semana_n, reg_semana_n, saldo_semana),
-            ("Mês",           novos_mes,     reg_mes,      saldo_mes),
-        ]
-        linhas_html = ""
-        for label_p, ent, sai, sal in linhas:
-            linhas_html += (
-                f'<tr>'
-                f'<td style="padding:3px 0;color:#8b94a5;font-size:10px">{label_p}</td>'
-                f'<td style="text-align:right;padding:3px 4px;color:#ef4444;font-weight:600;font-size:11px">{_fmt(ent)}</td>'
-                f'<td style="text-align:right;padding:3px 4px;color:#22c55e;font-weight:600;font-size:11px">{_fmt(sai)}</td>'
-                f'<td style="text-align:right;padding:3px 0;color:{_saldo_cor(sal)};font-weight:700;font-size:11px">{_saldo_fmt(sal)}</td>'
-                f'</tr>'
-            )
+        # Tooltips explicam o que cada coisa significa
+        _tt_saldo = "Saldo = novos inadimplentes (↑) − regularizados (↓). Negativo é bom (menos inadimplentes)."
+        _tt_mes   = "Período: do dia 01 do mês atual até agora."
+        _tt_hoje  = "Comparado com snapshot de ontem (+ regularizações capturadas em tempo real)."
+        _tt_7d    = "Janela rolante de 7 dias — pode cruzar fronteira de mês."
 
         st.markdown(
             f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
             f'<div class="metric-label" style="font-size:12px">Variação {variacao_sub}</div>'
-            f'<div style="text-align:center;margin:6px 0 8px">'
-            f'<div style="color:{cor_saldo};font-size:42px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums">{_saldo_fmt(saldo_mes)}</div>'
-            f'<div style="font-size:10px;color:#8b94a5;margin-top:2px">{desc_saldo}</div>'
+            f'<div title="{_tt_saldo}" style="cursor:help;display:flex;flex-direction:column">'
+            f'<div class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</div>'
+            f'<div style="font-size:10px;color:{cor_desc};font-weight:600;margin-top:2px">{desc_saldo}</div>'
             f'</div>'
-            f'<table style="width:100%;border-collapse:collapse;margin-top:auto;font-variant-numeric:tabular-nums">'
-            f'<thead>'
-            f'<tr style="border-bottom:1px solid #2a2f42">'
-            f'<th style="text-align:left;padding:4px 0;font-size:9px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.6px">Período</th>'
-            f'<th style="text-align:right;padding:4px;font-size:9px;color:#6b7280;font-weight:700" title="Novos inadimplentes">↑</th>'
-            f'<th style="text-align:right;padding:4px;font-size:9px;color:#6b7280;font-weight:700" title="Regularizados">↓</th>'
-            f'<th style="text-align:right;padding:4px 0;font-size:9px;color:#6b7280;font-weight:700">Δ</th>'
-            f'</tr>'
-            f'</thead>'
-            f'<tbody>{linhas_html}</tbody>'
-            f'</table>'
+            f'<div title="{_tt_mes}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+            f'<span style="color:#8b94a5">Mês: </span>'
+            f'<span style="color:#ef4444;font-weight:700">↑ {novos_mes}</span> novos · '
+            f'<span style="color:#22c55e;font-weight:700">↓ {reg_mes}</span> reg.'
+            f'</div>'
+            f'<div title="{_tt_hoje}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid #2a2f42;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+            f'<span style="color:#8b94a5">Hoje: </span>'
+            f'{novos_hoje_html.replace(" novos · ", " · ")}'
+            f'<span style="color:#22c55e;font-weight:700">↓ {regs_hoje_n}</span>'
+            f'</div>'
+            f'<div title="{_tt_7d}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+            f'<span style="color:#8b94a5">Últimos 7 dias: </span>'
+            f'{novos_semana_html.replace(" novos · ", " · ")}'
+            f'{reg_semana_html.replace(" regularizados", "")}'
+            f'</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -745,6 +739,7 @@ def _render_dashboard(store, clientes, role):
         )
 
     if total_pg > 1:
+        st.markdown('<div style="height:14px"></div>', unsafe_allow_html=True)
         pc1, pc2, pc3 = st.columns([1, 2, 1])
         with pc1:
             if st.button("← Anterior", disabled=(page <= 1), width="stretch"):
