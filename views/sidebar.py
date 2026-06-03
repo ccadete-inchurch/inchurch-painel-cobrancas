@@ -1,7 +1,7 @@
 import streamlit as st
 
 from config import LOGO_SRC
-from auth import is_logged, current_nome
+from auth import is_logged
 
 
 def render_sidebar():
@@ -16,14 +16,13 @@ def render_sidebar():
     page    = st.session_state.get("page", "atividades")
     logo_sb = f'<img src="{LOGO_SRC}" style="height:30px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:#7cc243">InChurch</span>'
 
-    # CSS: 'Sair' fixed na parte de cima do footer; nome/cargo fixed embaixo.
-    # Ordem visual (de cima pra baixo): nav → Sair → nome/cargo.
+    # CSS: 'Sair' fixed no fundo da sidebar (sem footer de nome/role pra
+    # competir — já aparecem no header top-right).
     st.sidebar.markdown("""
     <style>
-    /* Último botão da sidebar (= 'Sair da conta') fixo ACIMA do nome/cargo */
     section[data-testid="stSidebar"] [data-testid="stElementContainer"]:last-of-type {
         position: fixed !important;
-        bottom: 64px !important;
+        bottom: 16px !important;
         left: 0 !important;
         width: 250px !important;
         padding: 0 16px !important;
@@ -58,17 +57,8 @@ def render_sidebar():
     nav_item("Próximas Cobranças", "proximas")
     nav_item("Cliente",            "cliente")
 
-    # Footer (só nome) — role já aparece no header top-right, não duplica aqui.
-    st.sidebar.markdown(f"""
-    <div style="position:fixed;bottom:0;left:0;width:250px;padding:14px 20px 16px;
-                border-top:1px solid #1e2333;background:#13161f;z-index:49">
-        <div style="font-size:13px;color:#e8eaf0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{current_nome()}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Padding bottom no conteúdo da sidebar pra não esconder último item de nav
-    # atrás do footer fixed.
-    st.sidebar.markdown('<div style="height:120px"></div>', unsafe_allow_html=True)
+    # Spacer pra não esconder último nav atrás do botão Sair (fixed bottom)
+    st.sidebar.markdown('<div style="height:70px"></div>', unsafe_allow_html=True)
 
     if st.sidebar.button("Sair da conta", width="stretch"):
         # Limpa TODAS as chaves do session_state — garante que o login
