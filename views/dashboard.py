@@ -230,16 +230,6 @@ def _render_dashboard(store, clientes, role):
     with s6:
         sinal = "+" if saldo_mes >= 0 else ""
         cor_saldo = "#ef4444" if saldo_mes > 0 else ("#22c55e" if saldo_mes < 0 else "#e8eaf0")
-        # Descrição contextual do saldo (deixa explícito se é melhora ou piora)
-        if saldo_mes > 0:
-            desc_saldo = f"cresceu {saldo_mes} (piora)"
-            cor_desc = "#ef4444"
-        elif saldo_mes < 0:
-            desc_saldo = f"caiu {abs(saldo_mes)} (melhora)"
-            cor_desc = "#22c55e"
-        else:
-            desc_saldo = "estável"
-            cor_desc = "#8b94a5"
 
         # Métricas do DIA — comparam snapshot de ontem com store atual.
         ids_ontem = fetch_snapshot_ontem()
@@ -249,11 +239,6 @@ def _render_dashboard(store, clientes, role):
             if c.get("_regularizado_hoje")
         )
         novos_hoje_n = len(ids_atuais_set - ids_ontem) if ids_ontem else None
-        novos_hoje_html = (
-            f'<span style="color:#ef4444;font-weight:700">↑ {novos_hoje_n}</span> novos · '
-            if novos_hoje_n is not None else
-            f'<span style="color:#6b7280;font-weight:700">↑ —</span> novos · '
-        )
 
         # Métricas da SEMANA (janela rolante 7d, união pra reg)
         ids_semana = fetch_snapshot_semana_passada()
@@ -262,14 +247,22 @@ def _render_dashboard(store, clientes, role):
             ids_uniao_semana = fetch_inadimplentes_uniao_semana()
             reg_semana_n   = len(ids_uniao_semana - ids_atuais_set) if ids_uniao_semana else len(ids_semana - ids_atuais_set)
             reg_semana_n  += len(ids_pagos_hoje - ids_uniao_semana - ids_semana)
-            novos_semana_html = f'<span style="color:#ef4444;font-weight:700">↑ {novos_semana_n}</span> novos · '
-            reg_semana_html   = f'<span style="color:#22c55e;font-weight:700">↓ {reg_semana_n}</span> regularizados'
         else:
-            novos_semana_html = '<span style="color:#6b7280;font-weight:700">↑ —</span> novos · '
-            reg_semana_html   = '<span style="color:#6b7280;font-weight:700">↓ —</span> regularizados'
+            novos_semana_n = None
+            reg_semana_n   = None
 
-        # Tooltips explicam o que cada coisa significa
-        _tt_saldo = "Saldo = novos inadimplentes (↑) − regularizados (↓). Negativo é bom (menos inadimplentes)."
+        # Helpers de formatação (sem setas, palavras inteiras, valores em
+        # vermelho/verde inline com o label)
+        def _fmt_v(n, kind):
+            """kind: 'novos' (red) | 'reg' (green)"""
+            cor = "#ef4444" if kind == "novos" else "#22c55e"
+            if n is None:
+                return f'<span style="color:#6b7280;font-weight:700">— {kind}</span>'
+            label = "regularizados" if kind == "reg" else "novos"
+            return f'<span style="color:{cor};font-weight:700">{n}</span> <span style="color:#8b94a5">{label}</span>'
+
+        # Tooltips
+        _tt_saldo = "Saldo = novos inadimplentes − regularizados. Negativo é bom (caiu)."
         _tt_mes   = "Período: do dia 01 do mês atual até agora."
         _tt_hoje  = "Comparado com snapshot de ontem (+ regularizações capturadas em tempo real)."
         _tt_7d    = "Janela rolante de 7 dias — pode cruzar fronteira de mês."
@@ -277,24 +270,21 @@ def _render_dashboard(store, clientes, role):
         st.markdown(
             f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
             f'<div class="metric-label" style="font-size:12px">Variação {variacao_sub}</div>'
-            f'<div title="{_tt_saldo}" style="cursor:help;display:flex;flex-direction:column">'
-            f'<div class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</div>'
-            f'<div style="font-size:10px;color:{cor_desc};font-weight:600;margin-top:2px">{desc_saldo}</div>'
+            f'<div title="{_tt_saldo}" style="cursor:help;display:flex;align-items:baseline;gap:8px;margin-top:4px">'
+            f'<span class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</span>'
+            f'<span style="font-size:13px;color:#8b94a5;font-weight:600">inadimplentes</span>'
             f'</div>'
-            f'<div title="{_tt_mes}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+            f'<div title="{_tt_mes}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#8b94a5">Mês: </span>'
-            f'<span style="color:#ef4444;font-weight:700">↑ {novos_mes}</span> novos · '
-            f'<span style="color:#22c55e;font-weight:700">↓ {reg_mes}</span> reg.'
+            f'{_fmt_v(novos_mes, "novos")} · {_fmt_v(reg_mes, "reg")}'
             f'</div>'
             f'<div title="{_tt_hoje}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid #2a2f42;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#8b94a5">Hoje: </span>'
-            f'{novos_hoje_html.replace(" novos · ", " · ")}'
-            f'<span style="color:#22c55e;font-weight:700">↓ {regs_hoje_n}</span>'
+            f'{_fmt_v(novos_hoje_n, "novos")} · {_fmt_v(regs_hoje_n, "reg")}'
             f'</div>'
             f'<div title="{_tt_7d}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#8b94a5">Últimos 7 dias: </span>'
-            f'{novos_semana_html.replace(" novos · ", " · ")}'
-            f'{reg_semana_html.replace(" regularizados", "")}'
+            f'{_fmt_v(novos_semana_n, "novos")} · {_fmt_v(reg_semana_n, "reg")}'
             f'</div>'
             f'</div>',
             unsafe_allow_html=True,
