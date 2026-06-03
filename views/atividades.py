@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -643,6 +643,12 @@ def _render_atividades(store, clientes, role):
 
         _e_lote = email in _EMAIL_GRUPO or (role in ("admin", "gestor") and _modo_admin == "Lote do dia")
 
+        # Admin em 'Todos os clientes': IDs em qualquer lote do dia, pra
+        # aplicar opacidade nos cards FORA do lote (sinaliza que não estão
+        # sendo trabalhados por ninguém hoje).
+        _modo_todos_admin = role in ("admin", "gestor") and _modo_admin == "Todos os clientes"
+        ids_em_lote_hoje = fetch_ids_em_qualquer_lote_hoje() if _modo_todos_admin else set()
+
         acordos = []; ligacao = []; so_msg = []; tentar_nov = []; concluida = []; aguardar = []
         for item in fila:
             s, a, c, h = item
@@ -660,6 +666,23 @@ def _render_atividades(store, clientes, role):
             elif canal == "tentar_novamente": tentar_nov.append(item)
             elif canal == "concluida":        concluida.append(item)
             else:                             aguardar.append(item)
+
+        # Sort dentro de CADA coluna: quem pagou hoje (parcial ou total) sobe
+        # pro topo, independente do score. Prioridade:
+        #   1) regularizou TUDO hoje (_regularizado_hoje)
+        #   2) pagou ALGO hoje (_valor_pago_hoje > 0)
+        #   3) score normal (descendente)
+        def _prio(item):
+            _, _, c, _ = item
+            reg_hoje = bool(c.get("_regularizado_hoje"))
+            pagou_alg = float(c.get("_valor_pago_hoje") or 0) > 0
+            # Maior valor = topo (depois reverse=True implícito no sorted negativo)
+            return (
+                2 if reg_hoje else (1 if pagou_alg else 0),
+                item[0],  # score original
+            )
+        for col_list in (acordos, ligacao, so_msg, tentar_nov, concluida, aguardar):
+            col_list.sort(key=_prio, reverse=True)
 
         def _svg(path, color, size=13, ml=0, mr=6):
             return (f'<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="{color}" '
@@ -701,8 +724,23 @@ def _render_atividades(store, clientes, role):
                 else:
                     for idx, (score, acoes, c, h) in enumerate(itens):
                         bk = buckets_hoje.get(c["id"]) if isinstance(buckets_hoje, dict) else None
+                        # Admin em 'Todos os clientes': cards FORA de qualquer
+                        # lote ficam com opacidade reduzida (visualmente
+                        # secundários — não estão sendo trabalhados hoje).
+                        fora_do_lote = (
+                            _modo_todos_admin
+                            and str(c.get("id", "")) not in ids_em_lote_hoje
+                        )
+                        if fora_do_lote:
+                            st.markdown(
+                                '<div style="opacity:.55;transition:opacity .2s" '
+                                'title="Fora do lote do dia — nenhum atendente está trabalhando este cliente hoje">',
+                                unsafe_allow_html=True,
+                            )
                         with st.container():
                             _render_card(score, acoes, c, role, f"{titulo}_{idx}", bucket=bk)
+                        if fora_do_lote:
+                            st.markdown('</div>', unsafe_allow_html=True)
 
     _kanban_dinamico()
 

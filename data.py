@@ -1888,6 +1888,29 @@ def get_lote_buckets_bq(atendente: str, clientes: list) -> dict:
         return {}
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_ids_em_qualquer_lote_hoje() -> set:
+    """IDs de TODOS os clientes que estão em algum lote (qualquer atendente)
+    do dia operacional atual. Usado pelo admin em 'Todos os clientes' pra
+    distinguir visualmente quem está sendo trabalhado vs quem está fora.
+    Cache curto (2min) porque lote nasce de manhã e raramente muda no dia.
+    """
+    client = get_bq_client()
+    if not client:
+        return set()
+    try:
+        df = client.query(f"""
+            SELECT DISTINCT id_sacado_sac
+            FROM `{_TAREFAS_TABLE}`
+            WHERE data_tarefa = '{hoje_lote()}'
+        """).to_dataframe()
+        if df.empty:
+            return set()
+        return {str(r["id_sacado_sac"]) for _, r in df.iterrows()}
+    except Exception:
+        return set()
+
+
 def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
     """Atualiza bools na tabela de tarefas com base no status n8n do dia.
     Usa um único MERGE em vez de 80 UPDATEs individuais.
