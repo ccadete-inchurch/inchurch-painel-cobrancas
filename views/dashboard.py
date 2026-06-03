@@ -216,7 +216,7 @@ def _render_dashboard(store, clientes, role):
     ]:
         with col:
             st.markdown(
-                f'<div class="metric-card" style="min-height:150px;padding:20px 18px">'
+                f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
                 f'<div class="metric-label" style="font-size:12px">{label}</div>'
                 f'<div class="metric-value" style="color:{cor};font-size:38px">{val:,}</div>'
                 f'<div class="metric-sub" style="font-size:13px">{sub}</div></div>',
@@ -256,7 +256,7 @@ def _render_dashboard(store, clientes, role):
             reg_semana_html   = '<span style="color:#6b7280;font-weight:700">↓ —</span> regularizados'
 
         st.markdown(
-            f'<div class="metric-card" style="min-height:150px;padding:20px 18px">'
+            f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
             f'<div class="metric-label" style="font-size:12px">Variação {variacao_sub}</div>'
             f'<div class="metric-value" style="color:{cor_saldo};font-size:38px">{sinal}{saldo_mes:,}</div>'
             f'<div class="metric-sub" style="font-size:12px;margin-top:6px">'
