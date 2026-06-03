@@ -16,6 +16,19 @@ def render_sidebar():
     page    = st.session_state.get("page", "dashboard")
     logo_sb = f'<img src="{LOGO_SRC}" style="height:30px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:#7cc243">InChurch</span>'
 
+    # CSS pra fonte Syne (identidade visual) nos botões de navegação,
+    # com letter-spacing e tamanho ajustados pra caps ficarem legíveis.
+    st.sidebar.markdown("""
+    <style>
+    section[data-testid="stSidebar"] .stButton > button {
+        font-family: 'Syne', sans-serif !important;
+        font-weight: 600 !important;
+        letter-spacing: 1.2px !important;
+        font-size: 12px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     st.sidebar.markdown(f"""
     <div style="padding:24px 20px 18px;border-bottom:1px solid #1e2333;margin-bottom:8px">
         {logo_sb}

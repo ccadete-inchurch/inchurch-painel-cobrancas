@@ -218,7 +218,7 @@ def _render_dashboard(store, clientes, role):
             st.markdown(
                 f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
                 f'<div class="metric-label" style="font-size:12px">{label}</div>'
-                f'<div class="metric-value" style="color:{cor};font-size:38px">{val:,}</div>'
+                f'<div class="metric-value" style="color:{cor};font-size:46px">{val:,}</div>'
                 f'<div class="metric-sub" style="font-size:13px">{sub}</div></div>',
                 unsafe_allow_html=True,
             )
@@ -258,20 +258,20 @@ def _render_dashboard(store, clientes, role):
         st.markdown(
             f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
             f'<div class="metric-label" style="font-size:12px">Variação {variacao_sub}</div>'
-            f'<div class="metric-value" style="color:{cor_saldo};font-size:38px">{sinal}{saldo_mes:,}</div>'
-            f'<div class="metric-sub" style="font-size:12px;margin-top:6px">'
+            f'<div class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</div>'
+            f'<div class="metric-sub" style="font-size:11px;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#ef4444;font-weight:700">↑ {novos_mes}</span> novos · '
-            f'<span style="color:#22c55e;font-weight:700">↓ {reg_mes}</span> regularizados'
+            f'<span style="color:#22c55e;font-weight:700">↓ {reg_mes}</span> reg.'
             f'</div>'
-            f'<div class="metric-sub" style="font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid #2a2f42">'
+            f'<div class="metric-sub" style="font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid #2a2f42;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#8b94a5">Hoje: </span>'
-            f'{novos_hoje_html}'
-            f'<span style="color:#22c55e;font-weight:700">↓ {regs_hoje_n}</span> regularizados'
+            f'{novos_hoje_html.replace(" novos · ", " · ")}'
+            f'<span style="color:#22c55e;font-weight:700">↓ {regs_hoje_n}</span>'
             f'</div>'
-            f'<div class="metric-sub" style="font-size:11px;margin-top:4px">'
+            f'<div class="metric-sub" style="font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#8b94a5">Semana: </span>'
-            f'{novos_semana_html}'
-            f'{reg_semana_html}'
+            f'{novos_semana_html.replace(" novos · ", " · ")}'
+            f'{reg_semana_html.replace(" regularizados", "")}'
             f'</div>'
             f'</div>',
             unsafe_allow_html=True,
