@@ -7,7 +7,7 @@ import streamlit as st
 from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
 from auth import get_store, hash_senha, current_role
 from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
-from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_semana_passada, concluir_pendencia
+from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_semana_passada, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_semana, concluir_pendencia
 import re as _re_tel
 
 
@@ -182,16 +182,21 @@ def _render_dashboard(store, clientes, role):
     }
 
     if ids_inicio:
-        # Snapshot disponível — matemática exata
-        novos_mes = len(ids_atuais - ids_inicio)  # ID em hoje, não em snapshot inicial
-        reg_mes   = len(ids_inicio - ids_atuais)  # ID em snapshot inicial, não em hoje
-        # Edge case: cliente virou inadimplente DEPOIS do snapshot e pagou
-        # hoje. Não está em ids_inicio nem em ids_atuais → some da conta.
-        # Soma esses manualmente (dedup contra ids_inicio pra não contar 2×).
-        reg_mes += len(ids_pagos_hoje - ids_inicio)
+        # NOVOS no mês — atuais que não estavam no 1º dia do mês.
+        # Usa snapshot único do dia 01 (cliente "novo" = está agora E não
+        # estava no início).
+        novos_mes = len(ids_atuais - ids_inicio)
+
+        # REGULARIZADOS no mês — UNIÃO de todos snapshots do mês.
+        # Captura quem virou inadimplente NO MEIO do mês e regularizou
+        # (que o método de 1 ponto perdia — Igreja Y vence 02/06 paga 03/06).
+        ids_uniao_mes = fetch_inadimplentes_uniao_mes()
+        reg_mes = len(ids_uniao_mes - ids_atuais) if ids_uniao_mes else len(ids_inicio - ids_atuais)
+        # Edge case: pagou hoje mas snapshot de hoje ainda não rodou
+        # (ou virou inad. e pagou no mesmo dia depois do snapshot).
+        reg_mes += len(ids_pagos_hoje - ids_uniao_mes - ids_inicio)
+
         snapshot_dt = st.session_state.get("_snapshot_inicio_mes_data", "")
-        # Se snapshot começou depois do dia 1 (ex: implementação no meio do mês),
-        # exibe a data de referência no card pra ficar claro o que está medindo.
         variacao_sub = f"desde {snapshot_dt}" if snapshot_dt and not snapshot_dt.startswith("01/") else "no mês"
     else:
         # Fallback heurístico — usado enquanto o snapshot não foi populado
@@ -241,14 +246,17 @@ def _render_dashboard(store, clientes, role):
             f'<span style="color:#6b7280;font-weight:700">↑ —</span> novos · '
         )
 
-        # Métricas da SEMANA — compara snapshot de ~7 dias atrás (com fallback
-        # ao mais próximo dentro de 12d). Edge case: clientes que pagaram hoje
-        # mas não estavam no snapshot da semana — soma manual com dedup.
+        # Métricas da SEMANA:
+        # - NOVOS: snapshot único de ~7 dias atrás (cliente novo = está agora,
+        #   não estava há 7 dias)
+        # - REGULARIZADOS: UNIÃO dos últimos 7 snapshots (captura quem virou
+        #   inadimplente no meio da semana e pagou)
         ids_semana = fetch_snapshot_semana_passada()
         if ids_semana:
             novos_semana_n = len(ids_atuais_set - ids_semana)
-            reg_semana_n   = len(ids_semana - ids_atuais_set)
-            reg_semana_n  += len(ids_pagos_hoje - ids_semana)
+            ids_uniao_semana = fetch_inadimplentes_uniao_semana()
+            reg_semana_n   = len(ids_uniao_semana - ids_atuais_set) if ids_uniao_semana else len(ids_semana - ids_atuais_set)
+            reg_semana_n  += len(ids_pagos_hoje - ids_uniao_semana - ids_semana)
             novos_semana_html = f'<span style="color:#ef4444;font-weight:700">↑ {novos_semana_n}</span> novos · '
             reg_semana_html   = f'<span style="color:#22c55e;font-weight:700">↓ {reg_semana_n}</span> regularizados'
         else:

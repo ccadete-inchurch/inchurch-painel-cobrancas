@@ -721,9 +721,9 @@ def salvar_snapshot_inadimplentes_hoje(clientes: list | None = None):
 
 @st.cache_data(ttl=3600)
 def fetch_snapshot_inicio_mes() -> set:
-    """IDs dos clientes do PRIMEIRO snapshot do mês atual (proxy do 'estado em
-    01/mês'). Vazio se ainda não tem snapshot do mês — sinaliza pro dashboard
-    cair no fallback heurístico."""
+    """IDs dos clientes do PRIMEIRO snapshot do mês atual.
+    Usado pra calcular NOVOS no mês: atuais − inicio = entraram no mês.
+    """
     client = get_bq_client()
     if not client:
         return set()
@@ -741,8 +741,6 @@ def fetch_snapshot_inicio_mes() -> set:
         """).to_dataframe()
         if df.empty:
             return set()
-        # Guarda a data do primeiro snapshot no session_state pra UI indicar
-        # 'desde XX/XX' quando o mês começou depois do dia 1.
         try:
             dt = df["data_inicio"].iloc[0]
             st.session_state["_snapshot_inicio_mes_data"] = (
@@ -756,17 +754,35 @@ def fetch_snapshot_inicio_mes() -> set:
 
 
 @st.cache_data(ttl=3600)
+def fetch_inadimplentes_uniao_mes() -> set:
+    """IDs DISTINTOS de clientes que estiveram inadimplentes em ALGUM dia
+    do mês atual — UNIÃO de todos os snapshots desde 01/mês até hoje.
+
+    Usado pra calcular REGULARIZADOS no mês:
+        regularizados = uniao_mes − atuais
+    Captura cliente que virou inadimplente no MEIO do mês e regularizou
+    (que o snapshot único do dia 01 perdia).
+    """
+    client = get_bq_client()
+    if not client:
+        return set()
+    try:
+        df = client.query(f"""
+            SELECT DISTINCT id_sacado_sac
+            FROM `{_SNAPSHOT_TABLE}`
+            WHERE data_snapshot >= DATE_TRUNC(CURRENT_DATE("America/Sao_Paulo"), MONTH)
+        """).to_dataframe()
+        if df.empty:
+            return set()
+        return {str(r["id_sacado_sac"]) for _, r in df.iterrows()}
+    except Exception:
+        return set()
+
+
+@st.cache_data(ttl=3600)
 def fetch_snapshot_semana_passada() -> set:
-    """IDs do snapshot mais próximo de 7 dias atrás (alvo) — pra calcular
-    novos/regularizados da SEMANA comparando com hoje.
-
-    Estratégia: usa o snapshot mais recente dentro da janela [hoje-12d, hoje-7d].
-    Isso cobre o caso comum onde 7 dias atrás caiu em sábado/domingo (cron não
-    rodou) e usa o sexta-feira anterior. Limite máximo de 12 dias evita
-    comparar com snapshot muito velho que distorceria a métrica.
-
-    Vazio se não há snapshot no intervalo (primeira semana após ativar
-    snapshot diário, feriado prolongado, falha do cron).
+    """IDs do snapshot mais próximo de 7 dias atrás.
+    Usado pra calcular NOVOS na semana: atuais − semana_passada.
     """
     client = get_bq_client()
     if not client:
@@ -790,7 +806,6 @@ def fetch_snapshot_semana_passada() -> set:
         """).to_dataframe()
         if df.empty:
             return set()
-        # Guarda data de referência usada (pra UI indicar 'desde XX/XX')
         try:
             dt = df["data_ref"].iloc[0]
             st.session_state["_snapshot_semana_data"] = (
@@ -798,6 +813,34 @@ def fetch_snapshot_semana_passada() -> set:
             )
         except Exception:
             pass
+        return {str(r["id_sacado_sac"]) for _, r in df.iterrows()}
+    except Exception:
+        return set()
+
+
+@st.cache_data(ttl=3600)
+def fetch_inadimplentes_uniao_semana() -> set:
+    """IDs DISTINTOS de clientes que estiveram inadimplentes em ALGUM dia
+    dos últimos 7 dias — UNIÃO dos snapshots na janela [hoje-7d, ontem].
+
+    Usado pra calcular REGULARIZADOS na semana:
+        regularizados = uniao_semana − atuais
+    Garante semana ⊆ mês sempre (consistência matemática).
+    """
+    client = get_bq_client()
+    if not client:
+        return set()
+    try:
+        df = client.query(f"""
+            SELECT DISTINCT id_sacado_sac
+            FROM `{_SNAPSHOT_TABLE}`
+            WHERE data_snapshot >= DATE_SUB(
+                CURRENT_DATE("America/Sao_Paulo"), INTERVAL 7 DAY
+            )
+              AND data_snapshot < CURRENT_DATE("America/Sao_Paulo")
+        """).to_dataframe()
+        if df.empty:
+            return set()
         return {str(r["id_sacado_sac"]) for _, r in df.iterrows()}
     except Exception:
         return set()
