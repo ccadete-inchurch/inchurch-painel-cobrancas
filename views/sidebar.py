@@ -16,8 +16,8 @@ def render_sidebar():
     page    = st.session_state.get("page", "dashboard")
     logo_sb = f'<img src="{LOGO_SRC}" style="height:30px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:#7cc243">InChurch</span>'
 
-    # CSS: fonte Syne nos botões de nav + spacer flex pra empurrar
-    # footer (nome/cargo/sair) pro fundo da sidebar.
+    # CSS: fonte Syne + footer (nome/cargo + Sair) pinned no fim da sidebar
+    # via position:fixed. Última .stButton da sidebar = Sair.
     st.sidebar.markdown("""
     <style>
     section[data-testid="stSidebar"] .stButton > button {
@@ -26,15 +26,14 @@ def render_sidebar():
         letter-spacing: 1.2px !important;
         font-size: 12px !important;
     }
-    /* Sidebar flex column pra empurrar 'Sair' lá pro fundo */
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-        display: flex !important;
-        flex-direction: column !important;
-        min-height: calc(100vh - 60px) !important;
-    }
-    /* Spacer que cresce pra empurrar o footer */
-    section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(#sb-spacer) {
-        flex: 1 1 auto !important;
+    /* Último botão da sidebar (= 'Sair da conta') fixo no fundo */
+    section[data-testid="stSidebar"] [data-testid="stElementContainer"]:last-of-type {
+        position: fixed !important;
+        bottom: 12px !important;
+        left: 0 !important;
+        width: 250px !important;
+        padding: 0 16px !important;
+        z-index: 50 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -65,16 +64,20 @@ def render_sidebar():
     nav_item("PRÓXIMAS COBRANÇAS", "proximas")
     nav_item("CLIENTE",            "cliente")
 
-    # Spacer flex-grow que empurra footer pro fim da sidebar
-    st.sidebar.markdown('<div id="sb-spacer"></div>', unsafe_allow_html=True)
-
-    # Footer com nome + cargo (alinhado com padding da sidebar, sem position:fixed)
+    # Footer (nome + cargo) — position:fixed logo acima do botão Sair (que
+    # também fica fixed por CSS no topo do arquivo). bottom:60px = altura do
+    # botão Sair (~46px) + margem (~14px).
     st.sidebar.markdown(f"""
-    <div style="padding:14px 20px 10px;border-top:1px solid #1e2333;margin-top:8px">
+    <div style="position:fixed;bottom:60px;left:0;width:250px;padding:12px 20px 10px;
+                border-top:1px solid #1e2333;background:#13161f;z-index:49">
         <div style="font-size:13px;color:#e8eaf0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{current_nome()}</div>
         <div style="font-size:10px;color:#6b7280;margin-top:3px;text-transform:uppercase;letter-spacing:.8px;font-weight:600">{current_role()}</div>
     </div>
     """, unsafe_allow_html=True)
+
+    # Padding bottom no conteúdo da sidebar pra não esconder último item de nav
+    # atrás do footer fixed.
+    st.sidebar.markdown('<div style="height:120px"></div>', unsafe_allow_html=True)
 
     if st.sidebar.button("Sair da conta", width="stretch"):
         # Limpa TODAS as chaves do session_state — garante que o login
