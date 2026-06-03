@@ -212,8 +212,8 @@ def _render_dashboard(store, clientes, role):
 
     s1, s2, s3, s4, s5, s6 = st.columns(6)
     for col, label, val, cor, sub in [
-        (s1, "Total Clientes",       total,       "#e8eaf0", "filtro atual"),
-        (s2, "Não Contactados",     pending,     "#ef4444", "nunca foi tocado"),
+        (s1, "Total Clientes",       total,       "#e8eaf0", "inadimplentes"),
+        (s2, "Não Contactados",     pending,     "#ef4444", "pendentes"),
         (s3, "Contactados",         contacted,   "#f59e0b", "em acompanhamento"),
         (s4, "Promessas",           promise,     "#f97316", "prometeu pagar"),
         (s5, "Negociando",          negotiating, "#4f7cff", "em negociação"),
@@ -221,7 +221,7 @@ def _render_dashboard(store, clientes, role):
         with col:
             st.markdown(
                 f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
-                f'<div class="metric-label" style="font-size:12px">{label}</div>'
+                f'<div class="metric-label" style="font-size:14px">{label}</div>'
                 f'<div class="metric-value" style="color:{cor};font-size:46px">{val:,}</div>'
                 f'<div class="metric-sub" style="font-size:13px">{sub}</div></div>',
                 unsafe_allow_html=True,
@@ -269,7 +269,7 @@ def _render_dashboard(store, clientes, role):
 
         st.markdown(
             f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
-            f'<div class="metric-label" style="font-size:12px">Variação {variacao_sub}</div>'
+            f'<div class="metric-label" style="font-size:14px">Variação {variacao_sub}</div>'
             f'<div title="{_tt_saldo}" style="cursor:help;display:flex;align-items:baseline;gap:8px;margin-top:4px">'
             f'<span class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</span>'
             f'<span style="font-size:13px;color:#8b94a5;font-weight:600">inadimplentes</span>'
