@@ -91,7 +91,7 @@ def _render_cliente(_store, clientes):
             ("Último contato",   h.get("lastContact", "—")),
             ("Retorno agendado", h.get("retorno",     "—") or "—"),
             ("Prometeu pagar",   h.get("promiseDate", "—") or "—"),
-            ("Atendente",        h.get("atendente",   "—") or "—"),
+            ("Especialista",     h.get("atendente",   "—") or "—"),
         ]
         for label, val in fields:
             st.markdown(

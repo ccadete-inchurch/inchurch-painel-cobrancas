@@ -407,7 +407,7 @@ def _render_atividades(store, clientes, role):
                 with _ca:
                     if _modo_admin == "Lote do dia":
                         _atendente_sel = st.selectbox(
-                            "Atendente",
+                            "Especialista",
                             _nomes_atendentes,
                             label_visibility="collapsed",
                             key="_admin_atendente",

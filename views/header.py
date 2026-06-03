@@ -4,10 +4,23 @@ from auth import current_nome, current_role
 from data import get_store
 
 
+_ROLE_DISPLAY = {
+    "admin":     "ADMIN",
+    "gestor":    "GESTOR",
+    "atendente": "SPECIALIST",
+}
+
+
 def render_header():
     store    = get_store()
     upd      = store.get("ultima_atualizacao") or "—"
-    role_tag  = '<span style="background:rgba(124,194,67,.2);color:#7cc243;font-size:11px;padding:3px 10px;border-radius:12px;font-weight:700;margin-left:8px">ADMIN</span>' if current_role() == "admin" else ""
+    _r       = current_role()
+    _r_label = _ROLE_DISPLAY.get(_r, _r.upper() if _r else "")
+    role_tag = (
+        f'<span style="background:rgba(124,194,67,.2);color:#7cc243;font-size:11px;'
+        f'padding:3px 10px;border-radius:12px;font-weight:700;margin-left:8px;'
+        f'letter-spacing:.5px">{_r_label}</span>'
+    ) if _r_label else ""
     st.markdown(f"""
     <div style="background:#181c26;border-bottom:1px solid #2a2f42;padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,.15)">
       <div></div>

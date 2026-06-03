@@ -1,7 +1,7 @@
 import streamlit as st
 
 from config import LOGO_SRC
-from auth import is_logged, current_nome, current_role
+from auth import is_logged, current_nome
 
 
 def render_sidebar():
@@ -58,13 +58,11 @@ def render_sidebar():
     nav_item("Próximas Cobranças", "proximas")
     nav_item("Cliente",            "cliente")
 
-    # Footer (nome + cargo) — position:fixed no fundo da sidebar; o botão
-    # Sair fica logo ACIMA via CSS no topo do arquivo (bottom:64px).
+    # Footer (só nome) — role já aparece no header top-right, não duplica aqui.
     st.sidebar.markdown(f"""
-    <div style="position:fixed;bottom:0;left:0;width:250px;padding:12px 20px 14px;
+    <div style="position:fixed;bottom:0;left:0;width:250px;padding:14px 20px 16px;
                 border-top:1px solid #1e2333;background:#13161f;z-index:49">
         <div style="font-size:13px;color:#e8eaf0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{current_nome()}</div>
-        <div style="font-size:10px;color:#6b7280;margin-top:3px;text-transform:uppercase;letter-spacing:.8px;font-weight:600">{current_role()}</div>
     </div>
     """, unsafe_allow_html=True)
 

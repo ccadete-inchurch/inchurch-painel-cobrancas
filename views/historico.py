@@ -48,8 +48,8 @@ def _render_historico(store):
         filtro_sit = st.selectbox("Situação", ["Todos", "Apenas ativos", "Apenas inativos"], key="reg_sit")
     with fa:
         filtro_atd = st.selectbox(
-            "Atendente",
-            ["Todos"] + atendentes_disp + (["Sem atendente"] if (not df.empty and (df["atendente"] == "—").any()) else []),
+            "Especialista",
+            ["Todos"] + atendentes_disp + (["Sem especialista"] if (not df.empty and (df["atendente"] == "—").any()) else []),
             key="reg_atd",
         )
 
@@ -60,7 +60,7 @@ def _render_historico(store):
         df = df[~df["inativo"].fillna(False).astype(bool)]
     elif filtro_sit == "Apenas inativos" and "inativo" in df.columns:
         df = df[df["inativo"].fillna(False).astype(bool)]
-    if filtro_atd == "Sem atendente":
+    if filtro_atd == "Sem especialista":
         df = df[df["atendente"] == "—"]
     elif filtro_atd != "Todos":
         df = df[df["atendente"] == filtro_atd]
@@ -144,7 +144,7 @@ def _render_historico(store):
 
     # ── Tabela ────────────────────────────────────────────────────────────────
     col_w = [1.2, 3, 1.8, 1.5, 1.5]
-    hdrs  = ["Data", "Cliente", "CNPJ", "Valor", "Atendente"]
+    hdrs  = ["Data", "Cliente", "CNPJ", "Valor", "Especialista"]
 
     hdr_cells = "".join(
         f'<div style="flex:{w};padding:14px 14px;font-size:12px;text-transform:uppercase;'
