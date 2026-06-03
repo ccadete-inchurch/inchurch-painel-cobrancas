@@ -85,6 +85,18 @@ def _render_historico(store):
         n_hoje = 0
         v_hoje = 0.0
 
+    # Regularizados do Dia — só clientes que quitaram TUDO hoje (flag overlay)
+    ids_reg_hoje = {
+        str(c.get("id") or "") for c in store.get("clientes", [])
+        if c.get("_regularizado_hoje")
+    }
+    n_reg = len(ids_reg_hoje)
+    v_reg = sum(
+        float(c.get("_valor_pago_hoje") or 0)
+        for c in store.get("clientes", [])
+        if str(c.get("id") or "") in ids_reg_hoje
+    )
+
     # Mês / Histórico (clientes únicos via df)
     if df.empty:
         n_mes = n_total = 0
@@ -96,20 +108,25 @@ def _render_historico(store):
         n_total = int(df["id"].astype(str).nunique())
         v_total = float(df["valor"].sum())
 
-    m1, m2, m3, _m4 = st.columns(4)
+    m1, m2, m3, m4 = st.columns(4)
     _tooltip_dia = (
         "Conta todos os pagamentos do dia (parciais e totais), incluindo "
-        "clientes que já saíram da inadimplência. Mesma fonte da tabela abaixo. "
-        "Difere do card 'regularizações' da Atividades, que conta só quem "
-        "quitou TUDO entre os ainda em cobrança."
+        "clientes que já saíram da inadimplência. Mesma fonte da tabela abaixo."
     )
-    for col, label, valor, qtd, tooltip in [
-        (m1, "Pagamentos do Dia",   v_hoje,  n_hoje,  _tooltip_dia),
-        (m2, "Pagamentos no Mês",   v_mes,   n_mes,   ""),
-        (m3, "Total Histórico",     v_total, n_total, ""),
-    ]:
+    _tooltip_reg = (
+        "Apenas clientes que quitaram TODAS as cobranças vencidas hoje. "
+        "Linhas correspondentes na tabela abaixo recebem badge ✓ REGULARIZADO."
+    )
+    cards = [
+        (m1, "Pagamentos do Dia",      v_hoje,  n_hoje,  "pagou", _tooltip_dia),
+        (m2, "Regularizados do Dia",   v_reg,   n_reg,   "regularizou", _tooltip_reg),
+        (m3, "Pagamentos no Mês",      v_mes,   n_mes,   "pagou", ""),
+        (m4, "Total Histórico",        v_total, n_total, "pagou", ""),
+    ]
+    for col, label, valor, qtd, verbo, tooltip in cards:
         with col:
-            sub = f'{qtd} {"cliente pagou" if qtd == 1 else "clientes pagaram"}'
+            verbo_plural = verbo + ("" if qtd == 1 else "ram")
+            sub = f'{qtd} {"cliente" if qtd == 1 else "clientes"} {verbo_plural}'
             title_attr = f' title="{tooltip}"' if tooltip else ""
             cursor = "help" if tooltip else "default"
             st.markdown(
@@ -155,13 +172,27 @@ def _render_historico(store):
     n = len(rows)
     for i, row in enumerate(rows):
         inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("inativo") else ""
+        # Badge "REGULARIZADO" — só pra linhas onde cliente quitou tudo HOJE.
+        # Aplica em todas as linhas de hoje desse cliente (se ele tiver
+        # múltiplas cobranças pagas hoje, todas ganham o selo).
+        eh_reg_hoje = (
+            str(row.get("id") or "") in ids_reg_hoje
+            and str(row.get("data") or "") == hoje_str
+        )
+        reg_badge = (
+            '<span style="background:rgba(45,211,111,.18);color:#2dd36f;'
+            'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
+            'margin-right:4px">✓ REGULARIZADO</span>' if eh_reg_hoje else ""
+        )
         rcols = st.columns(col_w)
         with rcols[0]:
             st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{row.get("data","—")}</div>', unsafe_allow_html=True)
         with rcols[1]:
+            badges_html = f'{reg_badge}{inativo_badge}'
+            badges_line = f'<div style="margin-bottom:2px">{badges_html}</div>' if badges_html else ''
             st.markdown(
                 f'<div style="padding:12px 14px">'
-                f'<div style="margin-bottom:2px">{inativo_badge}</div>'
+                f'{badges_line}'
                 f'<div style="font-size:14px;font-weight:600;color:#e8eaf0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{row.get("nome","—")}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
