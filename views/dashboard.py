@@ -254,40 +254,48 @@ def _render_dashboard(store, clientes, role):
             novos_semana_n = None
             reg_semana_n   = None
 
-        # Helpers de formatação (sem setas, palavras inteiras, valores em
-        # vermelho/verde inline com o label)
-        def _fmt_v(n, kind):
-            """kind: 'novos' (red) | 'reg' (green)"""
+        # Helpers de formatação. Primeira linha (Mês) tem label completo
+        # 'novos'/'regularizados'. Linhas seguintes só números coloridos —
+        # evita repetição.
+        def _fmt_full(n, kind):
+            """Com label ('8 novos' / '59 regularizados')"""
+            cor = "#ef4444" if kind == "novos" else "#22c55e"
+            label = "regularizados" if kind == "reg" else "novos"
+            if n is None:
+                return f'<span style="color:#6b7280;font-weight:700">— {label}</span>'
+            return f'<span style="color:{cor};font-weight:700">{n}</span> <span style="color:#8b94a5">{label}</span>'
+
+        def _fmt_short(n, kind):
+            """Só número colorido ('8' vermelho / '59' verde)"""
             cor = "#ef4444" if kind == "novos" else "#22c55e"
             if n is None:
-                return f'<span style="color:#6b7280;font-weight:700">— {kind}</span>'
-            label = "regularizados" if kind == "reg" else "novos"
-            return f'<span style="color:{cor};font-weight:700">{n}</span> <span style="color:#8b94a5">{label}</span>'
+                return f'<span style="color:#6b7280;font-weight:700">—</span>'
+            return f'<span style="color:{cor};font-weight:700">{n}</span>'
 
         # Tooltips
         _tt_saldo = "Saldo = novos inadimplentes − regularizados. Negativo é bom (caiu)."
         _tt_mes   = "Período: do dia 01 do mês atual até agora."
         _tt_hoje  = "Comparado com snapshot de ontem (+ regularizações capturadas em tempo real)."
-        _tt_7d    = "Da segunda-feira da semana atual até hoje. Capada no início do mês — Esta semana ⊆ Mês sempre."
+        _tt_sem   = "Da segunda-feira da semana atual até hoje. Capada no início do mês — Semana ⊆ Mês sempre."
 
         st.markdown(
             f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
             f'<div class="metric-label" style="font-size:13px">Variação {variacao_sub}</div>'
             f'<div title="{_tt_saldo}" style="cursor:help;display:flex;align-items:baseline;gap:8px;margin-top:4px">'
             f'<span class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</span>'
-            f'<span style="font-size:12px;color:{cor_saldo};font-weight:600">inadimplentes</span>'
+            f'<span style="font-size:12px;color:{cor_saldo};font-weight:600;text-transform:uppercase;letter-spacing:.5px">INADIMPLENTES</span>'
             f'</div>'
             f'<div title="{_tt_mes}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#8b94a5">Mês: </span>'
-            f'{_fmt_v(novos_mes, "novos")} · {_fmt_v(reg_mes, "reg")}'
+            f'{_fmt_full(novos_mes, "novos")} · {_fmt_full(reg_mes, "reg")}'
             f'</div>'
             f'<div title="{_tt_hoje}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid #2a2f42;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#8b94a5">Hoje: </span>'
-            f'{_fmt_v(novos_hoje_n, "novos")} · {_fmt_v(regs_hoje_n, "reg")}'
+            f'{_fmt_short(novos_hoje_n, "novos")} · {_fmt_short(regs_hoje_n, "reg")}'
             f'</div>'
-            f'<div title="{_tt_7d}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-            f'<span style="color:#8b94a5">Esta semana: </span>'
-            f'{_fmt_v(novos_semana_n, "novos")} · {_fmt_v(reg_semana_n, "reg")}'
+            f'<div title="{_tt_sem}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+            f'<span style="color:#8b94a5">Semana: </span>'
+            f'{_fmt_short(novos_semana_n, "novos")} · {_fmt_short(reg_semana_n, "reg")}'
             f'</div>'
             f'</div>',
             unsafe_allow_html=True,

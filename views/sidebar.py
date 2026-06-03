@@ -13,7 +13,7 @@ def render_sidebar():
         """, unsafe_allow_html=True)
         return
 
-    page    = st.session_state.get("page", "dashboard")
+    page    = st.session_state.get("page", "atividades")
     logo_sb = f'<img src="{LOGO_SRC}" style="height:30px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:#7cc243">InChurch</span>'
 
     # CSS: 'Sair' fixed na parte de cima do footer; nome/cargo fixed embaixo.
