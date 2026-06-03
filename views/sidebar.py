@@ -16,8 +16,8 @@ def render_sidebar():
     page    = st.session_state.get("page", "dashboard")
     logo_sb = f'<img src="{LOGO_SRC}" style="height:30px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:#7cc243">InChurch</span>'
 
-    # CSS pra fonte Syne (identidade visual) nos botões de navegação,
-    # com letter-spacing e tamanho ajustados pra caps ficarem legíveis.
+    # CSS: fonte Syne nos botões de nav + spacer flex pra empurrar
+    # footer (nome/cargo/sair) pro fundo da sidebar.
     st.sidebar.markdown("""
     <style>
     section[data-testid="stSidebar"] .stButton > button {
@@ -26,16 +26,26 @@ def render_sidebar():
         letter-spacing: 1.2px !important;
         font-size: 12px !important;
     }
+    /* Sidebar flex column pra empurrar 'Sair' lá pro fundo */
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        display: flex !important;
+        flex-direction: column !important;
+        min-height: calc(100vh - 60px) !important;
+    }
+    /* Spacer que cresce pra empurrar o footer */
+    section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(#sb-spacer) {
+        flex: 1 1 auto !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
     st.sidebar.markdown(f"""
     <div style="padding:24px 20px 18px;border-bottom:1px solid #1e2333;margin-bottom:8px">
         {logo_sb}
-        <div style="font-size:12px;color:#8b94a5;margin-top:6px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600">Painel de Cobrança</div>
+        <div style="font-size:13px;color:#8b94a5;margin-top:6px;text-transform:uppercase;letter-spacing:1.5px;font-weight:800">Painel de Cobrança</div>
     </div>
     <div style="padding:6px 20px 8px">
-        <div style="font-size:10px;color:#374151;text-transform:uppercase;letter-spacing:1.5px;font-weight:700">Navegação</div>
+        <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1.5px;font-weight:800">Navegação</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -55,13 +65,16 @@ def render_sidebar():
     nav_item("PRÓXIMAS COBRANÇAS", "proximas")
     nav_item("CLIENTE",            "cliente")
 
+    # Spacer flex-grow que empurra footer pro fim da sidebar
+    st.sidebar.markdown('<div id="sb-spacer"></div>', unsafe_allow_html=True)
+
+    # Footer com nome + cargo (alinhado com padding da sidebar, sem position:fixed)
     st.sidebar.markdown(f"""
-    <div style="position:fixed;bottom:0;width:248px;padding:16px 20px;border-top:1px solid #1e2333;background:#13161f">
-        <div style="font-size:12px;color:#e8eaf0;font-weight:600">{current_nome()}</div>
-        <div style="font-size:10px;color:#4b5563;margin-top:2px;text-transform:uppercase;letter-spacing:.8px">{current_role()}</div>
+    <div style="padding:14px 20px 10px;border-top:1px solid #1e2333;margin-top:8px">
+        <div style="font-size:13px;color:#e8eaf0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{current_nome()}</div>
+        <div style="font-size:10px;color:#6b7280;margin-top:3px;text-transform:uppercase;letter-spacing:.8px;font-weight:600">{current_role()}</div>
     </div>
     """, unsafe_allow_html=True)
-    st.sidebar.markdown('<div style="height:80px"></div>', unsafe_allow_html=True)
 
     if st.sidebar.button("Sair da conta", width="stretch"):
         # Limpa TODAS as chaves do session_state — garante que o login
