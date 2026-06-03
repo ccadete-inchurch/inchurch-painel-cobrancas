@@ -73,13 +73,17 @@ def _render_historico(store):
     hoje_br = date.fromisoformat(hoje_lote())
     sufixo_mes = hoje_br.strftime("/%m/%Y")  # "/MM/AAAA" — match endswith
 
-    # Pagamentos Hoje (via flag — pode incluir parcial e total)
-    clientes_hoje = [
-        c for c in store.get("clientes", [])
-        if c.get("_regularizado_hoje") or c.get("_pago_parcial_hoje")
-    ]
-    n_hoje = len(clientes_hoje)
-    v_hoje = sum(float(c.get("_valor_pago_hoje") or 0) for c in clientes_hoje)
+    # Pagamentos Hoje — date-based no df pra bater com a tabela embaixo.
+    # Inclui pagamentos de clientes que saíram da inadimplência (não estão em
+    # store['clientes']) mas têm registro com data=hoje em store['regularizados'].
+    hoje_str = hoje_br.strftime("%d/%m/%Y")
+    if not df.empty:
+        df_hoje = df[df["data"].astype(str) == hoje_str]
+        n_hoje  = int(df_hoje["id"].astype(str).nunique()) if not df_hoje.empty else 0
+        v_hoje  = float(df_hoje["valor"].sum()) if not df_hoje.empty else 0.0
+    else:
+        n_hoje = 0
+        v_hoje = 0.0
 
     # Mês / Histórico (clientes únicos via df)
     if df.empty:
@@ -94,9 +98,10 @@ def _render_historico(store):
 
     m1, m2, m3, _m4 = st.columns(4)
     _tooltip_dia = (
-        "Inclui pagamentos parciais (cliente continua com cobranças vencidas) "
-        "e regularizações totais. Difere do card 'regularizações' da Atividades, "
-        "que conta só quem quitou TUDO."
+        "Conta todos os pagamentos do dia (parciais e totais), incluindo "
+        "clientes que já saíram da inadimplência. Mesma fonte da tabela abaixo. "
+        "Difere do card 'regularizações' da Atividades, que conta só quem "
+        "quitou TUDO entre os ainda em cobrança."
     )
     for col, label, valor, qtd, tooltip in [
         (m1, "Pagamentos do Dia",   v_hoje,  n_hoje,  _tooltip_dia),
