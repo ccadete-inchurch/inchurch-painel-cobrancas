@@ -7,54 +7,6 @@ from pathlib import Path
 _pending_oauth: dict = {}
 
 
-# Feriados nacionais FIXOS (não dependem da Páscoa). Usados como fallback
-# quando BrasilAPI está fora. Móveis (Carnaval, Sexta-feira Santa, Corpus
-# Christi) ficam de fora — preferimos gerar lote num desses dias raros a
-# marcar dia normal como feriado por engano.
-_FERIADOS_FIXOS_MMDD = {
-    "01-01",  # Confraternização Universal
-    "21-04",  # Tiradentes
-    "01-05",  # Dia do Trabalho
-    "07-09",  # Independência
-    "12-10",  # Nossa Senhora Aparecida
-    "02-11",  # Finados
-    "15-11",  # Proclamação da República
-    "25-12",  # Natal
-}
-
-
-@st.cache_data(ttl=86400, show_spinner=False)
-def fetch_feriados_ano(ano: int) -> set:
-    """Set de feriados nacionais do ano (strings ISO YYYY-MM-DD).
-
-    Primária: BrasilAPI (https://brasilapi.com.br/api/feriados/v1/{ano}).
-    Fallback (timeout/erro): só feriados FIXOS. Cache TTL 24h.
-    """
-    try:
-        r = requests.get(
-            f"https://brasilapi.com.br/api/feriados/v1/{ano}",
-            timeout=5,
-        )
-        r.raise_for_status()
-        data = r.json()
-        return {f["date"] for f in data if "date" in f}
-    except Exception:
-        return {f"{ano}-{mmdd}" for mmdd in _FERIADOS_FIXOS_MMDD}
-
-
-def eh_feriado(d) -> bool:
-    """True se a data é feriado nacional. d: date | str ISO YYYY-MM-DD."""
-    if hasattr(d, "isoformat"):
-        d_str = d.isoformat()
-    else:
-        d_str = str(d)
-    try:
-        ano = int(d_str[:4])
-    except (ValueError, IndexError):
-        return False
-    return d_str in fetch_feriados_ano(ano)
-
-
 def precisa_processar_bq(store: dict) -> bool:
     """Decide se precisa rodar processar_dados_bigquery agora.
 
@@ -115,6 +67,55 @@ from google.cloud import bigquery
 from config import MAP_COB, MAP_INAD, DIAS_SEM_CONTATO
 from auth import get_store, current_nome
 from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel, fmt_tel_lista, hoje_lote
+
+
+# ── Feriados nacionais ────────────────────────────────────────────────────────
+# FIXOS (não dependem da Páscoa). Fallback quando BrasilAPI está fora.
+# Móveis (Carnaval, Sexta-feira Santa, Corpus Christi) ficam de fora —
+# preferimos gerar lote num desses dias raros a marcar dia normal como
+# feriado por engano.
+_FERIADOS_FIXOS_MMDD = {
+    "01-01",  # Confraternização Universal
+    "21-04",  # Tiradentes
+    "01-05",  # Dia do Trabalho
+    "07-09",  # Independência
+    "12-10",  # Nossa Senhora Aparecida
+    "02-11",  # Finados
+    "15-11",  # Proclamação da República
+    "25-12",  # Natal
+}
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_feriados_ano(ano: int) -> set:
+    """Set de feriados nacionais do ano (strings ISO YYYY-MM-DD).
+
+    Primária: BrasilAPI (https://brasilapi.com.br/api/feriados/v1/{ano}).
+    Fallback (timeout/erro): só feriados FIXOS. Cache TTL 24h.
+    """
+    try:
+        r = requests.get(
+            f"https://brasilapi.com.br/api/feriados/v1/{ano}",
+            timeout=5,
+        )
+        r.raise_for_status()
+        data = r.json()
+        return {f["date"] for f in data if "date" in f}
+    except Exception:
+        return {f"{ano}-{mmdd}" for mmdd in _FERIADOS_FIXOS_MMDD}
+
+
+def eh_feriado(d) -> bool:
+    """True se a data é feriado nacional. d: date | str ISO YYYY-MM-DD."""
+    if hasattr(d, "isoformat"):
+        d_str = d.isoformat()
+    else:
+        d_str = str(d)
+    try:
+        ano = int(d_str[:4])
+    except (ValueError, IndexError):
+        return False
+    return d_str in fetch_feriados_ano(ano)
 
 
 # ── Superlógica API ──────────────────────────────────────────────────────────
