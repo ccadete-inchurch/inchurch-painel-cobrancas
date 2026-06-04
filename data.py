@@ -2472,12 +2472,19 @@ def concluir_pendencia(cid: str):
 
 # ── Cache local ───────────────────────────────────────────────────────────────
 
+# Versão do schema/filtros dos dados em cache. Bump quando mudar query
+# do BQ (ex: filtro novo) — cache local com versão diferente é descartado,
+# forçando re-fetch fresh no próximo login.
+_CACHE_VERSION = 2  # v2: pagamentos filtrados por dt_liquidacao > dt_vencimento
+
+
 def salvar_cache_local():
     store      = get_store()
     cache_file = Path(__file__).parent / "cache_dados.json"
     try:
         with open(cache_file, "w", encoding="utf-8") as f:
             json.dump({
+                "_version":           _CACHE_VERSION,
                 "clientes":           store["clientes"],
                 "regularizados":      store["regularizados"],
                 "ultima_atualizacao": store["ultima_atualizacao"],
@@ -2495,6 +2502,10 @@ def carregar_cache_local():
     try:
         with open(cache_file, "r", encoding="utf-8") as f:
             data = json.load(f)
+        # Versão diferente = schema/filtros mudaram → descarta cache, force
+        # re-fetch via processar_dados_bigquery (store fica vazio).
+        if data.get("_version") != _CACHE_VERSION:
+            return None
         store                       = get_store()
         store["clientes"]           = data.get("clientes",           [])
         store["regularizados"]      = data.get("regularizados",      [])
