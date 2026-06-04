@@ -308,12 +308,21 @@ def aplicar_pagamentos_hoje_no_store():
                 except (TypeError, ValueError):
                     pass
 
-    # 2) Adicionar a regularizados — TODOS os pagamentos (parcial + total).
-    # Mantém consistência com o BQ histórico (que também não distingue).
-    # Dedup por (id, data): mesmo cliente pode ter pagamentos em dias
-    # diferentes (BQ traz com data de liquidação real, overlay adiciona com
-    # data de hoje — eventos distintos). 'hoje' = dia operacional do lote
-    # (vira 08:15 BRT), não meia-noite — alinhado com o resto do painel.
+    # 2) Adicionar a regularizados — TODOS os pagamentos (parcial + total)
+    # de clientes QUE ESTÃO OU ESTIVERAM inadimplentes recentemente.
+    #
+    # Filtro: só conta pagamentos de clientes em store['clientes'] (atual
+    # inadimplência) OU na união de snapshots do mês. Sem isso, clientes
+    # que pagam em dia (nunca foram inadimplentes) apareceriam na tela
+    # 'Pagamentos' — quebrando o conceito de 'pagamento em contexto de
+    # cobrança'. Espelha o filtro dt_liquidacao>dt_vencimento usado no BQ.
+    ids_atuais = {str(c.get("id") or "") for c in store["clientes"]}
+    try:
+        ids_recentes = fetch_inadimplentes_uniao_mes()
+    except Exception:
+        ids_recentes = set()
+    ids_inadimplencia_contexto = ids_atuais | ids_recentes
+
     hoje_br = _date.fromisoformat(_hoje_lote()).strftime("%d/%m/%Y")
     ids_existentes_hoje = {
         str(r.get("id") or "") for r in store["regularizados"]
@@ -321,6 +330,10 @@ def aplicar_pagamentos_hoje_no_store():
     }
     for cid, info in pagamentos.items():
         if cid in ids_existentes_hoje:
+            continue
+        # Skip: cliente nunca foi inadimplente no mês — pagamento normal,
+        # não pertence à tela de Pagamentos (que é de cobrança).
+        if cid not in ids_inadimplencia_contexto:
             continue
         cliente_match = next((c for c in store["clientes"] if str(c.get("id")) == cid), None)
         inativo = bool(cliente_match.get("_inativo")) if cliente_match else False
@@ -2475,7 +2488,7 @@ def concluir_pendencia(cid: str):
 # Versão do schema/filtros dos dados em cache. Bump quando mudar query
 # do BQ (ex: filtro novo) — cache local com versão diferente é descartado,
 # forçando re-fetch fresh no próximo login.
-_CACHE_VERSION = 2  # v2: pagamentos filtrados por dt_liquidacao > dt_vencimento
+_CACHE_VERSION = 3  # v3: overlay também filtra clientes em contexto de inadimplência
 
 
 def salvar_cache_local():
