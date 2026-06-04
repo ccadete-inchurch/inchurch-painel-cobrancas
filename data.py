@@ -308,20 +308,22 @@ def aplicar_pagamentos_hoje_no_store():
                 except (TypeError, ValueError):
                     pass
 
-    # 2) Adicionar a regularizados — TODOS os pagamentos (parcial + total)
-    # de clientes QUE ESTÃO OU ESTIVERAM inadimplentes recentemente.
+    # 2) Adicionar a regularizados — pagamentos de clientes inadimplentes
+    # (atuais OU em algum snapshot do mês). Em-dia normais ficam fora.
     #
-    # Filtro: só conta pagamentos de clientes em store['clientes'] (atual
-    # inadimplência) OU na união de snapshots do mês. Sem isso, clientes
-    # que pagam em dia (nunca foram inadimplentes) apareceriam na tela
-    # 'Pagamentos' — quebrando o conceito de 'pagamento em contexto de
-    # cobrança'. Espelha o filtro dt_liquidacao>dt_vencimento usado no BQ.
-    ids_atuais = {str(c.get("id") or "") for c in store["clientes"]}
-    try:
-        ids_recentes = fetch_inadimplentes_uniao_mes()
-    except Exception:
-        ids_recentes = set()
-    ids_inadimplencia_contexto = ids_atuais | ids_recentes
+    # Performance: contexto é computado 1x por sessão (cacheado em
+    # session_state). Sem isso, a cada render do app o set comprehension
+    # roda + fetch_inadimplentes_uniao_mes é consultado.
+    _CTX_KEY = "_ids_inadimplencia_contexto"
+    ids_inadimplencia_contexto = st.session_state.get(_CTX_KEY)
+    if ids_inadimplencia_contexto is None:
+        ids_atuais = {str(c.get("id") or "") for c in store["clientes"]}
+        try:
+            ids_recentes = fetch_inadimplentes_uniao_mes()
+        except Exception:
+            ids_recentes = set()
+        ids_inadimplencia_contexto = ids_atuais | ids_recentes
+        st.session_state[_CTX_KEY] = ids_inadimplencia_contexto
 
     hoje_br = _date.fromisoformat(_hoje_lote()).strftime("%d/%m/%Y")
     ids_existentes_hoje = {
