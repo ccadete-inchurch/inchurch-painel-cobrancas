@@ -915,6 +915,15 @@ def fetch_regularizados_mes_atual() -> set:
 
 @st.cache_data(ttl=3600)
 def fetch_cobrancas_liquidacao():
+    """Pagamentos com atraso (dt_liquidacao > dt_vencimento).
+
+    Filtro intencional pra alinhar com o conceito da tela 'Pagamentos':
+      - 'Pagamentos do dia'    = parciais + totais de inadimplentes
+      - 'Regularizados do dia' = subset (quem zerou TUDO via flag overlay)
+      - 'Pagamentos no mês'    = todos os pagamentos com atraso do mês
+
+    Pagamentos em dia (sem atraso) NÃO entram — não são contexto de cobrança.
+    """
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
@@ -929,6 +938,7 @@ def fetch_cobrancas_liquidacao():
     FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
     WHERE fl_status_recb = '1'
       AND dt_liquidacao_recb <= CURRENT_TIMESTAMP()
+      AND dt_liquidacao_recb > dt_vencimento_recb
     GROUP BY id_sacado_sac, id_recebimento_recb
     HAVING SUM(comp_valor) > 0
     ORDER BY MAX(dt_liquidacao_recb) DESC
