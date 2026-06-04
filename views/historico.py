@@ -119,16 +119,18 @@ def _render_historico(store):
         "Apenas clientes que quitaram TODAS as cobranças vencidas hoje. "
         "Linhas correspondentes na tabela abaixo recebem badge ✓ REGULARIZADO."
     )
+    # Conjugação correta: 3ª pessoa singular vs plural.
+    # 'pagou' → 'pagaram' (NÃO 'pagouram'). 'regularizou' → 'regularizaram'.
     cards = [
-        (m1, "Pagamentos do Dia",      v_hoje,  n_hoje,  "pagou", _tooltip_dia),
-        (m2, "Regularizados do Dia",   v_reg,   n_reg,   "regularizou", _tooltip_reg),
-        (m3, "Pagamentos no Mês",      v_mes,   n_mes,   "pagou", ""),
-        (m4, "Total Histórico",        v_total, n_total, "pagou", ""),
+        (m1, "Pagamentos do Dia",      v_hoje,  n_hoje,  ("pagou",       "pagaram"),       _tooltip_dia),
+        (m2, "Regularizados do Dia",   v_reg,   n_reg,   ("regularizou", "regularizaram"), _tooltip_reg),
+        (m3, "Pagamentos no Mês",      v_mes,   n_mes,   ("pagou",       "pagaram"),       ""),
+        (m4, "Total Histórico",        v_total, n_total, ("pagou",       "pagaram"),       ""),
     ]
-    for col, label, valor, qtd, verbo, tooltip in cards:
+    for col, label, valor, qtd, (verbo_sg, verbo_pl), tooltip in cards:
         with col:
-            verbo_plural = verbo + ("" if qtd == 1 else "ram")
-            sub = f'{qtd} {"cliente" if qtd == 1 else "clientes"} {verbo_plural}'
+            verbo = verbo_sg if qtd == 1 else verbo_pl
+            sub = f'{qtd} {"cliente" if qtd == 1 else "clientes"} {verbo}'
             title_attr = f' title="{tooltip}"' if tooltip else ""
             cursor = "help" if tooltip else "default"
             st.markdown(
