@@ -143,7 +143,10 @@ def _render_dashboard(store, clientes, role):
                 df = df[tem_acordo]
             elif filtro_acordo == "Sem acordo":
                 df = df[~tem_acordo]
-        if filtro_grupo != "Todos" and "_grupo" in df.columns:
+        if filtro_grupo == "Sem especialista" and "_grupo" in df.columns:
+            # Cliente sem grupo: None, '', '—' ou 'nan' (string)
+            df = df[df["_grupo"].fillna("").astype(str).isin(["", "—", "nan", "NaN"])]
+        elif filtro_grupo != "Todos" and "_grupo" in df.columns:
             df = df[df["_grupo"] == filtro_grupo]
         if filtro_situacao == "Ativos" and "_inativo" in df.columns:
             df = df[~df["_inativo"].fillna(False).astype(bool)]
@@ -451,11 +454,13 @@ def _render_dashboard(store, clientes, role):
                 # Grupo (igreja) com ícone — mesmo padrão dos cards de
                 # Atividades. Pra atendente só (admin já vê origem '• Ana').
                 grupo_html = ""
+                _g = c.get("_grupo") or ""
+                _g_display = _g if _g and _g not in ("nan", "NaN", "—") else "Sem especialista"
                 if role not in ("admin", "gestor") and c.get("_grupo"):
                     grupo_html = (
                         f'<div style="display:flex;align-items:center;gap:5px;'
                         f'margin-top:4px;font-size:11px;color:#9ca3af">'
-                        f'{_ICON_FIX_GROUP}<span>{c.get("_grupo", "—")}</span>'
+                        f'{_ICON_FIX_GROUP}<span>{_g_display}</span>'
                         f'</div>'
                     )
 
@@ -556,12 +561,27 @@ def _render_dashboard(store, clientes, role):
     # ── Filtros ───────────────────────────────────────────────────────────────
     pill_status = st.pills("Status", ["Todos", "Sem contato", "Contactado", "Prometeu pagar", "Negociando"], default="Todos", key="fpills")
 
-    grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
+    # 'nan' (string) cai aqui quando _grupo veio de pandas com NaN convertido
+    # via str() em algum ponto do pipeline. Trata junto com None, '—' e ''
+    # como ausência de grupo.
+    grupos_disp = sorted({
+        c.get("_grupo", "—") for c in clientes
+        if c.get("_grupo") and c.get("_grupo") not in ("—", "", "nan", "NaN")
+    })
+    # Tem cliente sem grupo? Adiciona opção 'Sem especialista' no filtro.
+    _tem_sem_grupo = any(
+        not c.get("_grupo") or c.get("_grupo") in ("—", "", "nan", "NaN")
+        for c in clientes
+    )
     fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.5, 1.6, 1.3, 1.4, 1.4, 1.3])
     with fc1:
         ordenar = st.selectbox("Ordenar por", list(SORT_MAP.keys()), key="fordenar")
     with fc2:
-        filtro_grupo = st.selectbox("Grupo", ["Todos"] + grupos_disp, key="fgrupo")
+        filtro_grupo = st.selectbox(
+            "Grupo",
+            ["Todos"] + grupos_disp + (["Sem especialista"] if _tem_sem_grupo else []),
+            key="fgrupo",
+        )
     with fc3:
         filtro_situacao = st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], key="fsituacao")
     with fc4:
@@ -720,7 +740,9 @@ def _render_dashboard(store, clientes, role):
                     )
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{tel_display}</div>', unsafe_allow_html=True)
             with rcols[6]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row.get("_grupo","—")}</div>', unsafe_allow_html=True)
+                _g_row = row.get("_grupo") or ""
+                _g_row_display = _g_row if _g_row and str(_g_row) not in ("nan", "NaN", "—") else "Sem especialista"
+                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{_g_row_display}</div>', unsafe_allow_html=True)
             with rcols[7]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
             if has_edit:

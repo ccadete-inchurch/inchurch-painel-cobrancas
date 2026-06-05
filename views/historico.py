@@ -48,7 +48,7 @@ def _render_historico(store):
         filtro_sit = st.selectbox("Situação", ["Todos", "Apenas ativos", "Apenas inativos"], key="reg_sit")
     with fa:
         filtro_atd = st.selectbox(
-            "Especialista",
+            "Grupo",
             ["Todos"] + atendentes_disp + (["Sem especialista"] if (not df.empty and (df["atendente"] == "—").any()) else []),
             key="reg_atd",
         )
