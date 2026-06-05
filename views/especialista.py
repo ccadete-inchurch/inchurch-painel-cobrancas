@@ -239,32 +239,59 @@ def _render_especialista(store, clientes, role):
     )
     st.altair_chart(chart_qtd, use_container_width=True)
 
-    # ── Gráfico 2: Valor recuperado por especialista ──────────────────────
+    # ── Gráfico 2: Eficácia do contato por especialista ───────────────────
+    # % de contatos que converteram em regularização total. Mede qualidade
+    # do trabalho (vs Pagamentos que mede volume). Valor recuperado já
+    # aparece no ranking abaixo — não duplica.
     st.markdown(
         '<div style="font-size:18px;font-weight:700;color:#e8eaf0;'
-        'margin-top:24px;margin-bottom:12px">Valor recuperado por especialista</div>',
+        'margin-top:24px;margin-bottom:4px">Eficácia do contato por especialista</div>'
+        '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
+        'Das vezes que o especialista agiu (msg/ligação), % que converteu em regularização total.'
+        '</div>',
         unsafe_allow_html=True,
     )
-    chart_val = (
-        alt.Chart(agg_esp.sort_values("valor", ascending=False))
+    df_per["reg_via_contato_tmp"] = (
+        df_per["eh_regularizacao"].astype(bool)
+        & (df_per["tipo_atribuicao"] == "via_contato")
+    )
+    eficacia_esp = (
+        df_per.groupby("atendente")
+        .agg(
+            via_contato=("tipo_atribuicao", lambda s: int((s == "via_contato").sum())),
+            reg_via_contato=("reg_via_contato_tmp", lambda s: int(s.sum())),
+        )
+        .reset_index()
+    )
+    eficacia_esp["eficacia"] = (
+        eficacia_esp["reg_via_contato"] / eficacia_esp["via_contato"].replace(0, pd.NA) * 100
+    ).fillna(0).round(0).astype(int)
+    # Faixas de cor (verde >= 80, âmbar 50-79, vermelho < 50)
+    chart_ef = (
+        alt.Chart(eficacia_esp.sort_values("eficacia", ascending=False))
         .mark_bar(cornerRadiusEnd=4)
         .encode(
-            x=alt.X("valor:Q", title="R$ recuperado"),
+            x=alt.X("eficacia:Q", title="Eficácia (%)", scale=alt.Scale(domain=[0, 100])),
             y=alt.Y("atendente:N", title=None, sort="-x"),
             color=alt.Color(
-                "atendente:N",
-                scale=alt.Scale(range=_CHART_PALETTE),
+                "eficacia:Q",
+                scale=alt.Scale(
+                    domain=[0, 50, 80, 100],
+                    range=["#ef4444", "#ef4444", "#f59e0b", "#22c55e"],
+                ),
                 legend=None,
             ),
             tooltip=[
                 alt.Tooltip("atendente:N", title="Especialista"),
-                alt.Tooltip("valor:Q", title="Valor", format=",.2f"),
-                alt.Tooltip("pagamentos:Q", title="Pagamentos"),
+                alt.Tooltip("eficacia:Q", title="Eficácia", format=".0f"),
+                alt.Tooltip("via_contato:Q", title="Contatos"),
+                alt.Tooltip("reg_via_contato:Q", title="Regularizações via contato"),
             ],
         )
-        .properties(height=max(150, 40 * len(agg_esp)))
+        .properties(height=max(150, 40 * len(eficacia_esp)))
     )
-    st.altair_chart(chart_val, use_container_width=True)
+    st.altair_chart(chart_ef, use_container_width=True)
+    df_per = df_per.drop(columns=["reg_via_contato_tmp"], errors="ignore")
 
     # ── Gráfico 3: Total de pagamentos por dia (barras empilhadas) ───────
     # Barras empilhadas: altura = total diário, segmentos = atendentes.
