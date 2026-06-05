@@ -6,7 +6,7 @@ import streamlit as st
 
 from auth import current_role
 from data import _EMAIL_GRUPO
-from helpers import fmt_moeda_plain
+from helpers import fmt_moeda_plain, get_effective_atendente
 
 
 # Paleta inChurch (verde + complementares acessíveis em fundo escuro)
@@ -22,10 +22,28 @@ _CHART_PALETTE = [
 ]
 
 
-def _norm_atendente(s: str) -> str:
-    """Padroniza nomes — vazio/'—' viram 'Sem especialista'."""
+def _norm_atendente_raw(s: str) -> str:
+    """Padroniza só strings — vazio/'—' viram 'Sem especialista'."""
     s = str(s or "").strip()
     return s if s and s not in ("—", "nan", "NaN", "Sistema (BigQuery)") else "Sem especialista"
+
+
+def _resolve_atendente(row) -> str:
+    """Resolve o especialista efetivo de um pagamento.
+
+    Pagamentos do BQ histórico vêm marcados 'Sistema (BigQuery)' — não
+    rastreamos qual atendente causou aquela regularização específica.
+    Pra dar atribuição útil, busca o especialista atual do cliente via
+    get_effective_atendente (que usa splgc-grupo ou painel_tarefas).
+
+    Trade-off: se cliente trocou de especialista entre o pagamento e
+    agora (raro), atribuição reflete o atual, não o histórico.
+    """
+    at = str(row.get("atendente") or "").strip()
+    if at and "BigQuery" not in at and at not in ("—", "nan", "NaN"):
+        return at
+    effective = get_effective_atendente(str(row.get("id") or "")) or ""
+    return _norm_atendente_raw(effective)
 
 
 def _altair_theme():
@@ -78,8 +96,9 @@ def _render_especialista(store, clientes, role):
         st.info("Sem dados de pagamentos pra analisar.")
         return
 
-    # Normaliza colunas necessárias
-    df_reg["atendente"] = df_reg["atendente"].apply(_norm_atendente)
+    # Resolve atendente efetivo — pagamentos do BQ histórico não têm o nome
+    # do especialista; busca via get_effective_atendente (grupo splgc atual).
+    df_reg["atendente"] = df_reg.apply(_resolve_atendente, axis=1)
     df_reg["valor"] = pd.to_numeric(df_reg["valor"], errors="coerce").fillna(0.0)
     df_reg["data_dt"] = pd.to_datetime(df_reg["data"], format="%d/%m/%Y", errors="coerce")
     df_reg = df_reg.dropna(subset=["data_dt"])
@@ -272,7 +291,7 @@ def _render_especialista(store, clientes, role):
         unsafe_allow_html=True,
     )
     carteira = pd.DataFrame([
-        {"atendente": _norm_atendente(c.get("_grupo")), "valor": float(c.get("valor") or 0)}
+        {"atendente": _norm_atendente_raw(c.get("_grupo")), "valor": float(c.get("valor") or 0)}
         for c in clientes
     ])
     if not carteira.empty:
@@ -311,7 +330,7 @@ def _render_especialista(store, clientes, role):
     )
     # Junta pagamentos do período com carteira atual
     carteira_count = (
-        pd.DataFrame([{"atendente": _norm_atendente(c.get("_grupo"))} for c in clientes])
+        pd.DataFrame([{"atendente": _norm_atendente_raw(c.get("_grupo"))} for c in clientes])
         .groupby("atendente").size().reset_index(name="carteira_atual")
         if clientes else pd.DataFrame(columns=["atendente", "carteira_atual"])
     )
