@@ -138,19 +138,42 @@ def _render_especialista(store, clientes, role):
         dt_inicio = df_reg["data_dt"].min().date()
         dt_fim = hoje
 
-    df_per = df_reg[
+    # df_per_all: filtrado SÓ por período (usado pra média da equipe — não
+    # muda quando user filtra por especialista específico)
+    df_per_all = df_reg[
         (df_reg["data_dt"].dt.date >= dt_inicio)
         & (df_reg["data_dt"].dt.date <= dt_fim)
-    ].copy()
+    ]
+    # df_per: filtrado também por especialista (usado nos cards de total)
+    df_per = df_per_all.copy()
     if filtro_esp != "Todos":
         df_per = df_per[df_per["atendente"] == filtro_esp]
 
     # ── Cards agregados ───────────────────────────────────────────────────
     total_reg = int(df_per["id"].astype(str).nunique()) if not df_per.empty else 0
     total_valor = float(df_per["valor"].sum()) if not df_per.empty else 0.0
-    especialistas_ativos = int(df_per["atendente"].nunique()) if not df_per.empty else 0
-    media_por_esp = (total_reg / especialistas_ativos) if especialistas_ativos else 0
-    media_valor = (total_valor / especialistas_ativos) if especialistas_ativos else 0
+
+    # Média da EQUIPE (sempre baseada em df_per_all — independente do filtro
+    # de especialista). Quando user filtra por 1 atendente, pode comparar o
+    # total dele com a média da equipe.
+    team_especialistas = int(df_per_all["atendente"].nunique()) if not df_per_all.empty else 0
+    team_total_reg = int(df_per_all["id"].astype(str).nunique()) if not df_per_all.empty else 0
+    team_total_valor = float(df_per_all["valor"].sum()) if not df_per_all.empty else 0.0
+    media_por_esp = (team_total_reg / team_especialistas) if team_especialistas else 0
+    media_valor = (team_total_valor / team_especialistas) if team_especialistas else 0
+
+    # Sub-texto contextual no 'Pagamentos' — se filtrando por 1 especialista,
+    # mostra comparativo com a média da equipe.
+    if filtro_esp != "Todos" and team_especialistas:
+        diff_pct = ((total_reg - media_por_esp) / media_por_esp * 100) if media_por_esp else 0
+        sinal = "+" if diff_pct >= 0 else ""
+        cor_diff = "#22c55e" if diff_pct >= 0 else "#ef4444"
+        sub_pag = (
+            f'<span style="color:{cor_diff};font-weight:600">{sinal}{diff_pct:.0f}%</span> '
+            f'<span style="color:#8b94a5">vs média</span>'
+        )
+    else:
+        sub_pag = "no período"
 
     c1, c2, c3, c4 = st.columns(4)
     _card_fmt = lambda label, valor, sub, cor: (
@@ -162,7 +185,7 @@ def _render_especialista(store, clientes, role):
     )
     with c1:
         st.markdown(
-            _card_fmt("Pagamentos", f"{total_reg:,}", "no período", "#e8eaf0"),
+            _card_fmt("Pagamentos", f"{total_reg:,}", sub_pag, "#e8eaf0"),
             unsafe_allow_html=True,
         )
     with c2:
@@ -172,14 +195,14 @@ def _render_especialista(store, clientes, role):
         )
     with c3:
         st.markdown(
-            _card_fmt("Especialistas Ativos", str(especialistas_ativos),
+            _card_fmt("Especialistas Ativos", str(team_especialistas),
                       f"de {len(_EMAIL_GRUPO)} no time", "#5fa3ff"),
             unsafe_allow_html=True,
         )
     with c4:
         st.markdown(
-            _card_fmt("Média/Especialista", f"{media_por_esp:.1f}",
-                      f"≈ {fmt_moeda_plain(media_valor)}", "#a78bfa"),
+            _card_fmt("Média da Equipe", f"{media_por_esp:.1f}",
+                      f"≈ {fmt_moeda_plain(media_valor)} por especialista", "#a78bfa"),
             unsafe_allow_html=True,
         )
 
