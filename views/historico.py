@@ -99,18 +99,16 @@ def _render_historico(store):
         if str(c.get("id") or "") in ids_reg_hoje
     )
 
-    # Mês / Histórico (clientes únicos via df)
+    # Mês (clientes únicos via df). Total histórico removido (não acionável).
     if df.empty:
-        n_mes = n_total = 0
-        v_mes = v_total = 0.0
+        n_mes = 0
+        v_mes = 0.0
     else:
         df_mes = df[df["data"].astype(str).str.endswith(sufixo_mes, na=False)]
-        n_mes   = int(df_mes["id"].astype(str).nunique()) if not df_mes.empty else 0
-        v_mes   = float(df_mes["valor"].sum()) if not df_mes.empty else 0.0
-        n_total = int(df["id"].astype(str).nunique())
-        v_total = float(df["valor"].sum())
+        n_mes  = int(df_mes["id"].astype(str).nunique()) if not df_mes.empty else 0
+        v_mes  = float(df_mes["valor"].sum()) if not df_mes.empty else 0.0
 
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m2, m3 = st.columns(3)
     _tooltip_dia = (
         "Conta todos os pagamentos do dia (parciais e totais), incluindo "
         "clientes que já saíram da inadimplência. Mesma fonte da tabela abaixo."
@@ -119,13 +117,16 @@ def _render_historico(store):
         "Apenas clientes que quitaram TODAS as cobranças vencidas hoje. "
         "Linhas correspondentes na tabela abaixo recebem badge ✓ REGULARIZADO."
     )
+    _tooltip_mes = (
+        "Soma de pagamentos atrasados do mês — parciais + regularizações. "
+        "Aproxima o valor recuperado pela operação."
+    )
     # Conjugação correta: 3ª pessoa singular vs plural.
     # 'pagou' → 'pagaram' (NÃO 'pagouram'). 'regularizou' → 'regularizaram'.
     cards = [
         (m1, "Pagamentos do Dia",      v_hoje,  n_hoje,  ("pagou",       "pagaram"),       _tooltip_dia),
         (m2, "Regularizados do Dia",   v_reg,   n_reg,   ("regularizou", "regularizaram"), _tooltip_reg),
-        (m3, "Pagamentos no Mês",      v_mes,   n_mes,   ("pagou",       "pagaram"),       ""),
-        (m4, "Total Histórico",        v_total, n_total, ("pagou",       "pagaram"),       ""),
+        (m3, "Pagamentos no Mês",      v_mes,   n_mes,   ("pagou",       "pagaram"),       _tooltip_mes),
     ]
     for col, label, valor, qtd, (verbo_sg, verbo_pl), tooltip in cards:
         with col:
