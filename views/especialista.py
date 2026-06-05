@@ -122,7 +122,6 @@ def _render_especialista(store, clientes, role):
         especialistas_disp = sorted(
             set(df_reg["atendente"].unique())
             | set(_EMAIL_GRUPO.values())
-            | {"Sem contato registrado"}
         )
         filtro_esp = st.selectbox(
             "Especialista",

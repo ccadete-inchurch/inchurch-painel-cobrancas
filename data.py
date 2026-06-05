@@ -931,16 +931,20 @@ def fetch_regularizados_mes_atual() -> set:
 @st.cache_data(ttl=1800)
 def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
     """Pagamentos com atraso no período, agrupados POR CLIENTE+DIA, com:
-      - atendente_credito: último especialista com contato efetivo antes do pgto
-      - eh_regularizacao: cliente NÃO está mais inadimplente hoje (snapshot atual)
+      - atendente_credito: HÍBRIDO em ordem de prioridade:
+          1. Último especialista com contato efetivo antes do pgto (msg/lig)
+          2. Grupo atual do cliente no splgc-grupo (Ana/Priscila)
+          3. 'Sem especialista' (raro — cliente sem grupo nenhum)
+      - eh_regularizacao: cliente NÃO está mais inadimplente hoje
       - eh_parcial: cliente AINDA está inadimplente hoje
 
-    Definição operacional de regularização: comparada com o snapshot mais
-    recente. Quem pagou em junho mas voltou a ser inadimplente (parcela nova
-    venceu) conta como 'parcial' — reflete a realidade hoje, não o evento.
+    A lógica híbrida elimina a categoria 'Sem contato registrado' que era
+    confusa — todo cliente faz parte de algum grupo, então o crédito vai
+    pra quem é dono dele se não houve contato registrado.
 
-    'Sem contato registrado' = cliente pagou sem contato via painel
-    (pagamento espontâneo, ou contato fora da operação).
+    Trade-off: pagamento espontâneo de cliente da Ana credita a Ana mesmo
+    que ela não tenha feito nada. Aceito porque ela tem a 'responsabilidade'
+    daquele cliente.
 
     Retorna DataFrame com:
       id_sacado_sac, dt_pagamento, valor, atendente_credito,
@@ -952,8 +956,6 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataF
     try:
         df = client.query(f"""
             WITH liq AS (
-                -- Agrupa por cliente+dia (não por cobrança individual).
-                -- 1 pagamento = 1 cliente fez 1+ pagamentos atrasados num dia.
                 SELECT
                     CAST(id_sacado_sac AS STRING) AS id_sacado_sac,
                     DATE(dt_liquidacao_recb) AS dt_pagamento,
@@ -976,8 +978,16 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataF
                        OR ligacao_atendida = TRUE
                 )
             ),
+            grupos AS (
+                -- Grupo atual do cliente (Ana/Priscila). Fallback se sem contato.
+                SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(grupo) AS grupo
+                FROM `business-intelligence-467516.Splgc.splgc-grupo`
+                WHERE grupo IN (
+                    'Ana Carolina', 'Priscila Oliveira'
+                )
+                GROUP BY id_sacado_sac
+            ),
             inad_hoje AS (
-                -- Quem está inadimplente no snapshot mais recente
                 SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
                 FROM `{_SNAPSHOT_TABLE}`
                 WHERE data_snapshot = (
@@ -988,15 +998,17 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataF
                 liq.id_sacado_sac,
                 liq.dt_pagamento,
                 liq.valor,
-                COALESCE(c.atendente, 'Sem contato registrado') AS atendente_credito,
-                -- Regularizou = NÃO está mais inadimplente HOJE
+                -- Híbrido: contato efetivo > grupo atual > 'Sem especialista'
+                COALESCE(c.atendente, g.grupo, 'Sem especialista') AS atendente_credito,
                 (i.cid IS NULL) AS eh_regularizacao,
                 (i.cid IS NOT NULL) AS eh_parcial
             FROM liq
             LEFT JOIN contatos c
-              ON liq.id_sacado_sac = c.cid
+              ON c.cid = liq.id_sacado_sac
               AND c.data_tarefa <= liq.dt_pagamento
               AND c.rn = 1
+            LEFT JOIN grupos g
+              ON g.cid = liq.id_sacado_sac
             LEFT JOIN inad_hoje i
               ON i.cid = liq.id_sacado_sac
         """).to_dataframe()
