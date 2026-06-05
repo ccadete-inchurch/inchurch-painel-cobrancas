@@ -345,17 +345,21 @@ def _render_especialista(store, clientes, role):
         'margin-top:32px;margin-bottom:12px">Ranking detalhado</div>',
         unsafe_allow_html=True,
     )
-    # Agregado por especialista — pagamentos, regularizações, parciais, valor
+    # Agregado por especialista — pagamentos, regularizações, parciais, valor,
+    # e contagem via contato direto vs espontâneo (via grupo).
     rank_agg = (
         df_per.groupby("atendente")
         .agg(
             pagamentos=("id", "nunique"),
             regularizacoes=("eh_regularizacao", lambda s: int(s.sum())),
             parciais=("eh_parcial", lambda s: int(s.sum())),
+            via_contato=("tipo_atribuicao", lambda s: int((s == "via_contato").sum())),
             valor=("valor", "sum"),
         )
         .reset_index()
     )
+    rank_agg["espontaneos"] = rank_agg["pagamentos"] - rank_agg["via_contato"]
+    rank_agg["pct_contato"] = (rank_agg["via_contato"] / rank_agg["pagamentos"] * 100).round(0).astype(int)
     # Junta com carteira atual
     carteira_count = (
         pd.DataFrame([{"atendente": _norm_atendente_raw(c.get("_grupo"))} for c in clientes])
@@ -369,13 +373,25 @@ def _render_especialista(store, clientes, role):
     ranking["rank"] = ranking.index + 1
     ranking["valor_fmt"] = ranking["valor"].apply(fmt_moeda_plain)
 
-    # Headers — 7 colunas
-    _col_widths = [0.4, 2.5, 1.1, 1.3, 1.0, 1.6, 1.2]
+    # Headers — 8 colunas (Pag. quebrado em Contato/Espontâneo)
+    _col_widths = [0.4, 2.3, 0.9, 1.3, 1.3, 0.9, 1.4, 1.1]
     hdr_cols = st.columns(_col_widths)
-    for col, h in zip(hdr_cols, ["#", "Especialista", "Pag.", "Reg.", "Parc.", "Valor Recuperado", "Carteira"]):
+    _hdr_labels = [
+        ("#", ""),
+        ("Especialista", ""),
+        ("Pag.", "Pagamentos totais (clientes únicos)"),
+        ("Contato ●", "Pagamentos com contato registrado antes (msg ou ligação)"),
+        ("Espontâneo ○", "Pagamentos sem contato — atribuído por grupo"),
+        ("Reg.", "Clientes que NÃO estão mais inadimplentes hoje"),
+        ("Valor Recuperado", ""),
+        ("Carteira", "Clientes inadimplentes hoje sob esse especialista"),
+    ]
+    for col, (h, tip) in zip(hdr_cols, _hdr_labels):
+        title_attr = f' title="{tip}"' if tip else ""
+        cursor = "help" if tip else "default"
         col.markdown(
-            f'<div style="padding:8px 0;font-size:11px;text-transform:uppercase;'
-            f'letter-spacing:1px;color:#8b94a5;font-weight:700">{h}</div>',
+            f'<div{title_attr} style="cursor:{cursor};padding:8px 0;font-size:11px;'
+            f'text-transform:uppercase;letter-spacing:1px;color:#8b94a5;font-weight:700">{h}</div>',
             unsafe_allow_html=True,
         )
 
@@ -391,22 +407,27 @@ def _render_especialista(store, clientes, role):
             unsafe_allow_html=True,
         )
         rcols[2].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0">{row["pagamentos"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{row["pagamentos"]}</div>',
             unsafe_allow_html=True,
         )
         rcols[3].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:#7cc243;font-weight:600">'
+            f'{row["via_contato"]} <span style="color:#6b7280;font-size:11px;font-weight:400">({row["pct_contato"]}%)</span></div>',
             unsafe_allow_html=True,
         )
         rcols[4].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#f59e0b">{row["parciais"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["espontaneos"]}</div>',
             unsafe_allow_html=True,
         )
         rcols[5].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
             unsafe_allow_html=True,
         )
         rcols[6].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
+            unsafe_allow_html=True,
+        )
+        rcols[7].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["carteira_atual"]}</div>',
             unsafe_allow_html=True,
         )

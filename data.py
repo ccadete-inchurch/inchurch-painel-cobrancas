@@ -1000,6 +1000,12 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataF
                 liq.valor,
                 -- Híbrido: contato efetivo > grupo atual > 'Sem especialista'
                 COALESCE(c.atendente, g.grupo, 'Sem especialista') AS atendente_credito,
+                -- Transparência: como esse crédito foi atribuído?
+                CASE
+                  WHEN c.atendente IS NOT NULL THEN 'via_contato'
+                  WHEN g.grupo IS NOT NULL THEN 'via_grupo'
+                  ELSE 'sem_atribuicao'
+                END AS tipo_atribuicao,
                 (i.cid IS NULL) AS eh_regularizacao,
                 (i.cid IS NOT NULL) AS eh_parcial
             FROM liq
