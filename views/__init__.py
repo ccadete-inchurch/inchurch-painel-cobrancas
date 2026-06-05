@@ -8,3 +8,4 @@ from views.historico import _render_historico
 from views.cliente   import _render_cliente
 from views.proximas   import _render_proximas
 from views.atividades import _render_atividades
+from views.especialista import _render_especialista

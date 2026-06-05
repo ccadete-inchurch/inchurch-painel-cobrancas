@@ -1,7 +1,7 @@
 import streamlit as st
 
 from config import LOGO_SRC
-from auth import is_logged
+from auth import is_logged, current_role
 
 
 def render_sidebar():
@@ -56,6 +56,9 @@ def render_sidebar():
     nav_item("Pagamentos",         "historico")
     nav_item("Próximas Cobranças", "proximas")
     nav_item("Cliente",            "cliente")
+    # Especialista: análise por atendente (gráficos) — admin/gestor only
+    if current_role() in ("admin", "gestor"):
+        nav_item("Especialista",   "especialista")
 
     # Spacer pra não esconder último nav atrás do botão Sair (fixed bottom)
     st.sidebar.markdown('<div style="height:70px"></div>', unsafe_allow_html=True)
