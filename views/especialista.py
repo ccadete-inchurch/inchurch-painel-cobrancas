@@ -139,22 +139,20 @@ def _render_especialista(store, clientes, role):
         df_per = df_per[df_per["atendente"] == filtro_esp]
 
     # ── Cards agregados ───────────────────────────────────────────────────
-    total_reg = int(df_per["id"].astype(str).nunique()) if not df_per.empty else 0
+    total_pgto = int(df_per["id"].astype(str).nunique()) if not df_per.empty else 0
     total_valor = float(df_per["valor"].sum()) if not df_per.empty else 0.0
-
-    # Média da EQUIPE (sempre baseada em df_per_all — independente do filtro
-    # de especialista). Quando user filtra por 1 atendente, pode comparar o
-    # total dele com a média da equipe.
-    team_especialistas = int(df_per_all["atendente"].nunique()) if not df_per_all.empty else 0
-    team_total_reg = int(df_per_all["id"].astype(str).nunique()) if not df_per_all.empty else 0
-    team_total_valor = float(df_per_all["valor"].sum()) if not df_per_all.empty else 0.0
-    media_por_esp = (team_total_reg / team_especialistas) if team_especialistas else 0
-    media_valor = (team_total_valor / team_especialistas) if team_especialistas else 0
+    total_reg = int(df_per[df_per["eh_regularizacao"]]["id"].astype(str).nunique()) if not df_per.empty else 0
+    total_parc = int(df_per[df_per["eh_parcial"]]["id"].astype(str).nunique()) if not df_per.empty else 0
+    inadimplentes_atual = len(clientes)
+    taxa_reg = (total_reg / total_pgto * 100) if total_pgto else 0
 
     # Sub-texto contextual no 'Pagamentos' — se filtrando por 1 especialista,
     # mostra comparativo com a média da equipe.
+    team_especialistas = int(df_per_all["atendente"].nunique()) if not df_per_all.empty else 0
+    team_total_pgto = int(df_per_all["id"].astype(str).nunique()) if not df_per_all.empty else 0
+    media_por_esp = (team_total_pgto / team_especialistas) if team_especialistas else 0
     if filtro_esp != "Todos" and team_especialistas:
-        diff_pct = ((total_reg - media_por_esp) / media_por_esp * 100) if media_por_esp else 0
+        diff_pct = ((total_pgto - media_por_esp) / media_por_esp * 100) if media_por_esp else 0
         sinal = "+" if diff_pct >= 0 else ""
         cor_diff = "#22c55e" if diff_pct >= 0 else "#ef4444"
         sub_pag = (
@@ -164,34 +162,40 @@ def _render_especialista(store, clientes, role):
     else:
         sub_pag = "no período"
 
-    c1, c2, c3, c4 = st.columns(4)
+    # 5 cards em uma linha
+    c1, c2, c3, c4, c5 = st.columns(5)
     _card_fmt = lambda label, valor, sub, cor: (
         f'<div class="metric-card" style="min-height:140px;padding:18px 16px">'
         f'<div class="metric-label" style="font-size:11px">{label}</div>'
-        f'<div class="metric-value" style="color:{cor};font-size:34px;margin-top:4px">{valor}</div>'
+        f'<div class="metric-value" style="color:{cor};font-size:30px;margin-top:4px">{valor}</div>'
         f'<div class="metric-sub" style="font-size:12px;margin-top:6px">{sub}</div>'
         f'</div>'
     )
     with c1:
         st.markdown(
-            _card_fmt("Pagamentos", f"{total_reg:,}", sub_pag, "#e8eaf0"),
+            _card_fmt("Inadimplentes Atual", f"{inadimplentes_atual:,}", "carteira hoje", "#ef4444"),
             unsafe_allow_html=True,
         )
     with c2:
         st.markdown(
-            _card_fmt("Valor Recuperado", fmt_moeda_plain(total_valor), "no período", "#22c55e"),
+            _card_fmt("Pagamentos", f"{total_pgto:,}", sub_pag, "#e8eaf0"),
             unsafe_allow_html=True,
         )
     with c3:
         st.markdown(
-            _card_fmt("Especialistas Ativos", str(team_especialistas),
-                      f"de {len(_EMAIL_GRUPO)} no time", "#5fa3ff"),
+            _card_fmt("Regularizações", f"{total_reg:,}",
+                      f"{taxa_reg:.0f}% dos pagamentos", "#22c55e"),
             unsafe_allow_html=True,
         )
     with c4:
         st.markdown(
-            _card_fmt("Média da Equipe", f"{media_por_esp:.1f}",
-                      f"≈ {fmt_moeda_plain(media_valor)} por especialista", "#a78bfa"),
+            _card_fmt("Parciais", f"{total_parc:,}",
+                      "ainda devem algo", "#f59e0b"),
+            unsafe_allow_html=True,
+        )
+    with c5:
+        st.markdown(
+            _card_fmt("Valor Recuperado", fmt_moeda_plain(total_valor), "no período", "#5fa3ff"),
             unsafe_allow_html=True,
         )
 
@@ -342,22 +346,34 @@ def _render_especialista(store, clientes, role):
         'margin-top:32px;margin-bottom:12px">Ranking detalhado</div>',
         unsafe_allow_html=True,
     )
-    # Junta pagamentos do período com carteira atual
+    # Agregado por especialista — pagamentos, regularizações, parciais, valor
+    rank_agg = (
+        df_per.groupby("atendente")
+        .agg(
+            pagamentos=("id", "nunique"),
+            regularizacoes=("eh_regularizacao", lambda s: int(s.sum())),
+            parciais=("eh_parcial", lambda s: int(s.sum())),
+            valor=("valor", "sum"),
+        )
+        .reset_index()
+    )
+    # Junta com carteira atual
     carteira_count = (
         pd.DataFrame([{"atendente": _norm_atendente_raw(c.get("_grupo"))} for c in clientes])
         .groupby("atendente").size().reset_index(name="carteira_atual")
         if clientes else pd.DataFrame(columns=["atendente", "carteira_atual"])
     )
-    ranking = agg_esp.merge(carteira_count, on="atendente", how="outer").fillna(0)
-    ranking["pagamentos"] = ranking["pagamentos"].astype(int)
-    ranking["carteira_atual"] = ranking["carteira_atual"].astype(int)
-    ranking = ranking.sort_values("pagamentos", ascending=False).reset_index(drop=True)
+    ranking = rank_agg.merge(carteira_count, on="atendente", how="outer").fillna(0)
+    for col in ("pagamentos", "regularizacoes", "parciais", "carteira_atual"):
+        ranking[col] = ranking[col].astype(int)
+    ranking = ranking.sort_values("regularizacoes", ascending=False).reset_index(drop=True)
     ranking["rank"] = ranking.index + 1
     ranking["valor_fmt"] = ranking["valor"].apply(fmt_moeda_plain)
 
-    # Headers
-    hdr_cols = st.columns([0.5, 3, 1.5, 2, 1.5])
-    for col, h in zip(hdr_cols, ["#", "Especialista", "Pagamentos", "Valor Recuperado", "Carteira Atual"]):
+    # Headers — 7 colunas
+    _col_widths = [0.4, 2.5, 1.1, 1.3, 1.0, 1.6, 1.2]
+    hdr_cols = st.columns(_col_widths)
+    for col, h in zip(hdr_cols, ["#", "Especialista", "Pag.", "Reg.", "Parc.", "Valor Recuperado", "Carteira"]):
         col.markdown(
             f'<div style="padding:8px 0;font-size:11px;text-transform:uppercase;'
             f'letter-spacing:1px;color:#8b94a5;font-weight:700">{h}</div>',
@@ -365,7 +381,7 @@ def _render_especialista(store, clientes, role):
         )
 
     for _, row in ranking.iterrows():
-        rcols = st.columns([0.5, 3, 1.5, 2, 1.5])
+        rcols = st.columns(_col_widths)
         medalha = {1: "🥇", 2: "🥈", 3: "🥉"}.get(row["rank"], f"{row['rank']}")
         rcols[0].markdown(
             f'<div style="padding:10px 0;font-size:18px">{medalha}</div>',
@@ -380,10 +396,18 @@ def _render_especialista(store, clientes, role):
             unsafe_allow_html=True,
         )
         rcols[3].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["valor_fmt"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
             unsafe_allow_html=True,
         )
         rcols[4].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#f59e0b">{row["parciais"]}</div>',
+            unsafe_allow_html=True,
+        )
+        rcols[5].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
+            unsafe_allow_html=True,
+        )
+        rcols[6].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["carteira_atual"]}</div>',
             unsafe_allow_html=True,
         )

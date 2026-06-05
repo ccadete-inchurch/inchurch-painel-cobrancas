@@ -930,19 +930,21 @@ def fetch_regularizados_mes_atual() -> set:
 
 @st.cache_data(ttl=1800)
 def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
-    """Pagamentos com atraso no período, atribuídos ao ÚLTIMO especialista que
-    teve contato efetivo (mensagem enviada OU ligação feita OU atendida) antes
-    da liquidação.
+    """Pagamentos com atraso no período, agrupados POR CLIENTE+DIA, com:
+      - atendente_credito: último especialista com contato efetivo antes do pgto
+      - eh_regularizacao: cliente NÃO está mais inadimplente hoje (snapshot atual)
+      - eh_parcial: cliente AINDA está inadimplente hoje
 
-    Diferente de 'grupo atual' (que credita o atendente atribuído hoje), aqui
-    o crédito vai pra quem fez o contato que precedeu o pagamento — métrica
-    mais justa de 'quem causou a regularização'.
+    Definição operacional de regularização: comparada com o snapshot mais
+    recente. Quem pagou em junho mas voltou a ser inadimplente (parcela nova
+    venceu) conta como 'parcial' — reflete a realidade hoje, não o evento.
 
-    'Sem contato registrado' aparece quando o cliente pagou sem nenhum contato
-    via painel (pagamento espontâneo, ou contato fora da operação).
+    'Sem contato registrado' = cliente pagou sem contato via painel
+    (pagamento espontâneo, ou contato fora da operação).
 
     Retorna DataFrame com:
-      id_sacado_sac, dt_pagamento, valor, atendente_credito, dias_desde_contato
+      id_sacado_sac, dt_pagamento, valor, atendente_credito,
+      eh_regularizacao (bool), eh_parcial (bool)
     """
     client = get_bq_client()
     if not client:
@@ -950,9 +952,10 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataF
     try:
         df = client.query(f"""
             WITH liq AS (
+                -- Agrupa por cliente+dia (não por cobrança individual).
+                -- 1 pagamento = 1 cliente fez 1+ pagamentos atrasados num dia.
                 SELECT
                     CAST(id_sacado_sac AS STRING) AS id_sacado_sac,
-                    id_recebimento_recb,
                     DATE(dt_liquidacao_recb) AS dt_pagamento,
                     SUM(comp_valor) AS valor
                 FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
@@ -960,7 +963,7 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataF
                   AND dt_liquidacao_recb > dt_vencimento_recb
                   AND DATE(dt_liquidacao_recb) >= DATE('{dt_inicio_iso}')
                   AND DATE(dt_liquidacao_recb) <= DATE('{dt_fim_iso}')
-                GROUP BY id_sacado_sac, id_recebimento_recb, dt_pagamento
+                GROUP BY id_sacado_sac, dt_pagamento
             ),
             contatos AS (
                 SELECT cid, atendente, data_tarefa,
@@ -972,18 +975,30 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataF
                        OR ligacao_feita = TRUE
                        OR ligacao_atendida = TRUE
                 )
+            ),
+            inad_hoje AS (
+                -- Quem está inadimplente no snapshot mais recente
+                SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
+                FROM `{_SNAPSHOT_TABLE}`
+                WHERE data_snapshot = (
+                    SELECT MAX(data_snapshot) FROM `{_SNAPSHOT_TABLE}`
+                )
             )
             SELECT
                 liq.id_sacado_sac,
                 liq.dt_pagamento,
                 liq.valor,
                 COALESCE(c.atendente, 'Sem contato registrado') AS atendente_credito,
-                DATE_DIFF(liq.dt_pagamento, c.data_tarefa, DAY) AS dias_desde_contato
+                -- Regularizou = NÃO está mais inadimplente HOJE
+                (i.cid IS NULL) AS eh_regularizacao,
+                (i.cid IS NOT NULL) AS eh_parcial
             FROM liq
             LEFT JOIN contatos c
               ON liq.id_sacado_sac = c.cid
               AND c.data_tarefa <= liq.dt_pagamento
               AND c.rn = 1
+            LEFT JOIN inad_hoje i
+              ON i.cid = liq.id_sacado_sac
         """).to_dataframe()
         return df
     except Exception:
