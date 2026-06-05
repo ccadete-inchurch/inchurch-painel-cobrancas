@@ -424,8 +424,12 @@ def _render_especialista(store, clientes, role):
         if clientes else pd.DataFrame(columns=["atendente", "carteira_atual"])
     )
     ranking = rank_agg.merge(carteira_count, on="atendente", how="outer").fillna(0)
-    for col in ("pagamentos", "regularizacoes", "parciais", "carteira_atual"):
-        ranking[col] = ranking[col].astype(int)
+    # Força int em todas as colunas numéricas inteiras — evita exibir '16.0'
+    # quando merges com floats convertem o tipo silenciosamente.
+    for col in ("pagamentos", "regularizacoes", "parciais", "via_contato",
+                "espontaneos", "carteira_atual", "eficacia"):
+        if col in ranking.columns:
+            ranking[col] = ranking[col].astype(int)
     ranking = ranking.sort_values("regularizacoes", ascending=False).reset_index(drop=True)
     ranking["rank"] = ranking.index + 1
     ranking["valor_fmt"] = ranking["valor"].apply(fmt_moeda_plain)
