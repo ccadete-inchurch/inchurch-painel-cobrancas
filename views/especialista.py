@@ -161,10 +161,33 @@ def _render_especialista(store, clientes, role):
     else:
         sub_pag = "no período"
 
-    # 5 cards em uma linha
+    # Tooltips dos cards
+    _tt_inad = (
+        "Total de clientes inadimplentes na carteira HOJE (snapshot atual). "
+        "Equivale ao 'Total Clientes' da tela Inadimplência."
+    )
+    _tt_pag = (
+        "Clientes únicos que fizeram pagamento de cobrança ATRASADA no período "
+        "(dt_liquidacao > dt_vencimento). Não inclui pagamentos em dia."
+    )
+    _tt_reg = (
+        "Clientes que pagaram cobrança atrasada E não estão mais inadimplentes hoje. "
+        "Conta SÓ pagamentos efetivos — não inclui baixas administrativas, "
+        "parcelamentos ou desativações. Pra ver toda saída da carteira "
+        "(incluindo esses motivos), ver 'Regularizados' da tela Inadimplência."
+    )
+    _tt_parc = (
+        "Pagou cobrança atrasada mas ainda está inadimplente hoje "
+        "(pagou só parte ou voltou a ter cobrança vencida)."
+    )
+    _tt_val = "Soma dos pagamentos de cobranças atrasadas no período."
+
+    # 5 cards em uma linha — agora com tooltips
     c1, c2, c3, c4, c5 = st.columns(5)
-    _card_fmt = lambda label, valor, sub, cor: (
-        f'<div class="metric-card" style="min-height:140px;padding:18px 16px">'
+    _card_fmt = lambda label, valor, sub, cor, tip="": (
+        f'<div class="metric-card" '
+        f'{"title=" + chr(34) + tip + chr(34) if tip else ""} '
+        f'style="cursor:{"help" if tip else "default"};min-height:140px;padding:18px 16px">'
         f'<div class="metric-label" style="font-size:11px">{label}</div>'
         f'<div class="metric-value" style="color:{cor};font-size:30px;margin-top:4px">{valor}</div>'
         f'<div class="metric-sub" style="font-size:12px;margin-top:6px">{sub}</div>'
@@ -172,29 +195,31 @@ def _render_especialista(store, clientes, role):
     )
     with c1:
         st.markdown(
-            _card_fmt("Inadimplentes Atual", f"{inadimplentes_atual:,}", "carteira hoje", "#ef4444"),
+            _card_fmt("Inadimplentes Atual", f"{inadimplentes_atual:,}",
+                      "carteira hoje", "#ef4444", _tt_inad),
             unsafe_allow_html=True,
         )
     with c2:
         st.markdown(
-            _card_fmt("Pagamentos", f"{total_pgto:,}", sub_pag, "#e8eaf0"),
+            _card_fmt("Pagamentos", f"{total_pgto:,}", sub_pag, "#e8eaf0", _tt_pag),
             unsafe_allow_html=True,
         )
     with c3:
         st.markdown(
             _card_fmt("Regularizações", f"{total_reg:,}",
-                      f"{taxa_reg:.0f}% dos pagamentos", "#22c55e"),
+                      f"{taxa_reg:.0f}% dos pagamentos", "#22c55e", _tt_reg),
             unsafe_allow_html=True,
         )
     with c4:
         st.markdown(
             _card_fmt("Parciais", f"{total_parc:,}",
-                      "ainda devem algo", "#f59e0b"),
+                      "ainda devem algo", "#f59e0b", _tt_parc),
             unsafe_allow_html=True,
         )
     with c5:
         st.markdown(
-            _card_fmt("Valor Recuperado", fmt_moeda_plain(total_valor), "no período", "#5fa3ff"),
+            _card_fmt("Valor Recuperado", fmt_moeda_plain(total_valor),
+                      "no período", "#5fa3ff", _tt_val),
             unsafe_allow_html=True,
         )
 

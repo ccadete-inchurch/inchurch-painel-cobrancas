@@ -278,7 +278,12 @@ def _render_dashboard(store, clientes, role):
 
         # Tooltips
         _tt_saldo = "Saldo = novos inadimplentes − regularizados. Negativo é bom (caiu)."
-        _tt_mes   = "Período: do dia 01 do mês atual até agora."
+        _tt_mes   = (
+            "Período: do dia 01 do mês atual até agora. "
+            "'Regularizados' aqui = toda saída da carteira de inadimplência "
+            "(pagamento de cobrança atrasada, baixa administrativa, parcelamento, "
+            "antecipação ou desativação). Pra ver só pagamentos efetivos, ver tela Especialista."
+        )
         _tt_hoje  = "Comparado com snapshot de ontem (+ regularizações capturadas em tempo real)."
         _tt_sem   = "Da segunda-feira da semana atual até hoje. Capada no início do mês — Semana ⊆ Mês sempre."
 
