@@ -285,11 +285,22 @@ def _render_especialista(store, clientes, role):
         .rename(columns={"data_dt": "data"})
     )
     df_diario["eh_hoje"] = df_diario["data"].apply(lambda d: d == hoje)
+    # Converte pra string DD/MM pra exibir só dia/mês — sem horário.
+    # Tipo ordinal (não temporal) preserva ordem mas elimina a quantização
+    # de tempo do Altair (que tentava inferir 00:00, intervalos etc).
+    df_diario["data_str"] = df_diario["data"].apply(lambda d: d.strftime("%d/%m"))
+    # Lista ordenada pra Altair respeitar ordem cronológica no eixo X
+    _datas_ordem = (
+        df_diario[["data", "data_str"]]
+        .drop_duplicates()
+        .sort_values("data")["data_str"]
+        .tolist()
+    )
     chart_dia = (
         alt.Chart(df_diario)
         .mark_bar(cornerRadiusEnd=2)
         .encode(
-            x=alt.X("data:T", title="Data"),
+            x=alt.X("data_str:O", title="Data", sort=_datas_ordem, axis=alt.Axis(labelAngle=-45)),
             y=alt.Y("pagamentos:Q", title="Pagamentos (total empilhado)"),
             color=alt.Color(
                 "atendente:N",
@@ -302,7 +313,7 @@ def _render_especialista(store, clientes, role):
                 alt.value(1.0),   # outros dias: cheio
             ),
             tooltip=[
-                alt.Tooltip("data:T", title="Dia"),
+                alt.Tooltip("data_str:O", title="Dia"),
                 alt.Tooltip("atendente:N", title="Especialista"),
                 alt.Tooltip("pagamentos:Q", title="Pagamentos"),
             ],
@@ -432,8 +443,7 @@ def _render_especialista(store, clientes, role):
             unsafe_allow_html=True,
         )
         rcols[3].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#7cc243;font-weight:600">'
-            f'{row["via_contato"]} <span style="color:#6b7280;font-size:11px;font-weight:400">({row["pct_contato"]}%)</span></div>',
+            f'<div style="padding:10px 0;font-size:14px;color:#7cc243;font-weight:600">{row["via_contato"]}</div>',
             unsafe_allow_html=True,
         )
         rcols[4].markdown(
