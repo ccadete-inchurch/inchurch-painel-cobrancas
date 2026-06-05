@@ -929,6 +929,69 @@ def fetch_regularizados_mes_atual() -> set:
 
 
 @st.cache_data(ttl=1800)
+def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
+    """Eficácia REAL de contato por especialista no período.
+
+    Diferente da eficácia simplificada (regularizações via contato / contatos
+    em pagamentos), esta usa o DENOMINADOR CORRETO: total de clientes únicos
+    que o especialista contactou no período, mesmo que não tenham pagado.
+
+    Eficácia REAL = clientes_contactados_que_regularizaram / clientes_contactados_unicos
+
+    Exemplo de diferença (junho/2026):
+      Métrica anterior: Ana 18/20 = 90% (só pagamentos com contato)
+      Métrica REAL:     Ana 20/166 = 12% (todos clientes contactados)
+
+    Reflete o que realmente acontece: a maioria dos contatos não converte
+    imediatamente — cliente é abordado, prazo dado, etc.
+    """
+    client = get_bq_client()
+    if not client:
+        return pd.DataFrame()
+    try:
+        df = client.query(f"""
+            WITH contatos_periodo AS (
+                SELECT
+                    CAST(id_sacado_sac AS STRING) AS cid,
+                    atendente,
+                    MAX(data_tarefa) AS ult_contato
+                FROM `{_TAREFAS_TABLE}`
+                WHERE data_tarefa >= DATE('{dt_inicio_iso}')
+                  AND data_tarefa <= DATE('{dt_fim_iso}')
+                  AND (
+                      mensagem_enviada = TRUE
+                      OR ligacao_feita = TRUE
+                      OR ligacao_atendida = TRUE
+                  )
+                GROUP BY cid, atendente
+            ),
+            inad_hoje AS (
+                SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
+                FROM `{_SNAPSHOT_TABLE}`
+                WHERE data_snapshot = (
+                    SELECT MAX(data_snapshot) FROM `{_SNAPSHOT_TABLE}`
+                )
+            )
+            SELECT
+                c.atendente,
+                COUNT(DISTINCT c.cid) AS clientes_contactados,
+                COUNT(DISTINCT IF(i.cid IS NULL, c.cid, NULL)) AS regularizaram,
+                COUNT(DISTINCT IF(i.cid IS NOT NULL, c.cid, NULL)) AS ainda_inadimplentes
+            FROM contatos_periodo c
+            LEFT JOIN inad_hoje i ON i.cid = c.cid
+            GROUP BY c.atendente
+        """).to_dataframe()
+        if df.empty:
+            return df
+        df["eficacia_real"] = (
+            df["regularizaram"] / df["clientes_contactados"].replace(0, pd.NA) * 100
+        ).fillna(0).round(0).astype(int)
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=1800)
 def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
     """Pagamentos com atraso no período, agrupados POR CLIENTE+DIA, com:
       - atendente_credito: HÍBRIDO em ordem de prioridade:

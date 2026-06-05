@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from auth import current_role
-from data import _EMAIL_GRUPO, fetch_pagamentos_creditados
+from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_por_especialista
 from helpers import fmt_moeda_plain
 
 
@@ -239,59 +239,51 @@ def _render_especialista(store, clientes, role):
     )
     st.altair_chart(chart_qtd, use_container_width=True)
 
-    # ── Gráfico 2: Eficácia do contato por especialista ───────────────────
-    # % de contatos que converteram em regularização total. Mede qualidade
-    # do trabalho (vs Pagamentos que mede volume). Valor recuperado já
-    # aparece no ranking abaixo — não duplica.
+    # ── Gráfico 2: Eficácia REAL do contato por especialista ──────────────
+    # Denominador correto: clientes únicos contactados no período (não só os
+    # que viraram pagamento). Reflete o trabalho real — maioria dos contatos
+    # não converte imediatamente.
     st.markdown(
         '<div style="font-size:18px;font-weight:700;color:#e8eaf0;'
         'margin-top:24px;margin-bottom:4px">Eficácia do contato por especialista</div>'
         '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-        'Das vezes que o especialista agiu (msg/ligação), % que converteu em regularização total.'
+        'Dos clientes contactados no período, % que estão regularizados hoje.'
         '</div>',
         unsafe_allow_html=True,
     )
-    df_per["reg_via_contato_tmp"] = (
-        df_per["eh_regularizacao"].astype(bool)
-        & (df_per["tipo_atribuicao"] == "via_contato")
-    )
-    eficacia_esp = (
-        df_per.groupby("atendente")
-        .agg(
-            via_contato=("tipo_atribuicao", lambda s: int((s == "via_contato").sum())),
-            reg_via_contato=("reg_via_contato_tmp", lambda s: int(s.sum())),
-        )
-        .reset_index()
-    )
-    eficacia_esp["eficacia"] = (
-        eficacia_esp["reg_via_contato"] / eficacia_esp["via_contato"].replace(0, pd.NA) * 100
-    ).fillna(0).round(0).astype(int)
-    # Faixas de cor (verde >= 80, âmbar 50-79, vermelho < 50)
-    chart_ef = (
-        alt.Chart(eficacia_esp.sort_values("eficacia", ascending=False))
-        .mark_bar(cornerRadiusEnd=4)
-        .encode(
-            x=alt.X("eficacia:Q", title="Eficácia (%)", scale=alt.Scale(domain=[0, 100])),
-            y=alt.Y("atendente:N", title=None, sort="-x"),
-            color=alt.Color(
-                "eficacia:Q",
-                scale=alt.Scale(
-                    domain=[0, 50, 80, 100],
-                    range=["#ef4444", "#ef4444", "#f59e0b", "#22c55e"],
+    df_ef = fetch_eficacia_por_especialista(dt_inicio.isoformat(), dt_fim.isoformat())
+    if filtro_esp != "Todos" and not df_ef.empty:
+        df_ef = df_ef[df_ef["atendente"] == filtro_esp]
+
+    if df_ef.empty:
+        st.info("Sem dados de contato no período pra calcular eficácia.")
+    else:
+        # Faixas de cor por valor (reais agora — bem mais baixos que parecia)
+        chart_ef = (
+            alt.Chart(df_ef.sort_values("eficacia_real", ascending=False))
+            .mark_bar(cornerRadiusEnd=4)
+            .encode(
+                x=alt.X("eficacia_real:Q", title="Eficácia REAL (%)", scale=alt.Scale(domain=[0, 100])),
+                y=alt.Y("atendente:N", title=None, sort="-x"),
+                color=alt.Color(
+                    "eficacia_real:Q",
+                    scale=alt.Scale(
+                        domain=[0, 15, 30, 100],
+                        range=["#ef4444", "#f59e0b", "#22c55e", "#22c55e"],
+                    ),
+                    legend=None,
                 ),
-                legend=None,
-            ),
-            tooltip=[
-                alt.Tooltip("atendente:N", title="Especialista"),
-                alt.Tooltip("eficacia:Q", title="Eficácia", format=".0f"),
-                alt.Tooltip("via_contato:Q", title="Contatos"),
-                alt.Tooltip("reg_via_contato:Q", title="Regularizações via contato"),
-            ],
+                tooltip=[
+                    alt.Tooltip("atendente:N", title="Especialista"),
+                    alt.Tooltip("eficacia_real:Q", title="Eficácia", format=".0f"),
+                    alt.Tooltip("clientes_contactados:Q", title="Clientes contactados"),
+                    alt.Tooltip("regularizaram:Q", title="Regularizaram"),
+                    alt.Tooltip("ainda_inadimplentes:Q", title="Ainda inadimplentes"),
+                ],
+            )
+            .properties(height=max(150, 40 * len(df_ef)))
         )
-        .properties(height=max(150, 40 * len(eficacia_esp)))
-    )
-    st.altair_chart(chart_ef, use_container_width=True)
-    df_per = df_per.drop(columns=["reg_via_contato_tmp"], errors="ignore")
+        st.altair_chart(chart_ef, use_container_width=True)
 
     # ── Gráfico 3: Total de pagamentos por dia (barras empilhadas) ───────
     # Barras empilhadas: altura = total diário, segmentos = atendentes.
@@ -413,11 +405,18 @@ def _render_especialista(store, clientes, role):
     )
     rank_agg["espontaneos"] = rank_agg["pagamentos"] - rank_agg["via_contato"]
     rank_agg["pct_contato"] = (rank_agg["via_contato"] / rank_agg["pagamentos"] * 100).round(0).astype(int)
-    # Eficácia = das vezes que agiu, quantas % converteram em regularização total
-    # Padrão: 0 quando via_contato=0 (não dá pra dividir por zero)
-    rank_agg["eficacia"] = (
-        rank_agg["reg_via_contato"] / rank_agg["via_contato"].replace(0, pd.NA) * 100
-    ).fillna(0).round(0).astype(int)
+    # Eficácia REAL = dos clientes contactados no período, % regularizados hoje.
+    # Usa fetch_eficacia_por_especialista (denominador correto, não só pagamentos).
+    df_ef_real = fetch_eficacia_por_especialista(dt_inicio.isoformat(), dt_fim.isoformat())
+    if df_ef_real.empty:
+        rank_agg["eficacia"] = 0
+    else:
+        rank_agg = rank_agg.merge(
+            df_ef_real[["atendente", "eficacia_real"]],
+            on="atendente", how="left",
+        )
+        rank_agg["eficacia"] = rank_agg["eficacia_real"].fillna(0).astype(int)
+        rank_agg = rank_agg.drop(columns=["eficacia_real"])
     # Junta com carteira atual
     carteira_count = (
         pd.DataFrame([{"atendente": _norm_atendente_raw(c.get("_grupo"))} for c in clientes])
@@ -441,7 +440,7 @@ def _render_especialista(store, clientes, role):
         ("Contato ●", "Pagamentos com contato registrado antes (msg ou ligação)"),
         ("Espontâneo ○", "Pagamentos sem contato — atribuído por grupo"),
         ("Reg.", "Clientes que NÃO estão mais inadimplentes hoje"),
-        ("Eficácia", "Das vezes que agiu, quantas % converteram em regularização total. Mede qualidade do trabalho."),
+        ("Eficácia", "Dos clientes contactados no período (msg/ligação), % que estão regularizados hoje. Reflete trabalho real — cobrança tem conversão típica de 10-20%."),
         ("Valor Recuperado", ""),
         ("Carteira", "Clientes inadimplentes hoje sob esse especialista"),
     ]
@@ -481,9 +480,10 @@ def _render_especialista(store, clientes, role):
             f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
             unsafe_allow_html=True,
         )
-        # Eficácia: cor depende do valor (verde alto, âmbar médio, vermelho baixo)
+        # Eficácia REAL — faixas ajustadas (cobrança é trabalho difícil,
+        # taxa típica de conversão é 10-20% em operação saudável).
         _ef = row["eficacia"]
-        _ef_cor = "#22c55e" if _ef >= 80 else ("#f59e0b" if _ef >= 50 else "#ef4444")
+        _ef_cor = "#22c55e" if _ef >= 30 else ("#f59e0b" if _ef >= 15 else "#ef4444")
         rcols[6].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:{_ef_cor};font-weight:700">{_ef}%</div>',
             unsafe_allow_html=True,
