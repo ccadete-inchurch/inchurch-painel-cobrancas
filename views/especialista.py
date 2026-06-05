@@ -268,10 +268,14 @@ def _render_especialista(store, clientes, role):
 
     # ── Gráfico 3: Total de pagamentos por dia (barras empilhadas) ───────
     # Barras empilhadas: altura = total diário, segmentos = atendentes.
-    # Dá leitura dupla: volume diário + breakdown.
+    # Hoje aparece com opacidade reduzida + anotação ("em andamento") pra
+    # não distorcer comparação com dias completos.
     st.markdown(
         '<div style="font-size:18px;font-weight:700;color:#e8eaf0;'
-        'margin-top:24px;margin-bottom:12px">Pagamentos por dia</div>',
+        'margin-top:24px;margin-bottom:4px">Pagamentos por dia</div>'
+        '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
+        'Hoje aparece com opacidade reduzida — dia ainda em andamento, não comparável aos completos.'
+        '</div>',
         unsafe_allow_html=True,
     )
     df_diario = (
@@ -280,6 +284,7 @@ def _render_especialista(store, clientes, role):
         .reset_index(name="pagamentos")
         .rename(columns={"data_dt": "data"})
     )
+    df_diario["eh_hoje"] = df_diario["data"].apply(lambda d: d == hoje)
     chart_dia = (
         alt.Chart(df_diario)
         .mark_bar(cornerRadiusEnd=2)
@@ -290,6 +295,11 @@ def _render_especialista(store, clientes, role):
                 "atendente:N",
                 scale=alt.Scale(range=_CHART_PALETTE),
                 title="Especialista",
+            ),
+            opacity=alt.condition(
+                alt.datum.eh_hoje,
+                alt.value(0.45),  # hoje: esmaecido
+                alt.value(1.0),   # outros dias: cheio
             ),
             tooltip=[
                 alt.Tooltip("data:T", title="Dia"),
@@ -346,7 +356,11 @@ def _render_especialista(store, clientes, role):
         unsafe_allow_html=True,
     )
     # Agregado por especialista — pagamentos, regularizações, parciais, valor,
-    # e contagem via contato direto vs espontâneo (via grupo).
+    # contagem via contato direto vs espontâneo, e eficácia do contato.
+    df_per["reg_via_contato"] = (
+        df_per["eh_regularizacao"].astype(bool)
+        & (df_per["tipo_atribuicao"] == "via_contato")
+    )
     rank_agg = (
         df_per.groupby("atendente")
         .agg(
@@ -354,12 +368,18 @@ def _render_especialista(store, clientes, role):
             regularizacoes=("eh_regularizacao", lambda s: int(s.sum())),
             parciais=("eh_parcial", lambda s: int(s.sum())),
             via_contato=("tipo_atribuicao", lambda s: int((s == "via_contato").sum())),
+            reg_via_contato=("reg_via_contato", lambda s: int(s.sum())),
             valor=("valor", "sum"),
         )
         .reset_index()
     )
     rank_agg["espontaneos"] = rank_agg["pagamentos"] - rank_agg["via_contato"]
     rank_agg["pct_contato"] = (rank_agg["via_contato"] / rank_agg["pagamentos"] * 100).round(0).astype(int)
+    # Eficácia = das vezes que agiu, quantas % converteram em regularização total
+    # Padrão: 0 quando via_contato=0 (não dá pra dividir por zero)
+    rank_agg["eficacia"] = (
+        rank_agg["reg_via_contato"] / rank_agg["via_contato"].replace(0, pd.NA) * 100
+    ).fillna(0).round(0).astype(int)
     # Junta com carteira atual
     carteira_count = (
         pd.DataFrame([{"atendente": _norm_atendente_raw(c.get("_grupo"))} for c in clientes])
@@ -373,8 +393,8 @@ def _render_especialista(store, clientes, role):
     ranking["rank"] = ranking.index + 1
     ranking["valor_fmt"] = ranking["valor"].apply(fmt_moeda_plain)
 
-    # Headers — 8 colunas (Pag. quebrado em Contato/Espontâneo)
-    _col_widths = [0.4, 2.3, 0.9, 1.3, 1.3, 0.9, 1.4, 1.1]
+    # Headers — 9 colunas (Eficácia adicionada)
+    _col_widths = [0.35, 2.0, 0.8, 1.2, 1.1, 0.8, 0.9, 1.3, 1.0]
     hdr_cols = st.columns(_col_widths)
     _hdr_labels = [
         ("#", ""),
@@ -383,6 +403,7 @@ def _render_especialista(store, clientes, role):
         ("Contato ●", "Pagamentos com contato registrado antes (msg ou ligação)"),
         ("Espontâneo ○", "Pagamentos sem contato — atribuído por grupo"),
         ("Reg.", "Clientes que NÃO estão mais inadimplentes hoje"),
+        ("Eficácia", "Das vezes que agiu, quantas % converteram em regularização total. Mede qualidade do trabalho."),
         ("Valor Recuperado", ""),
         ("Carteira", "Clientes inadimplentes hoje sob esse especialista"),
     ]
@@ -423,11 +444,18 @@ def _render_especialista(store, clientes, role):
             f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
             unsafe_allow_html=True,
         )
+        # Eficácia: cor depende do valor (verde alto, âmbar médio, vermelho baixo)
+        _ef = row["eficacia"]
+        _ef_cor = "#22c55e" if _ef >= 80 else ("#f59e0b" if _ef >= 50 else "#ef4444")
         rcols[6].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:{_ef_cor};font-weight:700">{_ef}%</div>',
             unsafe_allow_html=True,
         )
         rcols[7].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
+            unsafe_allow_html=True,
+        )
+        rcols[8].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["carteira_atual"]}</div>',
             unsafe_allow_html=True,
         )
