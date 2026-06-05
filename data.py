@@ -928,6 +928,68 @@ def fetch_regularizados_mes_atual() -> set:
         return set()
 
 
+@st.cache_data(ttl=1800)
+def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
+    """Pagamentos com atraso no período, atribuídos ao ÚLTIMO especialista que
+    teve contato efetivo (mensagem enviada OU ligação feita OU atendida) antes
+    da liquidação.
+
+    Diferente de 'grupo atual' (que credita o atendente atribuído hoje), aqui
+    o crédito vai pra quem fez o contato que precedeu o pagamento — métrica
+    mais justa de 'quem causou a regularização'.
+
+    'Sem contato registrado' aparece quando o cliente pagou sem nenhum contato
+    via painel (pagamento espontâneo, ou contato fora da operação).
+
+    Retorna DataFrame com:
+      id_sacado_sac, dt_pagamento, valor, atendente_credito, dias_desde_contato
+    """
+    client = get_bq_client()
+    if not client:
+        return pd.DataFrame()
+    try:
+        df = client.query(f"""
+            WITH liq AS (
+                SELECT
+                    CAST(id_sacado_sac AS STRING) AS id_sacado_sac,
+                    id_recebimento_recb,
+                    DATE(dt_liquidacao_recb) AS dt_pagamento,
+                    SUM(comp_valor) AS valor
+                FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+                WHERE fl_status_recb = '1'
+                  AND dt_liquidacao_recb > dt_vencimento_recb
+                  AND DATE(dt_liquidacao_recb) >= DATE('{dt_inicio_iso}')
+                  AND DATE(dt_liquidacao_recb) <= DATE('{dt_fim_iso}')
+                GROUP BY id_sacado_sac, id_recebimento_recb, dt_pagamento
+            ),
+            contatos AS (
+                SELECT cid, atendente, data_tarefa,
+                    ROW_NUMBER() OVER (PARTITION BY cid ORDER BY data_tarefa DESC) AS rn
+                FROM (
+                    SELECT CAST(id_sacado_sac AS STRING) AS cid, atendente, data_tarefa
+                    FROM `{_TAREFAS_TABLE}`
+                    WHERE mensagem_enviada = TRUE
+                       OR ligacao_feita = TRUE
+                       OR ligacao_atendida = TRUE
+                )
+            )
+            SELECT
+                liq.id_sacado_sac,
+                liq.dt_pagamento,
+                liq.valor,
+                COALESCE(c.atendente, 'Sem contato registrado') AS atendente_credito,
+                DATE_DIFF(liq.dt_pagamento, c.data_tarefa, DAY) AS dias_desde_contato
+            FROM liq
+            LEFT JOIN contatos c
+              ON liq.id_sacado_sac = c.cid
+              AND c.data_tarefa <= liq.dt_pagamento
+              AND c.rn = 1
+        """).to_dataframe()
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
 @st.cache_data(ttl=3600)
 def fetch_cobrancas_liquidacao():
     """Pagamentos com atraso (dt_liquidacao > dt_vencimento).

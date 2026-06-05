@@ -5,8 +5,8 @@ import pandas as pd
 import streamlit as st
 
 from auth import current_role
-from data import _EMAIL_GRUPO
-from helpers import fmt_moeda_plain, get_effective_atendente
+from data import _EMAIL_GRUPO, fetch_pagamentos_creditados
+from helpers import fmt_moeda_plain
 
 
 # Paleta inChurch (verde + complementares acessíveis em fundo escuro)
@@ -26,24 +26,6 @@ def _norm_atendente_raw(s: str) -> str:
     """Padroniza só strings — vazio/'—' viram 'Sem especialista'."""
     s = str(s or "").strip()
     return s if s and s not in ("—", "nan", "NaN", "Sistema (BigQuery)") else "Sem especialista"
-
-
-def _resolve_atendente(row) -> str:
-    """Resolve o especialista efetivo de um pagamento.
-
-    Pagamentos do BQ histórico vêm marcados 'Sistema (BigQuery)' — não
-    rastreamos qual atendente causou aquela regularização específica.
-    Pra dar atribuição útil, busca o especialista atual do cliente via
-    get_effective_atendente (que usa splgc-grupo ou painel_tarefas).
-
-    Trade-off: se cliente trocou de especialista entre o pagamento e
-    agora (raro), atribuição reflete o atual, não o histórico.
-    """
-    at = str(row.get("atendente") or "").strip()
-    if at and "BigQuery" not in at and at not in ("—", "nan", "NaN"):
-        return at
-    effective = get_effective_atendente(str(row.get("id") or "")) or ""
-    return _norm_atendente_raw(effective)
 
 
 def _altair_theme():
@@ -89,35 +71,13 @@ def _render_especialista(store, clientes, role):
         unsafe_allow_html=True,
     )
 
-    # ── Prepara dados ─────────────────────────────────────────────────────
-    reg_list = store.get("regularizados") or []
-    df_reg = pd.DataFrame(reg_list)
-    if df_reg.empty:
-        st.info("Sem dados de pagamentos pra analisar.")
-        return
-
-    # Resolve atendente efetivo — pagamentos do BQ histórico não têm o nome
-    # do especialista; busca via get_effective_atendente (grupo splgc atual).
-    df_reg["atendente"] = df_reg.apply(_resolve_atendente, axis=1)
-    df_reg["valor"] = pd.to_numeric(df_reg["valor"], errors="coerce").fillna(0.0)
-    df_reg["data_dt"] = pd.to_datetime(df_reg["data"], format="%d/%m/%Y", errors="coerce")
-    df_reg = df_reg.dropna(subset=["data_dt"])
-
-    # ── Filtro de período ─────────────────────────────────────────────────
+    # ── Filtro de período (PRIMEIRO — define o range pro BQ) ──────────────
     fp1, fp2, _ = st.columns([2, 2, 4])
     with fp1:
         periodo = st.selectbox(
             "Período",
-            ["Este mês", "Últimos 30 dias", "Últimos 90 dias", "Mês anterior", "Todo o histórico"],
+            ["Este mês", "Últimos 30 dias", "Últimos 90 dias", "Mês anterior", "Últimos 12 meses"],
             key="esp_periodo",
-        )
-    with fp2:
-        # Lista todos especialistas + os do _EMAIL_GRUPO mesmo sem pagamento ainda
-        especialistas_disp = sorted(set(df_reg["atendente"].unique()) | set(_EMAIL_GRUPO.values()))
-        filtro_esp = st.selectbox(
-            "Especialista",
-            ["Todos"] + especialistas_disp,
-            key="esp_filtro",
         )
 
     hoje = date.today()
@@ -134,17 +94,46 @@ def _render_especialista(store, clientes, role):
         primeiro_dia_atual = hoje.replace(day=1)
         dt_fim = primeiro_dia_atual - timedelta(days=1)
         dt_inicio = dt_fim.replace(day=1)
-    else:  # Todo o histórico
-        dt_inicio = df_reg["data_dt"].min().date()
+    else:  # Últimos 12 meses
+        dt_inicio = hoje - timedelta(days=365)
         dt_fim = hoje
 
-    # df_per_all: filtrado SÓ por período (usado pra média da equipe — não
-    # muda quando user filtra por especialista específico)
-    df_per_all = df_reg[
-        (df_reg["data_dt"].dt.date >= dt_inicio)
-        & (df_reg["data_dt"].dt.date <= dt_fim)
-    ]
-    # df_per: filtrado também por especialista (usado nos cards de total)
+    # ── Fonte: BQ JOIN com tarefas — atribui por contato efetivo ──────────
+    # painel_tarefas_diarias + liquidações → último atendente que teve
+    # contato (msg/lig) antes do pagamento. Credita quem trabalhou o caso,
+    # não o grupo atual do cliente.
+    with st.spinner("Carregando pagamentos creditados..."):
+        df_reg = fetch_pagamentos_creditados(dt_inicio.isoformat(), dt_fim.isoformat())
+
+    if df_reg.empty:
+        st.info("Sem pagamentos com atraso no período selecionado.")
+        return
+
+    df_reg = df_reg.rename(columns={
+        "id_sacado_sac": "id",
+        "atendente_credito": "atendente",
+    })
+    df_reg["atendente"] = df_reg["atendente"].astype(str)
+    df_reg["valor"] = pd.to_numeric(df_reg["valor"], errors="coerce").fillna(0.0)
+    df_reg["data_dt"] = pd.to_datetime(df_reg["dt_pagamento"], errors="coerce")
+    df_reg = df_reg.dropna(subset=["data_dt"])
+
+    with fp2:
+        especialistas_disp = sorted(
+            set(df_reg["atendente"].unique())
+            | set(_EMAIL_GRUPO.values())
+            | {"Sem contato registrado"}
+        )
+        filtro_esp = st.selectbox(
+            "Especialista",
+            ["Todos"] + especialistas_disp,
+            key="esp_filtro",
+        )
+
+    # df_per_all: período inteiro (BQ já filtrou por data). Usado pra média
+    # da equipe — não muda com filtro de especialista.
+    df_per_all = df_reg
+    # df_per: também filtrado por especialista (cards individuais)
     df_per = df_per_all.copy()
     if filtro_esp != "Todos":
         df_per = df_per[df_per["atendente"] == filtro_esp]
@@ -274,10 +263,12 @@ def _render_especialista(store, clientes, role):
     )
     st.altair_chart(chart_val, use_container_width=True)
 
-    # ── Gráfico 3: Evolução diária (linha) ────────────────────────────────
+    # ── Gráfico 3: Total de pagamentos por dia (barras empilhadas) ───────
+    # Barras empilhadas: altura = total diário, segmentos = atendentes.
+    # Dá leitura dupla: volume diário + breakdown.
     st.markdown(
         '<div style="font-size:18px;font-weight:700;color:#e8eaf0;'
-        'margin-top:24px;margin-bottom:12px">Evolução diária — pagamentos</div>',
+        'margin-top:24px;margin-bottom:12px">Pagamentos por dia</div>',
         unsafe_allow_html=True,
     )
     df_diario = (
@@ -288,10 +279,10 @@ def _render_especialista(store, clientes, role):
     )
     chart_dia = (
         alt.Chart(df_diario)
-        .mark_line(point=True, strokeWidth=2.5)
+        .mark_bar(cornerRadiusEnd=2)
         .encode(
             x=alt.X("data:T", title="Data"),
-            y=alt.Y("pagamentos:Q", title="Pagamentos"),
+            y=alt.Y("pagamentos:Q", title="Pagamentos (total empilhado)"),
             color=alt.Color(
                 "atendente:N",
                 scale=alt.Scale(range=_CHART_PALETTE),
