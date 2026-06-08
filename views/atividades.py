@@ -536,12 +536,11 @@ def _render_atividades(store, clientes, role):
             'style="flex-shrink:0"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 1 0 0 7h5a3.5 3.5 0 1 1 0 7H6"/></svg>'
         )
 
-        # Card horizontal single-line — 3 indicadores:
-        # ✓ Regularizações (verde) │ ⏱ Parciais (azul) │ 💰 Total Recuperado (roxo)
+        # Card vertical — 3 linhas com divisores:
+        # ✓ Regularizações (verde) → ⏱ Parciais (azul) → $ Total (roxo)
         def _card_html(label_topo, sublabel, reg_n, reg_v, parc_n, parc_v):
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
             _parc_palavra = _palavra(parc_n, "parcial", "parciais").upper()
-            # Sempre formata como R$ (mesmo quando 0,00) — antes mostrava "—"
             _reg_v_fmt = fmt_moeda_plain(reg_v)
             _parc_v_fmt = fmt_moeda_plain(parc_v)
             # Total recuperado = soma direta (mutuamente exclusivos)
@@ -549,31 +548,29 @@ def _render_atividades(store, clientes, role):
             total_v = reg_v + parc_v
             _total_v_fmt = fmt_moeda_plain(total_v)
 
-            def _bloco(ico, count, palavra, valor_fmt, cor_valor):
+            def _linha(ico, count, palavra, valor_fmt, cor_valor):
                 return (
-                    f'<div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">'
+                    f'<div style="display:flex;align-items:center;gap:8px">'
                     f'{ico}'
-                    f'<span style="font-size:24px;font-weight:800;color:#e8eaf0;line-height:1;'
+                    f'<span style="font-size:26px;font-weight:800;color:#e8eaf0;line-height:1;'
                     f'font-variant-numeric:tabular-nums">{count}</span>'
-                    f'<span style="font-size:12px;color:#9ca3af;font-weight:700;'
-                    f'letter-spacing:1px;text-transform:uppercase;'
-                    f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{palavra}</span>'
-                    f'<span style="margin-left:auto;font-size:17px;font-weight:800;color:{cor_valor};'
+                    f'<span style="font-size:14px;color:#9ca3af;font-weight:700;'
+                    f'letter-spacing:1.2px;text-transform:uppercase">{palavra}</span>'
+                    f'<span style="margin-left:auto;font-size:20px;font-weight:800;color:{cor_valor};'
                     f'font-variant-numeric:tabular-nums">{valor_fmt}</span>'
                     f'</div>'
                 )
 
-            _divisor = '<div style="width:1px;align-self:stretch;background:#2a2f42;flex-shrink:0"></div>'
+            _divisor = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
 
             return (
                 f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
-                f'border-radius:10px;padding:14px 20px;'
-                f'display:flex;align-items:center;gap:20px;flex-wrap:wrap">'
-                f'{_bloco(_ico_reg, reg_n, _reg_palavra, _reg_v_fmt, "#7cc243")}'
+                f'border-radius:10px;padding:14px 18px">'
+                f'{_linha(_ico_reg, reg_n, _reg_palavra, _reg_v_fmt, "#7cc243")}'
                 f'{_divisor}'
-                f'{_bloco(_ico_pag, parc_n, _parc_palavra, _parc_v_fmt, "#5fa3ff")}'
+                f'{_linha(_ico_pag, parc_n, _parc_palavra, _parc_v_fmt, "#5fa3ff")}'
                 f'{_divisor}'
-                f'{_bloco(_ico_total, total_n, "TOTAL", _total_v_fmt, "#a78bfa")}'
+                f'{_linha(_ico_total, total_n, "TOTAL", _total_v_fmt, "#a78bfa")}'
                 f'</div>'
             )
 
@@ -593,9 +590,12 @@ def _render_atividades(store, clientes, role):
             ))
 
         if cards_html:
-            # Card ocupa LARGURA TOTAL (linha única horizontal, 3 indicadores)
-            for html in cards_html[:2]:
-                st.markdown(html, unsafe_allow_html=True)
+            # Card na MESMA largura do filtro 'Grupo' abaixo.
+            _col_widths = [1.3, 1.3, 2]
+            ind_cols = st.columns(_col_widths)
+            for i, html in enumerate(cards_html[:2]):
+                with ind_cols[i]:
+                    st.markdown(html, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
     # Indicadores 'Hoje' — ACIMA dos filtros (linha horizontal de destaque)
