@@ -543,7 +543,7 @@ def _render_atividades(store, clientes, role):
                     f'{ico}'
                     f'<span style="font-size:26px;font-weight:800;color:#e8eaf0;line-height:1;'
                     f'font-variant-numeric:tabular-nums">{count}</span>'
-                    f'<span style="font-size:14px;color:#9ca3af;font-weight:700;'
+                    f'<span style="font-size:13px;color:#9ca3af;font-weight:700;'
                     f'letter-spacing:1.2px;text-transform:uppercase">{palavra}</span>'
                     f'<span style="margin-left:auto;font-size:20px;font-weight:800;color:{cor_valor};'
                     f'font-variant-numeric:tabular-nums">{valor_fmt}</span>'
