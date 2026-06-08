@@ -1,0 +1,40 @@
+name: Snapshot diário de inadimplentes (06:00 BRT, 7 dias/semana)
+
+# Roda TODOS OS DIAS — desacoplado do lote (que só roda em dias úteis
+# via n8n). Garante que cobrancas_snapshot_diario não tenha buracos
+# em sábados/domingos/feriados, eliminando "—" no card Variação 'Hoje'
+# da segunda-feira (que comparava com o snapshot inexistente de domingo).
+#
+# GitHub Actions cron usa UTC.
+# 06:00 BRT (UTC-3) = 09:00 UTC → '0 9 * * *' significa todo dia às 09:00 UTC.
+#
+# Observação: schedule do GitHub é best-effort — pode atrasar 5-15min
+# em horários de pico. Pra snapshot diário isso é irrelevante (apenas
+# captura o estado da carteira no dia, não importa o minuto exato).
+#
+# Pode ser disparado manualmente pelo GitHub UI também (Actions → Run workflow).
+
+on:
+  schedule:
+    - cron: '0 9 * * *'   # 06:00 BRT, todos os dias
+  workflow_dispatch:       # disparo manual via UI
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Salvar snapshot
+        env:
+          GCP_SA_JSON: ${{ secrets.GCP_SA_JSON }}
+        run: python scripts/snapshot_cron.py
