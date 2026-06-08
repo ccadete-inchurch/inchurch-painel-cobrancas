@@ -485,27 +485,29 @@ def _render_atividades(store, clientes, role):
                 _ids_lote = set(_buckets.keys())
             _lote_cs = [c for c in clientes_full if c.get("id") in _ids_lote]
             lote_reg_n, lote_reg_v, lote_pag_n, lote_pag_v = _agg(_lote_cs)
-        # Dados do TOTAL — respeita filtros de grupo (admin panel OU filtro
-        # 'Grupo' embaixo). Se especialista específico filtrado, restringe
-        # a 'no total daquele grupo' em vez da operação inteira.
+        # Dados do TOTAL — respeita filtros Grupo (incluindo 'Sem especialista')
+        # e Situação. Sublabel removido por feedback — visual mais limpo.
         total_reg_n = total_reg_v = total_pag_n = total_pag_v = 0
-        total_label = ""
+        total_label = ""  # sublabel removido por feedback
         if _mostrar_total:
-            # Determina grupo ativo: painel admin > filtro Grupo
-            _grupo_ativo = None
-            if _atendente_sel:
-                _grupo_ativo = _atendente_sel
-            else:
-                _fg = st.session_state.get("atv_filtro_grupo", "Todos")
-                if _fg not in ("Todos", "Sem especialista", "", None):
-                    _grupo_ativo = _fg
-            # Filtra clientes pelo grupo ativo (se houver)
-            if _grupo_ativo:
-                _total_cs = [c for c in clientes_full if c.get("_grupo") == _grupo_ativo]
-                total_label = f"do grupo {_grupo_ativo}"
-            else:
-                _total_cs = clientes_full
-                total_label = "no total da operação"
+            _fg = st.session_state.get("atv_filtro_grupo", "Todos")
+            _fs = st.session_state.get("atv_filtro_inativo", "Todos")
+            _total_cs = clientes_full
+            # Filtro de Grupo
+            if _fg == "Sem especialista":
+                _total_cs = [
+                    c for c in _total_cs
+                    if not c.get("_grupo") or str(c.get("_grupo")) in ("—", "", "nan", "NaN")
+                ]
+            elif _atendente_sel:
+                _total_cs = [c for c in _total_cs if c.get("_grupo") == _atendente_sel]
+            elif _fg not in ("Todos", "", None):
+                _total_cs = [c for c in _total_cs if c.get("_grupo") == _fg]
+            # Filtro de Situação
+            if _fs == "Ativos":
+                _total_cs = [c for c in _total_cs if not c.get("_inativo")]
+            elif _fs == "Inativos":
+                _total_cs = [c for c in _total_cs if c.get("_inativo")]
             total_reg_n, total_reg_v, total_pag_n, total_pag_v = _agg(_total_cs)
 
         def _palavra(n, sing, plur):
@@ -550,6 +552,8 @@ def _render_atividades(store, clientes, role):
                 f'<span style="margin-left:auto;font-size:20px;font-weight:800;color:#7cc243;'
                 f'font-variant-numeric:tabular-nums">{_reg_v_fmt}</span>'
                 f'</div>'
+                # Divisor horizontal cinza escuro
+                f'<div style="height:1px;background:#2a2f42;margin:0 -18px 10px"></div>'
                 # Linha 2: pagamentos — valor R$ MAIOR
                 f'<div style="display:flex;align-items:center;gap:8px">'
                 f'{_ico_pag}'
