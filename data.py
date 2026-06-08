@@ -881,20 +881,15 @@ fetch_inadimplentes_uniao_semana = fetch_inadimplentes_uniao_esta_semana
 @st.cache_data(ttl=3600)
 def fetch_snapshot_ontem() -> set:
     """IDs do snapshot MAIS RECENTE disponível antes de hoje. Usado pra
-    calcular novos/regularizados de HOJE comparando com a referência mais
-    próxima.
-
-    Estratégia anterior buscava EXATAMENTE 'ontem' (CURRENT_DATE - 1 DAY).
-    Problema: como o lote não roda em sáb/dom/feriado, segunda-feira o
-    snapshot de domingo não existia, retornando vazio → card mostrava '—'.
+    calcular novos/regularizados comparando com a referência mais próxima.
 
     Estratégia atual: pega o snapshot mais recente que NÃO seja de hoje.
     Robusto a gaps (fim de semana, feriado, falha do cron).
 
-    Trade-off: na segunda compara com sexta (3 dias) em vez de domingo
-    (1 dia). Mas como atendentes não trabalham fim de semana, o quadro
-    operacional fica essencialmente o mesmo — só lumpa as mudanças do
-    fim de semana junto.
+    Trade-off aceito: na segunda compara com sexta (3 dias) em vez de
+    domingo. A UI usa _snapshot_ontem_data (session_state) pra mostrar
+    label dinâmico — 'Hoje' se ontem = 1 dia atrás, 'Desde DD/MM' se
+    a referência for mais antiga.
     """
     client = get_bq_client()
     if not client:
@@ -906,13 +901,21 @@ def fetch_snapshot_ontem() -> set:
                 FROM `{_SNAPSHOT_TABLE}`
                 WHERE data_snapshot < CURRENT_DATE("America/Sao_Paulo")
             )
-            SELECT DISTINCT id_sacado_sac
+            SELECT DISTINCT s.id_sacado_sac, r.dt AS data_ref
             FROM `{_SNAPSHOT_TABLE}` s
             CROSS JOIN ref r
             WHERE s.data_snapshot = r.dt
         """).to_dataframe()
         if df.empty:
             return set()
+        # Salva a data de referência usada — UI usa pra mostrar label dinâmico
+        try:
+            dt = df["data_ref"].iloc[0]
+            st.session_state["_snapshot_ontem_data"] = (
+                dt.strftime("%d/%m/%Y") if hasattr(dt, "strftime") else str(dt)
+            )
+        except Exception:
+            pass
         return {str(r["id_sacado_sac"]) for _, r in df.iterrows()}
     except Exception:
         return set()

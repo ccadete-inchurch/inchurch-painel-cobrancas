@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 import streamlit as st
@@ -284,7 +284,24 @@ def _render_dashboard(store, clientes, role):
             "(pagamento de cobrança atrasada, baixa administrativa, parcelamento, "
             "antecipação ou desativação). Pra ver só pagamentos efetivos, ver tela Especialista."
         )
-        _tt_hoje  = "Comparado com snapshot de ontem (+ regularizações capturadas em tempo real)."
+        # Label dinâmico do "Hoje" — adapta quando snapshot de referência
+        # não é literalmente de ontem (ex: segunda compara com sexta).
+        _ontem_data = st.session_state.get("_snapshot_ontem_data", "")
+        _hoje_dt = date.today()
+        _label_hoje = "Hoje"
+        if _ontem_data:
+            try:
+                _ref_dt = datetime.strptime(_ontem_data, "%d/%m/%Y").date()
+                _dias_gap = (_hoje_dt - _ref_dt).days
+                if _dias_gap > 1:
+                    _ref_curta = _ref_dt.strftime("%d/%m")
+                    _label_hoje = f"Desde {_ref_curta}"
+            except Exception:
+                pass
+        _tt_hoje = (
+            f"Comparado com snapshot de {_ontem_data} (último disponível) + "
+            "regularizações capturadas em tempo real via API."
+        ) if _ontem_data else "Comparado com snapshot anterior + regularizações em tempo real."
         _tt_sem   = "Da segunda-feira da semana atual até hoje. Capada no início do mês — Semana ⊆ Mês sempre."
 
         st.markdown(
@@ -303,7 +320,7 @@ def _render_dashboard(store, clientes, role):
             f'{_fmt_short(novos_semana_n, "novos")} · {_fmt_short(reg_semana_n, "reg")}'
             f'</div>'
             f'<div title="{_tt_hoje}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-            f'<span style="color:#8b94a5">Hoje: </span>'
+            f'<span style="color:#8b94a5">{_label_hoje}: </span>'
             f'{_fmt_short(novos_hoje_n, "novos")} · {_fmt_short(regs_hoje_n, "reg")}'
             f'</div>'
             f'</div>',
