@@ -463,22 +463,26 @@ def _render_atividades(store, clientes, role):
                     pag_v += vlr
             return reg_n, reg_v, pag_n, pag_v
 
-        # Decide quais seções renderizar baseado no contexto
+        # Decide quais seções renderizar baseado no contexto:
+        #   Atendente:                          mostra só 'No Lote'
+        #   Admin/Gestor em 'Lote do dia':      mostra só 'No Lote' (o atendente
+        #                                       selecionado já contextualiza)
+        #   Admin/Gestor em 'Todos os clientes': mostra só 'No Total'
         _mostrar_lote = (email in _EMAIL_GRUPO) or (
             role in ("admin", "gestor") and _modo_admin == "Lote do dia" and _atendente_sel
         )
-        _mostrar_total = role in ("admin", "gestor")
+        _mostrar_total = (
+            role in ("admin", "gestor") and _modo_admin == "Todos os clientes"
+        )
 
         # Dados do LOTE
         if _mostrar_lote:
             if email in _EMAIL_GRUPO:
                 _ids_lote = ids_hoje
-                _label_lote = "no seu lote"
             else:
                 _key = f"_tarefas_admin_{hoje_lote()}_{_atendente_sel}"
                 _buckets = st.session_state.get(_key, {}) or {}
                 _ids_lote = set(_buckets.keys())
-                _label_lote = f"no lote de {_atendente_sel}"
             _lote_cs = [c for c in clientes_full if c.get("id") in _ids_lote]
             lote_reg_n, lote_reg_v, lote_pag_n, lote_pag_v = _agg(_lote_cs)
         # Dados do TOTAL — respeita filtros de grupo (admin panel OU filtro
@@ -561,8 +565,10 @@ def _render_atividades(store, clientes, role):
         # Monta linha horizontal
         cards_html = []
         if _mostrar_lote:
+            # Sublabel vazio — filtro Painel Administrativo (admin/gestor) ou
+            # contexto natural (atendente vê só o próprio) já contextualizam.
             cards_html.append(_card_html(
-                "No Lote", _label_lote,
+                "No Lote", "",
                 lote_reg_n, lote_reg_v, lote_pag_n, lote_pag_v,
             ))
         if _mostrar_total:
