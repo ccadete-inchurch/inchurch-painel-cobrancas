@@ -43,7 +43,7 @@ def _render_historico(store):
     atendentes_disp = sorted({a for a in df["atendente"].unique() if a and a != "—"}) if not df.empty else []
     fb, fs, fa = st.columns([3, 2, 2])
     with fb:
-        busca = st.text_input("Buscar", placeholder="Nome ou CNPJ...", key="reg_busca")
+        busca = st.text_input("Buscar", placeholder="Nome, CNPJ ou ID sacado...", key="reg_busca")
     with fs:
         filtro_sit = st.selectbox("Situação", ["Todos", "Apenas ativos", "Apenas inativos"], key="reg_sit")
     with fa:
@@ -135,10 +135,14 @@ def _render_historico(store):
             title_attr = f' title="{tooltip}"' if tooltip else ""
             cursor = "help" if tooltip else "default"
             st.markdown(
-                f'<div class="metric-card" style="cursor:{cursor}"{title_attr}>'
-                f'<div class="metric-label">{label}</div>'
-                f'<div style="font-size:15px;font-weight:600;color:#2dd36f;margin-top:4px">{fmt_moeda_plain(valor)}</div>'
-                f'<div class="metric-sub">{sub}</div>'
+                f'<div class="metric-card" style="cursor:{cursor};padding:18px 20px"{title_attr}>'
+                # Label maior + letter-spacing pra ficar igual aos cards do dashboard
+                f'<div class="metric-label" style="font-size:14px;letter-spacing:1.3px">{label}</div>'
+                # Valor R$ MUITO MAIOR — é o que o atendente quer ver primeiro
+                f'<div style="font-size:30px;font-weight:800;color:#2dd36f;margin-top:6px;'
+                f'line-height:1.1;font-variant-numeric:tabular-nums">{fmt_moeda_plain(valor)}</div>'
+                # Sublabel maior também (qtd de clientes)
+                f'<div class="metric-sub" style="font-size:14px;margin-top:8px">{sub}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -205,7 +209,10 @@ def _render_historico(store):
         with rcols[2]:
             st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{row.get("cnpj","—")}</div>', unsafe_allow_html=True)
         with rcols[3]:
-            st.markdown(f'<div style="padding:12px 14px;font-size:14px;font-weight:600;color:#2dd36f">{fmt_moeda(row.get("valor",0))}</div>', unsafe_allow_html=True)
+            # fmt_moeda_plain (não fmt_moeda) — fmt_moeda colore valores altos
+            # em vermelho/âmbar como ALERTA (desenhado pra dívidas em
+            # Inadimplência). Aqui é PAGAMENTO recebido → tudo verde.
+            st.markdown(f'<div style="padding:12px 14px;font-size:14px;font-weight:600;color:#2dd36f">{fmt_moeda_plain(row.get("valor",0))}</div>', unsafe_allow_html=True)
         with rcols[4]:
             _at_txt = str(row.get("atendente") or "—")
             st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{_at_txt}</div>', unsafe_allow_html=True)
