@@ -7,6 +7,11 @@ on:
   # n8n é scheduler confiável e dispara essa action via repository_dispatch.
   workflow_dispatch:
 
+# Opt-in pra Node.js 24 (será default a partir de 16/06/2026).
+# Remove o warning 'Node.js 20 actions are deprecated'.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   gerar-lote:
     runs-on: ubuntu-latest

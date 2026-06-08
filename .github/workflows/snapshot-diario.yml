@@ -19,6 +19,12 @@ on:
     - cron: '0 9 * * *'   # 06:00 BRT, todos os dias
   workflow_dispatch:       # disparo manual via UI
 
+# Opt-in pra Node.js 24 (será default a partir de 16/06/2026).
+# Remove o warning 'Node.js 20 actions are deprecated' e prepara pro
+# desligamento de Node 20 em 16/09/2026.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   snapshot:
     runs-on: ubuntu-latest
