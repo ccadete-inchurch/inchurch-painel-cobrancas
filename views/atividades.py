@@ -524,48 +524,42 @@ def _render_atividades(store, clientes, role):
             '<path d="M12 6v6l4 2"></path></svg>'
         )
 
-        # Card compacto — altura simétrica aos filtros (Grupo/Situação/Buscar).
-        # Layout horizontal single-line: label | reg+valor | sep | pag+valor.
+        # Card compacto vertical — duas linhas (regularizações + pagamentos),
+        # cada uma com count à esquerda e valor R$ justificado à direita.
         def _card_html(label_topo, sublabel, reg_n, reg_v, pag_n, pag_v):
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
             _pag_palavra = _palavra(pag_n, "pagamento", "pagamentos").upper()
             _reg_v_fmt = fmt_moeda_plain(reg_v) if reg_v > 0 else "—"
             _pag_v_fmt = fmt_moeda_plain(pag_v) if pag_v > 0 else "—"
-            _sublabel_html = (
-                f'<span style="margin-left:auto;font-size:11px;color:#6b7280;'
-                f'font-style:italic;flex-shrink:0">{sublabel}</span>'
-            ) if sublabel else ''
             return (
                 f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
-                f'border-radius:10px;padding:12px 20px;'
-                f'display:flex;align-items:center;gap:24px;flex-wrap:wrap">'
-                # Label da seção (esquerda)
+                f'border-radius:10px;padding:14px 22px">'
+                # Header: label + sublabel
+                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
                 f'<span style="font-size:14px;font-weight:800;letter-spacing:2px;'
-                f'text-transform:uppercase;color:#8b94a5;flex-shrink:0">{label_topo}</span>'
-                # Regularizações inline (ícone + número + label + valor)
-                f'<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'
+                f'text-transform:uppercase;color:#8b94a5">{label_topo}</span>'
+                f'<span style="font-size:11px;color:#6b7280;font-style:italic">{sublabel}</span>'
+                f'</div>'
+                # Linha 1: regularizações  ...........  R$ valor
+                f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
                 f'{_ico_reg}'
-                f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'<span style="font-size:20px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'font-variant-numeric:tabular-nums">{reg_n}</span>'
-                f'<span style="font-size:14px;font-weight:700;color:#7cc243;'
-                f'font-variant-numeric:tabular-nums">{_reg_v_fmt}</span>'
-                f'<span style="font-size:11px;color:#9ca3af;font-weight:600;'
+                f'<span style="font-size:13px;color:#9ca3af;font-weight:600;'
                 f'letter-spacing:1.2px;text-transform:uppercase">{_reg_palavra}</span>'
+                f'<span style="margin-left:auto;font-size:16px;font-weight:700;color:#7cc243;'
+                f'font-variant-numeric:tabular-nums">{_reg_v_fmt}</span>'
                 f'</div>'
-                # Separador vertical visual
-                f'<div style="width:1px;height:28px;background:#2a2f42;flex-shrink:0"></div>'
-                # Pagamentos inline
-                f'<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'
+                # Linha 2: pagamentos  ...........  R$ valor
+                f'<div style="display:flex;align-items:center;gap:10px">'
                 f'{_ico_pag}'
-                f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'<span style="font-size:20px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'font-variant-numeric:tabular-nums">{pag_n}</span>'
-                f'<span style="font-size:14px;font-weight:700;color:#5fa3ff;'
-                f'font-variant-numeric:tabular-nums">{_pag_v_fmt}</span>'
-                f'<span style="font-size:11px;color:#9ca3af;font-weight:600;'
+                f'<span style="font-size:13px;color:#9ca3af;font-weight:600;'
                 f'letter-spacing:1.2px;text-transform:uppercase">{_pag_palavra}</span>'
+                f'<span style="margin-left:auto;font-size:16px;font-weight:700;color:#5fa3ff;'
+                f'font-variant-numeric:tabular-nums">{_pag_v_fmt}</span>'
                 f'</div>'
-                # Sublabel à direita (se houver)
-                f'{_sublabel_html}'
                 f'</div>'
             )
 
