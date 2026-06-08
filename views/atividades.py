@@ -579,10 +579,17 @@ def _render_atividades(store, clientes, role):
             ))
 
         if cards_html:
-            st.markdown(
-                f'<div style="display:flex;gap:12px;margin-bottom:14px">{"".join(cards_html)}</div>',
-                unsafe_allow_html=True,
-            )
+            # Renderiza o card na MESMA largura do filtro 'Grupo' abaixo
+            # (st.columns([1.3, 1.3, 2]) — primeira coluna = 1.3 weight).
+            # Se houver 2 cards (raro com a lógica atual), divide entre as
+            # duas primeiras colunas.
+            _col_widths = [1.3, 1.3, 2]
+            ind_cols = st.columns(_col_widths)
+            for i, html in enumerate(cards_html[:2]):
+                with ind_cols[i]:
+                    st.markdown(html, unsafe_allow_html=True)
+            # Espaçamento abaixo do card
+            st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
     _indicadores_hoje()
 
