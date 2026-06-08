@@ -524,40 +524,40 @@ def _render_atividades(store, clientes, role):
             '<path d="M12 6v6l4 2"></path></svg>'
         )
 
-        # Card compacto vertical — duas linhas (regularizações + pagamentos),
-        # cada uma com count à esquerda e valor R$ justificado à direita.
+        # Card compacto — sem header 'NO LOTE'/'NO TOTAL' (removido por
+        # feedback), 2 linhas com count + label compacto + valor R$ destacado.
         def _card_html(label_topo, sublabel, reg_n, reg_v, pag_n, pag_v):
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
             _pag_palavra = _palavra(pag_n, "pagamento", "pagamentos").upper()
             _reg_v_fmt = fmt_moeda_plain(reg_v) if reg_v > 0 else "—"
             _pag_v_fmt = fmt_moeda_plain(pag_v) if pag_v > 0 else "—"
+            # Sublabel discreto no topo (se houver — só pra 'No Total' com filtro)
+            _sub_html = (
+                f'<div style="font-size:10px;color:#6b7280;font-style:italic;'
+                f'margin-bottom:6px;text-align:right">{sublabel}</div>'
+            ) if sublabel else ''
             return (
                 f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
-                f'border-radius:10px;padding:14px 22px">'
-                # Header: label + sublabel
-                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-                f'<span style="font-size:14px;font-weight:800;letter-spacing:2px;'
-                f'text-transform:uppercase;color:#8b94a5">{label_topo}</span>'
-                f'<span style="font-size:11px;color:#6b7280;font-style:italic">{sublabel}</span>'
-                f'</div>'
-                # Linha 1: regularizações  ...........  R$ valor
-                f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+                f'border-radius:10px;padding:14px 18px">'
+                f'{_sub_html}'
+                # Linha 1: regularizações — valor R$ MAIOR
+                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
                 f'{_ico_reg}'
-                f'<span style="font-size:20px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'<span style="font-size:26px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'font-variant-numeric:tabular-nums">{reg_n}</span>'
-                f'<span style="font-size:13px;color:#9ca3af;font-weight:600;'
-                f'letter-spacing:1.2px;text-transform:uppercase">{_reg_palavra}</span>'
-                f'<span style="margin-left:auto;font-size:16px;font-weight:700;color:#7cc243;'
+                f'<span style="font-size:11px;color:#9ca3af;font-weight:600;'
+                f'letter-spacing:1px;text-transform:uppercase">{_reg_palavra}</span>'
+                f'<span style="margin-left:auto;font-size:20px;font-weight:800;color:#7cc243;'
                 f'font-variant-numeric:tabular-nums">{_reg_v_fmt}</span>'
                 f'</div>'
-                # Linha 2: pagamentos  ...........  R$ valor
-                f'<div style="display:flex;align-items:center;gap:10px">'
+                # Linha 2: pagamentos — valor R$ MAIOR
+                f'<div style="display:flex;align-items:center;gap:8px">'
                 f'{_ico_pag}'
-                f'<span style="font-size:20px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'<span style="font-size:26px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'font-variant-numeric:tabular-nums">{pag_n}</span>'
-                f'<span style="font-size:13px;color:#9ca3af;font-weight:600;'
-                f'letter-spacing:1.2px;text-transform:uppercase">{_pag_palavra}</span>'
-                f'<span style="margin-left:auto;font-size:16px;font-weight:700;color:#5fa3ff;'
+                f'<span style="font-size:11px;color:#9ca3af;font-weight:600;'
+                f'letter-spacing:1px;text-transform:uppercase">{_pag_palavra}</span>'
+                f'<span style="margin-left:auto;font-size:20px;font-weight:800;color:#5fa3ff;'
                 f'font-variant-numeric:tabular-nums">{_pag_v_fmt}</span>'
                 f'</div>'
                 f'</div>'
@@ -659,10 +659,10 @@ def _render_atividades(store, clientes, role):
                 atd = sum(1 for _, a in items if a.get("atend"))
             return {"mensagens": msg, "ligacoes": lig, "atendidas": atd}
 
-        # Importante: em 'Todos os clientes' (admin/gestor), as métricas dos
-        # cards M/L/A NÃO são afetadas pelos filtros Grupo/Situação. Refletem
-        # toda a atividade da operação no dia — usado pra visão gerencial.
-        # Filtros aplicam APENAS na fila do kanban abaixo.
+        # Em 'Todos os clientes' (admin/gestor), os cards M/L/A respeitam
+        # os filtros Grupo e Situação. Permite admin focar nos números de
+        # um grupo específico sem ter que entrar no modo 'Lote do dia'.
+        # Atendente e admin 'Lote do dia' continuam com escopo do lote.
         atendente_logado = _EMAIL_GRUPO.get(email)
         if atendente_logado:
             dados_m, label_m = _metricas_lote_painel(ids_hoje, buckets_hoje), atendente_logado
@@ -672,7 +672,29 @@ def _render_atividades(store, clientes, role):
             _ids_lote_adm = set(_buckets_adm.keys())
             dados_m, label_m = _metricas_lote_painel(_ids_lote_adm, _buckets_adm), _atendente_sel
         else:
-            dados_m, label_m = _metricas_lote_painel(None), "Total"
+            # Admin/Gestor em 'Todos os clientes' — aplica filtros Grupo/Situação
+            # pra restringir o universo de clientes contabilizados nas métricas.
+            _filtrados = store.get("clientes", []) or []
+            if filtro_grupo == "Sem especialista":
+                _filtrados = [
+                    c for c in _filtrados
+                    if not c.get("_grupo") or str(c.get("_grupo")) in ("—", "", "nan", "NaN")
+                ]
+            elif filtro_grupo != "Todos":
+                _filtrados = [c for c in _filtrados if c.get("_grupo") == filtro_grupo]
+            if filtro_inativo == "Ativos":
+                _filtrados = [c for c in _filtrados if not c.get("_inativo")]
+            elif filtro_inativo == "Inativos":
+                _filtrados = [c for c in _filtrados if c.get("_inativo")]
+            _ids_filtrados = {str(c.get("id") or "") for c in _filtrados}
+            # Se há filtro ativo, passa ids específicos; senão, None = todos
+            _eh_filtrado = (
+                filtro_grupo != "Todos" or filtro_inativo != "Todos"
+            )
+            dados_m, label_m = (
+                _metricas_lote_painel(_ids_filtrados if _eh_filtrado else None),
+                "Total" if not _eh_filtrado else "Filtrado",
+            )
 
         meta_msg, meta_lig, meta_atend = 50, 30, 15
         n_msg, n_lig, n_atend = dados_m.get("mensagens", 0), dados_m.get("ligacoes", 0), dados_m.get("atendidas", 0)
