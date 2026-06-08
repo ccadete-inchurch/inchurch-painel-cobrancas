@@ -442,6 +442,131 @@ def _render_atividades(store, clientes, role):
         unsafe_allow_html=True,
     )
 
+    # ── Indicadores 'Hoje' — fragment próprio, auto-refresh 60s ───────────────
+    # Layout horizontal: 'No Lote' (quando aplicável) e 'No Total' (admin/gestor).
+    # Atendente: vê só 'No Lote' (sua carteira do dia).
+    # Admin 'Todos os clientes': vê só 'No Total'.
+    # Admin 'Lote do dia' de X: vê 'No Lote de X' + 'No Total'.
+    @st.fragment(run_every=60)
+    def _indicadores_hoje():
+        clientes_full = store.get("clientes", []) or []
+        # Helper: conta + soma valor pagamentos pra um subset de clientes
+        def _agg(cs):
+            reg_n, reg_v, pag_n, pag_v = 0, 0.0, 0, 0.0
+            for c in cs:
+                vlr = float(c.get("_valor_pago_hoje") or 0)
+                if c.get("_regularizado_hoje"):
+                    reg_n += 1
+                    reg_v += vlr
+                if vlr > 0:
+                    pag_n += 1
+                    pag_v += vlr
+            return reg_n, reg_v, pag_n, pag_v
+
+        # Decide quais seções renderizar baseado no contexto
+        _mostrar_lote = (email in _EMAIL_GRUPO) or (
+            role in ("admin", "gestor") and _modo_admin == "Lote do dia" and _atendente_sel
+        )
+        _mostrar_total = role in ("admin", "gestor")
+
+        # Dados do LOTE
+        if _mostrar_lote:
+            if email in _EMAIL_GRUPO:
+                _ids_lote = ids_hoje
+                _label_lote = "no seu lote"
+            else:
+                _key = f"_tarefas_admin_{hoje_lote()}_{_atendente_sel}"
+                _buckets = st.session_state.get(_key, {}) or {}
+                _ids_lote = set(_buckets.keys())
+                _label_lote = f"no lote de {_atendente_sel}"
+            _lote_cs = [c for c in clientes_full if c.get("id") in _ids_lote]
+            lote_reg_n, lote_reg_v, lote_pag_n, lote_pag_v = _agg(_lote_cs)
+        # Dados do TOTAL
+        total_reg_n = total_reg_v = total_pag_n = total_pag_v = 0
+        total_label = ""
+        if _mostrar_total:
+            total_reg_n, total_reg_v, total_pag_n, total_pag_v = _agg(clientes_full)
+            total_label = "no total da operação"
+
+        def _palavra(n, sing, plur):
+            return sing if n == 1 else plur
+
+        # SVG icons inline (✓ verde, ⬡ azul)
+        _ico_reg = (
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7cc243" '
+            'stroke-width="3" stroke-linecap="round" stroke-linejoin="round" '
+            'style="flex-shrink:0"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+        )
+        _ico_pag = (
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5fa3ff" '
+            'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" '
+            'style="flex-shrink:0"><circle cx="12" cy="12" r="9"></circle>'
+            '<path d="M12 6v6l4 2"></path></svg>'
+        )
+
+        # CSS / building blocks
+        def _card_html(label_topo, sublabel, reg_n, reg_v, pag_n, pag_v, accent="#7cc243"):
+            _reg_palavra = _palavra(reg_n, "regularização", "regularizações")
+            _pag_palavra = _palavra(pag_n, "pagamento", "pagamentos")
+            return (
+                f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
+                f'border-radius:14px;padding:18px 22px;box-shadow:0 1px 4px rgba(0,0,0,.18);'
+                f'position:relative;overflow:hidden">'
+                # Faixa de cor no topo (linha fina decorativa)
+                f'<div style="position:absolute;top:0;left:0;right:0;height:3px;'
+                f'background:linear-gradient(90deg,{accent} 0%,{accent}80 100%)"></div>'
+                # Header (label da seção)
+                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
+                f'<span style="font-size:10px;font-weight:800;letter-spacing:1.6px;'
+                f'text-transform:uppercase;color:#8b94a5">{label_topo}</span>'
+                f'<span style="font-size:10px;color:#6b7280;font-style:italic">{sublabel}</span>'
+                f'</div>'
+                # Linha 1: regularizações
+                f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
+                f'{_ico_reg}'
+                f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'font-variant-numeric:tabular-nums">{reg_n}</span>'
+                f'<span style="font-size:13px;color:#9ca3af;font-weight:500">{_reg_palavra}</span>'
+                f'<span style="margin-left:auto;font-size:14px;font-weight:700;color:#7cc243;'
+                f'font-variant-numeric:tabular-nums">{fmt_moeda_plain(reg_v) if reg_v > 0 else "—"}</span>'
+                f'</div>'
+                # Divisor
+                f'<div style="height:1px;background:#2a2f42;margin:8px 0"></div>'
+                # Linha 2: pagamentos
+                f'<div style="display:flex;align-items:center;gap:10px">'
+                f'{_ico_pag}'
+                f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'font-variant-numeric:tabular-nums">{pag_n}</span>'
+                f'<span style="font-size:13px;color:#9ca3af;font-weight:500">{_pag_palavra}</span>'
+                f'<span style="margin-left:auto;font-size:14px;font-weight:700;color:#5fa3ff;'
+                f'font-variant-numeric:tabular-nums">{fmt_moeda_plain(pag_v) if pag_v > 0 else "—"}</span>'
+                f'</div>'
+                f'</div>'
+            )
+
+        # Monta linha horizontal
+        cards_html = []
+        if _mostrar_lote:
+            cards_html.append(_card_html(
+                "No Lote", _label_lote,
+                lote_reg_n, lote_reg_v, lote_pag_n, lote_pag_v,
+                accent="#7cc243",
+            ))
+        if _mostrar_total:
+            cards_html.append(_card_html(
+                "No Total", total_label,
+                total_reg_n, total_reg_v, total_pag_n, total_pag_v,
+                accent="#5fa3ff",
+            ))
+
+        if cards_html:
+            st.markdown(
+                f'<div style="display:flex;gap:16px;margin-bottom:28px">{"".join(cards_html)}</div>',
+                unsafe_allow_html=True,
+            )
+
+    _indicadores_hoje()
+
     # ── Filtros (fora do fragment — Streamlit preserva valor por session_state)
     grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
     fa, fb, fc = st.columns([1.3, 1.3, 2])
@@ -508,35 +633,11 @@ def _render_atividades(store, clientes, role):
         meta_msg, meta_lig, meta_atend = 50, 30, 15
         n_msg, n_lig, n_atend = dados_m.get("mensagens", 0), dados_m.get("ligacoes", 0), dados_m.get("atendidas", 0)
 
-        # Badge de regularizados hoje — só conta clientes que QUITARAM TUDO
-        # (flag _regularizado_hoje). Pagamentos parciais NÃO contam aqui (eles
-        # aparecem só na aba Regularizados como "Pagamentos do Dia").
-        # Tooltip explica a diferença pra evitar confusão com o card da aba.
-        _regs_hoje = [c for c in clientes if c.get("_regularizado_hoje")]
-        _badge_reg_html = ""
-        if _regs_hoje:
-            _n_reg = len(_regs_hoje)
-            _vl_reg = sum(float(c.get("_valor_pago_hoje") or 0) for c in _regs_hoje)
-            _vl_txt = f' · {fmt_moeda_plain(_vl_reg)}' if _vl_reg > 0 else ''
-            _suf_reg = " do lote" if email in _EMAIL_GRUPO else ""
-            _label_reg = "regularização" if _n_reg == 1 else "regularizações"
-            _tooltip = (
-                "Clientes que quitaram TODAS as cobranças vencidas hoje. "
-                "Pagamentos parciais não entram aqui — ver aba Pagamentos."
-            )
-            _badge_reg_html = (
-                f'<span title="{_tooltip}" style="display:inline-flex;align-items:center;gap:8px;'
-                f'background:rgba(124,194,67,.1);border:1px solid rgba(124,194,67,.4);'
-                f'border-radius:8px;padding:8px 16px;font-size:15px;font-weight:700;color:#e8eaf0;cursor:help">'
-                f'<span style="color:#7cc243;font-weight:900;font-size:17px;line-height:1">✓</span>'
-                f'{_n_reg} {_label_reg}{_suf_reg} hoje{_vl_txt}'
-                f'</span>'
-            )
-
+        # Badge de regularizados removido daqui — agora aparece no painel de
+        # 'Indicadores Hoje' acima dos filtros (mais visível e profissional).
         st.markdown(
-            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+            f'<div style="margin-bottom:10px">'
             f'<span style="font-size:13px;font-weight:700;color:#6b7280">{label_m}</span>'
-            f'{_badge_reg_html}'
             f'</div>',
             unsafe_allow_html=True,
         )
