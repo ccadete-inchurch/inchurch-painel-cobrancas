@@ -524,41 +524,48 @@ def _render_atividades(store, clientes, role):
             '<path d="M12 6v6l4 2"></path></svg>'
         )
 
-        # CSS / building blocks
+        # Card compacto — altura simétrica aos filtros (Grupo/Situação/Buscar).
+        # Layout horizontal single-line: label | reg+valor | sep | pag+valor.
         def _card_html(label_topo, sublabel, reg_n, reg_v, pag_n, pag_v):
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
             _pag_palavra = _palavra(pag_n, "pagamento", "pagamentos").upper()
+            _reg_v_fmt = fmt_moeda_plain(reg_v) if reg_v > 0 else "—"
+            _pag_v_fmt = fmt_moeda_plain(pag_v) if pag_v > 0 else "—"
+            _sublabel_html = (
+                f'<span style="margin-left:auto;font-size:11px;color:#6b7280;'
+                f'font-style:italic;flex-shrink:0">{sublabel}</span>'
+            ) if sublabel else ''
             return (
                 f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
-                f'border-radius:14px;padding:22px 26px;box-shadow:0 1px 4px rgba(0,0,0,.18)">'
-                # Header (label da seção) — fonte aumentada mais
-                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">'
-                f'<span style="font-size:18px;font-weight:800;letter-spacing:2.4px;'
-                f'text-transform:uppercase;color:#8b94a5">{label_topo}</span>'
-                f'<span style="font-size:12px;color:#6b7280;font-style:italic">{sublabel}</span>'
-                f'</div>'
-                # Linha 1: regularizações (caixa alta + fonte maior na palavra)
-                f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">'
+                f'border-radius:10px;padding:12px 20px;'
+                f'display:flex;align-items:center;gap:24px;flex-wrap:wrap">'
+                # Label da seção (esquerda)
+                f'<span style="font-size:14px;font-weight:800;letter-spacing:2px;'
+                f'text-transform:uppercase;color:#8b94a5;flex-shrink:0">{label_topo}</span>'
+                # Regularizações inline (ícone + número + label + valor)
+                f'<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'
                 f'{_ico_reg}'
-                f'<span style="font-size:32px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'font-variant-numeric:tabular-nums">{reg_n}</span>'
-                f'<span style="font-size:16px;color:#9ca3af;font-weight:700;'
-                f'letter-spacing:1.4px;text-transform:uppercase">{_reg_palavra}</span>'
-                f'<span style="margin-left:auto;font-size:18px;font-weight:700;color:#7cc243;'
-                f'font-variant-numeric:tabular-nums">{fmt_moeda_plain(reg_v) if reg_v > 0 else "—"}</span>'
+                f'<span style="font-size:14px;font-weight:700;color:#7cc243;'
+                f'font-variant-numeric:tabular-nums">{_reg_v_fmt}</span>'
+                f'<span style="font-size:11px;color:#9ca3af;font-weight:600;'
+                f'letter-spacing:1.2px;text-transform:uppercase">{_reg_palavra}</span>'
                 f'</div>'
-                # Divisor
-                f'<div style="height:1px;background:#2a2f42;margin:12px 0"></div>'
-                # Linha 2: pagamentos (caixa alta + fonte maior)
-                f'<div style="display:flex;align-items:center;gap:14px">'
+                # Separador vertical visual
+                f'<div style="width:1px;height:28px;background:#2a2f42;flex-shrink:0"></div>'
+                # Pagamentos inline
+                f'<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'
                 f'{_ico_pag}'
-                f'<span style="font-size:32px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'font-variant-numeric:tabular-nums">{pag_n}</span>'
-                f'<span style="font-size:16px;color:#9ca3af;font-weight:700;'
-                f'letter-spacing:1.4px;text-transform:uppercase">{_pag_palavra}</span>'
-                f'<span style="margin-left:auto;font-size:18px;font-weight:700;color:#5fa3ff;'
-                f'font-variant-numeric:tabular-nums">{fmt_moeda_plain(pag_v) if pag_v > 0 else "—"}</span>'
+                f'<span style="font-size:14px;font-weight:700;color:#5fa3ff;'
+                f'font-variant-numeric:tabular-nums">{_pag_v_fmt}</span>'
+                f'<span style="font-size:11px;color:#9ca3af;font-weight:600;'
+                f'letter-spacing:1.2px;text-transform:uppercase">{_pag_palavra}</span>'
                 f'</div>'
+                # Sublabel à direita (se houver)
+                f'{_sublabel_html}'
                 f'</div>'
             )
 
@@ -579,7 +586,7 @@ def _render_atividades(store, clientes, role):
 
         if cards_html:
             st.markdown(
-                f'<div style="display:flex;gap:16px;margin-bottom:28px">{"".join(cards_html)}</div>',
+                f'<div style="display:flex;gap:12px;margin-bottom:14px">{"".join(cards_html)}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -651,6 +658,10 @@ def _render_atividades(store, clientes, role):
                 atd = sum(1 for _, a in items if a.get("atend"))
             return {"mensagens": msg, "ligacoes": lig, "atendidas": atd}
 
+        # Importante: em 'Todos os clientes' (admin/gestor), as métricas dos
+        # cards M/L/A NÃO são afetadas pelos filtros Grupo/Situação. Refletem
+        # toda a atividade da operação no dia — usado pra visão gerencial.
+        # Filtros aplicam APENAS na fila do kanban abaixo.
         atendente_logado = _EMAIL_GRUPO.get(email)
         if atendente_logado:
             dados_m, label_m = _metricas_lote_painel(ids_hoje, buckets_hoje), atendente_logado
