@@ -521,40 +521,36 @@ def _render_atividades(store, clientes, role):
         )
 
         # CSS / building blocks
-        def _card_html(label_topo, sublabel, reg_n, reg_v, pag_n, pag_v, accent="#7cc243"):
+        def _card_html(label_topo, sublabel, reg_n, reg_v, pag_n, pag_v):
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações")
             _pag_palavra = _palavra(pag_n, "pagamento", "pagamentos")
             return (
                 f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
-                f'border-radius:14px;padding:18px 22px;box-shadow:0 1px 4px rgba(0,0,0,.18);'
-                f'position:relative;overflow:hidden">'
-                # Faixa de cor no topo (linha fina decorativa)
-                f'<div style="position:absolute;top:0;left:0;right:0;height:3px;'
-                f'background:linear-gradient(90deg,{accent} 0%,{accent}80 100%)"></div>'
-                # Header (label da seção)
-                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
-                f'<span style="font-size:10px;font-weight:800;letter-spacing:1.6px;'
+                f'border-radius:14px;padding:20px 24px;box-shadow:0 1px 4px rgba(0,0,0,.18)">'
+                # Header (label da seção) — fonte aumentada
+                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
+                f'<span style="font-size:13px;font-weight:800;letter-spacing:1.8px;'
                 f'text-transform:uppercase;color:#8b94a5">{label_topo}</span>'
-                f'<span style="font-size:10px;color:#6b7280;font-style:italic">{sublabel}</span>'
+                f'<span style="font-size:11px;color:#6b7280;font-style:italic">{sublabel}</span>'
                 f'</div>'
                 # Linha 1: regularizações
-                f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
+                f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">'
                 f'{_ico_reg}'
-                f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'<span style="font-size:30px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'font-variant-numeric:tabular-nums">{reg_n}</span>'
-                f'<span style="font-size:13px;color:#9ca3af;font-weight:500">{_reg_palavra}</span>'
-                f'<span style="margin-left:auto;font-size:14px;font-weight:700;color:#7cc243;'
+                f'<span style="font-size:14px;color:#9ca3af;font-weight:500">{_reg_palavra}</span>'
+                f'<span style="margin-left:auto;font-size:18px;font-weight:700;color:#7cc243;'
                 f'font-variant-numeric:tabular-nums">{fmt_moeda_plain(reg_v) if reg_v > 0 else "—"}</span>'
                 f'</div>'
                 # Divisor
-                f'<div style="height:1px;background:#2a2f42;margin:8px 0"></div>'
+                f'<div style="height:1px;background:#2a2f42;margin:10px 0"></div>'
                 # Linha 2: pagamentos
-                f'<div style="display:flex;align-items:center;gap:10px">'
+                f'<div style="display:flex;align-items:center;gap:12px">'
                 f'{_ico_pag}'
-                f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'<span style="font-size:30px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'font-variant-numeric:tabular-nums">{pag_n}</span>'
-                f'<span style="font-size:13px;color:#9ca3af;font-weight:500">{_pag_palavra}</span>'
-                f'<span style="margin-left:auto;font-size:14px;font-weight:700;color:#5fa3ff;'
+                f'<span style="font-size:14px;color:#9ca3af;font-weight:500">{_pag_palavra}</span>'
+                f'<span style="margin-left:auto;font-size:18px;font-weight:700;color:#5fa3ff;'
                 f'font-variant-numeric:tabular-nums">{fmt_moeda_plain(pag_v) if pag_v > 0 else "—"}</span>'
                 f'</div>'
                 f'</div>'
@@ -566,13 +562,11 @@ def _render_atividades(store, clientes, role):
             cards_html.append(_card_html(
                 "No Lote", _label_lote,
                 lote_reg_n, lote_reg_v, lote_pag_n, lote_pag_v,
-                accent="#7cc243",
             ))
         if _mostrar_total:
             cards_html.append(_card_html(
                 "No Total", total_label,
                 total_reg_n, total_reg_v, total_pag_n, total_pag_v,
-                accent="#5fa3ff",
             ))
 
         if cards_html:
