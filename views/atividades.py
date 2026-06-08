@@ -541,12 +541,13 @@ def _render_atividades(store, clientes, role):
         def _card_html(label_topo, sublabel, reg_n, reg_v, parc_n, parc_v):
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
             _parc_palavra = _palavra(parc_n, "parcial", "parciais").upper()
-            _reg_v_fmt = fmt_moeda_plain(reg_v) if reg_v > 0 else "—"
-            _parc_v_fmt = fmt_moeda_plain(parc_v) if parc_v > 0 else "—"
+            # Sempre formata como R$ (mesmo quando 0,00) — antes mostrava "—"
+            _reg_v_fmt = fmt_moeda_plain(reg_v)
+            _parc_v_fmt = fmt_moeda_plain(parc_v)
             # Total recuperado = soma direta (mutuamente exclusivos)
             total_n = reg_n + parc_n
             total_v = reg_v + parc_v
-            _total_v_fmt = fmt_moeda_plain(total_v) if total_v > 0 else "—"
+            _total_v_fmt = fmt_moeda_plain(total_v)
 
             def _bloco(ico, count, palavra, valor_fmt, cor_valor):
                 return (
@@ -597,8 +598,8 @@ def _render_atividades(store, clientes, role):
                 st.markdown(html, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    # NOTA: _indicadores_hoje() chamado MAIS ABAIXO, depois dos filtros, pra
-    # ficar alinhado com a linha de filtros (Grupo/Situação/Buscar).
+    # Indicadores 'Hoje' — ACIMA dos filtros (linha horizontal de destaque)
+    _indicadores_hoje()
 
     # ── Filtros (fora do fragment — Streamlit preserva valor por session_state)
     # 'nan' (string) cai aqui quando _grupo veio de pandas com NaN convertido
@@ -623,9 +624,6 @@ def _render_atividades(store, clientes, role):
         st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], key="atv_filtro_inativo")
     with fc:
         st.text_input("Buscar", placeholder="Nome, CNPJ ou ID...", key="atv_busca")
-
-    # Indicadores 'Hoje' — alinhado horizontalmente abaixo dos filtros.
-    _indicadores_hoje()
 
     # ── Conteúdo dinâmico (métricas + kanban) — fragment com run_every=60s
     # Atualiza a cada 60s sem fazer rerun do app inteiro: filtros (acima) ficam
