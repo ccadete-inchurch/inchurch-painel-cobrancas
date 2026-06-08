@@ -522,34 +522,36 @@ def _render_atividades(store, clientes, role):
 
         # CSS / building blocks
         def _card_html(label_topo, sublabel, reg_n, reg_v, pag_n, pag_v):
-            _reg_palavra = _palavra(reg_n, "regularização", "regularizações")
-            _pag_palavra = _palavra(pag_n, "pagamento", "pagamentos")
+            _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
+            _pag_palavra = _palavra(pag_n, "pagamento", "pagamentos").upper()
             return (
                 f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
-                f'border-radius:14px;padding:20px 24px;box-shadow:0 1px 4px rgba(0,0,0,.18)">'
-                # Header (label da seção) — fonte aumentada
-                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
-                f'<span style="font-size:13px;font-weight:800;letter-spacing:1.8px;'
+                f'border-radius:14px;padding:22px 26px;box-shadow:0 1px 4px rgba(0,0,0,.18)">'
+                # Header (label da seção) — fonte aumentada mais
+                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">'
+                f'<span style="font-size:18px;font-weight:800;letter-spacing:2.4px;'
                 f'text-transform:uppercase;color:#8b94a5">{label_topo}</span>'
-                f'<span style="font-size:11px;color:#6b7280;font-style:italic">{sublabel}</span>'
+                f'<span style="font-size:12px;color:#6b7280;font-style:italic">{sublabel}</span>'
                 f'</div>'
-                # Linha 1: regularizações
-                f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">'
+                # Linha 1: regularizações (caixa alta + fonte maior na palavra)
+                f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">'
                 f'{_ico_reg}'
-                f'<span style="font-size:30px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'<span style="font-size:32px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'font-variant-numeric:tabular-nums">{reg_n}</span>'
-                f'<span style="font-size:14px;color:#9ca3af;font-weight:500">{_reg_palavra}</span>'
+                f'<span style="font-size:16px;color:#9ca3af;font-weight:700;'
+                f'letter-spacing:1.4px;text-transform:uppercase">{_reg_palavra}</span>'
                 f'<span style="margin-left:auto;font-size:18px;font-weight:700;color:#7cc243;'
                 f'font-variant-numeric:tabular-nums">{fmt_moeda_plain(reg_v) if reg_v > 0 else "—"}</span>'
                 f'</div>'
                 # Divisor
-                f'<div style="height:1px;background:#2a2f42;margin:10px 0"></div>'
-                # Linha 2: pagamentos
-                f'<div style="display:flex;align-items:center;gap:12px">'
+                f'<div style="height:1px;background:#2a2f42;margin:12px 0"></div>'
+                # Linha 2: pagamentos (caixa alta + fonte maior)
+                f'<div style="display:flex;align-items:center;gap:14px">'
                 f'{_ico_pag}'
-                f'<span style="font-size:30px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'<span style="font-size:32px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'font-variant-numeric:tabular-nums">{pag_n}</span>'
-                f'<span style="font-size:14px;color:#9ca3af;font-weight:500">{_pag_palavra}</span>'
+                f'<span style="font-size:16px;color:#9ca3af;font-weight:700;'
+                f'letter-spacing:1.4px;text-transform:uppercase">{_pag_palavra}</span>'
                 f'<span style="margin-left:auto;font-size:18px;font-weight:700;color:#5fa3ff;'
                 f'font-variant-numeric:tabular-nums">{fmt_moeda_plain(pag_v) if pag_v > 0 else "—"}</span>'
                 f'</div>'
@@ -643,19 +645,15 @@ def _render_atividades(store, clientes, role):
         meta_msg, meta_lig, meta_atend = 50, 30, 15
         n_msg, n_lig, n_atend = dados_m.get("mensagens", 0), dados_m.get("ligacoes", 0), dados_m.get("atendidas", 0)
 
-        # Badge de regularizados removido daqui — agora aparece no painel de
-        # 'Indicadores Hoje' acima dos filtros (mais visível e profissional).
-        st.markdown(
-            f'<div style="margin-bottom:10px">'
-            f'<span style="font-size:13px;font-weight:700;color:#6b7280">{label_m}</span>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+        # Nome do especialista removido daqui por feedback — não agrega valor,
+        # o nome já aparece no header e nos cards de Indicadores acima.
+        # Labels com fonte maior (font-size:15px override da classe .metric-label)
+        _label_style = "font-size:15px;letter-spacing:1.4px"
         m1, m2, m3 = st.columns(3)
         with m1:
             pct = min(int(n_msg / meta_msg * 100), 100)
             st.markdown(
-                f'<div class="metric-card"><div class="metric-label">Mensagens Enviadas</div>'
+                f'<div class="metric-card"><div class="metric-label" style="{_label_style}">Mensagens Enviadas</div>'
                 f'<div class="metric-value" style="color:#5fa3ff;font-size:32px">{n_msg}<span style="font-size:18px;color:#6b7280">/{meta_msg}</span></div>'
                 f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
                 f'<div style="background:#5fa3ff;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
@@ -664,7 +662,7 @@ def _render_atividades(store, clientes, role):
         with m2:
             pct = min(int(n_lig / meta_lig * 100), 100)
             st.markdown(
-                f'<div class="metric-card"><div class="metric-label">Ligações Realizadas</div>'
+                f'<div class="metric-card"><div class="metric-label" style="{_label_style}">Ligações Realizadas</div>'
                 f'<div class="metric-value" style="color:#f59e0b;font-size:32px">{n_lig}<span style="font-size:18px;color:#6b7280">/{meta_lig}</span></div>'
                 f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
                 f'<div style="background:#f59e0b;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
@@ -673,7 +671,7 @@ def _render_atividades(store, clientes, role):
         with m3:
             pct = min(int(n_atend / meta_atend * 100), 100)
             st.markdown(
-                f'<div class="metric-card"><div class="metric-label">Ligações Atendidas</div>'
+                f'<div class="metric-card"><div class="metric-label" style="{_label_style}">Ligações Atendidas</div>'
                 f'<div class="metric-value" style="color:#7cc243;font-size:32px">{n_atend}<span style="font-size:18px;color:#6b7280">/{meta_atend}</span></div>'
                 f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
                 f'<div style="background:#7cc243;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
