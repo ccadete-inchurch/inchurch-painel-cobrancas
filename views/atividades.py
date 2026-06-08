@@ -580,10 +580,24 @@ def _render_atividades(store, clientes, role):
     _indicadores_hoje()
 
     # ── Filtros (fora do fragment — Streamlit preserva valor por session_state)
-    grupos_disp = sorted({c.get("_grupo", "—") for c in clientes if c.get("_grupo") and c.get("_grupo") not in ("—", "")})
+    # 'nan' (string) cai aqui quando _grupo veio de pandas com NaN convertido
+    # via str() em algum ponto do pipeline. Trata junto com None, '—' e ''
+    # como ausência de grupo (mesmo fix da tela Inadimplência).
+    grupos_disp = sorted({
+        c.get("_grupo", "—") for c in clientes
+        if c.get("_grupo") and c.get("_grupo") not in ("—", "", "nan", "NaN")
+    })
+    _tem_sem_grupo = any(
+        not c.get("_grupo") or c.get("_grupo") in ("—", "", "nan", "NaN")
+        for c in clientes
+    )
     fa, fb, fc = st.columns([1.3, 1.3, 2])
     with fa:
-        st.selectbox("Grupo", ["Todos"] + grupos_disp, key="atv_filtro_grupo")
+        st.selectbox(
+            "Grupo",
+            ["Todos"] + grupos_disp + (["Sem especialista"] if _tem_sem_grupo else []),
+            key="atv_filtro_grupo",
+        )
     with fb:
         st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], key="atv_filtro_inativo")
     with fc:
@@ -688,7 +702,13 @@ def _render_atividades(store, clientes, role):
         fila.sort(key=lambda x: x[0], reverse=True)
 
         # ── Aplica filtros (lê do session_state, preserva entre runs) ─────────
-        if filtro_grupo != "Todos":
+        if filtro_grupo == "Sem especialista":
+            # Cliente sem grupo: None, '', '—' ou 'nan' (string)
+            fila = [
+                (s, a, c, h) for s, a, c, h in fila
+                if not c.get("_grupo") or str(c.get("_grupo")) in ("—", "", "nan", "NaN")
+            ]
+        elif filtro_grupo != "Todos":
             fila = [(s, a, c, h) for s, a, c, h in fila if c.get("_grupo") == filtro_grupo]
         if filtro_inativo == "Ativos":
             fila = [(s, a, c, h) for s, a, c, h in fila if not c.get("_inativo")]
