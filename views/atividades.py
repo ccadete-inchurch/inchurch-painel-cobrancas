@@ -450,18 +450,21 @@ def _render_atividades(store, clientes, role):
     @st.fragment(run_every=60)
     def _indicadores_hoje():
         clientes_full = store.get("clientes", []) or []
-        # Helper: conta + soma valor pagamentos pra um subset de clientes
+        # Helper: conta + soma valor — REGULARIZAÇÕES e PARCIAIS são
+        # mutuamente EXCLUSIVAS (regularizou não conta em parcial e vice-versa).
+        # Clareza visual: 'Reg=3, Parc=1' soma 4 sem sobreposição.
         def _agg(cs):
-            reg_n, reg_v, pag_n, pag_v = 0, 0.0, 0, 0.0
+            reg_n, reg_v, parc_n, parc_v = 0, 0.0, 0, 0.0
             for c in cs:
                 vlr = float(c.get("_valor_pago_hoje") or 0)
                 if c.get("_regularizado_hoje"):
                     reg_n += 1
                     reg_v += vlr
-                if vlr > 0:
-                    pag_n += 1
-                    pag_v += vlr
-            return reg_n, reg_v, pag_n, pag_v
+                elif vlr > 0:
+                    # Pagou algo mas NÃO zerou tudo → parcial
+                    parc_n += 1
+                    parc_v += vlr
+            return reg_n, reg_v, parc_n, parc_v
 
         # Decide quais seções renderizar baseado no contexto:
         #   Atendente:                          mostra só 'No Lote'
@@ -484,10 +487,10 @@ def _render_atividades(store, clientes, role):
                 _buckets = st.session_state.get(_key, {}) or {}
                 _ids_lote = set(_buckets.keys())
             _lote_cs = [c for c in clientes_full if c.get("id") in _ids_lote]
-            lote_reg_n, lote_reg_v, lote_pag_n, lote_pag_v = _agg(_lote_cs)
+            lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v = _agg(_lote_cs)
         # Dados do TOTAL — respeita filtros Grupo (incluindo 'Sem especialista')
         # e Situação. Sublabel removido por feedback — visual mais limpo.
-        total_reg_n = total_reg_v = total_pag_n = total_pag_v = 0
+        total_reg_n = total_reg_v = total_parc_n = total_parc_v = 0
         total_label = ""  # sublabel removido por feedback
         if _mostrar_total:
             _fg = st.session_state.get("atv_filtro_grupo", "Todos")
@@ -508,7 +511,7 @@ def _render_atividades(store, clientes, role):
                 _total_cs = [c for c in _total_cs if not c.get("_inativo")]
             elif _fs == "Inativos":
                 _total_cs = [c for c in _total_cs if c.get("_inativo")]
-            total_reg_n, total_reg_v, total_pag_n, total_pag_v = _agg(_total_cs)
+            total_reg_n, total_reg_v, total_parc_n, total_parc_v = _agg(_total_cs)
 
         def _palavra(n, sing, plur):
             return sing if n == 1 else plur
@@ -526,43 +529,37 @@ def _render_atividades(store, clientes, role):
             '<path d="M12 6v6l4 2"></path></svg>'
         )
 
-        # Card compacto — sem header 'NO LOTE'/'NO TOTAL' (removido por
-        # feedback), 2 linhas com count + label compacto + valor R$ destacado.
-        def _card_html(label_topo, sublabel, reg_n, reg_v, pag_n, pag_v):
+        # Card compacto — sem header (removido), 2 linhas mutuamente
+        # exclusivas: REGULARIZAÇÕES (zerou tudo) + PARCIAIS (pagou só parte).
+        def _card_html(label_topo, sublabel, reg_n, reg_v, parc_n, parc_v):
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
-            _pag_palavra = _palavra(pag_n, "pagamento", "pagamentos").upper()
+            _parc_palavra = _palavra(parc_n, "parcial", "parciais").upper()
             _reg_v_fmt = fmt_moeda_plain(reg_v) if reg_v > 0 else "—"
-            _pag_v_fmt = fmt_moeda_plain(pag_v) if pag_v > 0 else "—"
-            # Sublabel discreto no topo (se houver — só pra 'No Total' com filtro)
-            _sub_html = (
-                f'<div style="font-size:10px;color:#6b7280;font-style:italic;'
-                f'margin-bottom:6px;text-align:right">{sublabel}</div>'
-            ) if sublabel else ''
+            _parc_v_fmt = fmt_moeda_plain(parc_v) if parc_v > 0 else "—"
             return (
                 f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
                 f'border-radius:10px;padding:14px 18px">'
-                f'{_sub_html}'
-                # Linha 1: regularizações — valor R$ MAIOR
+                # Linha 1: regularizações
                 f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
                 f'{_ico_reg}'
                 f'<span style="font-size:26px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'font-variant-numeric:tabular-nums">{reg_n}</span>'
-                f'<span style="font-size:11px;color:#9ca3af;font-weight:600;'
-                f'letter-spacing:1px;text-transform:uppercase">{_reg_palavra}</span>'
+                f'<span style="font-size:14px;color:#9ca3af;font-weight:700;'
+                f'letter-spacing:1.2px;text-transform:uppercase">{_reg_palavra}</span>'
                 f'<span style="margin-left:auto;font-size:20px;font-weight:800;color:#7cc243;'
                 f'font-variant-numeric:tabular-nums">{_reg_v_fmt}</span>'
                 f'</div>'
                 # Divisor horizontal cinza escuro
                 f'<div style="height:1px;background:#2a2f42;margin:0 -18px 10px"></div>'
-                # Linha 2: pagamentos — valor R$ MAIOR
+                # Linha 2: parciais (cliente pagou algo mas não zerou)
                 f'<div style="display:flex;align-items:center;gap:8px">'
                 f'{_ico_pag}'
                 f'<span style="font-size:26px;font-weight:800;color:#e8eaf0;line-height:1;'
-                f'font-variant-numeric:tabular-nums">{pag_n}</span>'
-                f'<span style="font-size:11px;color:#9ca3af;font-weight:600;'
-                f'letter-spacing:1px;text-transform:uppercase">{_pag_palavra}</span>'
+                f'font-variant-numeric:tabular-nums">{parc_n}</span>'
+                f'<span style="font-size:14px;color:#9ca3af;font-weight:700;'
+                f'letter-spacing:1.2px;text-transform:uppercase">{_parc_palavra}</span>'
                 f'<span style="margin-left:auto;font-size:20px;font-weight:800;color:#5fa3ff;'
-                f'font-variant-numeric:tabular-nums">{_pag_v_fmt}</span>'
+                f'font-variant-numeric:tabular-nums">{_parc_v_fmt}</span>'
                 f'</div>'
                 f'</div>'
             )
@@ -574,12 +571,12 @@ def _render_atividades(store, clientes, role):
             # contexto natural (atendente vê só o próprio) já contextualizam.
             cards_html.append(_card_html(
                 "No Lote", "",
-                lote_reg_n, lote_reg_v, lote_pag_n, lote_pag_v,
+                lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v,
             ))
         if _mostrar_total:
             cards_html.append(_card_html(
                 "No Total", total_label,
-                total_reg_n, total_reg_v, total_pag_n, total_pag_v,
+                total_reg_n, total_reg_v, total_parc_n, total_parc_v,
             ))
 
         if cards_html:
