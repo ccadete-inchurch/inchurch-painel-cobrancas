@@ -529,24 +529,13 @@ def _render_atividades(store, clientes, role):
             '<path d="M12 6v6l4 2"></path></svg>'
         )
 
-        # Ícone de cofre/total (cor verde inChurch claro pra diferenciar dos outros)
-        _ico_total = (
-            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" '
-            'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" '
-            'style="flex-shrink:0"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 1 0 0 7h5a3.5 3.5 0 1 1 0 7H6"/></svg>'
-        )
-
-        # Card vertical — 3 linhas com divisores:
-        # ✓ Regularizações (verde) → ⏱ Parciais (azul) → $ Total (roxo)
+        # Card vertical — 2 linhas com divisor:
+        # ✓ Regularizações (verde) → ⏱ Parciais (azul)
         def _card_html(label_topo, sublabel, reg_n, reg_v, parc_n, parc_v):
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
             _parc_palavra = _palavra(parc_n, "parcial", "parciais").upper()
             _reg_v_fmt = fmt_moeda_plain(reg_v)
             _parc_v_fmt = fmt_moeda_plain(parc_v)
-            # Total recuperado = soma direta (mutuamente exclusivos)
-            total_n = reg_n + parc_n
-            total_v = reg_v + parc_v
-            _total_v_fmt = fmt_moeda_plain(total_v)
 
             def _linha(ico, count, palavra, valor_fmt, cor_valor):
                 return (
@@ -569,8 +558,6 @@ def _render_atividades(store, clientes, role):
                 f'{_linha(_ico_reg, reg_n, _reg_palavra, _reg_v_fmt, "#7cc243")}'
                 f'{_divisor}'
                 f'{_linha(_ico_pag, parc_n, _parc_palavra, _parc_v_fmt, "#5fa3ff")}'
-                f'{_divisor}'
-                f'{_linha(_ico_total, total_n, "TOTAL", _total_v_fmt, "#a78bfa")}'
                 f'</div>'
             )
 
