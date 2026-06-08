@@ -481,12 +481,28 @@ def _render_atividades(store, clientes, role):
                 _label_lote = f"no lote de {_atendente_sel}"
             _lote_cs = [c for c in clientes_full if c.get("id") in _ids_lote]
             lote_reg_n, lote_reg_v, lote_pag_n, lote_pag_v = _agg(_lote_cs)
-        # Dados do TOTAL
+        # Dados do TOTAL — respeita filtros de grupo (admin panel OU filtro
+        # 'Grupo' embaixo). Se especialista específico filtrado, restringe
+        # a 'no total daquele grupo' em vez da operação inteira.
         total_reg_n = total_reg_v = total_pag_n = total_pag_v = 0
         total_label = ""
         if _mostrar_total:
-            total_reg_n, total_reg_v, total_pag_n, total_pag_v = _agg(clientes_full)
-            total_label = "no total da operação"
+            # Determina grupo ativo: painel admin > filtro Grupo
+            _grupo_ativo = None
+            if _atendente_sel:
+                _grupo_ativo = _atendente_sel
+            else:
+                _fg = st.session_state.get("atv_filtro_grupo", "Todos")
+                if _fg not in ("Todos", "Sem especialista", "", None):
+                    _grupo_ativo = _fg
+            # Filtra clientes pelo grupo ativo (se houver)
+            if _grupo_ativo:
+                _total_cs = [c for c in clientes_full if c.get("_grupo") == _grupo_ativo]
+                total_label = f"do grupo {_grupo_ativo}"
+            else:
+                _total_cs = clientes_full
+                total_label = "no total da operação"
+            total_reg_n, total_reg_v, total_pag_n, total_pag_v = _agg(_total_cs)
 
         def _palavra(n, sing, plur):
             return sing if n == 1 else plur
