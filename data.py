@@ -880,20 +880,36 @@ fetch_inadimplentes_uniao_semana = fetch_inadimplentes_uniao_esta_semana
 
 @st.cache_data(ttl=3600)
 def fetch_snapshot_ontem() -> set:
-    """IDs do snapshot do DIA ANTERIOR (operacional). Usado pra calcular
-    novos/regularizados de HOJE comparando com ontem. Vazio se não há
-    snapshot de ontem (primeiro dia da feature, falha no cron, etc).
+    """IDs do snapshot MAIS RECENTE disponível antes de hoje. Usado pra
+    calcular novos/regularizados de HOJE comparando com a referência mais
+    próxima.
+
+    Estratégia anterior buscava EXATAMENTE 'ontem' (CURRENT_DATE - 1 DAY).
+    Problema: como o lote não roda em sáb/dom/feriado, segunda-feira o
+    snapshot de domingo não existia, retornando vazio → card mostrava '—'.
+
+    Estratégia atual: pega o snapshot mais recente que NÃO seja de hoje.
+    Robusto a gaps (fim de semana, feriado, falha do cron).
+
+    Trade-off: na segunda compara com sexta (3 dias) em vez de domingo
+    (1 dia). Mas como atendentes não trabalham fim de semana, o quadro
+    operacional fica essencialmente o mesmo — só lumpa as mudanças do
+    fim de semana junto.
     """
     client = get_bq_client()
     if not client:
         return set()
     try:
         df = client.query(f"""
-            SELECT DISTINCT id_sacado_sac
-            FROM `{_SNAPSHOT_TABLE}`
-            WHERE data_snapshot = DATE_SUB(
-                CURRENT_DATE("America/Sao_Paulo"), INTERVAL 1 DAY
+            WITH ref AS (
+                SELECT MAX(data_snapshot) AS dt
+                FROM `{_SNAPSHOT_TABLE}`
+                WHERE data_snapshot < CURRENT_DATE("America/Sao_Paulo")
             )
+            SELECT DISTINCT id_sacado_sac
+            FROM `{_SNAPSHOT_TABLE}` s
+            CROSS JOIN ref r
+            WHERE s.data_snapshot = r.dt
         """).to_dataframe()
         if df.empty:
             return set()
