@@ -529,37 +529,36 @@ def _render_atividades(store, clientes, role):
             '<path d="M12 6v6l4 2"></path></svg>'
         )
 
-        # Card compacto — largura reduzida pra metade do filtro Grupo (~14% da
-        # tela). Labels abreviados (REG./PARC.) pra caber. Tooltips no hover
-        # mostram o nome completo. Categorias mutuamente exclusivas.
+        # Card — sem header (removido), 2 linhas mutuamente exclusivas:
+        # REGULARIZAÇÕES (zerou tudo) + PARCIAIS (pagou só parte).
         def _card_html(label_topo, sublabel, reg_n, reg_v, parc_n, parc_v):
+            _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
+            _parc_palavra = _palavra(parc_n, "parcial", "parciais").upper()
             _reg_v_fmt = fmt_moeda_plain(reg_v) if reg_v > 0 else "—"
             _parc_v_fmt = fmt_moeda_plain(parc_v) if parc_v > 0 else "—"
             return (
                 f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
-                f'border-radius:10px;padding:10px 12px">'
-                # Linha 1: regularizações (tooltip explica abreviação)
-                f'<div title="Regularizações — clientes que zeraram tudo hoje" '
-                f'style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:help">'
+                f'border-radius:10px;padding:14px 18px">'
+                # Linha 1: regularizações
+                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
                 f'{_ico_reg}'
-                f'<span style="font-size:20px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'<span style="font-size:26px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'font-variant-numeric:tabular-nums">{reg_n}</span>'
-                f'<span style="font-size:11px;color:#9ca3af;font-weight:700;'
-                f'letter-spacing:.8px;text-transform:uppercase">REG.</span>'
-                f'<span style="margin-left:auto;font-size:15px;font-weight:800;color:#7cc243;'
+                f'<span style="font-size:14px;color:#9ca3af;font-weight:700;'
+                f'letter-spacing:1.2px;text-transform:uppercase">{_reg_palavra}</span>'
+                f'<span style="margin-left:auto;font-size:20px;font-weight:800;color:#7cc243;'
                 f'font-variant-numeric:tabular-nums">{_reg_v_fmt}</span>'
                 f'</div>'
                 # Divisor horizontal cinza escuro
-                f'<div style="height:1px;background:#2a2f42;margin:0 -12px 6px"></div>'
-                # Linha 2: parciais (tooltip explica abreviação)
-                f'<div title="Parciais — clientes que pagaram parte e ainda devem" '
-                f'style="display:flex;align-items:center;gap:6px;cursor:help">'
+                f'<div style="height:1px;background:#2a2f42;margin:0 -18px 10px"></div>'
+                # Linha 2: parciais (cliente pagou algo mas não zerou)
+                f'<div style="display:flex;align-items:center;gap:8px">'
                 f'{_ico_pag}'
-                f'<span style="font-size:20px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'<span style="font-size:26px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'font-variant-numeric:tabular-nums">{parc_n}</span>'
-                f'<span style="font-size:11px;color:#9ca3af;font-weight:700;'
-                f'letter-spacing:.8px;text-transform:uppercase">PARC.</span>'
-                f'<span style="margin-left:auto;font-size:15px;font-weight:800;color:#5fa3ff;'
+                f'<span style="font-size:14px;color:#9ca3af;font-weight:700;'
+                f'letter-spacing:1.2px;text-transform:uppercase">{_parc_palavra}</span>'
+                f'<span style="margin-left:auto;font-size:20px;font-weight:800;color:#5fa3ff;'
                 f'font-variant-numeric:tabular-nums">{_parc_v_fmt}</span>'
                 f'</div>'
                 f'</div>'
@@ -581,15 +580,12 @@ def _render_atividades(store, clientes, role):
             ))
 
         if cards_html:
-            # Renderiza o card com METADE da largura do filtro 'Grupo'.
-            # Filtros abaixo: [1.3, 1.3, 2] = total 4.6, Grupo = 28%
-            # Card aqui: [0.65, ...] = total 5.25, Card ≈ 12% (≈ metade de 28%)
-            _col_widths = [0.65, 0.65, 1.3, 2]
+            # Card na MESMA largura do filtro 'Grupo' abaixo.
+            _col_widths = [1.3, 1.3, 2]
             ind_cols = st.columns(_col_widths)
             for i, html in enumerate(cards_html[:2]):
                 with ind_cols[i]:
                     st.markdown(html, unsafe_allow_html=True)
-            # Espaçamento abaixo do card
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
     _indicadores_hoje()
