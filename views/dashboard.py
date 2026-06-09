@@ -318,13 +318,37 @@ def _render_dashboard(store, clientes, role):
         ) if _ontem_data else "Comparado com snapshot anterior + regularizações em tempo real."
         _tt_sem   = "Da segunda-feira da semana atual até hoje. Capada no início do mês — Semana ⊆ Mês sempre."
 
+        # Label dinâmico baseado no sinal do saldo
+        if saldo_mes > 0:
+            _label_saldo = "A MAIS"
+        elif saldo_mes < 0:
+            _label_saldo = "A MENOS"
+        else:
+            _label_saldo = "ESTÁVEL"
+
+        # Sub-linha 'X → Y' — total no início do mês vs total atual.
+        # Discreto, abaixo do número grande. Resolve a ambiguidade de "+10"
+        # mostrando o ponto de partida e chegada.
+        _tot_inicio = len(ids_inicio) if ids_inicio else None
+        _tot_atual = len(ids_atuais)
+        if _tot_inicio is not None:
+            _evol_html = (
+                f'<div style="font-size:10px;color:#6b7280;margin-top:6px;'
+                f'font-variant-numeric:tabular-nums">'
+                f'{_tot_inicio:,} → {_tot_atual:,}'
+                f'</div>'
+            )
+        else:
+            _evol_html = ""
+
         st.markdown(
             f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
             f'<div class="metric-label" style="font-size:13px">Variação {variacao_sub}</div>'
             f'<div title="{_tt_saldo}" style="cursor:help;display:flex;align-items:baseline;gap:8px;margin-top:4px">'
             f'<span class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</span>'
-            f'<span style="font-size:10px;color:{cor_saldo};font-weight:600;text-transform:uppercase;letter-spacing:.5px">INADIMPLENTES</span>'
+            f'<span style="font-size:10px;color:{cor_saldo};font-weight:600;text-transform:uppercase;letter-spacing:.5px">{_label_saldo}</span>'
             f'</div>'
+            f'{_evol_html}'
             f'<div title="{_tt_mes}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#8b94a5">Mês: </span>'
             f'{_fmt_full(novos_mes, "novos")} · {_fmt_full(reg_mes, "reg")}'
