@@ -6,7 +6,7 @@ import streamlit as st
 from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
 from auth import get_store, current_role
 from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
-from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_esta_semana, concluir_pendencia
+from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_esta_semana, concluir_pendencia
 import re as _re_tel
 
 
@@ -184,15 +184,31 @@ def _render_dashboard(store, clientes, role):
     }
 
     if ids_inicio:
-        # NOVOS no mês — atuais que não estavam no 1º dia do mês.
-        novos_mes = len(ids_atuais - ids_inicio)
-
-        # REGULARIZADOS no mês — MATEMÁTICA LIMPA (sem união).
-        # Antes: usava união de snapshots → capturava transients (entrou
-        # E saiu no mesmo mês), mas quebrava a coerência saldo = delta_real.
-        # Agora: simples |inicio − atuais|. Saldo = delta visível da carteira.
-        # Trade-off aceito: transients (raros) não são contados como reg.
-        reg_mes = len(ids_inicio - ids_atuais)
+        # MATEMÁTICA SIMÉTRICA com UNIÃO em ambos novos e reg.
+        # Captura transients (clientes que entraram E saíram no mesmo mês,
+        # tipo Igreja Y vence 02/06 paga 03/06) E mantém saldo = delta real.
+        #
+        # Demonstração: pra cada cliente
+        #   Transient:        novos +1, reg +1  → saldo 0     ✓
+        #   Permanente novo:  novos +1, reg 0   → saldo +1    ✓
+        #   Permanente saiu:  novos 0,  reg +1  → saldo -1    ✓
+        #   Estável:          novos 0,  reg 0   → saldo 0     ✓
+        # Soma: saldo = |atuais| − |inicio| = delta real ✓
+        ids_uniao_mes = fetch_inadimplentes_uniao_mes()
+        if ids_uniao_mes:
+            novos_mes = len(ids_uniao_mes - ids_inicio)
+            reg_mes   = len(ids_uniao_mes - ids_atuais)
+        else:
+            # Fallback: sem união disponível, usa simples
+            novos_mes = len(ids_atuais - ids_inicio)
+            reg_mes   = len(ids_inicio - ids_atuais)
+        # Edge case: pagamentos via overlay HOJE de clientes que ainda
+        # não estavam em nenhum snapshot do mês (virou inad e regularizou
+        # hoje mesmo, antes de qualquer snapshot capturar). Adiciona em
+        # AMBOS pra preservar simetria (saldo += 0).
+        _orfãos = ids_pagos_hoje - (ids_uniao_mes or set()) - ids_inicio - ids_atuais
+        novos_mes += len(_orfãos)
+        reg_mes   += len(_orfãos)
 
         snapshot_dt = st.session_state.get("_snapshot_inicio_mes_data", "")
         variacao_sub = f"desde {snapshot_dt}" if snapshot_dt and not snapshot_dt.startswith("01/") else "no mês"
