@@ -6,7 +6,7 @@ import streamlit as st
 from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
 from auth import get_store, current_role
 from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
-from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_esta_semana, concluir_pendencia
+from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_esta_semana, concluir_pendencia
 import re as _re_tel
 
 
@@ -185,18 +185,14 @@ def _render_dashboard(store, clientes, role):
 
     if ids_inicio:
         # NOVOS no mês — atuais que não estavam no 1º dia do mês.
-        # Usa snapshot único do dia 01 (cliente "novo" = está agora E não
-        # estava no início).
         novos_mes = len(ids_atuais - ids_inicio)
 
-        # REGULARIZADOS no mês — UNIÃO de todos snapshots do mês.
-        # Captura quem virou inadimplente NO MEIO do mês e regularizou
-        # (que o método de 1 ponto perdia — Igreja Y vence 02/06 paga 03/06).
-        ids_uniao_mes = fetch_inadimplentes_uniao_mes()
-        reg_mes = len(ids_uniao_mes - ids_atuais) if ids_uniao_mes else len(ids_inicio - ids_atuais)
-        # Edge case: pagou hoje mas snapshot de hoje ainda não rodou
-        # (ou virou inad. e pagou no mesmo dia depois do snapshot).
-        reg_mes += len(ids_pagos_hoje - ids_uniao_mes - ids_inicio)
+        # REGULARIZADOS no mês — MATEMÁTICA LIMPA (sem união).
+        # Antes: usava união de snapshots → capturava transients (entrou
+        # E saiu no mesmo mês), mas quebrava a coerência saldo = delta_real.
+        # Agora: simples |inicio − atuais|. Saldo = delta visível da carteira.
+        # Trade-off aceito: transients (raros) não são contados como reg.
+        reg_mes = len(ids_inicio - ids_atuais)
 
         snapshot_dt = st.session_state.get("_snapshot_inicio_mes_data", "")
         variacao_sub = f"desde {snapshot_dt}" if snapshot_dt and not snapshot_dt.startswith("01/") else "no mês"
@@ -326,21 +322,6 @@ def _render_dashboard(store, clientes, role):
         else:
             _label_saldo = "ESTÁVEL"
 
-        # Sub-linha 'X → Y' — total no início do mês vs total atual.
-        # Discreto, abaixo do número grande. Resolve a ambiguidade de "+10"
-        # mostrando o ponto de partida e chegada.
-        _tot_inicio = len(ids_inicio) if ids_inicio else None
-        _tot_atual = len(ids_atuais)
-        if _tot_inicio is not None:
-            _evol_html = (
-                f'<div style="font-size:10px;color:#6b7280;margin-top:6px;'
-                f'font-variant-numeric:tabular-nums">'
-                f'{_tot_inicio:,} → {_tot_atual:,}'
-                f'</div>'
-            )
-        else:
-            _evol_html = ""
-
         st.markdown(
             f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
             f'<div class="metric-label" style="font-size:13px">Variação {variacao_sub}</div>'
@@ -348,7 +329,6 @@ def _render_dashboard(store, clientes, role):
             f'<span class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</span>'
             f'<span style="font-size:10px;color:{cor_saldo};font-weight:600;text-transform:uppercase;letter-spacing:.5px">{_label_saldo}</span>'
             f'</div>'
-            f'{_evol_html}'
             f'<div title="{_tt_mes}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#8b94a5">Mês: </span>'
             f'{_fmt_full(novos_mes, "novos")} · {_fmt_full(reg_mes, "reg")}'
