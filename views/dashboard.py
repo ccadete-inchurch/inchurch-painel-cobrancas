@@ -303,14 +303,9 @@ def _render_dashboard(store, clientes, role):
                 return f'<span style="color:#6b7280;font-weight:700">{seta} —</span>'
             return f'<span style="color:{cor};font-weight:700">{seta} {n}</span>'
 
-        # Tooltips
-        _tt_saldo = "Saldo = novos inadimplentes − regularizados. Negativo é bom (caiu)."
-        _tt_mes   = (
-            "Período: do dia 01 do mês atual até agora. "
-            "'Regularizados' aqui = toda saída da carteira de inadimplência "
-            "(pagamento de cobrança atrasada, baixa administrativa, parcelamento, "
-            "antecipação ou desativação). Pra ver só pagamentos efetivos, ver tela Especialista."
-        )
+        # Tooltips — curtos e diretos
+        _tt_saldo = "Variação líquida da carteira no mês."
+        _tt_mes   = "Acumulado desde o dia 01."
         # Label dinâmico do "Hoje" — adapta quando snapshot de referência
         # não é literalmente de ontem (ex: segunda compara com sexta).
         _ontem_data = st.session_state.get("_snapshot_ontem_data", "")
@@ -325,26 +320,17 @@ def _render_dashboard(store, clientes, role):
                     _label_hoje = f"Desde {_ref_curta}"
             except Exception:
                 pass
-        _tt_hoje = (
-            f"Comparado com snapshot de {_ontem_data} (último disponível) + "
-            "regularizações capturadas em tempo real via API."
-        ) if _ontem_data else "Comparado com snapshot anterior + regularizações em tempo real."
-        _tt_sem   = "Da segunda-feira da semana atual até hoje. Capada no início do mês — Semana ⊆ Mês sempre."
+        _tt_hoje = f"Comparado com snapshot de {_ontem_data}." if _ontem_data else "Período curto."
+        _tt_sem  = "Da segunda da semana atual."
 
-        # Label dinâmico baseado no sinal do saldo
-        if saldo_mes > 0:
-            _label_saldo = "A MAIS"
-        elif saldo_mes < 0:
-            _label_saldo = "A MENOS"
-        else:
-            _label_saldo = "ESTÁVEL"
-
+        # Sem label depois do número — cor (vermelho/verde/branco) e o
+        # sinal +/- já comunicam a direção. Título 'Variação no mês' diz
+        # do que se trata. Menos é mais.
         st.markdown(
             f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
             f'<div class="metric-label" style="font-size:13px">Variação {variacao_sub}</div>'
-            f'<div title="{_tt_saldo}" style="cursor:help;display:flex;align-items:baseline;gap:8px;margin-top:4px">'
+            f'<div title="{_tt_saldo}" style="cursor:help;margin-top:4px">'
             f'<span class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</span>'
-            f'<span style="font-size:10px;color:{cor_saldo};font-weight:600;text-transform:uppercase;letter-spacing:.5px">{_label_saldo}</span>'
             f'</div>'
             f'<div title="{_tt_mes}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
             f'<span style="color:#8b94a5">Mês: </span>'
