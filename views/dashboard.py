@@ -284,12 +284,13 @@ def _render_dashboard(store, clientes, role):
             reg_semana_n   = None
 
         # Helpers de formatação. Primeira linha (Mês) tem label completo
-        # 'novos'/'regularizados'. Linhas seguintes só seta + número.
+        # 'novos'/'reg.'. Linhas seguintes só seta + número.
+        # 'reg.' abreviado pra caber no card (era cortado em telas estreitas).
         def _fmt_full(n, kind):
-            """Com seta + número + label ('↑ 8 novos' / '↓ 59 regularizados')"""
+            """Com seta + número + label ('↑ 8 novos' / '↓ 59 reg.')"""
             seta = "↑" if kind == "novos" else "↓"
             cor = "#ef4444" if kind == "novos" else "#22c55e"
-            label = "regularizados" if kind == "reg" else "novos"
+            label = "reg." if kind == "reg" else "novos"
             if n is None:
                 return f'<span style="color:#6b7280;font-weight:700">{seta} —</span> <span style="color:#8b94a5">{label}</span>'
             return f'<span style="color:{cor};font-weight:700">{seta} {n}</span> <span style="color:#8b94a5">{label}</span>'
