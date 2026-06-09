@@ -234,14 +234,28 @@ def _render_dashboard(store, clientes, role):
         sinal = "+" if saldo_mes >= 0 else ""
         cor_saldo = "#ef4444" if saldo_mes > 0 else ("#22c55e" if saldo_mes < 0 else "#e8eaf0")
 
-        # Métricas do DIA — comparam snapshot de ontem com store atual.
+        # Métricas do DIA — JANELA ÚNICA do snapshot de referência (sex em
+        # segundas, ontem em dias normais) até agora. Antes havia incoerência:
+        # novos vinham de diff snapshot (3 dias na segunda), reg vinha só do
+        # overlay (1 dia). Agora ambos usam a mesma janela.
         ids_ontem = fetch_snapshot_ontem()
         ids_atuais_set = ids_atuais
-        regs_hoje_n = sum(
-            1 for c in store.get("clientes", [])
-            if c.get("_regularizado_hoje")
-        )
-        novos_hoje_n = len(ids_atuais_set - ids_ontem) if ids_ontem else None
+        if ids_ontem:
+            # Quem ENTROU desde o snapshot de referência
+            novos_hoje_n = len(ids_atuais_set - ids_ontem)
+            # Quem SAIU desde o snapshot de referência
+            regs_hoje_n = len(ids_ontem - ids_atuais_set)
+            # Edge case: pagamento via overlay HOJE de cliente que nem
+            # estava no snapshot (virou inad sáb/dom e regularizou hoje).
+            # Soma com dedup pra não contar 2x.
+            regs_hoje_n += len(ids_pagos_hoje - ids_ontem - ids_atuais_set)
+        else:
+            novos_hoje_n = None
+            # Fallback: sem snapshot de referência, usa só overlay (hoje)
+            regs_hoje_n = sum(
+                1 for c in store.get("clientes", [])
+                if c.get("_regularizado_hoje")
+            )
 
         # Métricas de ESTA SEMANA (seg → hoje, cap no início do mês).
         # Garante que Esta semana ⊆ Mês sempre. Quando dia 1 do mês cai
