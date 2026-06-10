@@ -70,9 +70,21 @@ def main():
                     font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#e8eaf0">
             <div style="font-size:52px;color:#7cc243;line-height:1">✓</div>
             <div style="font-size:18px;font-weight:700;margin:4px 0 0">Login realizado!</div>
-            <div style="font-size:13px;color:#6b7280">Pode fechar esta janela.</div>
+            <div style="font-size:13px;color:#6b7280">Fechando automaticamente...</div>
         </div>
         """, unsafe_allow_html=True)
+        # Auto-close do popup. st.markdown não executa <script> (Streamlit
+        # sanitiza), então usa components.html (iframe) com window.top pra
+        # alcançar a janela popup raiz. Delay 700ms pra usuário ver o ✓.
+        import streamlit.components.v1 as _components
+        _components.html("""
+        <script>
+        setTimeout(function() {
+            try { window.top.close(); } catch(e) {}
+            try { window.close(); } catch(e) {}
+        }, 700);
+        </script>
+        """, height=0)
         st.stop()
 
     render_sidebar()
