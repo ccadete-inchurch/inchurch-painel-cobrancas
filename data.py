@@ -1068,8 +1068,12 @@ def fetch_eventos_regularizacao() -> set:
             confirmados AS (
                 -- Passo 2: cross-check com pagamentos reais ATRASADOS
                 -- na janela [D-1, D]. Filtra falsos positivos (baixas etc).
+                -- IMPORTANTE: retorna a data do PAGAMENTO (não do snapshot)
+                -- pra match com a data exibida na tabela de Pagamentos.
+                -- Em fim de semana, pagamento em sábado pode ser detectado
+                -- na segunda, mas a data do badge é a do pagamento (sábado).
                 SELECT DISTINCT
-                    c.dt_atual,
+                    DATE(p.dt_liquidacao_recb) AS data_pagamento,
                     CAST(c.id_sacado_sac AS STRING) AS id
                 FROM candidatos c
                 JOIN `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` p
@@ -1081,7 +1085,7 @@ def fetch_eventos_regularizacao() -> set:
             )
             SELECT
                 id,
-                FORMAT_DATE('%d/%m/%Y', dt_atual) AS data
+                FORMAT_DATE('%d/%m/%Y', data_pagamento) AS data
             FROM confirmados
         """).to_dataframe()
         if df.empty:
