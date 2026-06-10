@@ -1013,20 +1013,27 @@ def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.D
 @st.cache_data(ttl=3600)
 def fetch_eventos_regularizacao() -> set:
     """Retorna set de (id_sacado_sac, data_dd_mm_aaaa) — eventos de regularização
-    histórica detectados via diferença entre snapshots consecutivos.
+    histórica CONFIRMADOS via cross-check com pagamentos reais.
 
-    Lógica: pra cada par (snapshot D-1, snapshot D), clientes que estavam em
-    D-1 mas NÃO em D = regularizaram entre D-1 e D. Associa o evento à data D.
+    Estratégia em 2 passos:
+    1) DIFF de snapshots consecutivos → candidatos a regularização
+       (cliente em snapshot D-1 mas NÃO em snapshot D)
+    2) CROSS-CHECK com tabela de liquidações → confirma que houve
+       pagamento atrasado na janela [D-1, D]. Só então conta como
+       regularização real.
 
-    Limitações:
-    - Só detecta a partir de quando snapshots começaram (~26/05)
-    - Gaps (sáb/dom/feriado sem snapshot) agrupam regularizações no próximo
-      dia útil (não é perda, só atribuição de data aproximada)
-    - Cliente que regularizou MAIS DE UMA VEZ no período (re-inadimplência)
-      tem múltiplos eventos, cada um na sua data
+    Elimina falsos positivos:
+    - Baixas administrativas (cliente saiu mas sem pagar)
+    - Parcelamentos (cobrança renegociada, não regularizada)
+    - Desativações de cadastro
+    - Qualquer outra saída que não seja pagamento
 
-    Usado pelo badge ✓ REGULARIZADO na tela Pagamentos pra detectar
-    regularizações históricas além de hoje (que vem via overlay API).
+    Limitações remanescentes:
+    - Só detecta a partir de ~26/05 (quando começou snapshot)
+    - Gaps de fim de semana: regularização sáb/dom atribuída à segunda
+    - Re-inadimplência funciona (cada par snapshot D-1/D detectado)
+
+    Usado pelo badge ✓ REGULARIZADO na tela Pagamentos.
     """
     client = get_bq_client()
     if not client:
@@ -1043,9 +1050,11 @@ def fetch_eventos_regularizacao() -> set:
                     LAG(dt) OVER (ORDER BY dt) AS dt_anterior
                 FROM datas
             ),
-            regularizacoes AS (
+            candidatos AS (
+                -- Passo 1: clientes que saíram da carteira entre snapshots
                 SELECT
                     pair.dt_atual,
+                    pair.dt_anterior,
                     prev.id_sacado_sac
                 FROM datas_com_lag pair
                 JOIN `{_SNAPSHOT_TABLE}` prev
@@ -1055,11 +1064,25 @@ def fetch_eventos_regularizacao() -> set:
                   AND CAST(curr.id_sacado_sac AS STRING) = CAST(prev.id_sacado_sac AS STRING)
                 WHERE curr.id_sacado_sac IS NULL
                   AND pair.dt_anterior IS NOT NULL
+            ),
+            confirmados AS (
+                -- Passo 2: cross-check com pagamentos reais ATRASADOS
+                -- na janela [D-1, D]. Filtra falsos positivos (baixas etc).
+                SELECT DISTINCT
+                    c.dt_atual,
+                    CAST(c.id_sacado_sac AS STRING) AS id
+                FROM candidatos c
+                JOIN `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` p
+                  ON CAST(p.id_sacado_sac AS STRING) = CAST(c.id_sacado_sac AS STRING)
+                  AND DATE(p.dt_liquidacao_recb) > c.dt_anterior
+                  AND DATE(p.dt_liquidacao_recb) <= c.dt_atual
+                  AND p.dt_liquidacao_recb > p.dt_vencimento_recb
+                  AND p.fl_status_recb = '1'
             )
             SELECT
-                CAST(id_sacado_sac AS STRING) AS id,
+                id,
                 FORMAT_DATE('%d/%m/%Y', dt_atual) AS data
-            FROM regularizacoes
+            FROM confirmados
         """).to_dataframe()
         if df.empty:
             return set()
