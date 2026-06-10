@@ -275,23 +275,16 @@ def _render_historico(store):
                     'margin-right:4px">ACORDO</span>'
                 )
         # Marca conversão: cliente do lote de hoje que pagou (parcial OU
-        # regularização). Destaque visual SÓ na célula do Cliente — faixa
-        # verde lateral + tint sutil, espelhando o TOP em Inadimplentes
-        # (mesma opacidade: .04 bg, .6 border).
+        # regularização). Faixa verde lateral + tint sutil na célula
+        # Cliente — espelha o TOP em Inadimplentes (.04 bg, .6 border).
+        # Sem badge LOTE: tint verde já comunica "veio do lote", e badge
+        # competia com REGULARIZADO/PARCIAL ali do lado.
         em_lote_hoje = _rid in ids_lote_hoje
         cli_bg = "background:rgba(45,211,111,.04);" if em_lote_hoje else ""
         cli_bl = "border-left:4px solid rgba(45,211,111,.6);" if em_lote_hoje else ""
-        # Badge LOTE em outline salmão — destaca sem competir com o verde
-        # (que sinaliza "conversão" via row tint + REGULARIZADO badge).
-        lote_badge = (
-            '<span style="background:transparent;color:#fa8072;'
-            'border:1px solid #fa8072;font-size:10px;font-weight:700;'
-            'padding:1px 6px;border-radius:5px;margin-right:4px;'
-            'letter-spacing:0.3px">★ LOTE</span>' if em_lote_hoje else ""
-        )
         rcols = st.columns(col_w)
         with rcols[0]:
-            badges_html = f'{lote_badge}{reg_badge}{parcial_badge}{acordo_badge}{inativo_badge}'
+            badges_html = f'{reg_badge}{parcial_badge}{acordo_badge}{inativo_badge}'
             badges_line = f'<div style="margin-bottom:2px">{badges_html}</div>' if badges_html else ''
             st.markdown(
                 f'<div style="padding:12px 14px;{cli_bg}{cli_bl}">'
