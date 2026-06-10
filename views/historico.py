@@ -235,46 +235,65 @@ def _render_historico(store):
     n = len(rows)
     for i, row in enumerate(rows):
         inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("inativo") else ""
-        # Badge "REGULARIZADO" — lógica operacional simples:
-        # Se cliente FEZ pagamento (linha existe) E NÃO tem saldo pendente
-        # (não está em store["clientes"]) → regularizou aquela cobrança.
-        #
-        # 3 fontes de detecção (qualquer uma confirma):
+        # Badge "REGULARIZADO" — 3 fontes de detecção:
         # 1) HOJE via overlay API (flag _regularizado_hoje real-time)
-        # 2) HISTÓRICO via diff de snapshots + cross-check com pagamento
-        # 3) FALLBACK: cliente não está mais na carteira atual (sem débito)
+        # 2) HISTÓRICO via diff de snapshots + cross-check (≥26/05)
+        # 3) PRE-SNAPSHOT: se data < 26/05 E cliente não está na carteira
+        #    (assume regularizou no passado, sem prova de snapshot)
         #
-        # A fonte 3 cobre pre-snapshot (antes 26/05) e edge cases. Lógica
-        # operacional: 'pagou + sem dívida atual = regularizou'.
+        # Importante: NÃO assume regularizado só por "não estar na carteira"
+        # se a data é POST-snapshot — porque pode ser re-inadimplência:
+        # cliente pagou e zerou em D1, voltou a inad em D2, e atendente
+        # vendo a linha de D1 esperaria badge se realmente regularizou.
+        # A Fonte 2 (snapshot diff) cobre esse caso corretamente.
         _rid = str(row.get("id") or "")
         _rdt = str(row.get("data") or "")
         _cli_atual = _clientes_lookup.get(_rid)
         eh_reg_hoje = _rid in ids_reg_hoje and _rdt == hoje_str
         eh_reg_historico = (_rid, _rdt) in eventos_reg_historico
-        eh_reg_sem_saldo = _cli_atual is None  # saiu da carteira → regularizou
-        eh_regularizado = eh_reg_hoje or eh_reg_historico or eh_reg_sem_saldo
+        # Fallback só pra pré-snapshot (antes 26/05) — sem como provar
+        try:
+            _dt_row = date.fromisoformat(
+                f"{_rdt[6:10]}-{_rdt[3:5]}-{_rdt[0:2]}"
+            )
+            eh_pre_snapshot = _dt_row < date(2026, 5, 26)
+        except Exception:
+            eh_pre_snapshot = False
+        eh_reg_pre_snapshot = eh_pre_snapshot and _cli_atual is None
+        eh_regularizado = eh_reg_hoje or eh_reg_historico or eh_reg_pre_snapshot
         reg_badge = (
             '<span style="background:rgba(45,211,111,.18);color:#2dd36f;'
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
             'margin-right:4px">✓ REGULARIZADO</span>' if eh_regularizado else ""
         )
-        # Badge ACORDO (azul, padrão Inadimplência) + saldo a pagar — só pra
-        # clientes AINDA na carteira (não regularizou). Se regularizou (via
-        # qualquer das 3 fontes acima), não mostra nada.
+        # Badge ACORDO (amarelo, mesmo tom de atenção) + saldo restante.
+        # Só pra clientes AINDA na carteira (não regularizou).
         acordo_badge = ""
         saldo_html = ""
         if _cli_atual and not eh_regularizado:
             if _cli_atual.get("_tem_acordo"):
                 acordo_badge = (
-                    '<span style="background:#4f7cff;color:#fff;font-size:10px;'
-                    'font-weight:700;padding:2px 7px;border-radius:4px;'
+                    '<span style="background:rgba(245,158,11,.2);color:#f59e0b;'
+                    'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
                     'margin-right:4px">ACORDO</span>'
                 )
             _saldo = float(_cli_atual.get("valor") or 0)
+            _dias = int(_cli_atual.get("dias_atraso") or 0)
             if _saldo > 0:
+                # Badge estilizado com info contextual (valor + dias de atraso)
+                _dias_html = (
+                    f'<span style="color:#9ca3af;font-weight:500;margin-left:8px">'
+                    f'· {_dias} {"dia" if _dias == 1 else "dias"} de atraso</span>'
+                ) if _dias > 0 else ""
                 saldo_html = (
-                    f'<div style="font-size:11px;color:#f59e0b;margin-top:3px;font-weight:600">'
-                    f'Saldo: {fmt_moeda_plain(_saldo)}</div>'
+                    f'<div style="display:inline-flex;align-items:center;gap:6px;'
+                    f'background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);'
+                    f'border-radius:5px;padding:3px 9px;margin-top:5px;font-size:11px">'
+                    f'<span style="color:#9ca3af;font-weight:500">Saldo pendente:</span>'
+                    f'<span style="color:#f59e0b;font-weight:800;'
+                    f'font-variant-numeric:tabular-nums">{fmt_moeda_plain(_saldo)}</span>'
+                    f'{_dias_html}'
+                    f'</div>'
                 )
         rcols = st.columns(col_w)
         with rcols[0]:
