@@ -221,6 +221,12 @@ def _render_historico(store):
     # (ids_reg_hoje) que é real-time; pra dias passados usa esse set.
     eventos_reg_historico = fetch_eventos_regularizacao()
 
+    # Lookup do cliente atual em store["clientes"] pra puxar saldo e acordo.
+    # Se cliente não está mais inadimplente (saiu da carteira), retorna None.
+    _clientes_lookup = {
+        str(c.get("id") or ""): c for c in store.get("clientes", []) or []
+    }
+
     PAGE_SIZE = 100
     total_f   = len(df)
     total_pg  = max(1, -(-total_f // PAGE_SIZE))
@@ -232,8 +238,6 @@ def _render_historico(store):
         # Badge "REGULARIZADO" — combina 2 fontes:
         # 1) HOJE: overlay API (flag _regularizado_hoje em store["clientes"])
         # 2) HISTÓRICO: detecção via diff de snapshots consecutivos
-        # Suporta re-inadimplência: se cliente regularizou em datas múltiplas,
-        # cada linha correspondente recebe seu próprio badge.
         _rid = str(row.get("id") or "")
         _rdt = str(row.get("data") or "")
         eh_reg_hoje = _rid in ids_reg_hoje and _rdt == hoje_str
@@ -244,16 +248,37 @@ def _render_historico(store):
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
             'margin-right:4px">✓ REGULARIZADO</span>' if eh_regularizado else ""
         )
+        # Badge ACORDO VENCIDO e saldo a pagar — só pra clientes que AINDA
+        # estão inadimplentes (estão em store["clientes"]). Se regularizou,
+        # esses badges não aparecem (já não devem mais nada).
+        _cli_atual = _clientes_lookup.get(_rid)
+        acordo_badge = ""
+        saldo_html = ""
+        if _cli_atual and not eh_regularizado:
+            _eh_acordo = bool(_cli_atual.get("_tem_acordo")) and (_cli_atual.get("dias_atraso") or 0) >= 7
+            if _eh_acordo:
+                acordo_badge = (
+                    '<span style="background:rgba(245,158,11,.2);color:#f59e0b;'
+                    'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
+                    'margin-right:4px">ACORDO VENCIDO</span>'
+                )
+            _saldo = float(_cli_atual.get("valor") or 0)
+            if _saldo > 0:
+                saldo_html = (
+                    f'<div style="font-size:11px;color:#f59e0b;margin-top:3px;font-weight:600">'
+                    f'Saldo: {fmt_moeda_plain(_saldo)}</div>'
+                )
         rcols = st.columns(col_w)
         with rcols[0]:
             st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{row.get("data","—")}</div>', unsafe_allow_html=True)
         with rcols[1]:
-            badges_html = f'{reg_badge}{inativo_badge}'
+            badges_html = f'{reg_badge}{acordo_badge}{inativo_badge}'
             badges_line = f'<div style="margin-bottom:2px">{badges_html}</div>' if badges_html else ''
             st.markdown(
                 f'<div style="padding:12px 14px">'
                 f'{badges_line}'
                 f'<div style="font-size:14px;font-weight:600;color:#e8eaf0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{row.get("nome","—")}</div>'
+                f'{saldo_html}'
                 f'</div>',
                 unsafe_allow_html=True,
             )
