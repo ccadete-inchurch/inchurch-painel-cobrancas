@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from helpers import fmt_moeda_plain, fmt_moeda, get_effective_atendente, hoje_lote
+from data import fetch_ids_em_qualquer_lote_hoje
 
 
 def _render_historico(store):
@@ -232,6 +233,11 @@ def _render_historico(store):
     page      = max(1, min(st.session_state.get("reg_page", 1), total_pg))
     rows      = df.iloc[(page - 1) * PAGE_SIZE : page * PAGE_SIZE].to_dict("records")
     n = len(rows)
+
+    # IDs do lote de hoje (qualquer atendente). Marca linhas verde pra
+    # destacar conversão: cliente foi trabalhado no lote E pagou hoje.
+    ids_lote_hoje = fetch_ids_em_qualquer_lote_hoje()
+
     for i, row in enumerate(rows):
         inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("inativo") else ""
         # Badge "REGULARIZADO" — 2 fontes simples:
@@ -259,11 +265,22 @@ def _render_historico(store):
                     'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
                     'margin-right:4px">ACORDO</span>'
                 )
+        # Marca conversão: cliente do lote de hoje que pagou (parcial OU
+        # regularização). Mesmo padrão visual do TOP em Inadimplentes — faixa
+        # lateral + tint sutil — mas verde pra sinalizar resultado positivo.
+        em_lote_hoje = _rid in ids_lote_hoje
+        row_bl = "border-left:4px solid rgba(45,211,111,.6);" if em_lote_hoje else ""
+        row_bg = "background:rgba(45,211,111,.04);"           if em_lote_hoje else ""
+        lote_badge = (
+            '<span style="background:rgba(45,211,111,.18);color:#2dd36f;'
+            'font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;'
+            'margin-right:3px">★ LOTE</span>' if em_lote_hoje else ""
+        )
         rcols = st.columns(col_w)
         with rcols[0]:
-            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{row.get("data","—")}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5;{row_bg}{row_bl}">{row.get("data","—")}</div>', unsafe_allow_html=True)
         with rcols[1]:
-            badges_html = f'{reg_badge}{acordo_badge}{inativo_badge}'
+            badges_html = f'{lote_badge}{reg_badge}{acordo_badge}{inativo_badge}'
             badges_line = f'<div style="margin-bottom:2px">{badges_html}</div>' if badges_html else ''
             st.markdown(
                 f'<div style="padding:12px 14px">'
