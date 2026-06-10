@@ -3,7 +3,6 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from data import fetch_eventos_regularizacao
 from helpers import fmt_moeda_plain, fmt_moeda, get_effective_atendente, hoje_lote
 
 
@@ -122,15 +121,22 @@ def _render_historico(store):
         str(c.get("id") or "") for c in store.get("clientes", [])
         if c.get("_regularizado_hoje")
     }
-    eventos_reg_historico = fetch_eventos_regularizacao()
+    # Lookup do cliente atual em store["clientes"] pra puxar saldo/acordo
+    # e pra check de regularização operacional (sem saldo = regularizou).
+    _clientes_lookup = {
+        str(c.get("id") or ""): c for c in store.get("clientes", []) or []
+    }
 
     if not df.empty:
         def _eh_reg(r):
             _rid = str(r.get("id") or "")
             _rdt = str(r.get("data") or "")
+            # 2 fontes simples:
+            # 1) Hoje via overlay (real-time)
+            # 2) Cliente fora da carteira atual (sem saldo)
             return (
                 (_rid in ids_reg_hoje_all and _rdt == hoje_str)
-                or (_rid, _rdt) in eventos_reg_historico
+                or _rid not in _clientes_lookup
             )
         df_reg_periodo = df[df.apply(_eh_reg, axis=1)]
         n_reg = int(df_reg_periodo["id"].astype(str).nunique()) if not df_reg_periodo.empty else 0
@@ -216,17 +222,6 @@ def _render_historico(store):
         )
         return
 
-    # Eventos históricos de regularização — set de (id, data) detectados
-    # via diff entre snapshots consecutivos. Pra HOJE usa o overlay
-    # (ids_reg_hoje) que é real-time; pra dias passados usa esse set.
-    eventos_reg_historico = fetch_eventos_regularizacao()
-
-    # Lookup do cliente atual em store["clientes"] pra puxar saldo e acordo.
-    # Se cliente não está mais inadimplente (saiu da carteira), retorna None.
-    _clientes_lookup = {
-        str(c.get("id") or ""): c for c in store.get("clientes", []) or []
-    }
-
     PAGE_SIZE = 100
     total_f   = len(df)
     total_pg  = max(1, -(-total_f // PAGE_SIZE))
@@ -235,26 +230,17 @@ def _render_historico(store):
     n = len(rows)
     for i, row in enumerate(rows):
         inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("inativo") else ""
-        # Badge "REGULARIZADO" — 3 fontes de detecção (qualquer uma confirma):
-        # 1) HOJE via overlay API (flag _regularizado_hoje real-time)
-        # 2) HISTÓRICO via diff de snapshots + cross-check (≥26/05, auditado)
-        # 3) FALLBACK: cliente NÃO está na carteira atual (sem saldo pendente)
-        #
-        # Sobre re-inadimplência: a Fonte 3 só dispara quando _cli_atual is None
-        # (cliente sumiu da carteira). Se cliente voltou a ser inad (carteira
-        # tem ele de novo), _cli_atual não é None → Fonte 3 não aplica.
-        # Aí a Fonte 2 detecta o evento histórico independentemente.
-        #
-        # Trade-off aceito: pagamento parcial em data passada, seguido de
-        # outro que zerou tudo, ambos ganham badge se cliente fica fora da
-        # carteira. Operacionalmente OK — ambos contribuíram pra regularização.
+        # Badge "REGULARIZADO" — 2 fontes simples:
+        # 1) HOJE via overlay API (real-time)
+        # 2) Cliente NÃO está na carteira atual (sem saldo pendente)
+        # Trade-off aceito: re-inadimplência (cliente paga, volta a inad)
+        # perde o badge na linha antiga. Acceito pra ganhar simplicidade.
         _rid = str(row.get("id") or "")
         _rdt = str(row.get("data") or "")
         _cli_atual = _clientes_lookup.get(_rid)
         eh_reg_hoje = _rid in ids_reg_hoje and _rdt == hoje_str
-        eh_reg_historico = (_rid, _rdt) in eventos_reg_historico
         eh_reg_sem_saldo = _cli_atual is None  # saiu da carteira → regularizou
-        eh_regularizado = eh_reg_hoje or eh_reg_historico or eh_reg_sem_saldo
+        eh_regularizado = eh_reg_hoje or eh_reg_sem_saldo
         reg_badge = (
             '<span style="background:rgba(45,211,111,.18);color:#2dd36f;'
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
