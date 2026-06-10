@@ -185,36 +185,49 @@ def tela_login():
                 var _U = '{auth_url}';
                 var _popupRef = null;
                 var _checkTimer = null;
-                // Fecha o popup de fora — o iframe do botão tem a referência
-                // do window.open e poll a location dele. Quando Google volta
-                // pra nossa origem (URL contém ?code=...), espera o Streamlit
-                // processar e chama .close() no ref. Funciona porque é a mesma
-                // window context que abriu (sem sandbox issues).
+                // Fecha o popup de fora — o iframe do botão tem a ref do
+                // window.open e poll a location dele. Detecta TRANSIÇÃO:
+                //   fase 'esperando': popup ainda no Google (cross-origin)
+                //   fase 'voltou':    URL tem ?code= (Streamlit começou a carregar)
+                //   fase 'pronto':    URL foi limpa por st.query_params.clear()
+                //                     (Streamlit terminou de processar o login)
+                // Fechar só na fase 'pronto' garante que set_pending_oauth
+                // já gravou — main app polling captura em <1s e loga.
                 function _go() {{
                     var w=480,h=560,x=Math.round(screen.width/2-240),y=Math.round(screen.height/2-280);
                     _popupRef = window.open(_U,'_google_oauth','width='+w+',height='+h+',left='+x+',top='+y+',scrollbars=yes');
                     if (_checkTimer) clearInterval(_checkTimer);
+                    var _fase = 'esperando';
+                    var _ticks = 0;
                     _checkTimer = setInterval(function() {{
+                        _ticks++;
                         if (!_popupRef || _popupRef.closed) {{
                             clearInterval(_checkTimer);
                             return;
                         }}
                         try {{
-                            // Same-origin: leitura permitida. Cross-origin (Google):
-                            // lança SecurityError, cai no catch, continua polling.
-                            if (_popupRef.location.search.indexOf('code=') !== -1) {{
+                            var s = _popupRef.location.search;
+                            var temCode = s.indexOf('code=') !== -1;
+                            if (_fase === 'esperando' && temCode) {{
+                                _fase = 'voltou';
+                            }} else if (_fase === 'voltou' && !temCode) {{
+                                // URL limpa → Streamlit processou → fecha
+                                _fase = 'pronto';
                                 clearInterval(_checkTimer);
-                                // Espera o Streamlit processar o code (gravar
-                                // no _pending_oauth) antes de fechar. 1500ms
-                                // é folgado — polling do main app captura em <1s.
                                 setTimeout(function() {{
                                     try {{ _popupRef.close(); }} catch(e) {{}}
-                                }}, 1500);
+                                }}, 500);
                             }}
                         }} catch(e) {{
-                            // Cross-origin (ainda no Google) — segue polling
+                            // Cross-origin (no Google) — segue polling
                         }}
-                    }}, 300);
+                        // Fallback: se 'voltou' há mais de 8s sem 'pronto',
+                        // fecha mesmo assim — pode ter dado erro no processamento.
+                        if (_fase === 'voltou' && _ticks > 40) {{
+                            clearInterval(_checkTimer);
+                            try {{ _popupRef.close(); }} catch(e) {{}}
+                        }}
+                    }}, 200);
                 }}
                 </script>
                 <button onclick="_go()" style="

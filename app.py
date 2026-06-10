@@ -59,10 +59,12 @@ def main():
                 set_pending_oauth(nonce, email, nome)
         except Exception:
             pass
-        # Tela "Login realizado" no popup. O auto-close é feito do LADO DO
-        # BOTÃO (iframe que abriu o popup tem a ref via window.open e poll
-        # a location dele). Tentar fechar de dentro do popup esbarrava no
-        # sandbox do components.html iframe — não rolou.
+        # Limpa a query string — sinal pro button iframe (que poll a location
+        # do popup) que o processamento terminou. Sem isso, ele tinha que
+        # adivinhar quando fechar e podia matar o popup antes do set_pending_oauth.
+        st.query_params.clear()
+        # Tela "Login realizado" no popup. Auto-close vem do lado do BOTÃO,
+        # que detecta a URL ter limpado e fecha 500ms depois.
         st.markdown("""
         <style>
         header{display:none!important}
