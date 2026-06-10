@@ -4,7 +4,7 @@ import streamlit as st
 
 import time as _time
 
-from helpers import get_hist, fmt_moeda_plain, dias_html, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias
+from helpers import get_hist, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias
 from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
@@ -108,18 +108,15 @@ def _motivo(bucket, acoes, c) -> tuple:
         return "Já regularizado · pagamento anterior", "blue"
 
     cid = c.get("id")
-    tel = c.get("telefone", "")
     acoes_hj = get_painel_acoes_hoje(cid)
-    # Painel é a fonte de verdade do cooldown. N8N é só info — quando atendente
-    # conversa por WhatsApp fora do lote, o painel fica cego. Badge distingue
-    # essas duas fontes pra não enganar: "fora do painel" sinaliza que sistema
-    # não rastreou aquilo (cooldown não bloqueia, cliente pode voltar no lote).
+    # Painel é a única fonte. Sem fallback N8N — atividade fora do painel é
+    # invisível pro sistema (cooldown, badge, métricas). Atendente que conversa
+    # por WhatsApp fora do lote vai ver "Sem msg anterior" mesmo tendo conversado
+    # ontem. Pressão construtiva pra usar o painel ou implementar sync N8N→painel
+    # pra capturar atividade fora-de-lote.
     dias_lig_atend = get_painel_dias_lig(cid)             # atendida (concluída)
     dias_lig_tent  = get_painel_dias_lig_tentada(cid)     # qualquer tentativa
-    if dias_lig_atend is None:
-        dias_lig_atend = get_msg_concluida_dias(tel)      # fallback N8N
-    dias_msg_painel = get_painel_dias_msg(cid)
-    dias_msg_n8n    = get_ultimo_contato_n8n_dias(tel)
+    dias_msg = get_painel_dias_msg(cid)
     streak_lig = get_streak_cooldown_dias(cid)            # cooldown 7d (3 falhas em série)
 
     acordo_dias = c.get("dias_atraso") or 0
@@ -188,10 +185,8 @@ def _motivo(bucket, acoes, c) -> tuple:
             return f"Última ligação há {dias_lig_atend}d · Ligação", "lig"
         return "Sem ligação anterior · Ligação", "lig"
     if bucket == "mensagem":
-        if dias_msg_painel is not None:
-            return f"Última mensagem há {dias_msg_painel}d · Mensagem", "msg"
-        if dias_msg_n8n is not None:
-            return f"Conversa fora do painel há {dias_msg_n8n}d · Mensagem", "msg_fora"
+        if dias_msg is not None:
+            return f"Última mensagem há {dias_msg}d · Mensagem", "msg"
         return "Sem mensagem anterior · Mensagem", "msg"
 
     # Sem bucket (gestor "Todos os clientes") — fallback por acoes
@@ -201,11 +196,8 @@ def _motivo(bucket, acoes, c) -> tuple:
         return (f"Última ligação há {dias_lig_atend}d · Ligação" if dias_lig_atend is not None
                 else "Sem ligação anterior · Ligação"), "lig"
     if "mensagem" in acoes:
-        if dias_msg_painel is not None:
-            return f"Última mensagem há {dias_msg_painel}d · Mensagem", "msg"
-        if dias_msg_n8n is not None:
-            return f"Conversa fora do painel há {dias_msg_n8n}d · Mensagem", "msg_fora"
-        return "Sem mensagem anterior · Mensagem", "msg"
+        return (f"Última mensagem há {dias_msg}d · Mensagem" if dias_msg is not None
+                else "Sem mensagem anterior · Mensagem"), "msg"
     return "", ""
 
 
@@ -238,9 +230,6 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
         "purple": "color:#a78bfa;background:rgba(167,139,250,.08);border-left:2px solid #a78bfa;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
         "lig":    "color:#5fa3ff;background:rgba(95,163,255,.08);border-left:2px solid #5fa3ff;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
         "msg":    "color:#f59e0b;background:rgba(245,158,11,.08);border-left:2px solid #f59e0b;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
-        # msg_fora = conversa via WhatsApp/N8N que o painel não rastreou. Cinza
-        # atenuado pra sinalizar "info, mas sistema não controla isso".
-        "msg_fora": "color:#9ca3af;background:rgba(156,163,175,.08);border-left:2px solid #9ca3af;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
     }
     motivo_html = (
         f'<div style="font-size:11px;font-weight:600;margin-bottom:8px;{_motivo_css.get(motivo_style, "")}">{motivo_txt}</div>'
