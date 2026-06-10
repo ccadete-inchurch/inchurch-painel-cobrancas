@@ -96,12 +96,13 @@ def _render_historico(store):
         df = df[(df["_dt_temp"].dt.date >= dt_ini) & (df["_dt_temp"].dt.date <= dt_fim)]
         df = df.drop(columns=["_dt_temp"])
 
-    # Label do período pra usar nos cards (texto curto)
+    # Label do período pra usar nos cards (texto curto). Ambas as datas
+    # mostram o ano completo pra evitar ambiguidade entre anos diferentes.
     if dt_ini and dt_fim:
         if dt_ini == dt_fim:
             periodo = dt_ini.strftime("%d/%m/%Y")
         else:
-            periodo = f"{dt_ini.strftime('%d/%m')} → {dt_fim.strftime('%d/%m/%Y')}"
+            periodo = f"{dt_ini.strftime('%d/%m/%Y')} → {dt_fim.strftime('%d/%m/%Y')}"
     else:
         periodo = "Período"
 
