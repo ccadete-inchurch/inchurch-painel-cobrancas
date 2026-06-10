@@ -4,7 +4,7 @@ import streamlit as st
 
 import time as _time
 
-from helpers import get_hist, fmt_moeda_plain, dias_html, get_ultimo_contato_n8n_dias, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias
+from helpers import get_hist, fmt_moeda_plain, dias_html, get_msg_concluida_dias, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias
 from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
@@ -110,16 +110,14 @@ def _motivo(bucket, acoes, c) -> tuple:
     cid = c.get("id")
     tel = c.get("telefone", "")
     acoes_hj = get_painel_acoes_hoje(cid)
-    # N8N só é usado pra fallback informativo do "Última mensagem há Xd" —
-    # não decide mais estado de tarefa do dia (que vem só do BQ painel).
-    dsc_n8n     = get_ultimo_contato_n8n_dias(tel)
+    # Badge reflete só o que o painel registrou — N8N não conta. Cooldown e
+    # seleção de lote usam o painel; alinhar o badge evita ler "1d" quando a
+    # geração tá vendo "7d" e por isso pegou o cliente.
     dias_lig_atend = get_painel_dias_lig(cid)             # atendida (concluída)
     dias_lig_tent  = get_painel_dias_lig_tentada(cid)     # qualquer tentativa
     if dias_lig_atend is None:
         dias_lig_atend = get_msg_concluida_dias(tel)      # fallback N8N
     dias_msg = get_painel_dias_msg(cid)
-    if dias_msg is None:
-        dias_msg = dsc_n8n
     streak_lig = get_streak_cooldown_dias(cid)            # cooldown 7d (3 falhas em série)
 
     acordo_dias = c.get("dias_atraso") or 0
