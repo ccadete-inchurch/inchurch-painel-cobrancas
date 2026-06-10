@@ -183,9 +183,38 @@ def tela_login():
                 <html><body style="margin:0;padding:0;background:transparent">
                 <script>
                 var _U = '{auth_url}';
+                var _popupRef = null;
+                var _checkTimer = null;
+                // Fecha o popup de fora — o iframe do botão tem a referência
+                // do window.open e poll a location dele. Quando Google volta
+                // pra nossa origem (URL contém ?code=...), espera o Streamlit
+                // processar e chama .close() no ref. Funciona porque é a mesma
+                // window context que abriu (sem sandbox issues).
                 function _go() {{
                     var w=480,h=560,x=Math.round(screen.width/2-240),y=Math.round(screen.height/2-280);
-                    window.open(_U,'_google_oauth','width='+w+',height='+h+',left='+x+',top='+y+',scrollbars=yes');
+                    _popupRef = window.open(_U,'_google_oauth','width='+w+',height='+h+',left='+x+',top='+y+',scrollbars=yes');
+                    if (_checkTimer) clearInterval(_checkTimer);
+                    _checkTimer = setInterval(function() {{
+                        if (!_popupRef || _popupRef.closed) {{
+                            clearInterval(_checkTimer);
+                            return;
+                        }}
+                        try {{
+                            // Same-origin: leitura permitida. Cross-origin (Google):
+                            // lança SecurityError, cai no catch, continua polling.
+                            if (_popupRef.location.search.indexOf('code=') !== -1) {{
+                                clearInterval(_checkTimer);
+                                // Espera o Streamlit processar o code (gravar
+                                // no _pending_oauth) antes de fechar. 1500ms
+                                // é folgado — polling do main app captura em <1s.
+                                setTimeout(function() {{
+                                    try {{ _popupRef.close(); }} catch(e) {{}}
+                                }}, 1500);
+                            }}
+                        }} catch(e) {{
+                            // Cross-origin (ainda no Google) — segue polling
+                        }}
+                    }}, 300);
                 }}
                 </script>
                 <button onclick="_go()" style="

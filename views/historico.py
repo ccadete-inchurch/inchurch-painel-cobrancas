@@ -204,8 +204,10 @@ def _render_historico(store):
     st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
 
     # ── Tabela ────────────────────────────────────────────────────────────────
-    col_w = [1.2, 3, 1.8, 1.5, 1.5]
-    hdrs  = ["Data de Pag.", "Cliente", "CNPJ", "Valor", "Especialista"]
+    # Cliente primeiro pra receber o destaque visual do LOTE (faixa lateral)
+    # de forma natural na lateral esquerda da tabela.
+    col_w = [3, 1.2, 1.8, 1.5, 1.5]
+    hdrs  = ["Cliente", "Data de Pag.", "CNPJ", "Valor", "Especialista"]
 
     hdr_cells = "".join(
         f'<div style="flex:{w};padding:14px 14px;font-size:12px;text-transform:uppercase;'
@@ -273,13 +275,13 @@ def _render_historico(store):
                     'margin-right:4px">ACORDO</span>'
                 )
         # Marca conversão: cliente do lote de hoje que pagou (parcial OU
-        # regularização). Pill verde sólido com texto escuro — destaca como
-        # "estrela de conversão", distinto do REGULARIZADO (que é tint claro).
-        # Background aplica em TODAS as colunas pra linha inteira ficar marcada;
-        # border-left só na primeira pra não criar listras internas.
+        # regularização). Destaque visual SÓ na célula do Cliente (faixa
+        # verde lateral + tint sutil) — segue o mesmo padrão do TOP nos
+        # Inadimplentes. Linha inteira ia gerar gaps escuros entre colunas
+        # do st.columns, ruim visualmente.
         em_lote_hoje = _rid in ids_lote_hoje
-        row_bg = "background:rgba(45,211,111,.05);" if em_lote_hoje else ""
-        row_bl = "border-left:4px solid #2dd36f;"    if em_lote_hoje else ""
+        cli_bg = "background:rgba(45,211,111,.06);" if em_lote_hoje else ""
+        cli_bl = "border-left:4px solid #2dd36f;"    if em_lote_hoje else ""
         lote_badge = (
             '<span style="background:#2dd36f;color:#0f1117;'
             'font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;'
@@ -287,27 +289,27 @@ def _render_historico(store):
         )
         rcols = st.columns(col_w)
         with rcols[0]:
-            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5;{row_bg}{row_bl}">{row.get("data","—")}</div>', unsafe_allow_html=True)
-        with rcols[1]:
             badges_html = f'{lote_badge}{reg_badge}{parcial_badge}{acordo_badge}{inativo_badge}'
             badges_line = f'<div style="margin-bottom:2px">{badges_html}</div>' if badges_html else ''
             st.markdown(
-                f'<div style="padding:12px 14px;{row_bg}">'
+                f'<div style="padding:12px 14px;{cli_bg}{cli_bl}">'
                 f'{badges_line}'
                 f'<div style="font-size:14px;font-weight:600;color:#e8eaf0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{row.get("nome","—")}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
+        with rcols[1]:
+            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{row.get("data","—")}</div>', unsafe_allow_html=True)
         with rcols[2]:
-            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5;{row_bg}">{row.get("cnpj","—")}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{row.get("cnpj","—")}</div>', unsafe_allow_html=True)
         with rcols[3]:
             # fmt_moeda_plain (não fmt_moeda) — fmt_moeda colore valores altos
             # em vermelho/âmbar como ALERTA (desenhado pra dívidas em
             # Inadimplência). Aqui é PAGAMENTO recebido → tudo verde.
-            st.markdown(f'<div style="padding:12px 14px;font-size:14px;font-weight:600;color:#2dd36f;{row_bg}">{fmt_moeda_plain(row.get("valor",0))}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:14px;font-weight:600;color:#2dd36f">{fmt_moeda_plain(row.get("valor",0))}</div>', unsafe_allow_html=True)
         with rcols[4]:
             _at_txt = str(row.get("atendente") or "—")
-            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5;{row_bg}">{_at_txt}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{_at_txt}</div>', unsafe_allow_html=True)
 
         if i < n - 1:
             st.markdown('<div style="height:0.5px;background:#2a2f42;margin:0"></div>', unsafe_allow_html=True)

@@ -59,12 +59,10 @@ def main():
                 set_pending_oauth(nonce, email, nome)
         except Exception:
             pass
-        # Auto-close do popup. components.html roda em iframe sandbox de
-        # Streamlit (sem allow-top-navigation) — window.top.close() pode ser
-        # bloqueado. Combina 2 estratégias:
-        #   1. SVG onload no markdown (atributo, não <script> — escapa do
-        #      sanitizer e roda no contexto da janela popup, não em iframe)
-        #   2. components.html como fallback com múltiplas tentativas
+        # Tela "Login realizado" no popup. O auto-close é feito do LADO DO
+        # BOTÃO (iframe que abriu o popup tem a ref via window.open e poll
+        # a location dele). Tentar fechar de dentro do popup esbarrava no
+        # sandbox do components.html iframe — não rolou.
         st.markdown("""
         <style>
         header{display:none!important}
@@ -78,18 +76,7 @@ def main():
             <div style="font-size:18px;font-weight:700;margin:4px 0 0">Login realizado!</div>
             <div style="font-size:13px;color:#6b7280">Fechando automaticamente...</div>
         </div>
-        <svg width="0" height="0" onload="setTimeout(function(){try{window.close();}catch(e){}try{open('','_self').close();}catch(e){}},700)"></svg>
         """, unsafe_allow_html=True)
-        import streamlit.components.v1 as _components
-        _components.html("""
-        <script>
-        setTimeout(function() {
-            try { window.top.close(); }    catch(e) {}
-            try { window.parent.close(); } catch(e) {}
-            try { open('','_self').close(); } catch(e) {}
-        }, 700);
-        </script>
-        """, height=0)
         st.stop()
 
     render_sidebar()
