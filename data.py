@@ -1475,13 +1475,15 @@ def load_cooldowns_from_painel():
             return None
 
     try:
+        # Sem janela temporal — badge "Última msg há Xd" precisa ver histórico completo
+        # do painel pra não cair em fallback N8N por engano. Tabela é pequena
+        # (~3.5k linhas/mês, scan <1MB). Revisar quando passar de ~1M linhas.
         df = client.query(f"""
             SELECT id_sacado_sac,
                    MAX(dt_mensagem_enviada) AS dt_msg,
                    MAX(dt_ligacao_atendida) AS dt_lig_atend,
                    MAX(dt_ligacao_feita)    AS dt_lig_tent
             FROM `{_TAREFAS_TABLE}`
-            WHERE data_tarefa >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 6 DAY)
             GROUP BY id_sacado_sac
         """).to_dataframe()
     except Exception:
