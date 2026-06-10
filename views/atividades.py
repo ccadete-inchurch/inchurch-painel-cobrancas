@@ -221,8 +221,8 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     # cliente está pagando, prioridade alta.
     _vl_parcial = float(c.get("_valor_pago_hoje") or 0)
     parcial_badge = (
-        f'<span style="background:rgba(124,194,67,.22);color:#7cc243;font-size:13px;'
-        f'font-weight:800;padding:4px 10px;border-radius:6px;margin-left:6px;'
+        f'<span style="background:rgba(124,194,67,.22);color:#7cc243;font-size:11px;'
+        f'font-weight:800;padding:3px 8px;border-radius:5px;margin-left:6px;'
         f'border:1px solid rgba(124,194,67,.4);'
         f'vertical-align:middle;letter-spacing:.3px">PAGOU {fmt_moeda_plain(_vl_parcial)} HOJE</span>'
     ) if c.get("_pago_parcial_hoje") and not _regularizado and _vl_parcial > 0 else ""

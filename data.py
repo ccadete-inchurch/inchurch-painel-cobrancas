@@ -1010,6 +1010,64 @@ def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.D
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=3600)
+def fetch_eventos_regularizacao() -> set:
+    """Retorna set de (id_sacado_sac, data_dd_mm_aaaa) — eventos de regularização
+    histórica detectados via diferença entre snapshots consecutivos.
+
+    Lógica: pra cada par (snapshot D-1, snapshot D), clientes que estavam em
+    D-1 mas NÃO em D = regularizaram entre D-1 e D. Associa o evento à data D.
+
+    Limitações:
+    - Só detecta a partir de quando snapshots começaram (~26/05)
+    - Gaps (sáb/dom/feriado sem snapshot) agrupam regularizações no próximo
+      dia útil (não é perda, só atribuição de data aproximada)
+    - Cliente que regularizou MAIS DE UMA VEZ no período (re-inadimplência)
+      tem múltiplos eventos, cada um na sua data
+
+    Usado pelo badge ✓ REGULARIZADO na tela Pagamentos pra detectar
+    regularizações históricas além de hoje (que vem via overlay API).
+    """
+    client = get_bq_client()
+    if not client:
+        return set()
+    try:
+        df = client.query(f"""
+            WITH datas AS (
+                SELECT DISTINCT data_snapshot AS dt
+                FROM `{_SNAPSHOT_TABLE}`
+            ),
+            datas_com_lag AS (
+                SELECT
+                    dt AS dt_atual,
+                    LAG(dt) OVER (ORDER BY dt) AS dt_anterior
+                FROM datas
+            ),
+            regularizacoes AS (
+                SELECT
+                    pair.dt_atual,
+                    prev.id_sacado_sac
+                FROM datas_com_lag pair
+                JOIN `{_SNAPSHOT_TABLE}` prev
+                  ON prev.data_snapshot = pair.dt_anterior
+                LEFT JOIN `{_SNAPSHOT_TABLE}` curr
+                  ON curr.data_snapshot = pair.dt_atual
+                  AND CAST(curr.id_sacado_sac AS STRING) = CAST(prev.id_sacado_sac AS STRING)
+                WHERE curr.id_sacado_sac IS NULL
+                  AND pair.dt_anterior IS NOT NULL
+            )
+            SELECT
+                CAST(id_sacado_sac AS STRING) AS id,
+                FORMAT_DATE('%d/%m/%Y', dt_atual) AS data
+            FROM regularizacoes
+        """).to_dataframe()
+        if df.empty:
+            return set()
+        return {(str(r["id"]), str(r["data"])) for _, r in df.iterrows()}
+    except Exception:
+        return set()
+
+
 @st.cache_data(ttl=1800)
 def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
     """Pagamentos com atraso no período, agrupados POR CLIENTE+DIA, com:

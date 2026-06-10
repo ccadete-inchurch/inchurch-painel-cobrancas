@@ -3,6 +3,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
+from data import fetch_eventos_regularizacao
 from helpers import fmt_moeda_plain, fmt_moeda, get_effective_atendente, hoje_lote
 
 
@@ -182,6 +183,11 @@ def _render_historico(store):
         )
         return
 
+    # Eventos históricos de regularização — set de (id, data) detectados
+    # via diff entre snapshots consecutivos. Pra HOJE usa o overlay
+    # (ids_reg_hoje) que é real-time; pra dias passados usa esse set.
+    eventos_reg_historico = fetch_eventos_regularizacao()
+
     PAGE_SIZE = 100
     total_f   = len(df)
     total_pg  = max(1, -(-total_f // PAGE_SIZE))
@@ -190,17 +196,20 @@ def _render_historico(store):
     n = len(rows)
     for i, row in enumerate(rows):
         inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("inativo") else ""
-        # Badge "REGULARIZADO" — só pra linhas onde cliente quitou tudo HOJE.
-        # Aplica em todas as linhas de hoje desse cliente (se ele tiver
-        # múltiplas cobranças pagas hoje, todas ganham o selo).
-        eh_reg_hoje = (
-            str(row.get("id") or "") in ids_reg_hoje
-            and str(row.get("data") or "") == hoje_str
-        )
+        # Badge "REGULARIZADO" — combina 2 fontes:
+        # 1) HOJE: overlay API (flag _regularizado_hoje em store["clientes"])
+        # 2) HISTÓRICO: detecção via diff de snapshots consecutivos
+        # Suporta re-inadimplência: se cliente regularizou em datas múltiplas,
+        # cada linha correspondente recebe seu próprio badge.
+        _rid = str(row.get("id") or "")
+        _rdt = str(row.get("data") or "")
+        eh_reg_hoje = _rid in ids_reg_hoje and _rdt == hoje_str
+        eh_reg_historico = (_rid, _rdt) in eventos_reg_historico
+        eh_regularizado = eh_reg_hoje or eh_reg_historico
         reg_badge = (
             '<span style="background:rgba(45,211,111,.18);color:#2dd36f;'
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
-            'margin-right:4px">✓ REGULARIZADO</span>' if eh_reg_hoje else ""
+            'margin-right:4px">✓ REGULARIZADO</span>' if eh_regularizado else ""
         )
         rcols = st.columns(col_w)
         with rcols[0]:
