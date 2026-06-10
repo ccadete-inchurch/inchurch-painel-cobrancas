@@ -283,9 +283,10 @@ def _render_historico(store):
         cli_bg = "background:rgba(45,211,111,.06);" if em_lote_hoje else ""
         cli_bl = "border-left:4px solid #2dd36f;"    if em_lote_hoje else ""
         lote_badge = (
-            '<span style="background:#2dd36f;color:#0f1117;'
-            'font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;'
-            'margin-right:4px;letter-spacing:0.4px">★ LOTE</span>' if em_lote_hoje else ""
+            '<span style="background:transparent;color:#2dd36f;'
+            'border:1px solid #2dd36f;font-size:10px;font-weight:700;'
+            'padding:1px 6px;border-radius:5px;margin-right:4px;'
+            'letter-spacing:0.3px">★ LOTE</span>' if em_lote_hoje else ""
         )
         rcols = st.columns(col_w)
         with rcols[0]:
