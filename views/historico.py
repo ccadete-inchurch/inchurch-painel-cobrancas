@@ -87,17 +87,26 @@ def _render_historico(store):
         n_hoje = 0
         v_hoje = 0.0
 
-    # Regularizados do Dia — só clientes que quitaram TUDO hoje (flag overlay)
-    ids_reg_hoje = {
+    # Regularizados do Dia — só clientes que quitaram TUDO hoje (flag overlay).
+    # Respeita os filtros aplicados: intersect com os IDs do df_hoje filtrado.
+    ids_reg_hoje_all = {
         str(c.get("id") or "") for c in store.get("clientes", [])
         if c.get("_regularizado_hoje")
     }
-    n_reg = len(ids_reg_hoje)
-    v_reg = sum(
-        float(c.get("_valor_pago_hoje") or 0)
-        for c in store.get("clientes", [])
-        if str(c.get("id") or "") in ids_reg_hoje
-    )
+    if not df.empty:
+        ids_no_df_hoje = set(df_hoje["id"].astype(str).unique()) if not df_hoje.empty else set()
+        ids_reg_hoje = ids_reg_hoje_all & ids_no_df_hoje
+        if not df_hoje.empty:
+            df_hoje_reg = df_hoje[df_hoje["id"].astype(str).isin(ids_reg_hoje)]
+            n_reg = int(df_hoje_reg["id"].astype(str).nunique()) if not df_hoje_reg.empty else 0
+            v_reg = float(df_hoje_reg["valor"].sum()) if not df_hoje_reg.empty else 0.0
+        else:
+            n_reg = 0
+            v_reg = 0.0
+    else:
+        ids_reg_hoje = set()
+        n_reg = 0
+        v_reg = 0.0
 
     # Mês (clientes únicos via df). Total histórico removido (não acionável).
     if df.empty:

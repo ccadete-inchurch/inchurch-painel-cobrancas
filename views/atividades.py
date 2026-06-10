@@ -216,13 +216,15 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
     acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if _eh_acordo and not _regularizado else ""
     # Badge de pagamento parcial — cliente pagou algum boleto hoje mas ainda
-    # tem vencidas. Só mostra fora da coluna CONCLUÍDA (lá já é regularização
-    # total). Mesmo estilo de INATIVO/ACORDO mas em verde inChurch.
+    # tem vencidas. Aumentado pra ficar mais evidente (era 10px, agora 13px
+    # com padding maior e borda sólida). É info crítica pra atendente —
+    # cliente está pagando, prioridade alta.
     _vl_parcial = float(c.get("_valor_pago_hoje") or 0)
     parcial_badge = (
-        f'<span style="background:rgba(124,194,67,.18);color:#7cc243;font-size:10px;'
-        f'font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;'
-        f'vertical-align:middle">PAGOU {fmt_moeda_plain(_vl_parcial)} HOJE</span>'
+        f'<span style="background:rgba(124,194,67,.22);color:#7cc243;font-size:13px;'
+        f'font-weight:800;padding:4px 10px;border-radius:6px;margin-left:6px;'
+        f'border:1px solid rgba(124,194,67,.4);'
+        f'vertical-align:middle;letter-spacing:.3px">PAGOU {fmt_moeda_plain(_vl_parcial)} HOJE</span>'
     ) if c.get("_pago_parcial_hoje") and not _regularizado and _vl_parcial > 0 else ""
     motivo_txt, motivo_style = _motivo(bucket, acoes, c)
     _motivo_css = {
