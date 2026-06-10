@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -42,9 +42,37 @@ def _render_historico(store):
 
     # ── Filtros ───────────────────────────────────────────────────────────────
     atendentes_disp = sorted({a for a in df["atendente"].unique() if a and a != "—"}) if not df.empty else []
-    fb, fs, fa = st.columns([3, 2, 2])
+
+    # Helper: calcula intervalo de datas baseado no preset selecionado.
+    hoje_br_pre = date.fromisoformat(hoje_lote())
+    def _intervalo_periodo(p: str) -> tuple[date, date] | None:
+        if p == "Hoje":
+            return (hoje_br_pre, hoje_br_pre)
+        if p == "Esta semana":
+            return (hoje_br_pre - timedelta(days=hoje_br_pre.weekday()), hoje_br_pre)
+        if p == "Este mês":
+            return (hoje_br_pre.replace(day=1), hoje_br_pre)
+        if p == "Mês anterior":
+            primeiro = hoje_br_pre.replace(day=1)
+            ultimo_mes_passado = primeiro - timedelta(days=1)
+            return (ultimo_mes_passado.replace(day=1), ultimo_mes_passado)
+        if p == "Últimos 30 dias":
+            return (hoje_br_pre - timedelta(days=30), hoje_br_pre)
+        if p == "Últimos 90 dias":
+            return (hoje_br_pre - timedelta(days=90), hoje_br_pre)
+        return None  # 'Tudo'
+
+    fb, fp, fs, fa = st.columns([3, 1.6, 1.4, 1.6])
     with fb:
         busca = st.text_input("Buscar", placeholder="Nome, CNPJ ou ID sacado...", key="reg_busca")
+    with fp:
+        periodo = st.selectbox(
+            "Período",
+            ["Hoje", "Esta semana", "Este mês", "Mês anterior",
+             "Últimos 30 dias", "Últimos 90 dias", "Tudo"],
+            index=2,  # 'Este mês' como default
+            key="reg_periodo",
+        )
     with fs:
         filtro_sit = st.selectbox("Situação", ["Todos", "Apenas ativos", "Apenas inativos"], key="reg_sit")
     with fa:
@@ -66,92 +94,97 @@ def _render_historico(store):
     elif filtro_atd != "Todos":
         df = df[df["atendente"] == filtro_atd]
 
+    # Filtro temporal — orquestra cards + tabela.
+    intervalo = _intervalo_periodo(periodo)
+    if intervalo and not df.empty:
+        dt_ini, dt_fim = intervalo
+        df = df.copy()
+        df["_dt_temp"] = pd.to_datetime(df["data"], format="%d/%m/%Y", errors="coerce")
+        df = df[(df["_dt_temp"].dt.date >= dt_ini) & (df["_dt_temp"].dt.date <= dt_fim)]
+        df = df.drop(columns=["_dt_temp"])
+
     # ── Métricas ──────────────────────────────────────────────────────────────
-    # Todos por CLIENTES ÚNICOS (não por faturas) — consistente com o badge
-    # da Atividades. Cliente que paga vários boletos no mesmo dia/mês/ano
-    # conta como 1. Valor é a soma real dos pagamentos (sem deduplicar).
-    # 'hoje' = dia OPERACIONAL (vira 08:15 BRT) pra alinhar com o ciclo do
-    # lote — evita resetar contador à meia-noite enquanto cards do dia
-    # anterior ainda estão visíveis em CONCLUÍDA.
+    # Cards driven pelo período selecionado — df já está filtrado por período.
     hoje_br = date.fromisoformat(hoje_lote())
-    sufixo_mes = hoje_br.strftime("/%m/%Y")  # "/MM/AAAA" — match endswith
-
-    # Pagamentos Hoje — date-based no df pra bater com a tabela embaixo.
-    # Inclui pagamentos de clientes que saíram da inadimplência (não estão em
-    # store['clientes']) mas têm registro com data=hoje em store['regularizados'].
     hoje_str = hoje_br.strftime("%d/%m/%Y")
-    if not df.empty:
-        df_hoje = df[df["data"].astype(str) == hoje_str]
-        n_hoje  = int(df_hoje["id"].astype(str).nunique()) if not df_hoje.empty else 0
-        v_hoje  = float(df_hoje["valor"].sum()) if not df_hoje.empty else 0.0
-    else:
-        n_hoje = 0
-        v_hoje = 0.0
 
-    # Regularizados do Dia — só clientes que quitaram TUDO hoje (flag overlay).
-    # Respeita os filtros aplicados: intersect com os IDs do df_hoje filtrado.
+    # Pagamentos no Período = todos os pagamentos do df filtrado
+    if not df.empty:
+        n_periodo = int(df["id"].astype(str).nunique())
+        v_periodo = float(df["valor"].sum())
+    else:
+        n_periodo = 0
+        v_periodo = 0.0
+
+    # Regularizações no Período = subset que efetivamente regularizou
+    # Combina 2 fontes: overlay HOJE (real-time) + histórico (BQ cross-check)
     ids_reg_hoje_all = {
         str(c.get("id") or "") for c in store.get("clientes", [])
         if c.get("_regularizado_hoje")
     }
+    eventos_reg_historico = fetch_eventos_regularizacao()
+
     if not df.empty:
-        ids_no_df_hoje = set(df_hoje["id"].astype(str).unique()) if not df_hoje.empty else set()
-        ids_reg_hoje = ids_reg_hoje_all & ids_no_df_hoje
-        if not df_hoje.empty:
-            df_hoje_reg = df_hoje[df_hoje["id"].astype(str).isin(ids_reg_hoje)]
-            n_reg = int(df_hoje_reg["id"].astype(str).nunique()) if not df_hoje_reg.empty else 0
-            v_reg = float(df_hoje_reg["valor"].sum()) if not df_hoje_reg.empty else 0.0
-        else:
-            n_reg = 0
-            v_reg = 0.0
+        def _eh_reg(r):
+            _rid = str(r.get("id") or "")
+            _rdt = str(r.get("data") or "")
+            return (
+                (_rid in ids_reg_hoje_all and _rdt == hoje_str)
+                or (_rid, _rdt) in eventos_reg_historico
+            )
+        df_reg_periodo = df[df.apply(_eh_reg, axis=1)]
+        n_reg = int(df_reg_periodo["id"].astype(str).nunique()) if not df_reg_periodo.empty else 0
+        v_reg = float(df_reg_periodo["valor"].sum()) if not df_reg_periodo.empty else 0.0
     else:
-        ids_reg_hoje = set()
         n_reg = 0
         v_reg = 0.0
 
-    # Mês (clientes únicos via df). Total histórico removido (não acionável).
-    if df.empty:
-        n_mes = 0
-        v_mes = 0.0
-    else:
-        df_mes = df[df["data"].astype(str).str.endswith(sufixo_mes, na=False)]
-        n_mes  = int(df_mes["id"].astype(str).nunique()) if not df_mes.empty else 0
-        v_mes  = float(df_mes["valor"].sum()) if not df_mes.empty else 0.0
+    # Taxa de regularização (% pagantes que zeraram tudo)
+    taxa_reg = (n_reg / n_periodo * 100) if n_periodo > 0 else 0.0
+
+    # IDs reg do dia (pra badge na tabela) — mantém compat com o restante
+    ids_reg_hoje = ids_reg_hoje_all
 
     m1, m2, m3 = st.columns(3)
-    _tooltip_dia = (
-        "Conta todos os pagamentos do dia (parciais e totais), incluindo "
-        "clientes que já saíram da inadimplência. Mesma fonte da tabela abaixo."
+    _tooltip_pag = (
+        f"Todos os pagamentos atrasados no período selecionado "
+        f"({periodo}). Inclui parciais + regularizações."
     )
     _tooltip_reg = (
-        "Apenas clientes que quitaram TODAS as cobranças vencidas hoje. "
-        "Linhas correspondentes na tabela abaixo recebem badge ✓ REGULARIZADO."
+        f"Clientes que quitaram TODAS as cobranças vencidas no período "
+        f"({periodo}). Subset de Pagamentos."
     )
-    _tooltip_mes = (
-        "Soma de pagamentos atrasados do mês — parciais + regularizações. "
-        "Aproxima o valor recuperado pela operação."
+    _tooltip_taxa = (
+        "Percentual de pagamentos que resultaram em regularização total. "
+        "Reflete quão 'completos' são os pagamentos no período."
     )
-    # Conjugação correta: 3ª pessoa singular vs plural.
-    # 'pagou' → 'pagaram' (NÃO 'pagouram'). 'regularizou' → 'regularizaram'.
+    # Cards adaptam label ao período. Tipo "moeda" formata R$, "pct" formata %.
+    # Taxa de Regularização tem sub-texto diferente (X de Y, não 'X regularizaram').
+    _sub_taxa = (
+        f'{n_reg} de {n_periodo} {"regularizou" if n_periodo == 1 else "regularizaram"}'
+    ) if n_periodo > 0 else "sem pagamentos no período"
+    _sub_pag = (
+        f'{n_periodo} {"cliente" if n_periodo == 1 else "clientes"} '
+        f'{"pagou" if n_periodo == 1 else "pagaram"}'
+    )
+    _sub_reg = (
+        f'{n_reg} {"cliente" if n_reg == 1 else "clientes"} '
+        f'{"regularizou" if n_reg == 1 else "regularizaram"}'
+    )
     cards = [
-        (m1, "Pagamentos do Dia",      v_hoje,  n_hoje,  ("pagou",       "pagaram"),       _tooltip_dia),
-        (m2, "Regularizados do Dia",   v_reg,   n_reg,   ("regularizou", "regularizaram"), _tooltip_reg),
-        (m3, "Pagamentos no Mês",      v_mes,   n_mes,   ("pagou",       "pagaram"),       _tooltip_mes),
+        (m1, f"Pagamentos · {periodo}",     fmt_moeda_plain(v_periodo), _sub_pag,  _tooltip_pag,  "#2dd36f"),
+        (m2, f"Regularizações · {periodo}", fmt_moeda_plain(v_reg),     _sub_reg,  _tooltip_reg,  "#2dd36f"),
+        (m3, "Taxa de Regularização",       f"{taxa_reg:.0f}%",         _sub_taxa, _tooltip_taxa, "#5fa3ff"),
     ]
-    for col, label, valor, qtd, (verbo_sg, verbo_pl), tooltip in cards:
+    for col, label, valor_str, sub, tooltip, cor_valor in cards:
         with col:
-            verbo = verbo_sg if qtd == 1 else verbo_pl
-            sub = f'{qtd} {"cliente" if qtd == 1 else "clientes"} {verbo}'
             title_attr = f' title="{tooltip}"' if tooltip else ""
             cursor = "help" if tooltip else "default"
             st.markdown(
                 f'<div class="metric-card" style="cursor:{cursor};padding:18px 20px"{title_attr}>'
-                # Label maior + letter-spacing pra ficar igual aos cards do dashboard
                 f'<div class="metric-label" style="font-size:14px;letter-spacing:1.3px">{label}</div>'
-                # Valor R$ MUITO MAIOR — é o que o atendente quer ver primeiro
-                f'<div style="font-size:30px;font-weight:800;color:#2dd36f;margin-top:6px;'
-                f'line-height:1.1;font-variant-numeric:tabular-nums">{fmt_moeda_plain(valor)}</div>'
-                # Sublabel maior também (qtd de clientes)
+                f'<div style="font-size:30px;font-weight:800;color:{cor_valor};margin-top:6px;'
+                f'line-height:1.1;font-variant-numeric:tabular-nums">{valor_str}</div>'
                 f'<div class="metric-sub" style="font-size:14px;margin-top:8px">{sub}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
