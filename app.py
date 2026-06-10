@@ -59,6 +59,12 @@ def main():
                 set_pending_oauth(nonce, email, nome)
         except Exception:
             pass
+        # Auto-close do popup. components.html roda em iframe sandbox de
+        # Streamlit (sem allow-top-navigation) — window.top.close() pode ser
+        # bloqueado. Combina 2 estratégias:
+        #   1. SVG onload no markdown (atributo, não <script> — escapa do
+        #      sanitizer e roda no contexto da janela popup, não em iframe)
+        #   2. components.html como fallback com múltiplas tentativas
         st.markdown("""
         <style>
         header{display:none!important}
@@ -72,16 +78,15 @@ def main():
             <div style="font-size:18px;font-weight:700;margin:4px 0 0">Login realizado!</div>
             <div style="font-size:13px;color:#6b7280">Fechando automaticamente...</div>
         </div>
+        <svg width="0" height="0" onload="setTimeout(function(){try{window.close();}catch(e){}try{open('','_self').close();}catch(e){}},700)"></svg>
         """, unsafe_allow_html=True)
-        # Auto-close do popup. st.markdown não executa <script> (Streamlit
-        # sanitiza), então usa components.html (iframe) com window.top pra
-        # alcançar a janela popup raiz. Delay 700ms pra usuário ver o ✓.
         import streamlit.components.v1 as _components
         _components.html("""
         <script>
         setTimeout(function() {
-            try { window.top.close(); } catch(e) {}
-            try { window.close(); } catch(e) {}
+            try { window.top.close(); }    catch(e) {}
+            try { window.parent.close(); } catch(e) {}
+            try { open('','_self').close(); } catch(e) {}
         }, 700);
         </script>
         """, height=0)

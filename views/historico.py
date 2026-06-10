@@ -256,6 +256,13 @@ def _render_historico(store):
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
             'margin-right:4px">✓ REGULARIZADO</span>' if eh_regularizado else ""
         )
+        # Badge PAGAMENTO PARCIAL (azul) — pagou algo mas não zerou a dívida.
+        # Mutuamente exclusivo com REGULARIZADO.
+        parcial_badge = (
+            '<span style="background:rgba(95,163,255,.18);color:#5fa3ff;'
+            'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
+            'margin-right:4px">PAGAMENTO PARCIAL</span>' if not eh_regularizado else ""
+        )
         # Badge ACORDO (amarelo) — só pra clientes AINDA na carteira.
         acordo_badge = ""
         if _cli_atual and not eh_regularizado:
@@ -266,39 +273,41 @@ def _render_historico(store):
                     'margin-right:4px">ACORDO</span>'
                 )
         # Marca conversão: cliente do lote de hoje que pagou (parcial OU
-        # regularização). Mesmo padrão visual do TOP em Inadimplentes — faixa
-        # lateral + tint sutil — mas verde pra sinalizar resultado positivo.
+        # regularização). Pill verde sólido com texto escuro — destaca como
+        # "estrela de conversão", distinto do REGULARIZADO (que é tint claro).
+        # Background aplica em TODAS as colunas pra linha inteira ficar marcada;
+        # border-left só na primeira pra não criar listras internas.
         em_lote_hoje = _rid in ids_lote_hoje
-        row_bl = "border-left:4px solid rgba(45,211,111,.6);" if em_lote_hoje else ""
-        row_bg = "background:rgba(45,211,111,.04);"           if em_lote_hoje else ""
+        row_bg = "background:rgba(45,211,111,.05);" if em_lote_hoje else ""
+        row_bl = "border-left:4px solid #2dd36f;"    if em_lote_hoje else ""
         lote_badge = (
-            '<span style="background:rgba(45,211,111,.18);color:#2dd36f;'
-            'font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;'
-            'margin-right:3px">★ LOTE</span>' if em_lote_hoje else ""
+            '<span style="background:#2dd36f;color:#0f1117;'
+            'font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;'
+            'margin-right:4px;letter-spacing:0.4px">★ LOTE</span>' if em_lote_hoje else ""
         )
         rcols = st.columns(col_w)
         with rcols[0]:
             st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5;{row_bg}{row_bl}">{row.get("data","—")}</div>', unsafe_allow_html=True)
         with rcols[1]:
-            badges_html = f'{lote_badge}{reg_badge}{acordo_badge}{inativo_badge}'
+            badges_html = f'{lote_badge}{reg_badge}{parcial_badge}{acordo_badge}{inativo_badge}'
             badges_line = f'<div style="margin-bottom:2px">{badges_html}</div>' if badges_html else ''
             st.markdown(
-                f'<div style="padding:12px 14px">'
+                f'<div style="padding:12px 14px;{row_bg}">'
                 f'{badges_line}'
                 f'<div style="font-size:14px;font-weight:600;color:#e8eaf0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{row.get("nome","—")}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
         with rcols[2]:
-            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{row.get("cnpj","—")}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5;{row_bg}">{row.get("cnpj","—")}</div>', unsafe_allow_html=True)
         with rcols[3]:
             # fmt_moeda_plain (não fmt_moeda) — fmt_moeda colore valores altos
             # em vermelho/âmbar como ALERTA (desenhado pra dívidas em
             # Inadimplência). Aqui é PAGAMENTO recebido → tudo verde.
-            st.markdown(f'<div style="padding:12px 14px;font-size:14px;font-weight:600;color:#2dd36f">{fmt_moeda_plain(row.get("valor",0))}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:14px;font-weight:600;color:#2dd36f;{row_bg}">{fmt_moeda_plain(row.get("valor",0))}</div>', unsafe_allow_html=True)
         with rcols[4]:
             _at_txt = str(row.get("atendente") or "—")
-            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{_at_txt}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5;{row_bg}">{_at_txt}</div>', unsafe_allow_html=True)
 
         if i < n - 1:
             st.markdown('<div style="height:0.5px;background:#2a2f42;margin:0"></div>', unsafe_allow_html=True)
