@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date
 
 import pandas as pd
 import streamlit as st
@@ -42,35 +42,20 @@ def _render_historico(store):
     # ── Filtros ───────────────────────────────────────────────────────────────
     atendentes_disp = sorted({a for a in df["atendente"].unique() if a and a != "—"}) if not df.empty else []
 
-    # Helper: calcula intervalo de datas baseado no preset selecionado.
     hoje_br_pre = date.fromisoformat(hoje_lote())
-    def _intervalo_periodo(p: str) -> tuple[date, date] | None:
-        if p == "Hoje":
-            return (hoje_br_pre, hoje_br_pre)
-        if p == "Esta semana":
-            return (hoje_br_pre - timedelta(days=hoje_br_pre.weekday()), hoje_br_pre)
-        if p == "Este mês":
-            return (hoje_br_pre.replace(day=1), hoje_br_pre)
-        if p == "Mês anterior":
-            primeiro = hoje_br_pre.replace(day=1)
-            ultimo_mes_passado = primeiro - timedelta(days=1)
-            return (ultimo_mes_passado.replace(day=1), ultimo_mes_passado)
-        if p == "Últimos 30 dias":
-            return (hoje_br_pre - timedelta(days=30), hoje_br_pre)
-        if p == "Últimos 90 dias":
-            return (hoje_br_pre - timedelta(days=90), hoje_br_pre)
-        return None  # 'Tudo'
+    # Default: mês corrente (1º dia → hoje)
+    _ini_default = hoje_br_pre.replace(day=1)
 
-    fb, fp, fs, fa = st.columns([3, 1.6, 1.4, 1.6])
+    fb, fp, fs, fa = st.columns([2.4, 2.2, 1.3, 1.5])
     with fb:
         busca = st.text_input("Buscar", placeholder="Nome, CNPJ ou ID sacado...", key="reg_busca")
     with fp:
-        periodo = st.selectbox(
-            "Período",
-            ["Hoje", "Esta semana", "Este mês", "Mês anterior",
-             "Últimos 30 dias", "Últimos 90 dias", "Tudo"],
-            index=2,  # 'Este mês' como default
-            key="reg_periodo",
+        # Date range picker — qualquer intervalo de datas
+        intervalo_selecionado = st.date_input(
+            "Período (de → até)",
+            value=(_ini_default, hoje_br_pre),
+            key="reg_periodo_range",
+            format="DD/MM/YYYY",
         )
     with fs:
         filtro_sit = st.selectbox("Situação", ["Todos", "Apenas ativos", "Apenas inativos"], key="reg_sit")
@@ -93,14 +78,32 @@ def _render_historico(store):
     elif filtro_atd != "Todos":
         df = df[df["atendente"] == filtro_atd]
 
-    # Filtro temporal — orquestra cards + tabela.
-    intervalo = _intervalo_periodo(periodo)
-    if intervalo and not df.empty:
-        dt_ini, dt_fim = intervalo
+    # Filtro temporal via date range picker — orquestra cards + tabela.
+    # st.date_input com value tupla retorna tupla (dt_ini, dt_fim) quando
+    # ambas datas escolhidas; tupla com 1 item enquanto user escolhe a 2ª.
+    dt_ini, dt_fim = None, None
+    if isinstance(intervalo_selecionado, tuple):
+        if len(intervalo_selecionado) == 2:
+            dt_ini, dt_fim = intervalo_selecionado
+        elif len(intervalo_selecionado) == 1:
+            dt_ini = dt_fim = intervalo_selecionado[0]
+    elif intervalo_selecionado:  # date single
+        dt_ini = dt_fim = intervalo_selecionado
+
+    if dt_ini and dt_fim and not df.empty:
         df = df.copy()
         df["_dt_temp"] = pd.to_datetime(df["data"], format="%d/%m/%Y", errors="coerce")
         df = df[(df["_dt_temp"].dt.date >= dt_ini) & (df["_dt_temp"].dt.date <= dt_fim)]
         df = df.drop(columns=["_dt_temp"])
+
+    # Label do período pra usar nos cards (texto curto)
+    if dt_ini and dt_fim:
+        if dt_ini == dt_fim:
+            periodo = dt_ini.strftime("%d/%m/%Y")
+        else:
+            periodo = f"{dt_ini.strftime('%d/%m')} → {dt_fim.strftime('%d/%m/%Y')}"
+    else:
+        periodo = "Período"
 
     # ── Métricas ──────────────────────────────────────────────────────────────
     # Cards driven pelo período selecionado — df já está filtrado por período.
@@ -246,34 +249,14 @@ def _render_historico(store):
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
             'margin-right:4px">✓ REGULARIZADO</span>' if eh_regularizado else ""
         )
-        # Badge ACORDO (amarelo, mesmo tom de atenção) + saldo restante.
-        # Só pra clientes AINDA na carteira (não regularizou).
+        # Badge ACORDO (amarelo) — só pra clientes AINDA na carteira.
         acordo_badge = ""
-        saldo_html = ""
         if _cli_atual and not eh_regularizado:
             if _cli_atual.get("_tem_acordo"):
                 acordo_badge = (
                     '<span style="background:rgba(245,158,11,.2);color:#f59e0b;'
                     'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
                     'margin-right:4px">ACORDO</span>'
-                )
-            _saldo = float(_cli_atual.get("valor") or 0)
-            _dias = int(_cli_atual.get("dias_atraso") or 0)
-            if _saldo > 0:
-                # Badge estilizado com info contextual (valor + dias de atraso)
-                _dias_html = (
-                    f'<span style="color:#9ca3af;font-weight:500;margin-left:8px">'
-                    f'· {_dias} {"dia" if _dias == 1 else "dias"} de atraso</span>'
-                ) if _dias > 0 else ""
-                saldo_html = (
-                    f'<div style="display:inline-flex;align-items:center;gap:6px;'
-                    f'background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);'
-                    f'border-radius:5px;padding:3px 9px;margin-top:5px;font-size:11px">'
-                    f'<span style="color:#9ca3af;font-weight:500">Saldo pendente:</span>'
-                    f'<span style="color:#f59e0b;font-weight:800;'
-                    f'font-variant-numeric:tabular-nums">{fmt_moeda_plain(_saldo)}</span>'
-                    f'{_dias_html}'
-                    f'</div>'
                 )
         rcols = st.columns(col_w)
         with rcols[0]:
@@ -285,7 +268,6 @@ def _render_historico(store):
                 f'<div style="padding:12px 14px">'
                 f'{badges_line}'
                 f'<div style="font-size:14px;font-weight:600;color:#e8eaf0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{row.get("nome","—")}</div>'
-                f'{saldo_html}'
                 f'</div>',
                 unsafe_allow_html=True,
             )
