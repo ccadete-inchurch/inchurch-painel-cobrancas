@@ -235,29 +235,35 @@ def _render_historico(store):
     n = len(rows)
     for i, row in enumerate(rows):
         inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("inativo") else ""
-        # Badge "REGULARIZADO" — combina 2 fontes:
-        # 1) HOJE: overlay API (flag _regularizado_hoje em store["clientes"])
-        # 2) HISTÓRICO: detecção via diff de snapshots consecutivos
+        # Badge "REGULARIZADO" — lógica operacional simples:
+        # Se cliente FEZ pagamento (linha existe) E NÃO tem saldo pendente
+        # (não está em store["clientes"]) → regularizou aquela cobrança.
+        #
+        # 3 fontes de detecção (qualquer uma confirma):
+        # 1) HOJE via overlay API (flag _regularizado_hoje real-time)
+        # 2) HISTÓRICO via diff de snapshots + cross-check com pagamento
+        # 3) FALLBACK: cliente não está mais na carteira atual (sem débito)
+        #
+        # A fonte 3 cobre pre-snapshot (antes 26/05) e edge cases. Lógica
+        # operacional: 'pagou + sem dívida atual = regularizou'.
         _rid = str(row.get("id") or "")
         _rdt = str(row.get("data") or "")
+        _cli_atual = _clientes_lookup.get(_rid)
         eh_reg_hoje = _rid in ids_reg_hoje and _rdt == hoje_str
         eh_reg_historico = (_rid, _rdt) in eventos_reg_historico
-        eh_regularizado = eh_reg_hoje or eh_reg_historico
+        eh_reg_sem_saldo = _cli_atual is None  # saiu da carteira → regularizou
+        eh_regularizado = eh_reg_hoje or eh_reg_historico or eh_reg_sem_saldo
         reg_badge = (
             '<span style="background:rgba(45,211,111,.18);color:#2dd36f;'
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
             'margin-right:4px">✓ REGULARIZADO</span>' if eh_regularizado else ""
         )
-        # Badge ACORDO (azul, padrão Inadimplência) + sub-texto contextual:
-        # - Cliente AINDA inad + saldo > 0  →  "Saldo: R$ X" (amarelo, atenção)
-        # - Cliente AINDA inad + saldo == 0 →  vazio (caso raro)
-        # - Cliente FORA da carteira         →  "Sem saldo pendente" (cinza,
-        #   sinaliza que cliente já saiu — mesmo sem badge confirmado)
-        _cli_atual = _clientes_lookup.get(_rid)
+        # Badge ACORDO (azul, padrão Inadimplência) + saldo a pagar — só pra
+        # clientes AINDA na carteira (não regularizou). Se regularizou (via
+        # qualquer das 3 fontes acima), não mostra nada.
         acordo_badge = ""
         saldo_html = ""
-        if _cli_atual:
-            # Ainda inadimplente — mostra badge ACORDO se aplicável + saldo
+        if _cli_atual and not eh_regularizado:
             if _cli_atual.get("_tem_acordo"):
                 acordo_badge = (
                     '<span style="background:#4f7cff;color:#fff;font-size:10px;'
@@ -270,14 +276,6 @@ def _render_historico(store):
                     f'<div style="font-size:11px;color:#f59e0b;margin-top:3px;font-weight:600">'
                     f'Saldo: {fmt_moeda_plain(_saldo)}</div>'
                 )
-        else:
-            # Cliente saiu da carteira (regularizou ou foi baixado). Indica
-            # textualmente pra evitar 'linha vazia confusa' em casos de
-            # regularização pré-snapshot ou baixas administrativas.
-            saldo_html = (
-                '<div style="font-size:11px;color:#6b7280;margin-top:3px;'
-                'font-style:italic">Sem saldo pendente</div>'
-            )
         rcols = st.columns(col_w)
         with rcols[0]:
             st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{row.get("data","—")}</div>', unsafe_allow_html=True)
