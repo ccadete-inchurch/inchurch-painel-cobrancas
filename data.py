@@ -276,18 +276,21 @@ def aplicar_pagamentos_hoje_no_store():
         info = pagamentos[cid]
         c["_valor_pago_hoje"] = info["valor_total"]
 
-        # Cobranças vencidas atuais do cliente (do BQ via processar_dados)
-        cobs_vencidas = {
-            str(cob.get("id_recebimento") or "")
+        # Decisão total vs parcial: comparação por VALOR, não por id_recebimento.
+        # API Superlógica com apenasColunasPrincipais=1 às vezes não retorna o
+        # id_recebimento_recb, e a comparação por conjuntos falhava — cliente
+        # que pagou tudo era marcado como parcial. Saldo (valor) é mais robusto.
+        saldo_vencido = sum(
+            float(cob.get("valor") or 0)
             for cob in c.get("_cobracas", [])
-            if (cob.get("dias_atraso") or 0) > 0 and cob.get("id_recebimento")
-        }
-        cobs_pagas_hoje = {str(x) for x in info["cobrancas_ids"] if x}
+            if (cob.get("dias_atraso") or 0) > 0
+        )
+        pago = float(info["valor_total"])
+        # Tolerância de R$ 0,50 cobre diferença de juros/multa quando o que o
+        # cliente pagou inclui acréscimos vs o saldo "limpo" do BQ.
+        quitou_tudo = pago + 0.5 >= saldo_vencido
 
-        # Sobram cobranças vencidas após o pagamento de hoje?
-        cobs_ainda_vencidas = cobs_vencidas - cobs_pagas_hoje
-
-        if not cobs_ainda_vencidas:
+        if quitou_tudo:
             # Totalmente regularizado — sai da inadimplência
             c["_regularizado_hoje"] = True
         else:
@@ -296,13 +299,10 @@ def aplicar_pagamentos_hoje_no_store():
             # Ajusta valor visível subtraindo o que foi pago — UMA SÓ VEZ.
             # O overlay roda a cada render; sem o gate '_valor_ajustado_parcial',
             # cada execução subtrai de novo e o saldo zera artificialmente
-            # após poucos reruns. Aproximação: vl_total_recb inclui juros/multa,
-            # então pode sobrar diferença pequena vs o saldo 'limpo'. BQ amanhã
-            # corrige tudo via replicação normal.
+            # após poucos reruns. BQ amanhã corrige tudo via replicação normal.
             if not c.get("_valor_ajustado_parcial"):
                 try:
                     saldo_antigo = float(c.get("valor") or 0)
-                    pago = float(info["valor_total"])
                     c["valor"] = max(0.0, saldo_antigo - pago)
                     c["_valor_ajustado_parcial"] = True
                 except (TypeError, ValueError):
