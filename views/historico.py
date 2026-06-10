@@ -235,32 +235,26 @@ def _render_historico(store):
     n = len(rows)
     for i, row in enumerate(rows):
         inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("inativo") else ""
-        # Badge "REGULARIZADO" — 3 fontes de detecção:
+        # Badge "REGULARIZADO" — 3 fontes de detecção (qualquer uma confirma):
         # 1) HOJE via overlay API (flag _regularizado_hoje real-time)
-        # 2) HISTÓRICO via diff de snapshots + cross-check (≥26/05)
-        # 3) PRE-SNAPSHOT: se data < 26/05 E cliente não está na carteira
-        #    (assume regularizou no passado, sem prova de snapshot)
+        # 2) HISTÓRICO via diff de snapshots + cross-check (≥26/05, auditado)
+        # 3) FALLBACK: cliente NÃO está na carteira atual (sem saldo pendente)
         #
-        # Importante: NÃO assume regularizado só por "não estar na carteira"
-        # se a data é POST-snapshot — porque pode ser re-inadimplência:
-        # cliente pagou e zerou em D1, voltou a inad em D2, e atendente
-        # vendo a linha de D1 esperaria badge se realmente regularizou.
-        # A Fonte 2 (snapshot diff) cobre esse caso corretamente.
+        # Sobre re-inadimplência: a Fonte 3 só dispara quando _cli_atual is None
+        # (cliente sumiu da carteira). Se cliente voltou a ser inad (carteira
+        # tem ele de novo), _cli_atual não é None → Fonte 3 não aplica.
+        # Aí a Fonte 2 detecta o evento histórico independentemente.
+        #
+        # Trade-off aceito: pagamento parcial em data passada, seguido de
+        # outro que zerou tudo, ambos ganham badge se cliente fica fora da
+        # carteira. Operacionalmente OK — ambos contribuíram pra regularização.
         _rid = str(row.get("id") or "")
         _rdt = str(row.get("data") or "")
         _cli_atual = _clientes_lookup.get(_rid)
         eh_reg_hoje = _rid in ids_reg_hoje and _rdt == hoje_str
         eh_reg_historico = (_rid, _rdt) in eventos_reg_historico
-        # Fallback só pra pré-snapshot (antes 26/05) — sem como provar
-        try:
-            _dt_row = date.fromisoformat(
-                f"{_rdt[6:10]}-{_rdt[3:5]}-{_rdt[0:2]}"
-            )
-            eh_pre_snapshot = _dt_row < date(2026, 5, 26)
-        except Exception:
-            eh_pre_snapshot = False
-        eh_reg_pre_snapshot = eh_pre_snapshot and _cli_atual is None
-        eh_regularizado = eh_reg_hoje or eh_reg_historico or eh_reg_pre_snapshot
+        eh_reg_sem_saldo = _cli_atual is None  # saiu da carteira → regularizou
+        eh_regularizado = eh_reg_hoje or eh_reg_historico or eh_reg_sem_saldo
         reg_badge = (
             '<span style="background:rgba(45,211,111,.18);color:#2dd36f;'
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
