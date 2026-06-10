@@ -194,7 +194,7 @@ def _render_historico(store):
 
     # ── Tabela ────────────────────────────────────────────────────────────────
     col_w = [1.2, 3, 1.8, 1.5, 1.5]
-    hdrs  = ["Data", "Cliente", "CNPJ", "Valor", "Especialista"]
+    hdrs  = ["Data de Pag.", "Cliente", "CNPJ", "Valor", "Especialista"]
 
     hdr_cells = "".join(
         f'<div style="flex:{w};padding:14px 14px;font-size:12px;text-transform:uppercase;'
@@ -248,19 +248,18 @@ def _render_historico(store):
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
             'margin-right:4px">✓ REGULARIZADO</span>' if eh_regularizado else ""
         )
-        # Badge ACORDO VENCIDO e saldo a pagar — só pra clientes que AINDA
-        # estão inadimplentes (estão em store["clientes"]). Se regularizou,
-        # esses badges não aparecem (já não devem mais nada).
+        # Badge ACORDO (azul, mesmo padrão da tela Inadimplência) e saldo
+        # a pagar — só pra clientes que AINDA estão inadimplentes (estão em
+        # store["clientes"]). Se regularizou, esses badges não aparecem.
         _cli_atual = _clientes_lookup.get(_rid)
         acordo_badge = ""
         saldo_html = ""
         if _cli_atual and not eh_regularizado:
-            _eh_acordo = bool(_cli_atual.get("_tem_acordo")) and (_cli_atual.get("dias_atraso") or 0) >= 7
-            if _eh_acordo:
+            if _cli_atual.get("_tem_acordo"):
                 acordo_badge = (
-                    '<span style="background:rgba(245,158,11,.2);color:#f59e0b;'
-                    'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
-                    'margin-right:4px">ACORDO VENCIDO</span>'
+                    '<span style="background:#4f7cff;color:#fff;font-size:10px;'
+                    'font-weight:700;padding:2px 7px;border-radius:4px;'
+                    'margin-right:4px">ACORDO</span>'
                 )
             _saldo = float(_cli_atual.get("valor") or 0)
             if _saldo > 0:
