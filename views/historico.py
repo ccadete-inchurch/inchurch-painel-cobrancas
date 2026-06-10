@@ -248,13 +248,16 @@ def _render_historico(store):
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
             'margin-right:4px">✓ REGULARIZADO</span>' if eh_regularizado else ""
         )
-        # Badge ACORDO (azul, mesmo padrão da tela Inadimplência) e saldo
-        # a pagar — só pra clientes que AINDA estão inadimplentes (estão em
-        # store["clientes"]). Se regularizou, esses badges não aparecem.
+        # Badge ACORDO (azul, padrão Inadimplência) + sub-texto contextual:
+        # - Cliente AINDA inad + saldo > 0  →  "Saldo: R$ X" (amarelo, atenção)
+        # - Cliente AINDA inad + saldo == 0 →  vazio (caso raro)
+        # - Cliente FORA da carteira         →  "Sem saldo pendente" (cinza,
+        #   sinaliza que cliente já saiu — mesmo sem badge confirmado)
         _cli_atual = _clientes_lookup.get(_rid)
         acordo_badge = ""
         saldo_html = ""
-        if _cli_atual and not eh_regularizado:
+        if _cli_atual:
+            # Ainda inadimplente — mostra badge ACORDO se aplicável + saldo
             if _cli_atual.get("_tem_acordo"):
                 acordo_badge = (
                     '<span style="background:#4f7cff;color:#fff;font-size:10px;'
@@ -267,6 +270,14 @@ def _render_historico(store):
                     f'<div style="font-size:11px;color:#f59e0b;margin-top:3px;font-weight:600">'
                     f'Saldo: {fmt_moeda_plain(_saldo)}</div>'
                 )
+        else:
+            # Cliente saiu da carteira (regularizou ou foi baixado). Indica
+            # textualmente pra evitar 'linha vazia confusa' em casos de
+            # regularização pré-snapshot ou baixas administrativas.
+            saldo_html = (
+                '<div style="font-size:11px;color:#6b7280;margin-top:3px;'
+                'font-style:italic">Sem saldo pendente</div>'
+            )
         rcols = st.columns(col_w)
         with rcols[0]:
             st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{row.get("data","—")}</div>', unsafe_allow_html=True)
