@@ -2,7 +2,7 @@ from datetime import date
 import streamlit as st
 
 from config import STATUS_LABELS, STATUS_COLORS
-from helpers import get_hist, fmt_moeda_plain, dias_html
+from helpers import get_hist, get_hist_unificado, get_effective_status, get_effective_lastContact, get_effective_atendente, fmt_moeda_plain, dias_html
 from data import fetch_historico_atrasos
 from views.dialog import dialog_editar
 
@@ -29,7 +29,9 @@ def _render_cliente(_store, clientes):
     if not cliente:
         return
 
-    h = get_hist(cid)
+    # h: histórico unificado — mesma fonte da Inadimplência (admin vê
+    # status/promessa/retorno das duas atendentes mesclados).
+    h = get_hist_unificado(cid)
     st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
 
     # ── Cards de métricas ─────────────────────────────────────────────────────
@@ -83,15 +85,20 @@ def _render_cliente(_store, clientes):
     with col_dir:
         st.markdown('<div style="font-size:13px;font-weight:700;color:#8b94a5;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Histórico de Contato</div>', unsafe_allow_html=True)
 
-        s   = h.get("status", "pending")
+        # Mesmos valores que aparecem nas colunas Status / Último Contato /
+        # Especialista da tela Inadimplência. Atendente vê o próprio; admin
+        # vê o mesclado das duas (regra dentro de get_effective_*).
+        s   = get_effective_status(cid)
         cor = STATUS_COLORS.get(s, "#6b7280")
+        ult_contato = get_effective_lastContact(cid) or "—"
+        atendente   = get_effective_atendente(cid) or "—"
 
         fields = [
             ("Status",           f'<span style="color:{cor};font-weight:700">{STATUS_LABELS.get(s,"—")}</span>'),
-            ("Último contato",   h.get("lastContact", "—")),
+            ("Último contato",   ult_contato),
             ("Retorno agendado", h.get("retorno",     "—") or "—"),
             ("Prometeu pagar",   h.get("promiseDate", "—") or "—"),
-            ("Especialista",     h.get("atendente",   "—") or "—"),
+            ("Especialista",     atendente),
         ]
         for label, val in fields:
             st.markdown(
