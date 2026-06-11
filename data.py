@@ -542,6 +542,66 @@ def fetch_cobrancas_competencia():
 
 
 @st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_evolucao_saldo_mensal(cliente_id: str) -> pd.DataFrame:
+    """Saldo devedor ao FIM DE CADA MÊS nos últimos 12 meses.
+
+    Reconstrói o saldo a partir das tabelas de competência + liquidação:
+    pra cada fim de mês EOM, soma as cobranças do cliente que:
+      - tinham vencimento <= EOM (já estavam vencidas) E
+      - não tinham sido pagas até EOM (em aberto naquela data)
+
+    Retorna DataFrame com colunas: mes (YYYY-MM), saldo (float)
+    """
+    client = get_bq_client()
+    if not client:
+        return pd.DataFrame()
+    query = f"""
+    WITH abertas AS (
+      SELECT
+        id_recebimento_recb,
+        SUM(comp_valor) AS valor,
+        MIN(DATE(dt_vencimento_recb)) AS dt_venc,
+        CAST(NULL AS DATE) AS dt_pag
+      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
+      WHERE id_sacado_sac = '{cliente_id}' AND fl_status_recb = '0'
+      GROUP BY id_recebimento_recb
+    ),
+    pagas AS (
+      SELECT
+        id_recebimento_recb,
+        SUM(comp_valor) AS valor,
+        MIN(DATE(dt_vencimento_recb)) AS dt_venc,
+        MIN(DATE(dt_liquidacao_recb)) AS dt_pag
+      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+      WHERE id_sacado_sac = '{cliente_id}' AND fl_status_recb = '1'
+      GROUP BY id_recebimento_recb
+    ),
+    todas AS (
+      SELECT * FROM abertas
+      UNION ALL
+      SELECT * FROM pagas
+    ),
+    meses AS (
+      SELECT LAST_DAY(DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL n MONTH)) AS eom
+      FROM UNNEST(GENERATE_ARRAY(0, 11)) AS n
+    )
+    SELECT
+      FORMAT_DATE('%Y-%m', m.eom) AS mes,
+      ROUND(COALESCE(SUM(t.valor), 0), 2) AS saldo
+    FROM meses m
+    LEFT JOIN todas t
+      ON t.dt_venc <= m.eom
+      AND (t.dt_pag IS NULL OR t.dt_pag > m.eom)
+    GROUP BY mes
+    ORDER BY mes ASC
+    """
+    try:
+        return client.query(query).to_dataframe()
+    except Exception:
+        return pd.DataFrame()
+
+
 def fetch_historico_atrasos(cliente_id: str) -> pd.DataFrame:
     client = get_bq_client()
     if not client:
