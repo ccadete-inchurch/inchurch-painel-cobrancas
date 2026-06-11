@@ -11,6 +11,12 @@ from views.dialog import dialog_editar
 _MESES_PT = {1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
              7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"}
 
+# Estilos compartilhados (alinhados com tela Pagamentos)
+_CARD_LABEL_CSS = "font-size:14px;letter-spacing:1.3px"
+_CARD_SUB_CSS   = "font-size:14px;margin-top:8px"
+_CARD_VALUE_CSS = "font-size:30px;font-weight:800;margin-top:6px;line-height:1.1;font-variant-numeric:tabular-nums"
+_SECTION_TITLE_CSS = "font-size:18px;font-weight:700;color:#e8eaf0;margin-bottom:14px;letter-spacing:-0.3px"
+
 
 def _render_cliente(_store, clientes):
     st.markdown(
@@ -63,36 +69,169 @@ def _render_cliente(_store, clientes):
     # h: histórico unificado — mesma fonte da Inadimplência (admin vê
     # status/promessa/retorno das duas atendentes mesclados).
     h = get_hist_unificado(cid)
-    st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:20px"></div>', unsafe_allow_html=True)
 
-    # ── Cards de métricas ─────────────────────────────────────────────────────
-    parcelas = cliente.get("parcelas", 0)
-    c1, c2, c3, c4 = st.columns(4)
-    inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if cliente.get("_inativo") else ""
-    infos = [
-        (c1, "Cliente",         f'{cliente["nome"]}{inativo_badge}', cliente.get("cnpj", "—")),
-        (c2, "Saldo em Aberto", fmt_moeda_plain(cliente["valor"]),   f'{parcelas} parcela{"s" if parcelas != 1 else ""} em atraso'),
-        (c3, "Maior Atraso",    f'{cliente.get("dias_atraso","—")}d', cliente.get("vencimento", "—")),
-        (c4, "Carteira",        cliente.get("_grupo", "—"),           cliente.get("telefone", "—")),
-    ]
-    for col, label, val, sub in infos:
-        with col:
+    # ── Evolução do Saldo Devedor — TOPO DA TELA ──────────────────────────────
+    st.markdown(
+        f'<div style="{_SECTION_TITLE_CSS}">Evolução do Saldo Devedor — Últimos 12 Meses</div>',
+        unsafe_allow_html=True,
+    )
+
+    with st.spinner("Calculando evolução do saldo..."):
+        df_evol = fetch_evolucao_saldo_mensal(cid)
+
+    if df_evol.empty:
+        st.markdown(
+            '<div style="background:#181c26;border:1px solid #1e2333;border-radius:10px;'
+            'padding:30px;text-align:center;color:#6b7280;font-size:13px">'
+            'Sem dados de saldo para esse cliente.</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        df_evol = df_evol.copy()
+        df_evol["mes_dt"]    = pd.to_datetime(df_evol["mes"] + "-01", format="%Y-%m-%d", errors="coerce")
+        df_evol              = df_evol.sort_values("mes_dt")
+        df_evol["mes_label"] = df_evol["mes_dt"].dt.strftime("%b/%y").str.capitalize()
+        df_evol["saldo_fmt"] = df_evol["saldo"].apply(fmt_moeda_plain)
+
+        # X e Y base — eixo Y usa labelExpr pra prefixar 'R$ ' (Altair não tem
+        # currency BRL nativo; '$,.0f' coloca cifrão de dólar)
+        x_enc = alt.X(
+            "mes_dt:T",
+            title=None,
+            axis=alt.Axis(
+                format="%b/%y",
+                labelAngle=0,
+                labelColor="#8b94a5",
+                tickColor="#2a2f42",
+                domainColor="#2a2f42",
+                grid=False,
+            ),
+        )
+        y_enc = alt.Y(
+            "saldo:Q",
+            title=None,
+            axis=alt.Axis(
+                labelExpr="'R$ ' + format(datum.value, ',.0f')",
+                labelColor="#8b94a5",
+                tickColor="#2a2f42",
+                domainColor="#2a2f42",
+                gridColor="#1e2333",
+                gridOpacity=0.5,
+            ),
+        )
+
+        # Tooltip uniforme — usado em todas as marcas (area, linha, pontos,
+        # rule) pra mostrar a mesma coisa independente de onde o mouse pousa.
+        tooltip_enc = [
+            alt.Tooltip("mes_label:N", title="Mês"),
+            alt.Tooltip("saldo_fmt:N", title="Saldo"),
+        ]
+
+        base = alt.Chart(df_evol).encode(x=x_enc, y=y_enc, tooltip=tooltip_enc)
+
+        # Área gradiente
+        area = base.mark_area(
+            interpolate="monotone",
+            color=alt.Gradient(
+                gradient="linear",
+                stops=[
+                    alt.GradientStop(color="rgba(239,68,68,0.0)", offset=0),
+                    alt.GradientStop(color="rgba(239,68,68,0.25)", offset=1),
+                ],
+                x1=1, x2=1, y1=1, y2=0,
+            ),
+        )
+        # Linha
+        linha = base.mark_line(color="#ef4444", strokeWidth=2.5, interpolate="monotone")
+        # Pontos por mês
+        pontos = base.mark_circle(
+            color="#ef4444", size=70, stroke="#0f1117", strokeWidth=2,
+        )
+
+        chart = (area + linha + pontos).properties(
+            height=280,
+            padding={"left": 0, "top": 10, "right": 10, "bottom": 0},
+        ).configure_view(
+            stroke=None,
+            fill="#181c26",
+        ).configure(
+            background="#181c26",
+        )
+
+        st.altair_chart(chart, use_container_width=True)
+
+        # Insight rápido: tendência (compara primeiros 3 vs últimos 3 meses)
+        if len(df_evol) >= 6:
+            avg_inicio = df_evol["saldo"].iloc[:3].mean()
+            avg_fim    = df_evol["saldo"].iloc[-3:].mean()
+            if avg_inicio > 0:
+                delta_pct = (avg_fim - avg_inicio) / avg_inicio * 100
+                if abs(delta_pct) < 10:
+                    tendencia, cor_t = "estável", "#8b94a5"
+                elif delta_pct > 0:
+                    tendencia, cor_t = f"crescendo {delta_pct:+.0f}%", "#ef4444"
+                else:
+                    tendencia, cor_t = f"reduzindo {delta_pct:+.0f}%", "#2dd36f"
+            else:
+                tendencia, cor_t = "saldo estava zerado no início", "#8b94a5"
             st.markdown(
-                f'<div class="metric-card">'
-                f'<div class="metric-label">{label}</div>'
-                f'<div style="font-size:15px;font-weight:600;color:#e8eaf0;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{val}</div>'
-                f'<div class="metric-sub">{sub}</div>'
+                f'<div style="font-size:12px;color:#6b7280;margin-top:8px;text-align:right">'
+                f'Tendência (média 3 primeiros vs 3 últimos meses): '
+                f'<span style="color:{cor_t};font-weight:700">{tendencia}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
 
-    st.markdown('<div style="height:20px"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
+
+    # ── Cards de métricas ─────────────────────────────────────────────────────
+    parcelas = cliente.get("parcelas", 0)
+    c1, c2, c3, c4 = st.columns(4)
+    inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle">INATIVO</span>' if cliente.get("_inativo") else ""
+
+    # Valor de cada card com font-size 30px (igual Pagamentos), cores mantidas.
+    # Pra Cliente (nome longo): line-height menor + permite quebrar.
+    cards = [
+        (
+            c1, "Cliente",
+            f'<div style="{_CARD_VALUE_CSS};font-size:20px;color:#e8eaf0">{cliente["nome"]}{inativo_badge}</div>',
+            cliente.get("cnpj", "—"),
+        ),
+        (
+            c2, "Saldo em Aberto",
+            f'<div style="{_CARD_VALUE_CSS};color:#ef4444">{fmt_moeda_plain(cliente["valor"])}</div>',
+            f'{parcelas} parcela{"s" if parcelas != 1 else ""} em atraso',
+        ),
+        (
+            c3, "Maior Atraso",
+            f'<div style="{_CARD_VALUE_CSS};color:#e8eaf0">{cliente.get("dias_atraso","—")}<span style="font-size:18px;color:#8b94a5;margin-left:4px;font-weight:600">dias</span></div>',
+            cliente.get("vencimento", "—"),
+        ),
+        (
+            c4, "Carteira",
+            f'<div style="{_CARD_VALUE_CSS};font-size:22px;color:#e8eaf0">{cliente.get("_grupo", "—")}</div>',
+            cliente.get("telefone", "—"),
+        ),
+    ]
+    for col, label, val_html, sub in cards:
+        with col:
+            st.markdown(
+                f'<div class="metric-card" style="padding:18px 20px">'
+                f'<div class="metric-label" style="{_CARD_LABEL_CSS}">{label}</div>'
+                f'{val_html}'
+                f'<div class="metric-sub" style="{_CARD_SUB_CSS}">{sub}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
 
     col_esq, col_dir = st.columns([1.6, 1])
 
     # ── Cobranças em aberto ───────────────────────────────────────────────────
     with col_esq:
-        st.markdown('<div style="font-size:13px;font-weight:700;color:#8b94a5;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Cobranças em Aberto</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="{_SECTION_TITLE_CSS}">Cobranças em Aberto</div>', unsafe_allow_html=True)
         cobracas = sorted(
             [c for c in cliente.get("_cobracas", []) if c.get("dias_atraso") and c["dias_atraso"] > 0],
             key=lambda x: x.get("dias_atraso", 0),
@@ -114,7 +253,7 @@ def _render_cliente(_store, clientes):
 
     # ── Histórico de contato ──────────────────────────────────────────────────
     with col_dir:
-        st.markdown('<div style="font-size:13px;font-weight:700;color:#8b94a5;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Histórico de Contato</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="{_SECTION_TITLE_CSS}">Histórico de Contato</div>', unsafe_allow_html=True)
 
         # Mesmos valores que aparecem nas colunas Status / Último Contato /
         # Especialista da tela Inadimplência. Atendente vê o próprio; admin
@@ -153,136 +292,10 @@ def _render_cliente(_store, clientes):
         if st.button("Editar registro", width="stretch"):
             dialog_editar(cid)
 
-    # ── Evolução do Saldo Devedor — últimos 12 meses ──────────────────────────
-    st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div style="font-size:13px;font-weight:700;color:#8b94a5;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Evolução do Saldo Devedor — Últimos 12 Meses</div>',
-        unsafe_allow_html=True,
-    )
-
-    with st.spinner("Calculando evolução do saldo..."):
-        df_evol = fetch_evolucao_saldo_mensal(cid)
-
-    if df_evol.empty:
-        st.markdown(
-            '<div style="background:#181c26;border:1px solid #1e2333;border-radius:10px;'
-            'padding:30px;text-align:center;color:#6b7280;font-size:13px">'
-            'Sem dados de saldo para esse cliente.</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        # Prepara dataframe pra Altair: mes → datetime pra ordenação cronológica
-        df_evol = df_evol.copy()
-        df_evol["mes_dt"] = pd.to_datetime(df_evol["mes"] + "-01", format="%Y-%m-%d", errors="coerce")
-        df_evol = df_evol.sort_values("mes_dt")
-        # Label legível (Mai/26) pro eixo X
-        df_evol["mes_label"] = df_evol["mes_dt"].dt.strftime("%b/%y").str.capitalize()
-        # Pra tooltip
-        df_evol["saldo_fmt"] = df_evol["saldo"].apply(fmt_moeda_plain)
-
-        # Cor: verde quando saldo=0 (regularizado), gradiente conforme valor
-        max_saldo = float(df_evol["saldo"].max() or 1)
-
-        base = alt.Chart(df_evol).encode(
-            x=alt.X(
-                "mes_dt:T",
-                title=None,
-                axis=alt.Axis(
-                    format="%b/%y",
-                    labelAngle=0,
-                    labelColor="#8b94a5",
-                    tickColor="#2a2f42",
-                    domainColor="#2a2f42",
-                    grid=False,
-                ),
-            ),
-            y=alt.Y(
-                "saldo:Q",
-                title=None,
-                axis=alt.Axis(
-                    format="$,.0f",
-                    labelColor="#8b94a5",
-                    tickColor="#2a2f42",
-                    domainColor="#2a2f42",
-                    gridColor="#1e2333",
-                    gridOpacity=0.5,
-                ),
-            ),
-        )
-
-        # Área sob a linha — gradiente sutil pra dar volume
-        area = base.mark_area(
-            interpolate="monotone",
-            color=alt.Gradient(
-                gradient="linear",
-                stops=[
-                    alt.GradientStop(color="rgba(239,68,68,0.0)", offset=0),
-                    alt.GradientStop(color="rgba(239,68,68,0.25)", offset=1),
-                ],
-                x1=1, x2=1, y1=1, y2=0,
-            ),
-        )
-        # Linha principal — vermelho da inadimplência
-        linha = base.mark_line(
-            color="#ef4444",
-            strokeWidth=2.5,
-            interpolate="monotone",
-        )
-        # Pontos em cada mês
-        pontos = base.mark_circle(
-            color="#ef4444",
-            size=70,
-            stroke="#0f1117",
-            strokeWidth=2,
-        ).encode(
-            tooltip=[
-                alt.Tooltip("mes_label:N", title="Mês"),
-                alt.Tooltip("saldo_fmt:N", title="Saldo"),
-            ],
-        )
-
-        chart = (area + linha + pontos).properties(
-            height=280,
-            padding={"left": 0, "top": 10, "right": 10, "bottom": 0},
-        ).configure_view(
-            stroke=None,
-            fill="#181c26",
-        ).configure(
-            background="#181c26",
-        )
-
-        st.altair_chart(chart, use_container_width=True)
-
-        # Insight rápido: tendência (compara primeiros 3 vs últimos 3 meses)
-        if len(df_evol) >= 6:
-            avg_inicio = df_evol["saldo"].iloc[:3].mean()
-            avg_fim    = df_evol["saldo"].iloc[-3:].mean()
-            if avg_inicio > 0:
-                delta_pct = (avg_fim - avg_inicio) / avg_inicio * 100
-                if abs(delta_pct) < 10:
-                    tendencia = "estável"
-                    cor_t = "#8b94a5"
-                elif delta_pct > 0:
-                    tendencia = f"crescendo {delta_pct:+.0f}%"
-                    cor_t = "#ef4444"
-                else:
-                    tendencia = f"reduzindo {delta_pct:+.0f}%"
-                    cor_t = "#2dd36f"
-            else:
-                tendencia = "saldo estava zerado no início"
-                cor_t = "#8b94a5"
-            st.markdown(
-                f'<div style="font-size:12px;color:#6b7280;margin-top:8px;text-align:right">'
-                f'Tendência (média 3 primeiros vs 3 últimos meses): '
-                f'<span style="color:{cor_t};font-weight:700">{tendencia}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
     # ── Histórico de atrasos — últimos 12 meses ───────────────────────────────
     st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
     st.markdown(
-        '<div style="font-size:13px;font-weight:700;color:#8b94a5;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Histórico de Atrasos — Últimos 12 Meses</div>',
+        f'<div style="{_SECTION_TITLE_CSS}">Histórico de Atrasos — Últimos 12 Meses</div>',
         unsafe_allow_html=True,
     )
 
