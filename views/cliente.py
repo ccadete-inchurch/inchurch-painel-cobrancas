@@ -11,10 +11,10 @@ from views.dialog import dialog_editar
 _MESES_PT = {1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
              7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"}
 
-# Estilos compartilhados (alinhados com tela Pagamentos)
-_CARD_LABEL_CSS = "font-size:14px;letter-spacing:1.3px"
-_CARD_SUB_CSS   = "font-size:14px;margin-top:8px"
-_CARD_VALUE_CSS = "font-size:30px;font-weight:800;margin-top:6px;line-height:1.1;font-variant-numeric:tabular-nums"
+# Estilos compartilhados
+_CARD_LABEL_CSS = "font-size:13px;letter-spacing:1.2px"
+_CARD_SUB_CSS   = "font-size:13px;margin-top:6px"
+_CARD_VALUE_CSS = "font-size:22px;font-weight:800;margin-top:6px;line-height:1.1;font-variant-numeric:tabular-nums"
 _SECTION_TITLE_CSS = "font-size:18px;font-weight:700;color:#e8eaf0;margin-bottom:14px;letter-spacing:-0.3px"
 
 
@@ -69,9 +69,50 @@ def _render_cliente(_store, clientes):
     # h: histórico unificado — mesma fonte da Inadimplência (admin vê
     # status/promessa/retorno das duas atendentes mesclados).
     h = get_hist_unificado(cid)
-    st.markdown('<div style="height:20px"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
 
-    # ── Evolução do Saldo Devedor — TOPO DA TELA ──────────────────────────────
+    # ── Cards de métricas ─────────────────────────────────────────────────────
+    parcelas = cliente.get("parcelas", 0)
+    c1, c2, c3, c4 = st.columns(4)
+    inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle">INATIVO</span>' if cliente.get("_inativo") else ""
+
+    # Valor de cada card — 22px nos numéricos, 16px nos textos (nome/grupo).
+    # Cores preservadas: Saldo vermelho, demais brancos.
+    cards = [
+        (
+            c1, "Cliente",
+            f'<div style="{_CARD_VALUE_CSS};font-size:16px;color:#e8eaf0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{cliente["nome"]}{inativo_badge}</div>',
+            cliente.get("cnpj", "—"),
+        ),
+        (
+            c2, "Saldo em Aberto",
+            f'<div style="{_CARD_VALUE_CSS};color:#ef4444">{fmt_moeda_plain(cliente["valor"])}</div>',
+            f'{parcelas} parcela{"s" if parcelas != 1 else ""} em atraso',
+        ),
+        (
+            c3, "Maior Atraso",
+            f'<div style="{_CARD_VALUE_CSS};color:#e8eaf0">{cliente.get("dias_atraso","—")}<span style="font-size:14px;color:#8b94a5;margin-left:4px;font-weight:600">dias</span></div>',
+            cliente.get("vencimento", "—"),
+        ),
+        (
+            c4, "Carteira",
+            f'<div style="{_CARD_VALUE_CSS};font-size:16px;color:#e8eaf0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{cliente.get("_grupo", "—")}</div>',
+            cliente.get("telefone", "—"),
+        ),
+    ]
+    for col, label, val_html, sub in cards:
+        with col:
+            st.markdown(
+                f'<div class="metric-card" style="padding:18px 20px">'
+                f'<div class="metric-label" style="{_CARD_LABEL_CSS}">{label}</div>'
+                f'{val_html}'
+                f'<div class="metric-sub" style="{_CARD_SUB_CSS}">{sub}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    # ── Evolução do Saldo Devedor — depois dos cards ─────────────────────────
+    st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
     st.markdown(
         f'<div style="{_SECTION_TITLE_CSS}">Evolução do Saldo Devedor — Últimos 12 Meses</div>',
         unsafe_allow_html=True,
@@ -94,8 +135,8 @@ def _render_cliente(_store, clientes):
         df_evol["mes_label"] = df_evol["mes_dt"].dt.strftime("%b/%y").str.capitalize()
         df_evol["saldo_fmt"] = df_evol["saldo"].apply(fmt_moeda_plain)
 
-        # X e Y base — eixo Y usa labelExpr pra prefixar 'R$ ' (Altair não tem
-        # currency BRL nativo; '$,.0f' coloca cifrão de dólar)
+        # Eixo Y usa labelExpr pra prefixar 'R$ ' (Altair não tem currency BRL
+        # nativo; '$,.0f' coloca cifrão de dólar)
         x_enc = alt.X(
             "mes_dt:T",
             title=None,
@@ -120,17 +161,13 @@ def _render_cliente(_store, clientes):
                 gridOpacity=0.5,
             ),
         )
-
-        # Tooltip uniforme — usado em todas as marcas (area, linha, pontos,
-        # rule) pra mostrar a mesma coisa independente de onde o mouse pousa.
+        # Tooltip uniforme em todas as marcas
         tooltip_enc = [
             alt.Tooltip("mes_label:N", title="Mês"),
             alt.Tooltip("saldo_fmt:N", title="Saldo"),
         ]
 
         base = alt.Chart(df_evol).encode(x=x_enc, y=y_enc, tooltip=tooltip_enc)
-
-        # Área gradiente
         area = base.mark_area(
             interpolate="monotone",
             color=alt.Gradient(
@@ -142,26 +179,19 @@ def _render_cliente(_store, clientes):
                 x1=1, x2=1, y1=1, y2=0,
             ),
         )
-        # Linha
         linha = base.mark_line(color="#ef4444", strokeWidth=2.5, interpolate="monotone")
-        # Pontos por mês
-        pontos = base.mark_circle(
-            color="#ef4444", size=70, stroke="#0f1117", strokeWidth=2,
-        )
+        pontos = base.mark_circle(color="#ef4444", size=70, stroke="#0f1117", strokeWidth=2)
 
         chart = (area + linha + pontos).properties(
             height=280,
             padding={"left": 0, "top": 10, "right": 10, "bottom": 0},
         ).configure_view(
-            stroke=None,
-            fill="#181c26",
-        ).configure(
-            background="#181c26",
-        )
+            stroke=None, fill="#181c26",
+        ).configure(background="#181c26")
 
         st.altair_chart(chart, use_container_width=True)
 
-        # Insight rápido: tendência (compara primeiros 3 vs últimos 3 meses)
+        # Tendência: média 3 primeiros vs 3 últimos meses
         if len(df_evol) >= 6:
             avg_inicio = df_evol["saldo"].iloc[:3].mean()
             avg_fim    = df_evol["saldo"].iloc[-3:].mean()
@@ -179,48 +209,6 @@ def _render_cliente(_store, clientes):
                 f'<div style="font-size:12px;color:#6b7280;margin-top:8px;text-align:right">'
                 f'Tendência (média 3 primeiros vs 3 últimos meses): '
                 f'<span style="color:{cor_t};font-weight:700">{tendencia}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
-    st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
-
-    # ── Cards de métricas ─────────────────────────────────────────────────────
-    parcelas = cliente.get("parcelas", 0)
-    c1, c2, c3, c4 = st.columns(4)
-    inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle">INATIVO</span>' if cliente.get("_inativo") else ""
-
-    # Valor de cada card com font-size 30px (igual Pagamentos), cores mantidas.
-    # Pra Cliente (nome longo): line-height menor + permite quebrar.
-    cards = [
-        (
-            c1, "Cliente",
-            f'<div style="{_CARD_VALUE_CSS};font-size:20px;color:#e8eaf0">{cliente["nome"]}{inativo_badge}</div>',
-            cliente.get("cnpj", "—"),
-        ),
-        (
-            c2, "Saldo em Aberto",
-            f'<div style="{_CARD_VALUE_CSS};color:#ef4444">{fmt_moeda_plain(cliente["valor"])}</div>',
-            f'{parcelas} parcela{"s" if parcelas != 1 else ""} em atraso',
-        ),
-        (
-            c3, "Maior Atraso",
-            f'<div style="{_CARD_VALUE_CSS};color:#e8eaf0">{cliente.get("dias_atraso","—")}<span style="font-size:18px;color:#8b94a5;margin-left:4px;font-weight:600">dias</span></div>',
-            cliente.get("vencimento", "—"),
-        ),
-        (
-            c4, "Carteira",
-            f'<div style="{_CARD_VALUE_CSS};font-size:22px;color:#e8eaf0">{cliente.get("_grupo", "—")}</div>',
-            cliente.get("telefone", "—"),
-        ),
-    ]
-    for col, label, val_html, sub in cards:
-        with col:
-            st.markdown(
-                f'<div class="metric-card" style="padding:18px 20px">'
-                f'<div class="metric-label" style="{_CARD_LABEL_CSS}">{label}</div>'
-                f'{val_html}'
-                f'<div class="metric-sub" style="{_CARD_SUB_CSS}">{sub}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
