@@ -53,8 +53,21 @@ def _render_cliente(_store, clientes):
             st.markdown('<div style="padding-top:30px;color:#6b7280;font-size:13px">Nenhum cliente encontrado.</div>', unsafe_allow_html=True)
         return
 
-    # Dropdown só com o nome — IDs servem de chave pra evitar colisão de nomes.
-    opcoes = {c["id"]: c["nome"] for c in sorted(pool, key=lambda x: x["nome"])}
+    # Dropdown: nome só, MAS quando há mais de um cliente com o mesmo nome
+    # (ex.: "Ministério Ide" em 3 CNPJ diferentes), sufixamos com o CNPJ pra
+    # o atendente escolher o certo. Sem o sufixo, viraria escolha cega.
+    _nome_counts = {}
+    for c in pool:
+        _nome_counts[c["nome"]] = _nome_counts.get(c["nome"], 0) + 1
+
+    def _label_dropdown(c):
+        nome = c["nome"]
+        if _nome_counts.get(nome, 0) > 1:
+            extra = c.get("cnpj") or f"ID {c['id']}"
+            return f"{nome} · {extra}"
+        return nome
+
+    opcoes = {c["id"]: _label_dropdown(c) for c in sorted(pool, key=lambda x: x["nome"])}
     with f2:
         cid = st.selectbox(
             f"Cliente ({len(opcoes)} {'encontrado' if len(opcoes) == 1 else 'encontrados'})",
@@ -215,68 +228,107 @@ def _render_cliente(_store, clientes):
 
     st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
 
-    col_esq, col_dir = st.columns([1.6, 1])
+    # Split 50/50 — ambas seções agora são compactas, sem desperdício lateral.
+    col_esq, col_dir = st.columns([1, 1])
 
-    # ── Cobranças em aberto ───────────────────────────────────────────────────
+    # ── Cobranças em aberto — tabela compacta ─────────────────────────────────
     with col_esq:
-        st.markdown(f'<div style="{_SECTION_TITLE_CSS}">Cobranças em Aberto</div>', unsafe_allow_html=True)
         cobracas = sorted(
             [c for c in cliente.get("_cobracas", []) if c.get("dias_atraso") and c["dias_atraso"] > 0],
             key=lambda x: x.get("dias_atraso", 0),
             reverse=True,
         )
-        for cob in cobracas:
+        # Header com resumo: total + quantidade
+        total_cob = sum(float(c.get("valor") or 0) for c in cobracas)
+        resumo = (
+            f' · {fmt_moeda_plain(total_cob)} · {len(cobracas)} parcela{"s" if len(cobracas) != 1 else ""}'
+            if cobracas else ""
+        )
+        st.markdown(
+            f'<div style="{_SECTION_TITLE_CSS}">Cobranças em Aberto'
+            f'<span style="font-size:13px;color:#8b94a5;font-weight:500">{resumo}</span></div>',
+            unsafe_allow_html=True,
+        )
+
+        if not cobracas:
             st.markdown(
-                f'<div style="background:#181c26;border:1px solid #1e2333;border-radius:10px;padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-                f'<div>'
-                f'<div style="font-size:14px;font-weight:600;color:#e8eaf0">{fmt_moeda_plain(cob["valor"])}</div>'
-                f'<div style="font-size:11px;color:#6b7280;margin-top:2px">Venc. {cob["vencimento"]}</div>'
-                f'</div>'
-                f'<div>{dias_html(cob["dias_atraso"])}</div>'
-                f'</div>',
+                '<div style="background:#181c26;border:1px solid #1e2333;border-radius:10px;'
+                'padding:24px;text-align:center;color:#6b7280;font-size:13px">'
+                'Sem cobranças em atraso.</div>',
                 unsafe_allow_html=True,
             )
-        if not cobracas:
-            st.info("Sem cobranças em atraso.")
+        else:
+            # Tabela: cabeçalho + linhas em flex (mesmo padrão da tela Pagamentos)
+            hdr_html = (
+                '<div style="display:flex;background:#1e2333;border:1px solid #2a2f42;'
+                'border-radius:8px 8px 0 0;padding:8px 12px;font-size:11px;'
+                'text-transform:uppercase;letter-spacing:1px;color:#8b94a5;font-weight:700">'
+                '<div style="flex:1.2">Valor</div>'
+                '<div style="flex:1">Vencimento</div>'
+                '<div style="flex:0.8;text-align:right">Atraso</div>'
+                '</div>'
+            )
+            rows_html = []
+            for i, cob in enumerate(cobracas):
+                last = (i == len(cobracas) - 1)
+                radius = "border-radius:0 0 8px 8px;" if last else ""
+                border = "border:1px solid #2a2f42;border-top:none;"
+                rows_html.append(
+                    f'<div style="display:flex;align-items:center;background:#181c26;'
+                    f'{border}{radius}padding:8px 12px;font-size:13px">'
+                    f'<div style="flex:1.2;color:#e8eaf0;font-weight:600">{fmt_moeda_plain(cob["valor"])}</div>'
+                    f'<div style="flex:1;color:#8b94a5">{cob["vencimento"]}</div>'
+                    f'<div style="flex:0.8;text-align:right">{dias_html(cob["dias_atraso"])}</div>'
+                    f'</div>'
+                )
+            st.markdown(hdr_html + "".join(rows_html), unsafe_allow_html=True)
 
-    # ── Histórico de contato ──────────────────────────────────────────────────
+    # ── Histórico de Contato — bloco compacto com grid 2×2 ───────────────────
     with col_dir:
         st.markdown(f'<div style="{_SECTION_TITLE_CSS}">Histórico de Contato</div>', unsafe_allow_html=True)
 
-        # Mesmos valores que aparecem nas colunas Status / Último Contato /
-        # Especialista da tela Inadimplência. Atendente vê o próprio; admin
-        # vê o mesclado das duas (regra dentro de get_effective_*).
         s   = get_effective_status(cid)
         cor = STATUS_COLORS.get(s, "#6b7280")
         ult_contato = get_effective_lastContact(cid) or "—"
         atendente   = get_effective_atendente(cid) or "—"
+        retorno     = h.get("retorno", "—") or "—"
+        promessa    = h.get("promiseDate", "—") or "—"
 
-        fields = [
-            ("Status",           f'<span style="color:{cor};font-weight:700">{STATUS_LABELS.get(s,"—")}</span>'),
-            ("Último contato",   ult_contato),
-            ("Retorno agendado", h.get("retorno",     "—") or "—"),
-            ("Prometeu pagar",   h.get("promiseDate", "—") or "—"),
-            ("Especialista",     atendente),
-        ]
-        for label, val in fields:
-            st.markdown(
-                f'<div style="padding:10px 14px;background:#181c26;border:1px solid #1e2333;border-radius:8px;margin-bottom:6px">'
-                f'<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:3px">{label}</div>'
-                f'<div style="font-size:13px;color:#e8eaf0;font-weight:500">{val}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
+        def _fld(label, valor_html):
+            return (
+                f'<div style="padding:8px 12px;flex:1;min-width:0">'
+                f'<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;'
+                f'color:#6b7280;margin-bottom:2px">{label}</div>'
+                f'<div style="font-size:13px;color:#e8eaf0;font-weight:500;'
+                f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{valor_html}</div>'
+                f'</div>'
             )
+
+        status_val   = f'<span style="color:{cor};font-weight:700">{STATUS_LABELS.get(s,"—")}</span>'
+
+        # Bloco único com border, grid 2×3 dentro (3 linhas de 2 campos)
+        bloco_html = (
+            '<div style="background:#181c26;border:1px solid #1e2333;border-radius:10px;'
+            'padding:4px 6px;display:flex;flex-direction:column">'
+            f'<div style="display:flex">{_fld("Status", status_val)}{_fld("Especialista", atendente)}</div>'
+            '<div style="height:1px;background:#1e2333;margin:0 8px"></div>'
+            f'<div style="display:flex">{_fld("Último contato", ult_contato)}{_fld("Retorno agendado", retorno)}</div>'
+            '<div style="height:1px;background:#1e2333;margin:0 8px"></div>'
+            f'<div style="display:flex">{_fld("Prometeu pagar", promessa)}{_fld("", "")}</div>'
+            '</div>'
+        )
+        st.markdown(bloco_html, unsafe_allow_html=True)
 
         if h.get("notes"):
             st.markdown(
-                f'<div style="padding:10px 14px;background:#181c26;border:1px solid #1e2333;border-radius:8px;margin-top:4px">'
+                f'<div style="padding:10px 14px;background:#181c26;border:1px solid #1e2333;border-radius:8px;margin-top:8px">'
                 f'<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:4px">Observações</div>'
                 f'<div style="font-size:13px;color:#8b94a5;line-height:1.5">{h["notes"]}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
 
-        st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
         if st.button("Editar registro", width="stretch"):
             dialog_editar(cid)
 
