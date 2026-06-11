@@ -2,40 +2,12 @@ from datetime import date
 import streamlit as st
 
 from config import STATUS_LABELS, STATUS_COLORS
-from helpers import get_hist, fmt_moeda_plain, dias_html, get_effective_lastContact, get_effective_atendente
-from data import fetch_historico_atrasos, calcular_score
+from helpers import get_hist, fmt_moeda_plain, dias_html
+from data import fetch_historico_atrasos
 from views.dialog import dialog_editar
 
 _MESES_PT = {1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
              7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"}
-
-
-def _tels_html_inline(cliente):
-    """Renderiza telefones em uma linha — primeiro destacado, demais menores.
-    Mesmo padrão usado na tela de Inadimplência pra ficar consistente."""
-    tels = cliente.get("telefones") or []
-    if not tels:
-        return cliente.get("telefone", "—") or "—"
-    if len(tels) == 1:
-        return tels[0]
-    extras = " · ".join(tels[1:])
-    return (
-        f'{tels[0]}<br>'
-        f'<span style="color:#6b7280;font-size:11px;font-weight:500">{extras}</span>'
-    )
-
-
-def _score_cor(score, pct):
-    """Mesmo gradiente da Inadimplência — top 10% laranja, resto branco→cinza."""
-    if pct >= 0.90:
-        return "#f59e0b"
-    ratio = pct / 0.90 if pct > 0 else 0
-    r1, g1, b1 = 0x6b, 0x72, 0x80
-    r2, g2, b2 = 0xe8, 0xea, 0xf0
-    r = int(r1 + (r2 - r1) * ratio)
-    g = int(g1 + (g2 - g1) * ratio)
-    b = int(b1 + (b2 - b1) * ratio)
-    return f"#{r:02x}{g:02x}{b:02x}"
 
 
 def _render_cliente(_store, clientes):
@@ -50,159 +22,38 @@ def _render_cliente(_store, clientes):
         st.info("Nenhum dado disponível. Atualize os dados na tela de Inadimplência.")
         return
 
-    # ── Filtro: busca por nome, CNPJ ou ID + seletor abaixo ───────────────────
-    busca = st.text_input(
-        "Buscar cliente",
-        placeholder="Nome, CNPJ ou ID do cliente...",
-        key="cliente_busca",
-        label_visibility="collapsed",
-    )
-
-    pool = clientes
-    if busca:
-        b = busca.lower().strip()
-        pool = [
-            c for c in clientes
-            if b in str(c.get("nome", "")).lower()
-            or b in str(c.get("cnpj", "")).lower()
-            or b in str(c.get("id", "")).lower()
-        ]
-
-    if not pool:
-        st.info("Nenhum cliente encontrado com esse termo.")
-        return
-
-    opcoes = {f"{c['nome']} — {c.get('cnpj','')}": c["id"] for c in sorted(pool, key=lambda x: x["nome"])}
-    sel    = st.selectbox(
-        f"Selecionar entre {len(opcoes)} cliente{'s' if len(opcoes) != 1 else ''}",
-        list(opcoes.keys()),
-        key="cliente_sel",
-    )
+    opcoes  = {f"{c['nome']} — {c.get('cnpj','')}": c["id"] for c in sorted(clientes, key=lambda x: x["nome"])}
+    sel     = st.selectbox("Selecionar cliente", list(opcoes.keys()), label_visibility="collapsed", key="cliente_sel")
     cid     = opcoes[sel]
     cliente = next((c for c in clientes if c["id"] == cid), None)
     if not cliente:
         return
 
     h = get_hist(cid)
-
-    # Campos computados igual ao dashboard de Inadimplência
-    score       = int(calcular_score(cliente, h) or 0)
-    # Percentil do score: ranking entre todos os clientes (mesmo método do dashboard)
-    scores_todos = sorted([
-        int(calcular_score(c, get_hist(c["id"])) or 0) for c in clientes
-    ])
-    if scores_todos:
-        rank = sum(1 for s in scores_todos if s <= score)
-        score_pct = rank / len(scores_todos)
-    else:
-        score_pct = 0.0
-    cor_score   = _score_cor(score, score_pct)
-    ult_contato = get_effective_lastContact(cid) or "—"
-    atendente   = get_effective_atendente(cid) or cliente.get("_atendente") or cliente.get("_grupo") or "Sem especialista"
-    meses_atraso = int(cliente.get("_meses_atraso") or 0)
-    cor_mes      = "#ef4444" if meses_atraso >= 9 else ("#f97316" if meses_atraso >= 5 else "#f59e0b")
-    parcelas    = cliente.get("parcelas", 0)
-    tels_html   = _tels_html_inline(cliente)
-    grupo       = cliente.get("_grupo") or "Sem especialista"
-
-    # Tags (mesma lógica da Inadimplência)
-    tags_html = "".join([
-        '<span class="tag-novo">NOVO</span>'                  if cliente.get("_novo")          else "",
-        '<span class="tag-upd">ATUALIZADO</span>'             if cliente.get("_atualizado")    else "",
-        '<span class="tag-nova-cob">+ Nova cobrança</span>'   if cliente.get("_nova_cobranca") else "",
-        '<span style="background:#4f7cff;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">ACORDO</span>'   if cliente.get("_tem_acordo") else "",
-        '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>'  if cliente.get("_inativo")    else "",
-    ])
-    tags_line = f'<div style="margin-bottom:6px">{tags_html}</div>' if tags_html else ""
-
     st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
 
-    # ── Cards linha 1: Cliente · Score · Saldo · Atraso ───────────────────────
+    # ── Cards de métricas ─────────────────────────────────────────────────────
+    parcelas = cliente.get("parcelas", 0)
     c1, c2, c3, c4 = st.columns(4)
+    inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if cliente.get("_inativo") else ""
+    infos = [
+        (c1, "Cliente",         f'{cliente["nome"]}{inativo_badge}', cliente.get("cnpj", "—")),
+        (c2, "Saldo em Aberto", fmt_moeda_plain(cliente["valor"]),   f'{parcelas} parcela{"s" if parcelas != 1 else ""} em atraso'),
+        (c3, "Maior Atraso",    f'{cliente.get("dias_atraso","—")}d', cliente.get("vencimento", "—")),
+        (c4, "Carteira",        cliente.get("_grupo", "—"),           cliente.get("telefone", "—")),
+    ]
+    for col, label, val, sub in infos:
+        with col:
+            st.markdown(
+                f'<div class="metric-card">'
+                f'<div class="metric-label">{label}</div>'
+                f'<div style="font-size:15px;font-weight:600;color:#e8eaf0;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{val}</div>'
+                f'<div class="metric-sub">{sub}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
-    with c1:
-        st.markdown(
-            f'<div class="metric-card">'
-            f'<div class="metric-label">Cliente</div>'
-            f'{tags_line}'
-            f'<div style="font-size:15px;font-weight:700;color:#e8eaf0;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{cliente["nome"]}</div>'
-            f'<div class="metric-sub">{cliente.get("cnpj", "—")} · ID {cid}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    with c2:
-        st.markdown(
-            f'<div class="metric-card">'
-            f'<div class="metric-label">Score</div>'
-            f'<div style="font-size:32px;font-weight:800;color:{cor_score};margin-top:4px;line-height:1.1">{score}<span style="font-size:13px;color:#6b7280;margin-left:5px;font-weight:600">pts</span></div>'
-            f'<div class="metric-sub">prioridade no lote</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    with c3:
-        st.markdown(
-            f'<div class="metric-card">'
-            f'<div class="metric-label">Saldo Devedor</div>'
-            f'<div style="font-size:28px;font-weight:800;color:#ef4444;margin-top:4px;line-height:1.1">{fmt_moeda_plain(cliente["valor"])}</div>'
-            f'<div class="metric-sub">{parcelas} parcela{"s" if parcelas != 1 else ""} em atraso</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    with c4:
-        st.markdown(
-            f'<div class="metric-card">'
-            f'<div class="metric-label">Maior Atraso</div>'
-            f'<div style="font-size:32px;font-weight:800;color:#e8eaf0;margin-top:4px;line-height:1.1">{cliente.get("dias_atraso","—")}<span style="font-size:14px;color:#8b94a5;margin-left:4px;font-weight:600">dias</span></div>'
-            f'<div class="metric-sub">vencido em {cliente.get("vencimento", "—")}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-    st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
-
-    # ── Cards linha 2: Histórico 12m · Telefones · Grupo · Último Contato ─────
-    c5, c6, c7, c8 = st.columns(4)
-    with c5:
-        st.markdown(
-            f'<div class="metric-card">'
-            f'<div class="metric-label">Histórico (12 meses)</div>'
-            f'<div style="font-size:32px;font-weight:800;margin-top:4px;line-height:1.1">'
-            f'<span style="color:{cor_mes}">{meses_atraso}</span>'
-            f'<span style="color:#8b94a5;font-size:18px">/12</span>'
-            f'</div>'
-            f'<div class="metric-sub">meses com atraso</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    with c6:
-        st.markdown(
-            f'<div class="metric-card">'
-            f'<div class="metric-label">Telefone</div>'
-            f'<div style="font-size:15px;font-weight:600;color:#e8eaf0;margin-top:4px;line-height:1.4">{tels_html}</div>'
-            f'<div class="metric-sub">copie e contate</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    with c7:
-        st.markdown(
-            f'<div class="metric-card">'
-            f'<div class="metric-label">Grupo</div>'
-            f'<div style="font-size:17px;font-weight:600;color:#e8eaf0;margin-top:6px">{grupo}</div>'
-            f'<div class="metric-sub">{atendente}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    with c8:
-        st.markdown(
-            f'<div class="metric-card">'
-            f'<div class="metric-label">Último Contato</div>'
-            f'<div style="font-size:17px;font-weight:600;color:#e8eaf0;margin-top:6px">{ult_contato}</div>'
-            f'<div class="metric-sub">registro mais recente</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-    st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:20px"></div>', unsafe_allow_html=True)
 
     col_esq, col_dir = st.columns([1.6, 1])
 
@@ -228,17 +79,19 @@ def _render_cliente(_store, clientes):
         if not cobracas:
             st.info("Sem cobranças em atraso.")
 
-    # ── Status de atendimento (fixados/promessa/retorno) ─────────────────────
+    # ── Histórico de contato ──────────────────────────────────────────────────
     with col_dir:
-        st.markdown('<div style="font-size:13px;font-weight:700;color:#8b94a5;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Status de Atendimento</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:13px;font-weight:700;color:#8b94a5;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Histórico de Contato</div>', unsafe_allow_html=True)
 
         s   = h.get("status", "pending")
         cor = STATUS_COLORS.get(s, "#6b7280")
 
         fields = [
             ("Status",           f'<span style="color:{cor};font-weight:700">{STATUS_LABELS.get(s,"—")}</span>'),
+            ("Último contato",   h.get("lastContact", "—")),
             ("Retorno agendado", h.get("retorno",     "—") or "—"),
             ("Prometeu pagar",   h.get("promiseDate", "—") or "—"),
+            ("Especialista",     h.get("atendente",   "—") or "—"),
         ]
         for label, val in fields:
             st.markdown(
