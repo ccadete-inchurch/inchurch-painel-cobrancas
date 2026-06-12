@@ -64,30 +64,33 @@ def render_sidebar():
     # ── Widget "Online agora" — fragment re-renderiza a cada 30s ─────────────
     # Pinga a própria sessão e mostra todos que pingaram nos últimos 90s.
     # Sem persistência: deploy zera; em 30s a lista reformula sozinha.
-    @st.fragment(run_every=30)
-    def _online_widget():
-        ping_online(current_email(), current_nome())
-        online = get_online_users(janela_s=90)
-        if not online:
-            return
-        linhas = "".join(
-            f'<div style="display:flex;align-items:center;gap:8px;padding:4px 0">'
-            f'<span style="width:8px;height:8px;background:#22c55e;border-radius:50%;'
-            f'box-shadow:0 0 0 3px rgba(34,197,94,.15);flex-shrink:0"></span>'
-            f'<span style="font-size:12px;color:#e8eaf0;font-weight:500;'
-            f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{u["nome"]}</span>'
-            f'</div>'
-            for u in online
-        )
-        st.sidebar.markdown(
-            f'<div style="padding:14px 20px 6px;margin-top:12px;border-top:1px solid #1e2333">'
-            f'<div style="font-size:10px;color:#374151;text-transform:uppercase;'
-            f'letter-spacing:1.5px;font-weight:700;margin-bottom:6px">Online agora</div>'
-            f'{linhas}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    _online_widget()
+    # Fragment precisa ser definido DENTRO do contexto da sidebar pra poder
+    # escrever nela (Streamlit valida o container do fragment vs writes).
+    with st.sidebar:
+        @st.fragment(run_every=30)
+        def _online_widget():
+            ping_online(current_email(), current_nome())
+            online = get_online_users(janela_s=90)
+            if not online:
+                return
+            linhas = "".join(
+                f'<div style="display:flex;align-items:center;gap:8px;padding:4px 0">'
+                f'<span style="width:8px;height:8px;background:#22c55e;border-radius:50%;'
+                f'box-shadow:0 0 0 3px rgba(34,197,94,.15);flex-shrink:0"></span>'
+                f'<span style="font-size:12px;color:#e8eaf0;font-weight:500;'
+                f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{u["nome"]}</span>'
+                f'</div>'
+                for u in online
+            )
+            st.markdown(
+                f'<div style="padding:14px 20px 6px;margin-top:12px;border-top:1px solid #1e2333">'
+                f'<div style="font-size:10px;color:#374151;text-transform:uppercase;'
+                f'letter-spacing:1.5px;font-weight:700;margin-bottom:6px">Online agora</div>'
+                f'{linhas}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        _online_widget()
 
     # Spacer pra não esconder último nav atrás do botão Sair (fixed bottom)
     st.sidebar.markdown('<div style="height:70px"></div>', unsafe_allow_html=True)
