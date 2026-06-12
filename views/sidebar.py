@@ -17,20 +17,9 @@ def render_sidebar():
     page    = st.session_state.get("page", "atividades")
     logo_sb = f'<img src="{LOGO_SRC}" style="height:30px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:#7cc243">InChurch</span>'
 
-    # CSS: 'Sair' fixed no fundo da sidebar (sem footer de nome/role pra
-    # competir — já aparecem no header top-right).
-    st.sidebar.markdown("""
-    <style>
-    section[data-testid="stSidebar"] [data-testid="stElementContainer"]:last-of-type {
-        position: fixed !important;
-        bottom: 16px !important;
-        left: 0 !important;
-        width: 250px !important;
-        padding: 0 16px !important;
-        z-index: 50 !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    # Sair fica no fluxo natural depois do widget Online — sem position:fixed,
+    # que conflitava com o widget novo (`:last-of-type` pegava ele em vez do
+    # botão Sair, quebrando o layout).
 
     st.sidebar.markdown(f"""
     <div style="padding:24px 20px 18px;border-bottom:1px solid #1e2333;margin-bottom:8px">
@@ -92,8 +81,8 @@ def render_sidebar():
             )
         _online_widget()
 
-    # Spacer pra não esconder último nav atrás do botão Sair (fixed bottom)
-    st.sidebar.markdown('<div style="height:70px"></div>', unsafe_allow_html=True)
+    # Sem spacer — Sair vem direto após o widget Online no fluxo natural.
+    st.sidebar.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
 
     if st.sidebar.button("Sair da conta", width="stretch"):
         # Limpa TODAS as chaves do session_state — garante que o login
