@@ -1,8 +1,7 @@
 import streamlit as st
 
 from config import LOGO_SRC
-from auth import is_logged, current_role, current_email, current_nome
-from data import ping_online, get_online_users
+from auth import is_logged, current_role
 
 
 def render_sidebar():
@@ -17,9 +16,20 @@ def render_sidebar():
     page    = st.session_state.get("page", "atividades")
     logo_sb = f'<img src="{LOGO_SRC}" style="height:30px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:#7cc243">InChurch</span>'
 
-    # Sair fica no fluxo natural depois do widget Online — sem position:fixed,
-    # que conflitava com o widget novo (`:last-of-type` pegava ele em vez do
-    # botão Sair, quebrando o layout).
+    # CSS: 'Sair' fixed no fundo da sidebar (sem footer de nome/role pra
+    # competir — já aparecem no header top-right).
+    st.sidebar.markdown("""
+    <style>
+    section[data-testid="stSidebar"] [data-testid="stElementContainer"]:last-of-type {
+        position: fixed !important;
+        bottom: 16px !important;
+        left: 0 !important;
+        width: 250px !important;
+        padding: 0 16px !important;
+        z-index: 50 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     st.sidebar.markdown(f"""
     <div style="padding:24px 20px 18px;border-bottom:1px solid #1e2333;margin-bottom:8px">
@@ -50,39 +60,8 @@ def render_sidebar():
     if current_role() in ("admin", "gestor"):
         nav_item("Especialista",   "especialista")
 
-    # ── Widget "Online agora" — fragment re-renderiza a cada 30s ─────────────
-    # Pinga a própria sessão e mostra todos que pingaram nos últimos 90s.
-    # Sem persistência: deploy zera; em 30s a lista reformula sozinha.
-    # Fragment precisa ser definido DENTRO do contexto da sidebar pra poder
-    # escrever nela (Streamlit valida o container do fragment vs writes).
-    with st.sidebar:
-        @st.fragment(run_every=30)
-        def _online_widget():
-            ping_online(current_email(), current_nome())
-            online = get_online_users(janela_s=90)
-            if not online:
-                return
-            linhas = "".join(
-                f'<div style="display:flex;align-items:center;gap:8px;padding:4px 0">'
-                f'<span style="width:8px;height:8px;background:#22c55e;border-radius:50%;'
-                f'box-shadow:0 0 0 3px rgba(34,197,94,.15);flex-shrink:0"></span>'
-                f'<span style="font-size:12px;color:#e8eaf0;font-weight:500;'
-                f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{u["nome"]}</span>'
-                f'</div>'
-                for u in online
-            )
-            st.markdown(
-                f'<div style="padding:14px 20px 6px;margin-top:12px;border-top:1px solid #1e2333">'
-                f'<div style="font-size:10px;color:#374151;text-transform:uppercase;'
-                f'letter-spacing:1.5px;font-weight:700;margin-bottom:6px">Online agora</div>'
-                f'{linhas}'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-        _online_widget()
-
-    # Sem spacer — Sair vem direto após o widget Online no fluxo natural.
-    st.sidebar.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
+    # Spacer pra não esconder último nav atrás do botão Sair (fixed bottom)
+    st.sidebar.markdown('<div style="height:70px"></div>', unsafe_allow_html=True)
 
     if st.sidebar.button("Sair da conta", width="stretch"):
         # Limpa TODAS as chaves do session_state — garante que o login
