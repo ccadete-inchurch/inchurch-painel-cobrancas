@@ -478,17 +478,17 @@ def _render_atividades(store, clientes, role):
             role in ("admin", "gestor") and _modo_admin == "Todos os clientes"
         )
 
-        # Dados do LOTE
+        # Dados da CARTEIRA do atendente (não só do lote de 80 do dia).
+        # Inadimplentes = todos da carteira que ainda não regularizaram hoje;
+        # vai diminuindo conforme overlay da API marca _regularizado_hoje.
         lote_inad_n = lote_reg_n = lote_parc_n = 0
         lote_reg_v = lote_parc_v = 0.0
         if _mostrar_lote:
             if email in _EMAIL_GRUPO:
-                _ids_lote = ids_hoje
+                _atendente_nome = _EMAIL_GRUPO[email]
             else:
-                _key = f"_tarefas_admin_{hoje_lote()}_{_atendente_sel}"
-                _buckets = st.session_state.get(_key, {}) or {}
-                _ids_lote = set(_buckets.keys())
-            _lote_cs = [c for c in clientes_full if c.get("id") in _ids_lote]
+                _atendente_nome = _atendente_sel
+            _lote_cs = [c for c in clientes_full if c.get("_grupo") == _atendente_nome]
             lote_inad_n, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v = _agg(_lote_cs)
         # Dados do TOTAL — respeita filtros Grupo (incluindo 'Sem especialista')
         # e Situação. Sublabel removido por feedback — visual mais limpo.
