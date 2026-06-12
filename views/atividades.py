@@ -555,6 +555,14 @@ def _render_atividades(store, clientes, role):
         # Card vertical empilhado: Inadimplentes (1ª linha) + divisor + Reg +
         # divisor + Parc. Mesmo padrão que tinha antes; Inadimplentes só foi
         # adicionada no topo pra mostrar quanto da carteira ainda tá pendente.
+        # Horário da última atualização do BQ — usado no delta de Inadimplentes.
+        # Formato em store: "DD/MM/YYYY HH:MM". Pega só HH:MM. Fallback "08:15".
+        _ult_atu = store.get("ultima_atualizacao") or ""
+        if len(_ult_atu) >= 5:
+            _horario_bq = _ult_atu[-5:]
+        else:
+            _horario_bq = "08:15"
+
         def _card_html(label_topo, sublabel, inad_n, reg_n, reg_v, parc_n, parc_v, delta_n=None):
             _inad_palavra = _palavra(inad_n, "inadimplente", "inadimplentes").upper()
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
@@ -562,13 +570,13 @@ def _render_atividades(store, clientes, role):
             _reg_v_fmt = fmt_moeda_plain(reg_v)
             _parc_v_fmt = fmt_moeda_plain(parc_v)
             # Linha do Inadimplentes — direita mostra delta verde quando houve
-            # regularização no dia ("↓ N desde 08h"). Delta = quantos saíram
-            # da carteira (pode ser ≠ Reg do lote, porque clientes regularizam
-            # também fora do lote por iniciativa própria).
+            # regularização no dia ("↓ N desde HH:MM"). Horário = última leitura
+            # do BQ (store["ultima_atualizacao"]). Delta = quantos saíram da
+            # carteira (pode ≠ Reg do lote — alguns regularizam fora do lote).
             _d = delta_n if delta_n is not None else reg_n
             _inad_dir = (
                 f'<span style="margin-left:auto;font-size:13px;font-weight:700;'
-                f'color:#7cc243;font-variant-numeric:tabular-nums">↓ {_d} desde 08h</span>'
+                f'color:#7cc243;font-variant-numeric:tabular-nums">↓ {_d} desde {_horario_bq}</span>'
                 if _d > 0 else ""
             )
 
