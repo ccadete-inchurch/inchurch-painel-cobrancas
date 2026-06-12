@@ -497,9 +497,6 @@ def _render_atividades(store, clientes, role):
             # Inadimplentes: carteira inteira do atendente — descontando reg.
             _carteira_cs = [c for c in clientes_full if c.get("_grupo") == _atendente_nome]
             lote_inad_n = sum(1 for c in _carteira_cs if not c.get("_regularizado_hoje"))
-            # Delta "↓ N desde 08h" usa total de reg da carteira inteira —
-            # pra Inad bater matematicamente (Inad cai = carteira_reg).
-            lote_delta_n = sum(1 for c in _carteira_cs if c.get("_regularizado_hoje"))
             # Reg + Parc: só do lote do dia (mérito do trabalho do atendente).
             _lote_cs = [c for c in clientes_full if c.get("id") in _ids_lote]
             _, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v = _agg(_lote_cs)
@@ -555,36 +552,18 @@ def _render_atividades(store, clientes, role):
         # Card vertical empilhado: Inadimplentes (1ª linha) + divisor + Reg +
         # divisor + Parc. Mesmo padrão que tinha antes; Inadimplentes só foi
         # adicionada no topo pra mostrar quanto da carteira ainda tá pendente.
-        # Horário da última atualização do BQ — usado no delta de Inadimplentes.
-        # Formato em store: "DD/MM/YYYY HH:MM". Pega só HH:MM. Fallback "08:15".
-        _ult_atu = store.get("ultima_atualizacao") or ""
-        if len(_ult_atu) >= 5:
-            _horario_bq = _ult_atu[-5:]
-        else:
-            _horario_bq = "08:15"
-
-        def _card_html(label_topo, sublabel, inad_n, reg_n, reg_v, parc_n, parc_v, delta_n=None):
+        def _card_html(label_topo, sublabel, inad_n, reg_n, reg_v, parc_n, parc_v):
             _inad_palavra = _palavra(inad_n, "inadimplente", "inadimplentes").upper()
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
             _parc_palavra = _palavra(parc_n, "parcial", "parciais").upper()
             _reg_v_fmt = fmt_moeda_plain(reg_v)
             _parc_v_fmt = fmt_moeda_plain(parc_v)
-            # Linha do Inadimplentes — direita mostra delta verde quando houve
-            # regularização no dia ("↓ N desde HH:MM"). Horário = última leitura
-            # do BQ (store["ultima_atualizacao"]). Delta = quantos saíram da
-            # carteira (pode ≠ Reg do lote — alguns regularizam fora do lote).
-            _d = delta_n if delta_n is not None else reg_n
-            _inad_dir = (
-                f'<span style="margin-left:auto;font-size:13px;font-weight:700;'
-                f'color:#7cc243;font-variant-numeric:tabular-nums">↓ {_d} desde {_horario_bq}</span>'
-                if _d > 0 else ""
-            )
 
-            def _linha(ico, count, palavra, valor_fmt, cor_valor, sufixo=""):
+            def _linha(ico, count, palavra, valor_fmt, cor_valor):
                 _direita = (
                     f'<span style="margin-left:auto;font-size:20px;font-weight:800;'
                     f'color:{cor_valor};font-variant-numeric:tabular-nums">{valor_fmt}</span>'
-                ) if valor_fmt else sufixo
+                ) if valor_fmt else ""
                 return (
                     f'<div style="display:flex;align-items:center;gap:8px">'
                     f'{ico}'
@@ -601,7 +580,7 @@ def _render_atividades(store, clientes, role):
             return (
                 f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
                 f'border-radius:10px;padding:14px 18px">'
-                f'{_linha(_ico_inad, inad_n, _inad_palavra, "", "", sufixo=_inad_dir)}'
+                f'{_linha(_ico_inad, inad_n, _inad_palavra, "", "")}'
                 f'{_divisor}'
                 f'{_linha(_ico_reg, reg_n, _reg_palavra, _reg_v_fmt, "#7cc243")}'
                 f'{_divisor}'
@@ -615,7 +594,6 @@ def _render_atividades(store, clientes, role):
             cards_html.append(_card_html(
                 "No Lote", "",
                 lote_inad_n, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v,
-                delta_n=lote_delta_n,
             ))
         if _mostrar_total:
             cards_html.append(_card_html(
