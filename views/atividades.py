@@ -478,18 +478,31 @@ def _render_atividades(store, clientes, role):
             role in ("admin", "gestor") and _modo_admin == "Todos os clientes"
         )
 
-        # Dados da CARTEIRA do atendente (não só do lote de 80 do dia).
-        # Inadimplentes = todos da carteira que ainda não regularizaram hoje;
-        # vai diminuindo conforme overlay da API marca _regularizado_hoje.
+        # Mix de fontes:
+        #   • Inadimplentes = carteira completa do atendente (todo) — diminui
+        #     ao longo do dia conforme pagamentos chegam por qualquer canal
+        #   • Reg / Parc = SÓ do lote de hoje (mérito do trabalho do atendente
+        #     com a lista priorizada; pagamentos fora do lote não contam aqui)
         lote_inad_n = lote_reg_n = lote_parc_n = 0
         lote_reg_v = lote_parc_v = 0.0
         if _mostrar_lote:
             if email in _EMAIL_GRUPO:
                 _atendente_nome = _EMAIL_GRUPO[email]
+                _ids_lote = ids_hoje
             else:
                 _atendente_nome = _atendente_sel
-            _lote_cs = [c for c in clientes_full if c.get("_grupo") == _atendente_nome]
-            lote_inad_n, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v = _agg(_lote_cs)
+                _key = f"_tarefas_admin_{hoje_lote()}_{_atendente_sel}"
+                _buckets = st.session_state.get(_key, {}) or {}
+                _ids_lote = set(_buckets.keys())
+            # Inadimplentes: carteira inteira do atendente — descontando reg.
+            _carteira_cs = [c for c in clientes_full if c.get("_grupo") == _atendente_nome]
+            lote_inad_n = sum(1 for c in _carteira_cs if not c.get("_regularizado_hoje"))
+            # Delta "↓ N desde 08h" usa total de reg da carteira inteira —
+            # pra Inad bater matematicamente (Inad cai = carteira_reg).
+            lote_delta_n = sum(1 for c in _carteira_cs if c.get("_regularizado_hoje"))
+            # Reg + Parc: só do lote do dia (mérito do trabalho do atendente).
+            _lote_cs = [c for c in clientes_full if c.get("id") in _ids_lote]
+            _, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v = _agg(_lote_cs)
         # Dados do TOTAL — respeita filtros Grupo (incluindo 'Sem especialista')
         # e Situação. Sublabel removido por feedback — visual mais limpo.
         total_inad_n = total_reg_n = total_parc_n = 0
@@ -542,18 +555,21 @@ def _render_atividades(store, clientes, role):
         # Card vertical empilhado: Inadimplentes (1ª linha) + divisor + Reg +
         # divisor + Parc. Mesmo padrão que tinha antes; Inadimplentes só foi
         # adicionada no topo pra mostrar quanto da carteira ainda tá pendente.
-        def _card_html(label_topo, sublabel, inad_n, reg_n, reg_v, parc_n, parc_v):
+        def _card_html(label_topo, sublabel, inad_n, reg_n, reg_v, parc_n, parc_v, delta_n=None):
             _inad_palavra = _palavra(inad_n, "inadimplente", "inadimplentes").upper()
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
             _parc_palavra = _palavra(parc_n, "parcial", "parciais").upper()
             _reg_v_fmt = fmt_moeda_plain(reg_v)
             _parc_v_fmt = fmt_moeda_plain(parc_v)
             # Linha do Inadimplentes — direita mostra delta verde quando houve
-            # regularização no dia ("↓ N desde 08h"). Sem reg, fica vazio.
+            # regularização no dia ("↓ N desde 08h"). Delta = quantos saíram
+            # da carteira (pode ser ≠ Reg do lote, porque clientes regularizam
+            # também fora do lote por iniciativa própria).
+            _d = delta_n if delta_n is not None else reg_n
             _inad_dir = (
                 f'<span style="margin-left:auto;font-size:13px;font-weight:700;'
-                f'color:#7cc243;font-variant-numeric:tabular-nums">↓ {reg_n} desde 08h</span>'
-                if reg_n > 0 else ""
+                f'color:#7cc243;font-variant-numeric:tabular-nums">↓ {_d} desde 08h</span>'
+                if _d > 0 else ""
             )
 
             def _linha(ico, count, palavra, valor_fmt, cor_valor, sufixo=""):
@@ -591,6 +607,7 @@ def _render_atividades(store, clientes, role):
             cards_html.append(_card_html(
                 "No Lote", "",
                 lote_inad_n, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v,
+                delta_n=lote_delta_n,
             ))
         if _mostrar_total:
             cards_html.append(_card_html(
