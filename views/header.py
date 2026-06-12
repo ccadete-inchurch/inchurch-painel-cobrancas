@@ -37,12 +37,13 @@ def render_header():
         outros_online = [u for u in online if u["email"] != _meu_email]
         online_html = ""
         if outros_online:
+            # Verde InChurch (#7cc243) — mesmo do badge à direita e logo,
+            # mantendo consistência visual em todo o header.
             pills = "".join(
                 f'<span style="display:inline-flex;align-items:center;gap:6px;'
-                f'background:#1e2333;border:1px solid rgba(34,197,94,.25);border-radius:20px;'
+                f'background:#1e2333;border:1px solid rgba(124,194,67,.25);border-radius:20px;'
                 f'padding:5px 12px;font-size:12px;color:#e8eaf0;font-weight:500">'
-                f'<span style="width:7px;height:7px;background:#22c55e;border-radius:50%;'
-                f'box-shadow:0 0 0 2px rgba(34,197,94,.2)"></span>'
+                f'<span style="width:7px;height:7px;background:#7cc243;border-radius:50%"></span>'
                 f'{u["nome"].split()[0] if u["nome"] else u["email"]}'
                 f'</span>'
                 for u in outros_online[:4]  # cap pra não estourar o header
