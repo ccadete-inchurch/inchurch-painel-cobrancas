@@ -37,9 +37,9 @@ def render_header():
         outros_online = [u for u in online if u["email"] != _meu_email]
         online_html = ""
         if outros_online:
-            # Verde InChurch (#7cc243) — mesmo do badge à direita e logo,
-            # mantendo consistência visual em todo o header.
-            pills = "".join(
+            # Verde InChurch (#7cc243) — consistente com badge e logo.
+            # Sem label "ONLINE" — pills com bola verde já comunicam (Slack-style).
+            online_html = "".join(
                 f'<span style="display:inline-flex;align-items:center;gap:6px;'
                 f'background:#1e2333;border:1px solid rgba(124,194,67,.25);border-radius:20px;'
                 f'padding:5px 12px;font-size:12px;color:#e8eaf0;font-weight:500">'
@@ -48,19 +48,12 @@ def render_header():
                 f'</span>'
                 for u in outros_online[:4]  # cap pra não estourar o header
             )
-            online_html = (
-                f'<div style="display:flex;align-items:center;gap:6px;margin-right:12px">'
-                f'<span style="font-size:10px;color:#6b7280;text-transform:uppercase;'
-                f'letter-spacing:1.3px;font-weight:700;margin-right:2px">Online</span>'
-                f'{pills}'
-                f'</div>'
-            )
 
+        # Layout: presença do time na esquerda; status/usuário à direita.
         st.markdown(f"""
         <div style="background:#181c26;border-bottom:1px solid #2a2f42;padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,.15)">
-          <div></div>
+          <div style="display:flex;align-items:center;gap:8px">{online_html}</div>
           <div style="display:flex;align-items:center;gap:12px">
-            {online_html}
             <span style="font-size:13px;color:#8b94a5;background:#1e2333;padding:6px 14px;border-radius:20px;border:1px solid #2a2f42">Atualizado: {upd}</span>
             <span style="font-size:13px;background:#1e2333;border:1px solid #2a2f42;border-radius:20px;padding:6px 14px;display:inline-flex;align-items:center;gap:8px;font-weight:500">
               <span style="width:8px;height:8px;background:#7cc243;border-radius:50%;display:inline-block"></span>{current_nome()}{role_tag}
