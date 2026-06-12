@@ -519,67 +519,90 @@ def _render_atividades(store, clientes, role):
         def _palavra(n, sing, plur):
             return sing if n == 1 else plur
 
-        # Card individual — vertical, com label/número/valor/sublabel.
-        # Usado pelos 3 indicadores: Inadimplentes, Regularizações, Parciais.
-        def _card_indicador(label, count, palavra, sublabel, cor_count, valor_fmt=None):
-            valor_html = ""
-            if valor_fmt is not None:
-                valor_html = (
-                    f'<div style="font-size:18px;font-weight:700;color:{cor_count};'
-                    f'margin-top:2px;font-variant-numeric:tabular-nums">{valor_fmt}</div>'
+        # SVG icons inline (vermelho alerta, verde check, azul relógio)
+        _ico_inad = (
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" '
+            'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" '
+            'style="flex-shrink:0"><circle cx="12" cy="12" r="9"></circle>'
+            '<line x1="12" y1="8" x2="12" y2="13"></line>'
+            '<line x1="12" y1="16" x2="12.01" y2="16"></line></svg>'
+        )
+        _ico_reg = (
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7cc243" '
+            'stroke-width="3" stroke-linecap="round" stroke-linejoin="round" '
+            'style="flex-shrink:0"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+        )
+        _ico_pag = (
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5fa3ff" '
+            'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" '
+            'style="flex-shrink:0"><circle cx="12" cy="12" r="9"></circle>'
+            '<path d="M12 6v6l4 2"></path></svg>'
+        )
+
+        # Card vertical empilhado: Inadimplentes (1ª linha) + divisor + Reg +
+        # divisor + Parc. Mesmo padrão que tinha antes; Inadimplentes só foi
+        # adicionada no topo pra mostrar quanto da carteira ainda tá pendente.
+        def _card_html(label_topo, sublabel, inad_n, reg_n, reg_v, parc_n, parc_v):
+            _inad_palavra = _palavra(inad_n, "inadimplente", "inadimplentes").upper()
+            _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
+            _parc_palavra = _palavra(parc_n, "parcial", "parciais").upper()
+            _reg_v_fmt = fmt_moeda_plain(reg_v)
+            _parc_v_fmt = fmt_moeda_plain(parc_v)
+            # Linha do Inadimplentes — direita mostra delta verde quando houve
+            # regularização no dia ("↓ N desde 08h"). Sem reg, fica vazio.
+            _inad_dir = (
+                f'<span style="margin-left:auto;font-size:13px;font-weight:700;'
+                f'color:#7cc243;font-variant-numeric:tabular-nums">↓ {reg_n} desde 08h</span>'
+                if reg_n > 0 else ""
+            )
+
+            def _linha(ico, count, palavra, valor_fmt, cor_valor, sufixo=""):
+                _direita = (
+                    f'<span style="margin-left:auto;font-size:20px;font-weight:800;'
+                    f'color:{cor_valor};font-variant-numeric:tabular-nums">{valor_fmt}</span>'
+                ) if valor_fmt else sufixo
+                return (
+                    f'<div style="display:flex;align-items:center;gap:8px">'
+                    f'{ico}'
+                    f'<span style="font-size:26px;font-weight:800;color:#e8eaf0;line-height:1;'
+                    f'font-variant-numeric:tabular-nums">{count}</span>'
+                    f'<span style="font-size:13px;color:#9ca3af;font-weight:700;'
+                    f'letter-spacing:1.2px;text-transform:uppercase">{palavra}</span>'
+                    f'{_direita}'
+                    f'</div>'
                 )
+
+            _divisor = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
+
             return (
-                f'<div style="background:#181c26;border:1px solid #2a2f42;'
-                f'border-radius:10px;padding:14px 18px;height:100%;box-sizing:border-box">'
-                f'<div style="display:flex;align-items:baseline;gap:8px">'
-                f'<span style="font-size:32px;font-weight:800;color:{cor_count};line-height:1;'
-                f'font-variant-numeric:tabular-nums">{count}</span>'
-                f'<span style="font-size:12px;color:#8b94a5;font-weight:700;'
-                f'letter-spacing:1.2px;text-transform:uppercase">{palavra}</span>'
-                f'</div>'
-                f'{valor_html}'
-                f'<div style="font-size:12px;color:#6b7280;margin-top:6px">{sublabel}</div>'
+                f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
+                f'border-radius:10px;padding:14px 18px">'
+                f'{_linha(_ico_inad, inad_n, _inad_palavra, "", "", sufixo=_inad_dir)}'
+                f'{_divisor}'
+                f'{_linha(_ico_reg, reg_n, _reg_palavra, _reg_v_fmt, "#7cc243")}'
+                f'{_divisor}'
+                f'{_linha(_ico_pag, parc_n, _parc_palavra, _parc_v_fmt, "#5fa3ff")}'
                 f'</div>'
             )
 
-        # Triplet (Inad, Reg, Parc) pra um contexto (Lote ou Total).
-        def _triplet_html(label_topo, inad_n, reg_n, reg_v, parc_n, parc_v):
-            _ctx = "no lote" if label_topo == "No Lote" else "na carteira"
-            _sub_inad = f"{_ctx} · ↓ {reg_n} desde 08h" if reg_n > 0 else _ctx
-            return (
-                _card_indicador(
-                    "Inadimplentes", inad_n,
-                    _palavra(inad_n, "cliente", "clientes"),
-                    _sub_inad,
-                    "#ef4444",
-                ),
-                _card_indicador(
-                    "Regularizações", reg_n,
-                    _palavra(reg_n, "regularização", "regularizações"),
-                    "regularizados hoje",
-                    "#7cc243",
-                    fmt_moeda_plain(reg_v),
-                ),
-                _card_indicador(
-                    "Parciais", parc_n,
-                    _palavra(parc_n, "parcial", "parciais"),
-                    "pagamentos parciais hoje",
-                    "#5fa3ff",
-                    fmt_moeda_plain(parc_v),
-                ),
-            )
-
-        # Decide qual contexto mostrar (lote OU total — nunca os dois)
+        # Monta linha horizontal — 1 card por contexto (lote ou total).
+        cards_html = []
         if _mostrar_lote:
-            cards = _triplet_html("No Lote", lote_inad_n, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v)
-        elif _mostrar_total:
-            cards = _triplet_html("No Total", total_inad_n, total_reg_n, total_reg_v, total_parc_n, total_parc_v)
-        else:
-            cards = None
+            cards_html.append(_card_html(
+                "No Lote", "",
+                lote_inad_n, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v,
+            ))
+        if _mostrar_total:
+            cards_html.append(_card_html(
+                "No Total", total_label,
+                total_inad_n, total_reg_n, total_reg_v, total_parc_n, total_parc_v,
+            ))
 
-        if cards:
-            ind_cols = st.columns(3)
-            for i, html in enumerate(cards):
+        if cards_html:
+            # Card na MESMA largura do filtro 'Grupo' abaixo.
+            _col_widths = [1.3, 1.3, 2]
+            ind_cols = st.columns(_col_widths)
+            for i, html in enumerate(cards_html[:2]):
                 with ind_cols[i]:
                     st.markdown(html, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
