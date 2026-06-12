@@ -6,6 +6,31 @@ from pathlib import Path
 # ── OAuth popup: armazenamento temporário compartilhado entre sessões ─────────
 _pending_oauth: dict = {}
 
+# ── Presença online: dict em memória compartilhado entre sessões ──────────────
+# email → {"ts": timestamp_da_ultima_atividade, "nome": "Nome do Usuário"}
+# Cada sessão ativa pinga a cada 30s; consideramos online quem pingou nos
+# últimos 90s. Sem persistência — reinicialização do processo zera.
+_online_sessions: dict = {}
+
+
+def ping_online(email: str, nome: str = "") -> None:
+    """Marca sessão como ativa agora. Chamado por fragment de heartbeat."""
+    if email:
+        _online_sessions[email] = {"ts": time.time(), "nome": nome or email}
+
+
+def get_online_users(janela_s: int = 90) -> list[dict]:
+    """Retorna usuários que pingaram nos últimos N segundos.
+    Cada item: {email, nome, ago_s}. Ordenado por mais recente primeiro."""
+    agora = time.time()
+    out = [
+        {"email": e, "nome": d.get("nome") or e, "ago_s": int(agora - d["ts"])}
+        for e, d in _online_sessions.items()
+        if (agora - d["ts"]) < janela_s
+    ]
+    out.sort(key=lambda x: x["ago_s"])
+    return out
+
 
 def precisa_processar_bq(store: dict) -> bool:
     """Decide se precisa rodar processar_dados_bigquery agora.
