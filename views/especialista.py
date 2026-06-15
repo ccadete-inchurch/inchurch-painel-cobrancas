@@ -375,7 +375,7 @@ def _render_especialista(store, clientes, role):
         tooltip=[
             alt.Tooltip("atendente:N", title="Especialista"),
             alt.Tooltip("pagamentos:Q", title="Pagamentos"),
-            alt.Tooltip("eficacia_real:Q", title="Eficácia (%)", format=".0f"),
+            alt.Tooltip("eficacia_real:Q", title="Eficácia (%)", format=".2f"),
             alt.Tooltip("clientes_contactados:Q", title="Contatados"),
             alt.Tooltip("valor:Q", title="Valor recuperado", format=",.2f"),
         ],
@@ -401,7 +401,7 @@ def _render_especialista(store, clientes, role):
     st.altair_chart(chart_matriz, use_container_width=True)
     st.markdown(
         f'<div style="font-size:11px;color:#6b7280;margin-top:-8px">'
-        f'Linhas pontilhadas = média da equipe (eficácia {_avg_ef:.0f}%, '
+        f'Linhas pontilhadas = média da equipe (eficácia {_avg_ef:.2f}%, '
         f'volume {_avg_vol:.0f}). Superior direito = melhor desempenho.'
         f'</div>',
         unsafe_allow_html=True,
@@ -635,7 +635,7 @@ def _render_especialista(store, clientes, role):
             df_ef_real[["atendente", "eficacia_real"]],
             on="atendente", how="left",
         )
-        rank_agg["eficacia"] = rank_agg["eficacia_real"].fillna(0).astype(int)
+        rank_agg["eficacia"] = rank_agg["eficacia_real"].fillna(0).astype(float)
         rank_agg = rank_agg.drop(columns=["eficacia_real"])
     # Junta com carteira atual
     carteira_count = (
@@ -646,10 +646,13 @@ def _render_especialista(store, clientes, role):
     ranking = rank_agg.merge(carteira_count, on="atendente", how="outer").fillna(0)
     # Força int em todas as colunas numéricas inteiras — evita exibir '16.0'
     # quando merges com floats convertem o tipo silenciosamente.
+    # Eficácia mantém como float (duas casas decimais); demais são int.
     for col in ("pagamentos", "regularizacoes", "parciais", "via_contato",
-                "espontaneos", "carteira_atual", "eficacia"):
+                "espontaneos", "carteira_atual"):
         if col in ranking.columns:
             ranking[col] = ranking[col].astype(int)
+    if "eficacia" in ranking.columns:
+        ranking["eficacia"] = ranking["eficacia"].astype(float)
     ranking = ranking.sort_values("regularizacoes", ascending=False).reset_index(drop=True)
     ranking["rank"] = ranking.index + 1
     ranking["valor_fmt"] = ranking["valor"].apply(fmt_moeda_plain)
@@ -712,7 +715,7 @@ def _render_especialista(store, clientes, role):
         _ef = row["eficacia"]
         _ef_cor = "#22c55e" if _ef >= 30 else ("#f59e0b" if _ef >= 15 else "#ef4444")
         rcols[6].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:{_ef_cor};font-weight:700">{_ef}%</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:{_ef_cor};font-weight:700">{_ef:.2f}%</div>',
             unsafe_allow_html=True,
         )
         rcols[7].markdown(
