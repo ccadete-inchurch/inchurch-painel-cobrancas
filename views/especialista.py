@@ -9,18 +9,19 @@ from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_por_e
 from helpers import fmt_moeda_plain
 
 
-# Paleta categórica neutra — vermelho calmo + slate gray.
-# Tons mais sofisticados pra não brigar com o fundo escuro nem dominar
-# visualmente. Mantém legibilidade sem virar alarme.
+# Paleta categórica — verde InChurch pras atendentes ativas + cinza forte
+# pra "Sem especialista". Tons sofisticados sem brigar com fundo escuro.
+# Ordem: Priscila e Ana primeiro (vão receber as 2 primeiras cores pelo
+# sort alfabético do Altair), depois Sem especialista.
 _CHART_PALETTE = [
-    "#dc2626",  # vermelho calmo
-    "#cbd5e1",  # slate claro (era branco puro)
-    "#94a3b8",  # slate médio
-    "#7f1d1d",  # vermelho escuro profundo
-    "#64748b",  # slate escuro
-    "#fca5a5",  # vermelho claro
-    "#e2e8f0",  # slate muito claro
-    "#475569",  # slate grafite
+    "#7cc243",  # verde InChurch
+    "#3e7a1f",  # verde escuro (variação da marca)
+    "#4b5563",  # cinza forte (Sem especialista)
+    "#a3d672",  # verde claro
+    "#6b7280",  # cinza médio
+    "#2d5a14",  # verde profundo
+    "#9ca3af",  # cinza claro
+    "#dc2626",  # vermelho — só se passar dos 7 atendentes
 ]
 
 
@@ -187,14 +188,14 @@ def _render_especialista(store, clientes, role):
     )
     _tt_val = "Soma dos pagamentos de cobranças atrasadas no período."
 
-    # 5 cards em uma linha — mesmo padrão da tela Pagamentos.
+    # 5 cards em uma linha — valor mais destacado (36px) pra dar peso.
     c1, c2, c3, c4, c5 = st.columns(5)
     _card_fmt = lambda label, valor, sub, cor, tip="": (
         f'<div class="metric-card" '
         f'{"title=" + chr(34) + tip + chr(34) if tip else ""} '
         f'style="cursor:{"help" if tip else "default"};padding:18px 20px">'
         f'<div class="metric-label" style="font-size:14px;letter-spacing:1.3px">{label}</div>'
-        f'<div style="font-size:30px;font-weight:800;color:{cor};margin-top:6px;'
+        f'<div style="font-size:36px;font-weight:800;color:{cor};margin-top:6px;'
         f'line-height:1.1;font-variant-numeric:tabular-nums">{valor}</div>'
         f'<div class="metric-sub" style="font-size:14px;margin-top:8px">{sub}</div>'
         f'</div>'
@@ -298,14 +299,13 @@ def _render_especialista(store, clientes, role):
             .encode(
                 x=alt.X("eficacia_real:Q", title="EFICÁCIA REAL (%)", scale=alt.Scale(domain=[0, 100])),
                 y=alt.Y("atendente:N", title=None, sort="-x"),
-                # Gradiente alinhado com paleta vermelho/slate:
-                # baixa eficácia (alarmante) = vermelho intenso;
-                # alta eficácia (bom) = slate claro neutro.
+                # Gradiente: baixa eficácia = vermelho (alarme);
+                # alta eficácia = verde InChurch (bom).
                 color=alt.Color(
                     "eficacia_real:Q",
                     scale=alt.Scale(
                         domain=[0, 15, 30, 100],
-                        range=["#7f1d1d", "#dc2626", "#94a3b8", "#cbd5e1"],
+                        range=["#dc2626", "#f59e0b", "#7cc243", "#7cc243"],
                     ),
                     legend=None,
                 ),
@@ -325,13 +325,19 @@ def _render_especialista(store, clientes, role):
     # Barras empilhadas: altura = total diário, segmentos = atendentes.
     # Hoje aparece com opacidade reduzida + anotação ("em andamento") pra
     # não distorcer comparação com dias completos.
+    # Sub-label só aparece se há dados de hoje no df — senão é uma frase
+    # desconectada (ex.: dia 15 sem pagamentos ainda, gráfico vai até 14).
+    _tem_hoje_no_df = any(d == hoje for d in df_per["data_dt"].dt.date.unique())
+    _sub_hoje = (
+        '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
+        'Hoje aparece com opacidade reduzida — dia ainda em andamento, não comparável aos completos.'
+        '</div>' if _tem_hoje_no_df else '<div style="height:12px"></div>'
+    )
     st.markdown(
         '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
         'text-transform:uppercase;letter-spacing:1.5px;'
         'margin-top:24px;margin-bottom:4px">Pagamentos por Dia</div>'
-        '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-        'Hoje aparece com opacidade reduzida — dia ainda em andamento, não comparável aos completos.'
-        '</div>',
+        f'{_sub_hoje}',
         unsafe_allow_html=True,
     )
     df_diario = (
