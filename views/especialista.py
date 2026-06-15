@@ -299,13 +299,18 @@ def _render_especialista(store, clientes, role):
             .encode(
                 x=alt.X("eficacia_real:Q", title="EFICÁCIA REAL (%)", scale=alt.Scale(domain=[0, 100])),
                 y=alt.Y("atendente:N", title=None, sort="-x"),
-                # Gradiente: baixa eficácia = vermelho (alarme);
-                # alta eficácia = verde InChurch (bom).
+                # Cores discretas (threshold) — sem gradiente. Antes a
+                # interpolação entre vermelho e verde criava amarelo/laranja
+                # nas faixas intermediárias. Agora cada faixa tem cor sólida:
+                #   < 15%   = vermelho (alarme)
+                #   15-30%  = cinza   (marginal)
+                #   >= 30%  = verde   (bom)
                 color=alt.Color(
                     "eficacia_real:Q",
                     scale=alt.Scale(
-                        domain=[0, 15, 30, 100],
-                        range=["#dc2626", "#f59e0b", "#7cc243", "#7cc243"],
+                        type="threshold",
+                        domain=[15, 30],
+                        range=["#dc2626", "#94a3b8", "#7cc243"],
                     ),
                     legend=None,
                 ),
