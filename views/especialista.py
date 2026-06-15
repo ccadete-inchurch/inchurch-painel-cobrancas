@@ -505,6 +505,81 @@ def _render_especialista(store, clientes, role):
 
     st.markdown(_DIVIDER, unsafe_allow_html=True)
 
+    # ── Evolução Mensal de Pagamentos (últimos 6 meses) ───────────────────
+    # Trend histórico — independente do filtro de período (sempre 6 meses).
+    # Mostra se o time tá melhorando ou piorando ao longo do tempo.
+    st.markdown(
+        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+        'text-transform:uppercase;letter-spacing:1.5px;'
+        'margin-bottom:4px">Evolução Mensal de Pagamentos</div>'
+        '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
+        'Últimos 6 meses — independente do filtro de período. Mostra '
+        'tendência do time ao longo do tempo.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    # Calcula primeiro dia há 6 meses (1º dia do mês há 5 meses pra trás)
+    _hoje_trend = date.today()
+    _ano = _hoje_trend.year
+    _mes = _hoje_trend.month - 5
+    while _mes <= 0:
+        _mes += 12
+        _ano -= 1
+    _trend_inicio = date(_ano, _mes, 1)
+    df_trend = fetch_pagamentos_creditados(_trend_inicio.isoformat(), _hoje_trend.isoformat())
+    if not df_trend.empty:
+        df_trend = df_trend.rename(columns={
+            "id_sacado_sac": "id",
+            "atendente_credito": "atendente",
+        })
+        df_trend["data_dt"] = pd.to_datetime(df_trend["dt_pagamento"], errors="coerce")
+        df_trend = df_trend.dropna(subset=["data_dt"])
+        df_trend["mes_dt"] = df_trend["data_dt"].dt.to_period("M").dt.to_timestamp()
+        df_trend["mes_label"] = df_trend["mes_dt"].dt.strftime("%b/%y").str.capitalize()
+        df_mensal = (
+            df_trend.groupby(["mes_dt", "mes_label", "atendente"])
+            .agg(pagamentos=("id", "nunique"))
+            .reset_index()
+        )
+        # Filtra por especialista se selecionado (só na visualização — base
+        # da média da equipe permanece todos os atendentes)
+        df_mensal_show = df_mensal.copy()
+        if filtro_esp != "Todos":
+            df_mensal_show = df_mensal_show[df_mensal_show["atendente"] == filtro_esp]
+
+        if not df_mensal_show.empty:
+            _meses_ordem = (
+                df_mensal[["mes_dt", "mes_label"]]
+                .drop_duplicates()
+                .sort_values("mes_dt")["mes_label"]
+                .tolist()
+            )
+            base_trend = alt.Chart(df_mensal_show).encode(
+                x=alt.X("mes_label:O", title="MÊS", sort=_meses_ordem, axis=alt.Axis(labelAngle=0)),
+                y=alt.Y("pagamentos:Q", title="PAGAMENTOS"),
+                color=alt.Color(
+                    "atendente:N",
+                    scale=alt.Scale(range=_CHART_PALETTE),
+                    legend=alt.Legend(title="Especialista", orient="top"),
+                ),
+                tooltip=[
+                    alt.Tooltip("mes_label:N", title="Mês"),
+                    alt.Tooltip("atendente:N", title="Especialista"),
+                    alt.Tooltip("pagamentos:Q", title="Pagamentos"),
+                ],
+            )
+            linha_trend = base_trend.mark_line(strokeWidth=2.5, interpolate="monotone")
+            pontos_trend = base_trend.mark_circle(size=90, stroke="#0f1117", strokeWidth=2)
+
+            chart_trend = (linha_trend + pontos_trend).properties(height=280)
+            st.altair_chart(chart_trend, use_container_width=True)
+        else:
+            st.info("Sem pagamentos do especialista selecionado nos últimos 6 meses.")
+    else:
+        st.info("Sem dados históricos de pagamentos.")
+
+    st.markdown(_DIVIDER, unsafe_allow_html=True)
+
     # ── Tabela ranking detalhado ──────────────────────────────────────────
     st.markdown(
         '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
