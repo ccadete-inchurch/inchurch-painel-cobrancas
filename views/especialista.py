@@ -74,13 +74,19 @@ def _render_especialista(store, clientes, role):
         unsafe_allow_html=True,
     )
 
-    # ── Filtro de período (PRIMEIRO — define o range pro BQ) ──────────────
-    fp1, fp2, _ = st.columns([2, 2, 4])
+    # ── Filtros: Período, Especialista, Situação ─────────────────────────
+    fp1, fp2, fp3, _ = st.columns([2, 2, 2, 2])
     with fp1:
         periodo = st.selectbox(
             "Período",
             ["Este mês", "Últimos 30 dias", "Últimos 90 dias", "Mês anterior", "Últimos 12 meses"],
             key="esp_periodo",
+        )
+    with fp3:
+        filtro_situacao = st.selectbox(
+            "Situação",
+            ["Todos", "Apenas ativos", "Apenas inativos"],
+            key="esp_situacao",
         )
 
     hoje = date.today()
@@ -190,16 +196,23 @@ def _render_especialista(store, clientes, role):
     total_valor = float(df_per["valor"].sum()) if not df_per.empty else 0.0
     total_reg = int(df_per[df_per["eh_regularizacao"]]["id"].astype(str).nunique()) if not df_per.empty else 0
     total_parc = int(df_per[df_per["eh_parcial"]]["id"].astype(str).nunique()) if not df_per.empty else 0
-    # Inadimplentes atual: desconta os marcados como regularizados hoje pelo
-    # overlay da API (Superlógica em tempo real). Respeita o filtro de
-    # especialista — quando filtrado por Ana, mostra só os da Ana.
+    # Inadimplentes atual: desconta regularizados de hoje (overlay) + respeita
+    # filtros de Especialista E Situação (ativos/inativos).
     def _eh_grupo_match(c):
         if filtro_esp == "Todos":
             return True
         return _norm_atendente_raw(c.get("_grupo")) == filtro_esp
+    def _eh_situacao_match(c):
+        if filtro_situacao == "Todos":
+            return True
+        if filtro_situacao == "Apenas ativos":
+            return not c.get("_inativo")
+        return bool(c.get("_inativo"))
     inadimplentes_atual = sum(
         1 for c in clientes
-        if not c.get("_regularizado_hoje") and _eh_grupo_match(c)
+        if not c.get("_regularizado_hoje")
+        and _eh_grupo_match(c)
+        and _eh_situacao_match(c)
     )
     taxa_reg = (total_reg / total_pgto * 100) if total_pgto else 0
 
@@ -240,16 +253,17 @@ def _render_especialista(store, clientes, role):
     )
     _tt_val = "Soma dos pagamentos de cobranças atrasadas no período."
 
-    # 5 cards em uma linha — valor mais destacado (36px) pra dar peso.
+    # 5 cards em uma linha — fontes maiores (16/42/16) com padding extra
+    # pro card "respirar" e o número dominar a leitura.
     c1, c2, c3, c4, c5 = st.columns(5)
     _card_fmt = lambda label, valor, sub, cor, tip="": (
         f'<div class="metric-card" '
         f'{"title=" + chr(34) + tip + chr(34) if tip else ""} '
-        f'style="cursor:{"help" if tip else "default"};padding:18px 20px">'
-        f'<div class="metric-label" style="font-size:14px;letter-spacing:1.3px">{label}</div>'
-        f'<div style="font-size:36px;font-weight:800;color:{cor};margin-top:6px;'
-        f'line-height:1.1;font-variant-numeric:tabular-nums">{valor}</div>'
-        f'<div class="metric-sub" style="font-size:14px;margin-top:8px">{sub}</div>'
+        f'style="cursor:{"help" if tip else "default"};padding:22px 24px">'
+        f'<div class="metric-label" style="font-size:16px;letter-spacing:1.4px">{label}</div>'
+        f'<div style="font-size:42px;font-weight:800;color:{cor};margin-top:8px;'
+        f'line-height:1.05;font-variant-numeric:tabular-nums">{valor}</div>'
+        f'<div class="metric-sub" style="font-size:16px;margin-top:10px">{sub}</div>'
         f'</div>'
     )
     with c1:
@@ -360,10 +374,10 @@ def _render_especialista(store, clientes, role):
     _avg_ef = float(agg_esp["eficacia_real"].mean()) if not agg_esp.empty else 0
     _avg_vol = float(agg_esp["pagamentos"].mean()) if not agg_esp.empty else 0
     vline = alt.Chart(pd.DataFrame({"x": [_avg_ef]})).mark_rule(
-        color="#6b7280", strokeDash=[5, 5], opacity=0.7,
+        color="#cbd5e1", strokeDash=[6, 4], opacity=0.95, strokeWidth=1.5,
     ).encode(x="x:Q")
     hline = alt.Chart(pd.DataFrame({"y": [_avg_vol]})).mark_rule(
-        color="#6b7280", strokeDash=[5, 5], opacity=0.7,
+        color="#cbd5e1", strokeDash=[6, 4], opacity=0.95, strokeWidth=1.5,
     ).encode(y="y:Q")
 
     chart_matriz = (vline + hline + pontos + labels).properties(height=320)
@@ -446,12 +460,14 @@ def _render_especialista(store, clientes, role):
             'margin-top:24px;margin-bottom:12px">Distribuição da Carteira</div>',
             unsafe_allow_html=True,
         )
-        # Filtra: exclui regularizados de hoje (real-time) + aplica filtro
-        # de especialista quando selecionado.
+        # Filtra: exclui regularizados de hoje (real-time) + aplica filtros
+        # de Especialista e Situação.
         carteira = pd.DataFrame([
             {"atendente": _norm_atendente_raw(c.get("_grupo")), "valor": float(c.get("valor") or 0)}
             for c in clientes
-            if not c.get("_regularizado_hoje") and _eh_grupo_match(c)
+            if not c.get("_regularizado_hoje")
+            and _eh_grupo_match(c)
+            and _eh_situacao_match(c)
         ])
         if not carteira.empty:
             carteira_agg = (
