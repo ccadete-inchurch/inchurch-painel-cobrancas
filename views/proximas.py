@@ -31,21 +31,18 @@ def _render_proximas(_store, _clientes):
             "Período",
             list(_PERIODO_DAYS.keys()),
             index=2,
-            label_visibility="collapsed",
             key="proximas_periodo",
         )
     with fp2:
         busca = st.text_input(
             "Buscar",
-            placeholder="Nome ou CNPJ...",
-            label_visibility="collapsed",
+            placeholder="Nome, CNPJ ou ID do sacado...",
             key="proximas_busca",
         )
     with fp3:
         filtro_situacao = st.selectbox(
             "Situação",
             ["Todos", "Apenas ativos", "Apenas inativos"],
-            label_visibility="collapsed",
             key="proximas_situacao",
         )
 
@@ -70,6 +67,7 @@ def _render_proximas(_store, _clientes):
             dias_rest = 0
 
         rows.append({
+            "id":             str(row.get("codigo",    "") or ""),  # id_sacado_sac
             "nome":           str(row.get("nome",      "") or ""),
             "cnpj":           str(row.get("cnpj",      "") or ""),
             "telefone":       str(row.get("telefone",  "") or "—"),
@@ -94,13 +92,17 @@ def _render_proximas(_store, _clientes):
         filtro_grupo = st.selectbox(
             "Grupo",
             ["Todos"] + grupos_disp + (["Sem especialista"] if _tem_sem_grupo else []),
-            label_visibility="collapsed",
             key="proximas_grupo",
         )
 
     if busca:
-        b = busca.lower()
-        rows = [r for r in rows if b in r["nome"].lower() or b in r["cnpj"].lower()]
+        b = busca.lower().strip()
+        rows = [
+            r for r in rows
+            if b in r["nome"].lower()
+            or b in r["cnpj"].lower()
+            or b in r["id"].lower()
+        ]
     if filtro_situacao == "Apenas ativos":
         rows = [r for r in rows if not r.get("inativo")]
     elif filtro_situacao == "Apenas inativos":

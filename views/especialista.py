@@ -9,16 +9,18 @@ from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_por_e
 from helpers import fmt_moeda_plain
 
 
-# Paleta inChurch (verde + complementares acessíveis em fundo escuro)
+# Paleta categórica neutra — vermelho da inadimplência + tons brancos/cinzas.
+# Sem cores vibrantes pra não competir com os gradientes semânticos (verde/
+# vermelho na eficácia) e manter foco no significado dos dados.
 _CHART_PALETTE = [
-    "#7cc243",  # inChurch verde
-    "#5fa3ff",  # azul
-    "#f59e0b",  # âmbar
-    "#a78bfa",  # roxo
-    "#ef4444",  # vermelho
-    "#22c55e",  # verde claro
-    "#f97316",  # laranja
-    "#ec4899",  # rosa
+    "#ef4444",  # vermelho (inadimplência)
+    "#e8eaf0",  # branco quase-puro
+    "#9ca3af",  # cinza médio
+    "#b91c1c",  # vermelho escuro
+    "#6b7280",  # cinza escuro
+    "#fca5a5",  # vermelho claro
+    "#d1d5db",  # cinza claro
+    "#4b5563",  # cinza profundo
 ]
 
 
