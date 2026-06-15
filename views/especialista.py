@@ -9,18 +9,18 @@ from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_por_e
 from helpers import fmt_moeda_plain
 
 
-# Paleta categórica neutra — vermelho da inadimplência + tons brancos/cinzas.
-# Sem cores vibrantes pra não competir com os gradientes semânticos (verde/
-# vermelho na eficácia) e manter foco no significado dos dados.
+# Paleta categórica neutra — vermelho calmo + slate gray.
+# Tons mais sofisticados pra não brigar com o fundo escuro nem dominar
+# visualmente. Mantém legibilidade sem virar alarme.
 _CHART_PALETTE = [
-    "#ef4444",  # vermelho (inadimplência)
-    "#e8eaf0",  # branco quase-puro
-    "#9ca3af",  # cinza médio
-    "#b91c1c",  # vermelho escuro
-    "#6b7280",  # cinza escuro
+    "#dc2626",  # vermelho calmo
+    "#cbd5e1",  # slate claro (era branco puro)
+    "#94a3b8",  # slate médio
+    "#7f1d1d",  # vermelho escuro profundo
+    "#64748b",  # slate escuro
     "#fca5a5",  # vermelho claro
-    "#d1d5db",  # cinza claro
-    "#4b5563",  # cinza profundo
+    "#e2e8f0",  # slate muito claro
+    "#475569",  # slate grafite
 ]
 
 
