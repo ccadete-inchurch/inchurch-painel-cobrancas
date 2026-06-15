@@ -115,13 +115,17 @@ def _render_proximas(_store, _clientes):
     # ── Métricas ──────────────────────────────────────────────────────────────
     total_valor = sum(r["valor"] for r in rows)
     n_clientes  = len({r["cnpj"] for r in rows})
+    # Ticket médio: valor por cobrança. Indica se o pipeline é de cobranças
+    # pequenas (volume) ou grandes (concentração).
+    ticket_medio = (total_valor / len(rows)) if rows else 0.0
 
-    m1, m2, m3, _ = st.columns(4)
+    m1, m2, m3, m4 = st.columns(4)
     # Mesmo padrão visual da tela Pagamentos: padding, font-sizes, peso.
     for col, label, val, sub, cor in [
         (m1, "Total a Receber", fmt_moeda_plain(total_valor), f"próximos {days} dias", "#2dd36f"),
         (m2, "Cobranças",       str(len(rows)),               "faturas futuras",       "#e8eaf0"),
         (m3, "Clientes",        str(n_clientes),              "com vencimentos",       "#e8eaf0"),
+        (m4, "Ticket Médio",    fmt_moeda_plain(ticket_medio),"valor por cobrança",    "#5fa3ff"),
     ]:
         with col:
             st.markdown(

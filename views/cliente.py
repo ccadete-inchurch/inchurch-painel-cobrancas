@@ -39,11 +39,16 @@ def _render_cliente(_store, clientes):
             placeholder="Nome, CNPJ ou ID do sacado...",
             key="cliente_busca",
         )
-    pool = clientes
+    # Filtra clientes que regularizaram hoje via overlay da API — não devem
+    # aparecer na lista de inadimplentes pra evitar contato repetido.
+    base = [c for c in clientes if not c.get("_regularizado_hoje")]
+    _reg_hoje = len(clientes) - len(base)
+
+    pool = base
     if busca:
         b = busca.lower().strip()
         pool = [
-            c for c in clientes
+            c for c in base
             if b in str(c.get("nome", "")).lower()
             or b in str(c.get("cnpj", "")).lower()
             or b in str(c.get("id", "")).lower()
@@ -68,9 +73,14 @@ def _render_cliente(_store, clientes):
         return nome
 
     opcoes = {c["id"]: _label_dropdown(c) for c in sorted(pool, key=lambda x: x["nome"])}
+    # Label: total restante + nota de quantos regularizaram hoje (se > 0)
+    _label_topo = f"Cliente ({len(opcoes)} {'encontrado' if len(opcoes) == 1 else 'encontrados'}"
+    if _reg_hoje > 0:
+        _label_topo += f" · {_reg_hoje} regularizou hoje" if _reg_hoje == 1 else f" · {_reg_hoje} regularizaram hoje"
+    _label_topo += ")"
     with f2:
         cid = st.selectbox(
-            f"Cliente ({len(opcoes)} {'encontrado' if len(opcoes) == 1 else 'encontrados'})",
+            _label_topo,
             list(opcoes.keys()),
             format_func=lambda k: opcoes[k],
             key="cliente_sel",
