@@ -236,197 +236,176 @@ def _render_especialista(store, clientes, role):
         st.info("Nenhum pagamento no período selecionado.")
         return
 
-    # ── Agregado por especialista (base pros gráficos) ────────────────────
+    # ── Agregado por especialista — Volume + Eficácia (base pra matriz) ───
     agg_esp = (
         df_per.groupby("atendente")
         .agg(pagamentos=("id", "nunique"), valor=("valor", "sum"))
         .reset_index()
-        .sort_values("pagamentos", ascending=False)
-    )
-
-    # ── Gráfico 1: Pagamentos por especialista (bar horizontal) ───────────
-    st.markdown(
-        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
-        'text-transform:uppercase;letter-spacing:1.5px;'
-        'margin-top:8px;margin-bottom:12px">Pagamentos por Especialista</div>',
-        unsafe_allow_html=True,
-    )
-    chart_qtd = (
-        alt.Chart(agg_esp)
-        .mark_bar(cornerRadiusEnd=4)
-        .encode(
-            x=alt.X("pagamentos:Q", title="PAGAMENTOS (CLIENTES ÚNICOS)"),
-            y=alt.Y("atendente:N", title=None, sort="-x"),
-            color=alt.Color(
-                "atendente:N",
-                scale=alt.Scale(range=_CHART_PALETTE),
-                legend=None,
-            ),
-            tooltip=[
-                alt.Tooltip("atendente:N", title="Especialista"),
-                alt.Tooltip("pagamentos:Q", title="Pagamentos"),
-                alt.Tooltip("valor:Q", title="Valor", format=",.2f"),
-            ],
-        )
-        .properties(height=max(150, 40 * len(agg_esp)))
-    )
-    st.altair_chart(chart_qtd, use_container_width=True)
-
-    # ── Gráfico 2: Eficácia REAL do contato por especialista ──────────────
-    # Denominador correto: clientes únicos contactados no período (não só os
-    # que viraram pagamento). Reflete o trabalho real — maioria dos contatos
-    # não converte imediatamente.
-    st.markdown(
-        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
-        'text-transform:uppercase;letter-spacing:1.5px;'
-        'margin-top:24px;margin-bottom:4px">Eficácia do Contato por Especialista</div>'
-        '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-        'Dos clientes contactados no período, % que estão regularizados hoje.'
-        '</div>',
-        unsafe_allow_html=True,
     )
     df_ef = fetch_eficacia_por_especialista(dt_inicio.isoformat(), dt_fim.isoformat())
     if filtro_esp != "Todos" and not df_ef.empty:
         df_ef = df_ef[df_ef["atendente"] == filtro_esp]
-
-    if df_ef.empty:
-        st.info("Sem dados de contato no período pra calcular eficácia.")
+    if not df_ef.empty:
+        agg_esp = agg_esp.merge(
+            df_ef[["atendente", "eficacia_real", "clientes_contactados"]],
+            on="atendente", how="left",
+        ).fillna({"eficacia_real": 0, "clientes_contactados": 0})
     else:
-        # Faixas de cor por valor (reais agora — bem mais baixos que parecia)
-        chart_ef = (
-            alt.Chart(df_ef.sort_values("eficacia_real", ascending=False))
-            .mark_bar(cornerRadiusEnd=4)
-            .encode(
-                x=alt.X("eficacia_real:Q", title="EFICÁCIA REAL (%)", scale=alt.Scale(domain=[0, 100])),
-                y=alt.Y("atendente:N", title=None, sort="-x"),
-                # Cores discretas (threshold) — sem gradiente. Antes a
-                # interpolação entre vermelho e verde criava amarelo/laranja
-                # nas faixas intermediárias. Agora cada faixa tem cor sólida:
-                #   < 15%   = vermelho (alarme)
-                #   15-30%  = cinza   (marginal)
-                #   >= 30%  = verde   (bom)
-                color=alt.Color(
-                    "eficacia_real:Q",
-                    scale=alt.Scale(
-                        type="threshold",
-                        domain=[15, 30],
-                        range=["#dc2626", "#94a3b8", "#7cc243"],
-                    ),
-                    legend=None,
-                ),
-                tooltip=[
-                    alt.Tooltip("atendente:N", title="Especialista"),
-                    alt.Tooltip("eficacia_real:Q", title="Eficácia", format=".0f"),
-                    alt.Tooltip("clientes_contactados:Q", title="Clientes contactados"),
-                    alt.Tooltip("regularizaram:Q", title="Regularizaram"),
-                    alt.Tooltip("ainda_inadimplentes:Q", title="Ainda inadimplentes"),
-                ],
-            )
-            .properties(height=max(150, 40 * len(df_ef)))
-        )
-        st.altair_chart(chart_ef, use_container_width=True)
+        agg_esp["eficacia_real"] = 0
+        agg_esp["clientes_contactados"] = 0
 
-    # ── Gráfico 3: Total de pagamentos por dia (barras empilhadas) ───────
-    # Barras empilhadas: altura = total diário, segmentos = atendentes.
-    # Hoje aparece com opacidade reduzida + anotação ("em andamento") pra
-    # não distorcer comparação com dias completos.
-    # Sub-label só aparece se há dados de hoje no df — senão é uma frase
-    # desconectada (ex.: dia 15 sem pagamentos ainda, gráfico vai até 14).
-    _tem_hoje_no_df = any(d == hoje for d in df_per["data_dt"].dt.date.unique())
-    _sub_hoje = (
+    # ── Matriz de Desempenho (scatter Volume × Eficácia) ──────────────────
+    # Cada atendente vira um ponto. Quadrante superior direito = star
+    # (alto volume + alta eficácia). Inferior esquerdo = precisa apoio.
+    st.markdown(
+        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+        'text-transform:uppercase;letter-spacing:1.5px;'
+        'margin-top:8px;margin-bottom:4px">Matriz de Desempenho</div>'
         '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-        'Hoje aparece com opacidade reduzida — dia ainda em andamento, não comparável aos completos.'
-        '</div>' if _tem_hoje_no_df else '<div style="height:12px"></div>'
-    )
-    st.markdown(
-        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
-        'text-transform:uppercase;letter-spacing:1.5px;'
-        'margin-top:24px;margin-bottom:4px">Pagamentos por Dia</div>'
-        f'{_sub_hoje}',
+        'Volume × Eficácia por especialista. Quadrante superior direito = melhor performance (muitos pagamentos + alta conversão).'
+        '</div>',
         unsafe_allow_html=True,
     )
-    df_diario = (
-        df_per.groupby([df_per["data_dt"].dt.date, "atendente"])
-        .size()
-        .reset_index(name="pagamentos")
-        .rename(columns={"data_dt": "data"})
-    )
-    df_diario["eh_hoje"] = df_diario["data"].apply(lambda d: d == hoje)
-    # Converte pra string DD/MM pra exibir só dia/mês — sem horário.
-    # Tipo ordinal (não temporal) preserva ordem mas elimina a quantização
-    # de tempo do Altair (que tentava inferir 00:00, intervalos etc).
-    df_diario["data_str"] = df_diario["data"].apply(lambda d: d.strftime("%d/%m"))
-    # Lista ordenada pra Altair respeitar ordem cronológica no eixo X
-    _datas_ordem = (
-        df_diario[["data", "data_str"]]
-        .drop_duplicates()
-        .sort_values("data")["data_str"]
-        .tolist()
-    )
-    chart_dia = (
-        alt.Chart(df_diario)
-        .mark_bar(cornerRadiusEnd=2)
-        .encode(
-            x=alt.X("data_str:O", title="DATA", sort=_datas_ordem, axis=alt.Axis(labelAngle=0)),
-            y=alt.Y("pagamentos:Q", title="PAGAMENTOS (TOTAL EMPILHADO)"),
-            color=alt.Color(
-                "atendente:N",
-                scale=alt.Scale(range=_CHART_PALETTE),
-                title="Especialista",
-            ),
-            opacity=alt.condition(
-                alt.datum.eh_hoje,
-                alt.value(0.45),  # hoje: esmaecido
-                alt.value(1.0),   # outros dias: cheio
-            ),
-            tooltip=[
-                alt.Tooltip("data_str:O", title="Dia"),
-                alt.Tooltip("atendente:N", title="Especialista"),
-                alt.Tooltip("pagamentos:Q", title="Pagamentos"),
-            ],
-        )
-        .properties(height=320)
-    )
-    st.altair_chart(chart_dia, use_container_width=True)
 
-    # ── Gráfico 4: Distribuição da carteira atual (donut) ─────────────────
-    st.markdown(
-        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
-        'text-transform:uppercase;letter-spacing:1.5px;'
-        'margin-top:24px;margin-bottom:12px">Distribuição da Carteira Inadimplente (Hoje)</div>',
-        unsafe_allow_html=True,
+    # Cap dos eixos: deixa margem visual nos extremos pra texto não sair
+    _max_pag = max(agg_esp["pagamentos"].max() if not agg_esp.empty else 1, 1)
+    _max_ef = max(agg_esp["eficacia_real"].max() if not agg_esp.empty else 1, 30)
+
+    base_scatter = alt.Chart(agg_esp).encode(
+        x=alt.X(
+            "eficacia_real:Q",
+            title="EFICÁCIA REAL (%)",
+            scale=alt.Scale(domain=[0, max(_max_ef * 1.2, 100)]),
+        ),
+        y=alt.Y(
+            "pagamentos:Q",
+            title="VOLUME DE PAGAMENTOS",
+            scale=alt.Scale(domain=[0, _max_pag * 1.25]),
+        ),
     )
-    carteira = pd.DataFrame([
-        {"atendente": _norm_atendente_raw(c.get("_grupo")), "valor": float(c.get("valor") or 0)}
-        for c in clientes
-    ])
-    if not carteira.empty:
-        carteira_agg = (
-            carteira.groupby("atendente")
-            .agg(clientes=("valor", "count"), valor=("valor", "sum"))
-            .reset_index()
+    pontos = base_scatter.mark_circle(size=400, opacity=0.85).encode(
+        color=alt.Color(
+            "atendente:N",
+            scale=alt.Scale(range=_CHART_PALETTE),
+            legend=None,
+        ),
+        tooltip=[
+            alt.Tooltip("atendente:N", title="Especialista"),
+            alt.Tooltip("pagamentos:Q", title="Pagamentos"),
+            alt.Tooltip("eficacia_real:Q", title="Eficácia (%)", format=".0f"),
+            alt.Tooltip("clientes_contactados:Q", title="Contatados"),
+            alt.Tooltip("valor:Q", title="Valor recuperado", format=",.2f"),
+        ],
+    )
+    labels = base_scatter.mark_text(
+        align="left", baseline="middle", dx=14, dy=-2,
+        fontSize=12, fontWeight="bold", color="#e8eaf0",
+    ).encode(text="atendente:N")
+
+    chart_matriz = (pontos + labels).properties(height=320)
+    st.altair_chart(chart_matriz, use_container_width=True)
+
+    # ── Layout 2 colunas: Pagamentos por Dia | Distribuição da Carteira ──
+    # Time series (esquerda, sem legenda) + Donut (direita, com legenda
+    # única que serve de referência pros dois gráficos via cor compartilhada).
+    g_esq, g_dir = st.columns(2)
+
+    # ── Pagamentos por Dia ────────────────────────────────────────────────
+    with g_esq:
+        _tem_hoje_no_df = any(d == hoje for d in df_per["data_dt"].dt.date.unique())
+        _sub_hoje = (
+            '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
+            'Hoje aparece esmaecido — dia em andamento.'
+            '</div>' if _tem_hoje_no_df else '<div style="height:12px"></div>'
         )
-        chart_donut = (
-            alt.Chart(carteira_agg)
-            .mark_arc(innerRadius=70, outerRadius=130)
+        st.markdown(
+            '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+            'text-transform:uppercase;letter-spacing:1.5px;'
+            'margin-top:24px;margin-bottom:4px">Pagamentos por Dia</div>'
+            f'{_sub_hoje}',
+            unsafe_allow_html=True,
+        )
+        df_diario = (
+            df_per.groupby([df_per["data_dt"].dt.date, "atendente"])
+            .size()
+            .reset_index(name="pagamentos")
+            .rename(columns={"data_dt": "data"})
+        )
+        df_diario["eh_hoje"] = df_diario["data"].apply(lambda d: d == hoje)
+        df_diario["data_str"] = df_diario["data"].apply(lambda d: d.strftime("%d/%m"))
+        _datas_ordem = (
+            df_diario[["data", "data_str"]]
+            .drop_duplicates()
+            .sort_values("data")["data_str"]
+            .tolist()
+        )
+        chart_dia = (
+            alt.Chart(df_diario)
+            .mark_bar(cornerRadiusEnd=2)
             .encode(
-                theta=alt.Theta("clientes:Q", title="Clientes"),
+                x=alt.X("data_str:O", title="DATA", sort=_datas_ordem, axis=alt.Axis(labelAngle=0)),
+                y=alt.Y("pagamentos:Q", title="PAGAMENTOS"),
+                # Sem legenda — o donut à direita serve de referência única
+                # pra cor → atendente em toda a tela.
                 color=alt.Color(
                     "atendente:N",
                     scale=alt.Scale(range=_CHART_PALETTE),
-                    title="Especialista",
+                    legend=None,
+                ),
+                opacity=alt.condition(
+                    alt.datum.eh_hoje,
+                    alt.value(0.45),
+                    alt.value(1.0),
                 ),
                 tooltip=[
+                    alt.Tooltip("data_str:O", title="Dia"),
                     alt.Tooltip("atendente:N", title="Especialista"),
-                    alt.Tooltip("clientes:Q", title="Clientes"),
-                    alt.Tooltip("valor:Q", title="R$ em aberto", format=",.2f"),
+                    alt.Tooltip("pagamentos:Q", title="Pagamentos"),
                 ],
             )
             .properties(height=320)
         )
-        st.altair_chart(chart_donut, use_container_width=True)
-    else:
-        st.info("Sem carteira atual pra mostrar distribuição.")
+        st.altair_chart(chart_dia, use_container_width=True)
+
+    # ── Distribuição da Carteira (Donut) ──────────────────────────────────
+    with g_dir:
+        st.markdown(
+            '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+            'text-transform:uppercase;letter-spacing:1.5px;'
+            'margin-top:24px;margin-bottom:12px">Distribuição da Carteira</div>',
+            unsafe_allow_html=True,
+        )
+        carteira = pd.DataFrame([
+            {"atendente": _norm_atendente_raw(c.get("_grupo")), "valor": float(c.get("valor") or 0)}
+            for c in clientes
+        ])
+        if not carteira.empty:
+            carteira_agg = (
+                carteira.groupby("atendente")
+                .agg(clientes=("valor", "count"), valor=("valor", "sum"))
+                .reset_index()
+            )
+            chart_donut = (
+                alt.Chart(carteira_agg)
+                .mark_arc(innerRadius=60, outerRadius=110)
+                .encode(
+                    theta=alt.Theta("clientes:Q", title="Clientes"),
+                    color=alt.Color(
+                        "atendente:N",
+                        scale=alt.Scale(range=_CHART_PALETTE),
+                        title="Especialista",
+                    ),
+                    tooltip=[
+                        alt.Tooltip("atendente:N", title="Especialista"),
+                        alt.Tooltip("clientes:Q", title="Clientes"),
+                        alt.Tooltip("valor:Q", title="R$ em aberto", format=",.2f"),
+                    ],
+                )
+                .properties(height=320)
+            )
+            st.altair_chart(chart_donut, use_container_width=True)
+        else:
+            st.info("Sem carteira atual pra mostrar distribuição.")
 
     # ── Tabela ranking detalhado ──────────────────────────────────────────
     st.markdown(
