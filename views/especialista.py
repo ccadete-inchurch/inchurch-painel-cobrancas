@@ -245,15 +245,16 @@ def _render_especialista(store, clientes, role):
 
     # ── Gráfico 1: Pagamentos por especialista (bar horizontal) ───────────
     st.markdown(
-        '<div style="font-size:18px;font-weight:700;color:#e8eaf0;'
-        'margin-top:8px;margin-bottom:12px">Pagamentos por especialista</div>',
+        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+        'text-transform:uppercase;letter-spacing:1.5px;'
+        'margin-top:8px;margin-bottom:12px">Pagamentos por Especialista</div>',
         unsafe_allow_html=True,
     )
     chart_qtd = (
         alt.Chart(agg_esp)
         .mark_bar(cornerRadiusEnd=4)
         .encode(
-            x=alt.X("pagamentos:Q", title="Pagamentos (clientes únicos)"),
+            x=alt.X("pagamentos:Q", title="PAGAMENTOS (CLIENTES ÚNICOS)"),
             y=alt.Y("atendente:N", title=None, sort="-x"),
             color=alt.Color(
                 "atendente:N",
@@ -275,8 +276,9 @@ def _render_especialista(store, clientes, role):
     # que viraram pagamento). Reflete o trabalho real — maioria dos contatos
     # não converte imediatamente.
     st.markdown(
-        '<div style="font-size:18px;font-weight:700;color:#e8eaf0;'
-        'margin-top:24px;margin-bottom:4px">Eficácia do contato por especialista</div>'
+        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+        'text-transform:uppercase;letter-spacing:1.5px;'
+        'margin-top:24px;margin-bottom:4px">Eficácia do Contato por Especialista</div>'
         '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
         'Dos clientes contactados no período, % que estão regularizados hoje.'
         '</div>',
@@ -294,7 +296,7 @@ def _render_especialista(store, clientes, role):
             alt.Chart(df_ef.sort_values("eficacia_real", ascending=False))
             .mark_bar(cornerRadiusEnd=4)
             .encode(
-                x=alt.X("eficacia_real:Q", title="Eficácia REAL (%)", scale=alt.Scale(domain=[0, 100])),
+                x=alt.X("eficacia_real:Q", title="EFICÁCIA REAL (%)", scale=alt.Scale(domain=[0, 100])),
                 y=alt.Y("atendente:N", title=None, sort="-x"),
                 # Gradiente alinhado com paleta vermelho/slate:
                 # baixa eficácia (alarmante) = vermelho intenso;
@@ -324,8 +326,9 @@ def _render_especialista(store, clientes, role):
     # Hoje aparece com opacidade reduzida + anotação ("em andamento") pra
     # não distorcer comparação com dias completos.
     st.markdown(
-        '<div style="font-size:18px;font-weight:700;color:#e8eaf0;'
-        'margin-top:24px;margin-bottom:4px">Pagamentos por dia</div>'
+        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+        'text-transform:uppercase;letter-spacing:1.5px;'
+        'margin-top:24px;margin-bottom:4px">Pagamentos por Dia</div>'
         '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
         'Hoje aparece com opacidade reduzida — dia ainda em andamento, não comparável aos completos.'
         '</div>',
@@ -353,8 +356,8 @@ def _render_especialista(store, clientes, role):
         alt.Chart(df_diario)
         .mark_bar(cornerRadiusEnd=2)
         .encode(
-            x=alt.X("data_str:O", title="Data", sort=_datas_ordem, axis=alt.Axis(labelAngle=0)),
-            y=alt.Y("pagamentos:Q", title="Pagamentos (total empilhado)"),
+            x=alt.X("data_str:O", title="DATA", sort=_datas_ordem, axis=alt.Axis(labelAngle=0)),
+            y=alt.Y("pagamentos:Q", title="PAGAMENTOS (TOTAL EMPILHADO)"),
             color=alt.Color(
                 "atendente:N",
                 scale=alt.Scale(range=_CHART_PALETTE),
@@ -377,8 +380,9 @@ def _render_especialista(store, clientes, role):
 
     # ── Gráfico 4: Distribuição da carteira atual (donut) ─────────────────
     st.markdown(
-        '<div style="font-size:18px;font-weight:700;color:#e8eaf0;'
-        'margin-top:24px;margin-bottom:12px">Distribuição da carteira inadimplente (hoje)</div>',
+        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+        'text-transform:uppercase;letter-spacing:1.5px;'
+        'margin-top:24px;margin-bottom:12px">Distribuição da Carteira Inadimplente (Hoje)</div>',
         unsafe_allow_html=True,
     )
     carteira = pd.DataFrame([
@@ -415,8 +419,9 @@ def _render_especialista(store, clientes, role):
 
     # ── Tabela ranking detalhado ──────────────────────────────────────────
     st.markdown(
-        '<div style="font-size:18px;font-weight:700;color:#e8eaf0;'
-        'margin-top:32px;margin-bottom:12px">Ranking detalhado</div>',
+        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+        'text-transform:uppercase;letter-spacing:1.5px;'
+        'margin-top:32px;margin-bottom:12px">Ranking Detalhado</div>',
         unsafe_allow_html=True,
     )
     # Agregado por especialista — pagamentos, regularizações, parciais, valor,
@@ -472,12 +477,12 @@ def _render_especialista(store, clientes, role):
     _col_widths = [0.35, 2.0, 0.8, 1.2, 1.1, 0.8, 0.9, 1.3, 1.0]
     hdr_cols = st.columns(_col_widths)
     _hdr_labels = [
-        ("#", ""),
+        ("Posição", ""),
         ("Especialista", ""),
-        ("Pag.", "Pagamentos totais (clientes únicos)"),
-        ("Contato ●", "Pagamentos com contato registrado antes (msg ou ligação)"),
-        ("Espontâneo ○", "Pagamentos sem contato — atribuído por grupo"),
-        ("Reg.", "Clientes que NÃO estão mais inadimplentes hoje"),
+        ("Pagamentos", "Pagamentos totais (clientes únicos)"),
+        ("Via Contato", "Pagamentos com contato registrado antes (msg ou ligação)"),
+        ("Espontâneos", "Pagamentos sem contato — atribuído por grupo"),
+        ("Regularizações", "Clientes que NÃO estão mais inadimplentes hoje"),
         ("Eficácia", "Dos clientes contactados no período (msg/ligação), % que estão regularizados hoje. Reflete trabalho real — cobrança tem conversão típica de 10-20%."),
         ("Valor Recuperado", ""),
         ("Carteira", "Clientes inadimplentes hoje sob esse especialista"),
@@ -493,9 +498,9 @@ def _render_especialista(store, clientes, role):
 
     for _, row in ranking.iterrows():
         rcols = st.columns(_col_widths)
-        medalha = {1: "🥇", 2: "🥈", 3: "🥉"}.get(row["rank"], f"{row['rank']}")
+        # Posição numérica (1, 2, 3...) em vez das medalhas de emoji.
         rcols[0].markdown(
-            f'<div style="padding:10px 0;font-size:18px">{medalha}</div>',
+            f'<div style="padding:10px 0;font-size:16px;color:#e8eaf0;font-weight:700">{row["rank"]}</div>',
             unsafe_allow_html=True,
         )
         rcols[1].markdown(
