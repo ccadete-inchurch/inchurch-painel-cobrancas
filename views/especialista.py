@@ -296,11 +296,14 @@ def _render_especialista(store, clientes, role):
             .encode(
                 x=alt.X("eficacia_real:Q", title="Eficácia REAL (%)", scale=alt.Scale(domain=[0, 100])),
                 y=alt.Y("atendente:N", title=None, sort="-x"),
+                # Gradiente alinhado com paleta vermelho/slate:
+                # baixa eficácia (alarmante) = vermelho intenso;
+                # alta eficácia (bom) = slate claro neutro.
                 color=alt.Color(
                     "eficacia_real:Q",
                     scale=alt.Scale(
                         domain=[0, 15, 30, 100],
-                        range=["#ef4444", "#f59e0b", "#22c55e", "#22c55e"],
+                        range=["#7f1d1d", "#dc2626", "#94a3b8", "#cbd5e1"],
                     ),
                     legend=None,
                 ),
@@ -350,7 +353,7 @@ def _render_especialista(store, clientes, role):
         alt.Chart(df_diario)
         .mark_bar(cornerRadiusEnd=2)
         .encode(
-            x=alt.X("data_str:O", title="Data", sort=_datas_ordem, axis=alt.Axis(labelAngle=-45)),
+            x=alt.X("data_str:O", title="Data", sort=_datas_ordem, axis=alt.Axis(labelAngle=0)),
             y=alt.Y("pagamentos:Q", title="Pagamentos (total empilhado)"),
             color=alt.Color(
                 "atendente:N",
