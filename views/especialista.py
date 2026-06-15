@@ -191,9 +191,16 @@ def _render_especialista(store, clientes, role):
     total_reg = int(df_per[df_per["eh_regularizacao"]]["id"].astype(str).nunique()) if not df_per.empty else 0
     total_parc = int(df_per[df_per["eh_parcial"]]["id"].astype(str).nunique()) if not df_per.empty else 0
     # Inadimplentes atual: desconta os marcados como regularizados hoje pelo
-    # overlay da API (Superlógica em tempo real). Mesma lógica da tela
-    # Inadimplência — número cai durante o dia conforme pagamentos entram.
-    inadimplentes_atual = sum(1 for c in clientes if not c.get("_regularizado_hoje"))
+    # overlay da API (Superlógica em tempo real). Respeita o filtro de
+    # especialista — quando filtrado por Ana, mostra só os da Ana.
+    def _eh_grupo_match(c):
+        if filtro_esp == "Todos":
+            return True
+        return _norm_atendente_raw(c.get("_grupo")) == filtro_esp
+    inadimplentes_atual = sum(
+        1 for c in clientes
+        if not c.get("_regularizado_hoje") and _eh_grupo_match(c)
+    )
     taxa_reg = (total_reg / total_pgto * 100) if total_pgto else 0
 
     # Sub-texto contextual no 'Pagamentos' — se filtrando por 1 especialista,
@@ -439,9 +446,12 @@ def _render_especialista(store, clientes, role):
             'margin-top:24px;margin-bottom:12px">Distribuição da Carteira</div>',
             unsafe_allow_html=True,
         )
+        # Filtra: exclui regularizados de hoje (real-time) + aplica filtro
+        # de especialista quando selecionado.
         carteira = pd.DataFrame([
             {"atendente": _norm_atendente_raw(c.get("_grupo")), "valor": float(c.get("valor") or 0)}
             for c in clientes
+            if not c.get("_regularizado_hoje") and _eh_grupo_match(c)
         ])
         if not carteira.empty:
             carteira_agg = (
