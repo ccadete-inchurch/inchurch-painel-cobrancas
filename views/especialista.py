@@ -121,6 +121,51 @@ def _render_especialista(store, clientes, role):
     df_reg["data_dt"] = pd.to_datetime(df_reg["dt_pagamento"], errors="coerce")
     df_reg = df_reg.dropna(subset=["data_dt"])
 
+    # ── Overlay real-time: pagamentos via API Superlógica HOJE ─────────────
+    # BQ replica 1×/dia (lag), então pagamentos de hoje só aparecem amanhã
+    # no df_reg. O overlay (store["clientes"] com _regularizado_hoje /
+    # _pago_parcial_hoje) preenche essa lacuna. Mesma lógica da tela
+    # Pagamentos — Especialista também fica real-time.
+    if hoje >= dt_inicio and hoje <= dt_fim:
+        hoje_dt = pd.to_datetime(hoje.isoformat())
+        # Evita duplicata: ids que já estão em df_reg pra HOJE (caso BQ tenha
+        # replicado mais cedo do que esperado)
+        ids_hoje_bq = set()
+        if not df_reg.empty:
+            _mask = df_reg["data_dt"].dt.date == hoje
+            ids_hoje_bq = set(df_reg.loc[_mask, "id"].astype(str))
+
+        overlay_rows = []
+        for c in clientes:
+            eh_reg = bool(c.get("_regularizado_hoje"))
+            eh_parc = bool(c.get("_pago_parcial_hoje"))
+            if not (eh_reg or eh_parc):
+                continue
+            cid = str(c.get("id") or "")
+            if cid in ids_hoje_bq:
+                continue
+            valor_hoje = float(c.get("_valor_pago_hoje") or 0)
+            if valor_hoje <= 0:
+                continue
+            atendente = _norm_atendente_raw(c.get("_grupo"))
+            overlay_rows.append({
+                "id": cid,
+                "atendente": atendente,
+                "valor": valor_hoje,
+                "dt_pagamento": hoje.isoformat(),
+                "data_dt": hoje_dt,
+                "eh_regularizacao": eh_reg,
+                "eh_parcial": eh_parc,
+                # Sem distinção de via_contato pra overlay (não temos rastro
+                # do contato em real-time). Default conservador: via_contato.
+                "tipo_atribuicao": "via_contato",
+            })
+        if overlay_rows:
+            df_reg = pd.concat(
+                [df_reg, pd.DataFrame(overlay_rows)],
+                ignore_index=True,
+            )
+
     with fp2:
         especialistas_disp = sorted(
             set(df_reg["atendente"].unique())
@@ -302,8 +347,27 @@ def _render_especialista(store, clientes, role):
         fontSize=12, fontWeight="bold", color="#e8eaf0",
     ).encode(text="atendente:N")
 
-    chart_matriz = (pontos + labels).properties(height=320)
+    # Linhas de quadrantes — médias da equipe (vertical = eficácia, horizontal
+    # = volume). Atendente acima da linha horizontal = volume acima da média;
+    # à direita da vertical = eficácia acima da média.
+    _avg_ef = float(agg_esp["eficacia_real"].mean()) if not agg_esp.empty else 0
+    _avg_vol = float(agg_esp["pagamentos"].mean()) if not agg_esp.empty else 0
+    vline = alt.Chart(pd.DataFrame({"x": [_avg_ef]})).mark_rule(
+        color="#6b7280", strokeDash=[5, 5], opacity=0.7,
+    ).encode(x="x:Q")
+    hline = alt.Chart(pd.DataFrame({"y": [_avg_vol]})).mark_rule(
+        color="#6b7280", strokeDash=[5, 5], opacity=0.7,
+    ).encode(y="y:Q")
+
+    chart_matriz = (vline + hline + pontos + labels).properties(height=320)
     st.altair_chart(chart_matriz, use_container_width=True)
+    st.markdown(
+        f'<div style="font-size:11px;color:#6b7280;margin-top:-8px">'
+        f'Linhas pontilhadas = média da equipe (eficácia {_avg_ef:.0f}%, '
+        f'volume {_avg_vol:.0f}). Superior direito = melhor desempenho.'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
     # ── Layout 2 colunas: Pagamentos por Dia | Distribuição da Carteira ──
     # Time series (esquerda, sem legenda) + Donut (direita, com legenda
