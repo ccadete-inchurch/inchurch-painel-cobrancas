@@ -23,7 +23,9 @@ def _render_proximas(_store, _clientes):
         unsafe_allow_html=True,
     )
 
-    fp1, fp2, fp3, _ = st.columns([2, 2, 2, 2])
+    # Filtros: período, busca, situação, grupo. O grupo é populado depois
+    # que carregamos os dados (precisa do conjunto de grupos disponíveis).
+    fp1, fp2, fp3, fp4 = st.columns([2, 2, 2, 2])
     with fp1:
         periodo = st.selectbox(
             "Período",
@@ -78,6 +80,24 @@ def _render_proximas(_store, _clientes):
             "inativo":        bool(row.get("inativo",  False)),
         })
 
+    # Filtro de grupo — opções vêm dos dados carregados.
+    # 'Sem especialista' = grupo vazio/'—' (mesmo padrão das outras telas).
+    grupos_disp = sorted({
+        r["grupo"] for r in rows
+        if r["grupo"] and r["grupo"] not in ("—", "", "nan", "NaN")
+    })
+    _tem_sem_grupo = any(
+        not r["grupo"] or r["grupo"] in ("—", "", "nan", "NaN")
+        for r in rows
+    )
+    with fp4:
+        filtro_grupo = st.selectbox(
+            "Grupo",
+            ["Todos"] + grupos_disp + (["Sem especialista"] if _tem_sem_grupo else []),
+            label_visibility="collapsed",
+            key="proximas_grupo",
+        )
+
     if busca:
         b = busca.lower()
         rows = [r for r in rows if b in r["nome"].lower() or b in r["cnpj"].lower()]
@@ -85,6 +105,10 @@ def _render_proximas(_store, _clientes):
         rows = [r for r in rows if not r.get("inativo")]
     elif filtro_situacao == "Apenas inativos":
         rows = [r for r in rows if r.get("inativo")]
+    if filtro_grupo == "Sem especialista":
+        rows = [r for r in rows if not r["grupo"] or r["grupo"] in ("—", "", "nan", "NaN")]
+    elif filtro_grupo != "Todos":
+        rows = [r for r in rows if r["grupo"] == filtro_grupo]
 
     # ── Métricas ──────────────────────────────────────────────────────────────
     total_valor = sum(r["valor"] for r in rows)
