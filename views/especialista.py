@@ -253,17 +253,17 @@ def _render_especialista(store, clientes, role):
     )
     _tt_val = "Soma dos pagamentos de cobranças atrasadas no período."
 
-    # 5 cards em uma linha — fontes maiores (16/42/16) com padding extra
-    # pro card "respirar" e o número dominar a leitura.
+    # 5 cards em uma linha — fontes equilibradas (15/38/15), peso correto
+    # pro número sem dominar demais.
     c1, c2, c3, c4, c5 = st.columns(5)
     _card_fmt = lambda label, valor, sub, cor, tip="": (
         f'<div class="metric-card" '
         f'{"title=" + chr(34) + tip + chr(34) if tip else ""} '
-        f'style="cursor:{"help" if tip else "default"};padding:22px 24px">'
-        f'<div class="metric-label" style="font-size:16px;letter-spacing:1.4px">{label}</div>'
-        f'<div style="font-size:42px;font-weight:800;color:{cor};margin-top:8px;'
+        f'style="cursor:{"help" if tip else "default"};padding:20px 22px">'
+        f'<div class="metric-label" style="font-size:15px;letter-spacing:1.3px">{label}</div>'
+        f'<div style="font-size:38px;font-weight:800;color:{cor};margin-top:6px;'
         f'line-height:1.05;font-variant-numeric:tabular-nums">{valor}</div>'
-        f'<div class="metric-sub" style="font-size:16px;margin-top:10px">{sub}</div>'
+        f'<div class="metric-sub" style="font-size:15px;margin-top:8px">{sub}</div>'
         f'</div>'
     )
     with c1:
@@ -296,7 +296,10 @@ def _render_especialista(store, clientes, role):
             unsafe_allow_html=True,
         )
 
-    st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
+    # Divider entre seções — linha hairline + respiro vertical pra separar
+    # blocos visualmente (Cards → Matriz → Gráficos → Tabela).
+    _DIVIDER = '<div style="margin:36px 0 28px;border-top:1px solid rgba(75,85,99,0.5)"></div>'
+    st.markdown(_DIVIDER, unsafe_allow_html=True)
 
     if df_per.empty:
         st.info("Nenhum pagamento no período selecionado.")
@@ -374,10 +377,10 @@ def _render_especialista(store, clientes, role):
     _avg_ef = float(agg_esp["eficacia_real"].mean()) if not agg_esp.empty else 0
     _avg_vol = float(agg_esp["pagamentos"].mean()) if not agg_esp.empty else 0
     vline = alt.Chart(pd.DataFrame({"x": [_avg_ef]})).mark_rule(
-        color="#cbd5e1", strokeDash=[6, 4], opacity=0.95, strokeWidth=1.5,
+        color="#cbd5e1", strokeDash=[6, 4], opacity=0.45, strokeWidth=1.5,
     ).encode(x="x:Q")
     hline = alt.Chart(pd.DataFrame({"y": [_avg_vol]})).mark_rule(
-        color="#cbd5e1", strokeDash=[6, 4], opacity=0.95, strokeWidth=1.5,
+        color="#cbd5e1", strokeDash=[6, 4], opacity=0.45, strokeWidth=1.5,
     ).encode(y="y:Q")
 
     chart_matriz = (vline + hline + pontos + labels).properties(height=320)
@@ -389,6 +392,8 @@ def _render_especialista(store, clientes, role):
         f'</div>',
         unsafe_allow_html=True,
     )
+
+    st.markdown(_DIVIDER, unsafe_allow_html=True)
 
     # ── Layout 2 colunas: Pagamentos por Dia | Distribuição da Carteira ──
     # Time series (esquerda, sem legenda) + Donut (direita, com legenda
@@ -497,11 +502,13 @@ def _render_especialista(store, clientes, role):
         else:
             st.info("Sem carteira atual pra mostrar distribuição.")
 
+    st.markdown(_DIVIDER, unsafe_allow_html=True)
+
     # ── Tabela ranking detalhado ──────────────────────────────────────────
     st.markdown(
         '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
         'text-transform:uppercase;letter-spacing:1.5px;'
-        'margin-top:32px;margin-bottom:12px">Ranking Detalhado</div>',
+        'margin-bottom:12px">Ranking Detalhado</div>',
         unsafe_allow_html=True,
     )
     # Agregado por especialista — pagamentos, regularizações, parciais, valor,
