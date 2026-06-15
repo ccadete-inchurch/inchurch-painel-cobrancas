@@ -253,16 +253,17 @@ def _render_especialista(store, clientes, role):
     )
     _tt_val = "Soma dos pagamentos de cobranças atrasadas no período."
 
-    # 5 cards em uma linha — fontes equilibradas (15/38/15), peso correto
-    # pro número sem dominar demais.
-    c1, c2, c3, c4, c5 = st.columns(5)
+    # 5 cards — Valor Recuperado (último) tem coluna mais larga porque
+    # "R$ 130.121,84" não cabe na largura das demais sem quebrar linha.
+    c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 1.5])
     _card_fmt = lambda label, valor, sub, cor, tip="": (
         f'<div class="metric-card" '
         f'{"title=" + chr(34) + tip + chr(34) if tip else ""} '
         f'style="cursor:{"help" if tip else "default"};padding:20px 22px">'
         f'<div class="metric-label" style="font-size:15px;letter-spacing:1.3px">{label}</div>'
         f'<div style="font-size:38px;font-weight:800;color:{cor};margin-top:6px;'
-        f'line-height:1.05;font-variant-numeric:tabular-nums">{valor}</div>'
+        f'line-height:1.05;font-variant-numeric:tabular-nums;'
+        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{valor}</div>'
         f'<div class="metric-sub" style="font-size:15px;margin-top:8px">{sub}</div>'
         f'</div>'
     )
@@ -561,7 +562,10 @@ def _render_especialista(store, clientes, role):
     ranking["valor_fmt"] = ranking["valor"].apply(fmt_moeda_plain)
 
     # Headers — 9 colunas (Eficácia adicionada)
-    _col_widths = [0.35, 2.0, 0.8, 1.2, 1.1, 0.8, 0.9, 1.3, 1.0]
+    # 9 colunas: Posição (mais larga pra header completo), Especialista (nome),
+    # Pagamentos, Via Contato, Espontâneos, Regularizações, Eficácia, Valor
+    # Recuperado, Carteira.
+    _col_widths = [0.7, 2.0, 1.0, 1.0, 1.1, 1.2, 0.9, 1.4, 0.9]
     hdr_cols = st.columns(_col_widths)
     _hdr_labels = [
         ("Posição", ""),
