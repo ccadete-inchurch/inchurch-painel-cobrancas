@@ -185,15 +185,16 @@ def _render_especialista(store, clientes, role):
     )
     _tt_val = "Soma dos pagamentos de cobranças atrasadas no período."
 
-    # 5 cards em uma linha — agora com tooltips
+    # 5 cards em uma linha — mesmo padrão da tela Pagamentos.
     c1, c2, c3, c4, c5 = st.columns(5)
     _card_fmt = lambda label, valor, sub, cor, tip="": (
         f'<div class="metric-card" '
         f'{"title=" + chr(34) + tip + chr(34) if tip else ""} '
-        f'style="cursor:{"help" if tip else "default"};min-height:140px;padding:18px 16px">'
-        f'<div class="metric-label" style="font-size:11px">{label}</div>'
-        f'<div class="metric-value" style="color:{cor};font-size:30px;margin-top:4px">{valor}</div>'
-        f'<div class="metric-sub" style="font-size:12px;margin-top:6px">{sub}</div>'
+        f'style="cursor:{"help" if tip else "default"};padding:18px 20px">'
+        f'<div class="metric-label" style="font-size:14px;letter-spacing:1.3px">{label}</div>'
+        f'<div style="font-size:30px;font-weight:800;color:{cor};margin-top:6px;'
+        f'line-height:1.1;font-variant-numeric:tabular-nums">{valor}</div>'
+        f'<div class="metric-sub" style="font-size:14px;margin-top:8px">{sub}</div>'
         f'</div>'
     )
     with c1:

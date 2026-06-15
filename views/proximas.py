@@ -91,17 +91,19 @@ def _render_proximas(_store, _clientes):
     n_clientes  = len({r["cnpj"] for r in rows})
 
     m1, m2, m3, _ = st.columns(4)
-    for col, label, val, sub in [
-        (m1, "Total a Receber", fmt_moeda_plain(total_valor), f"próximos {days} dias"),
-        (m2, "Cobranças",       str(len(rows)),               "faturas futuras"),
-        (m3, "Clientes",        str(n_clientes),              "com vencimentos"),
+    # Mesmo padrão visual da tela Pagamentos: padding, font-sizes, peso.
+    for col, label, val, sub, cor in [
+        (m1, "Total a Receber", fmt_moeda_plain(total_valor), f"próximos {days} dias", "#2dd36f"),
+        (m2, "Cobranças",       str(len(rows)),               "faturas futuras",       "#e8eaf0"),
+        (m3, "Clientes",        str(n_clientes),              "com vencimentos",       "#e8eaf0"),
     ]:
         with col:
             st.markdown(
-                f'<div class="metric-card">'
-                f'<div class="metric-label">{label}</div>'
-                f'<div style="font-size:15px;font-weight:600;color:#e8eaf0;margin-top:4px">{val}</div>'
-                f'<div class="metric-sub">{sub}</div>'
+                f'<div class="metric-card" style="padding:18px 20px">'
+                f'<div class="metric-label" style="font-size:14px;letter-spacing:1.3px">{label}</div>'
+                f'<div style="font-size:30px;font-weight:800;color:{cor};margin-top:6px;'
+                f'line-height:1.1;font-variant-numeric:tabular-nums">{val}</div>'
+                f'<div class="metric-sub" style="font-size:14px;margin-top:8px">{sub}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
