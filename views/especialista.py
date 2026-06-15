@@ -406,7 +406,7 @@ def _render_especialista(store, clientes, role):
         _tem_hoje_no_df = any(d == hoje for d in df_per["data_dt"].dt.date.unique())
         _sub_hoje = (
             '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-            'Hoje aparece esmaecido — dia em andamento.'
+            'Hoje aparece com a opacidade reduzida — dia em andamento.'
             '</div>' if _tem_hoje_no_df else '<div style="height:12px"></div>'
         )
         st.markdown(
@@ -557,10 +557,12 @@ def _render_especialista(store, clientes, role):
             base_trend = alt.Chart(df_mensal_show).encode(
                 x=alt.X("mes_label:O", title="MÊS", sort=_meses_ordem, axis=alt.Axis(labelAngle=0)),
                 y=alt.Y("pagamentos:Q", title="PAGAMENTOS"),
+                # Sem legenda — o donut "Distribuição da Carteira" acima é a
+                # referência única pra mapeamento cor→especialista.
                 color=alt.Color(
                     "atendente:N",
                     scale=alt.Scale(range=_CHART_PALETTE),
-                    legend=alt.Legend(title="Especialista", orient="top"),
+                    legend=None,
                 ),
                 tooltip=[
                     alt.Tooltip("mes_label:N", title="Mês"),
