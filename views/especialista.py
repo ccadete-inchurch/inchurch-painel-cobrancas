@@ -183,21 +183,7 @@ def _render_especialista(store, clientes, role):
             key="esp_filtro",
         )
 
-    # df_per_all: período inteiro (BQ já filtrou por data). Usado pra média
-    # da equipe — não muda com filtro de especialista.
-    df_per_all = df_reg
-    # df_per: também filtrado por especialista (cards individuais)
-    df_per = df_per_all.copy()
-    if filtro_esp != "Todos":
-        df_per = df_per[df_per["atendente"] == filtro_esp]
-
-    # ── Cards agregados ───────────────────────────────────────────────────
-    total_pgto = int(df_per["id"].astype(str).nunique()) if not df_per.empty else 0
-    total_valor = float(df_per["valor"].sum()) if not df_per.empty else 0.0
-    total_reg = int(df_per[df_per["eh_regularizacao"]]["id"].astype(str).nunique()) if not df_per.empty else 0
-    total_parc = int(df_per[df_per["eh_parcial"]]["id"].astype(str).nunique()) if not df_per.empty else 0
-    # Inadimplentes atual: desconta regularizados de hoje (overlay) + respeita
-    # filtros de Especialista E Situação (ativos/inativos).
+    # Helpers de filtro pra carteira atual (clientes)
     def _eh_grupo_match(c):
         if filtro_esp == "Todos":
             return True
@@ -208,6 +194,33 @@ def _render_especialista(store, clientes, role):
         if filtro_situacao == "Apenas ativos":
             return not c.get("_inativo")
         return bool(c.get("_inativo"))
+
+    # Set de IDs ativos/inativos baseado no filtro de situação — usado pra
+    # cruzar com df_per (pagamentos histórico). Quando filtro é "Todos",
+    # mantém None e não aplica restrição. Senão, restringe aos IDs que
+    # batem com a situação atual.
+    if filtro_situacao == "Todos":
+        ids_situacao_ok = None
+    else:
+        ids_situacao_ok = {
+            str(c.get("id") or "") for c in clientes if _eh_situacao_match(c)
+        }
+
+    # df_per_all: período inteiro (BQ já filtrou por data) — média da equipe.
+    # Aplica filtro de Situação cruzando com IDs da carteira atual.
+    df_per_all = df_reg
+    if ids_situacao_ok is not None:
+        df_per_all = df_per_all[df_per_all["id"].astype(str).isin(ids_situacao_ok)]
+    # df_per: também filtrado por especialista (cards individuais)
+    df_per = df_per_all.copy()
+    if filtro_esp != "Todos":
+        df_per = df_per[df_per["atendente"] == filtro_esp]
+
+    # ── Cards agregados ───────────────────────────────────────────────────
+    total_pgto = int(df_per["id"].astype(str).nunique()) if not df_per.empty else 0
+    total_valor = float(df_per["valor"].sum()) if not df_per.empty else 0.0
+    total_reg = int(df_per[df_per["eh_regularizacao"]]["id"].astype(str).nunique()) if not df_per.empty else 0
+    total_parc = int(df_per[df_per["eh_parcial"]]["id"].astype(str).nunique()) if not df_per.empty else 0
     inadimplentes_atual = sum(
         1 for c in clientes
         if not c.get("_regularizado_hoje")
@@ -534,6 +547,9 @@ def _render_especialista(store, clientes, role):
         })
         df_trend["data_dt"] = pd.to_datetime(df_trend["dt_pagamento"], errors="coerce")
         df_trend = df_trend.dropna(subset=["data_dt"])
+        # Aplica filtro de Situação no trend também (consistência com o resto)
+        if ids_situacao_ok is not None:
+            df_trend = df_trend[df_trend["id"].astype(str).isin(ids_situacao_ok)]
         df_trend["mes_dt"] = df_trend["data_dt"].dt.to_period("M").dt.to_timestamp()
         df_trend["mes_label"] = df_trend["mes_dt"].dt.strftime("%b/%y").str.capitalize()
         df_mensal = (
