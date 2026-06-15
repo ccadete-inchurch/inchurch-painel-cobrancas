@@ -142,7 +142,10 @@ def _render_especialista(store, clientes, role):
     total_valor = float(df_per["valor"].sum()) if not df_per.empty else 0.0
     total_reg = int(df_per[df_per["eh_regularizacao"]]["id"].astype(str).nunique()) if not df_per.empty else 0
     total_parc = int(df_per[df_per["eh_parcial"]]["id"].astype(str).nunique()) if not df_per.empty else 0
-    inadimplentes_atual = len(clientes)
+    # Inadimplentes atual: desconta os marcados como regularizados hoje pelo
+    # overlay da API (Superlógica em tempo real). Mesma lógica da tela
+    # Inadimplência — número cai durante o dia conforme pagamentos entram.
+    inadimplentes_atual = sum(1 for c in clientes if not c.get("_regularizado_hoje"))
     taxa_reg = (total_reg / total_pgto * 100) if total_pgto else 0
 
     # Sub-texto contextual no 'Pagamentos' — se filtrando por 1 especialista,

@@ -362,6 +362,11 @@ def aplicar_pagamentos_hoje_no_store():
         # não pertence à tela de Pagamentos (que é de cobrança).
         if cid not in ids_inadimplencia_contexto:
             continue
+        # Skip: pagamento sem valor (R$ 0,00) — ocorre quando a API retorna
+        # registros de estorno/cancelamento ou itens com vl_total_recb=null.
+        # Esses não devem aparecer como "regularizado" na tela Pagamentos.
+        if float(info.get("valor_total") or 0) <= 0:
+            continue
         cliente_match = next((c for c in store["clientes"] if str(c.get("id")) == cid), None)
         inativo = bool(cliente_match.get("_inativo")) if cliente_match else False
         # Atendente associada ao cliente — pega do mapa carregado por
