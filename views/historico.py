@@ -184,7 +184,7 @@ def _render_historico(store):
     cards = [
         (m1, f"Pagamentos · {periodo}",     fmt_moeda_plain(v_periodo), _sub_pag,  _tooltip_pag,  "#2dd36f"),
         (m2, f"Regularizações · {periodo}", fmt_moeda_plain(v_reg),     _sub_reg,  _tooltip_reg,  "#2dd36f"),
-        (m3, "Taxa de Regularização",       f"{taxa_reg:.0f}%",         _sub_taxa, _tooltip_taxa, "#5fa3ff"),
+        (m3, "Taxa de Regularização",       f"{taxa_reg:.2f}%",         _sub_taxa, _tooltip_taxa, "#5fa3ff"),
     ]
     for col, label, valor_str, sub, tooltip, cor_valor in cards:
         with col:
