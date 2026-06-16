@@ -221,11 +221,14 @@ def fetch_pagamentos_hoje_api() -> dict:
     agg: dict[str, dict] = {}
     pagina = 1
     while True:
+        # apenasColunasPrincipais=1 omitia o id_recebimento_recb em alguns
+        # casos, forçando a usar heurística por valor pra identificar qual
+        # cobrança foi paga. Sem essa flag, IDs vêm consistentes e dá pra
+        # matchar exato. Custo do payload extra: irrelevante (~10-15 KB).
         status, body, _ = _superlogica_get("/cobranca", {
             "filtrarpor": "liquidacao",
             "dtInicio":   dt_inicio_iso,
             "dtFim":      hoje_iso,
-            "apenasColunasPrincipais": 1,
             "itensPorPagina": 200,
             "pagina": pagina,
         })
@@ -312,7 +315,10 @@ def aplicar_pagamentos_hoje_no_store():
     store = get_store()
     ids_pagos = set(pagamentos.keys())
 
-    # 1) Marcar clientes que pagaram — total vs parcial
+    # 1) Marcar clientes que pagaram — match exato por id_recebimento.
+    # Com apenasColunasPrincipais removido, a API retorna id_recebimento_recb
+    # de cada pagamento. Matchamos com c["_cobracas"][i]["id_recebimento"]
+    # diretamente — sem heurística, sem ambiguidade.
     for c in store["clientes"]:
         cid = str(c.get("id") or "")
         if cid not in ids_pagos:
@@ -322,27 +328,58 @@ def aplicar_pagamentos_hoje_no_store():
         foi_hoje = bool(info.get("foi_hoje"))
         c["_valor_pago_hoje"] = info["valor_total"]
 
-        # Decisão total vs parcial: comparação por VALOR, não por id_recebimento.
-        # API Superlógica com apenasColunasPrincipais=1 às vezes não retorna o
-        # id_recebimento_recb, e a comparação por conjuntos falhava — cliente
-        # que pagou tudo era marcado como parcial. Saldo (valor) é mais robusto.
-        saldo_vencido = sum(
-            float(cob.get("valor") or 0)
-            for cob in c.get("_cobracas", [])
-            if (cob.get("dias_atraso") or 0) > 0
-        )
-        pago = float(info["valor_total"])
-        # Tolerância de R$ 0,50 cobre diferença de juros/multa quando o que o
-        # cliente pagou inclui acréscimos vs o saldo "limpo" do BQ.
-        quitou_tudo = pago + 0.5 >= saldo_vencido
+        if c.get("_cobracas_ajustadas"):
+            continue  # já foi ajustado em invocação anterior
 
-        if quitou_tudo:
-            # Totalmente regularizado — sai da inadimplência. Mesma flag pra
-            # pago hoje E pago em dia passado.
-            c["_regularizado_hoje"] = True
-            # Marca TODAS as vencidas como pagas — pra detail page mostrar
-            # consistente (sem cobranças "fantasma" abertas)
-            if not c.get("_cobracas_ajustadas"):
+        # Set de IDs pagos vindo da API
+        paid_ids = {str(x) for x in info.get("cobrancas_ids", []) if x}
+
+        # Tentativa de match por ID — preciso e sem ambiguidade
+        matched_any = False
+        if paid_ids:
+            for cob in c.get("_cobracas", []):
+                cob_id = str(cob.get("id_recebimento") or "")
+                if cob_id and cob_id in paid_ids:
+                    # Cobrança paga — zera valor e atraso (some do filtro
+                    # de vencidas em todas as telas)
+                    cob["valor"] = 0
+                    cob["dias_atraso"] = 0
+                    matched_any = True
+
+        if matched_any:
+            # Match por ID funcionou — recalcula agregados do cliente
+            vencidas_restantes = [
+                cob for cob in c.get("_cobracas", [])
+                if (cob.get("dias_atraso") or 0) > 0
+            ]
+            c["valor"] = sum(float(cob.get("valor", 0)) for cob in vencidas_restantes)
+            c["dias_atraso"] = max(
+                (cob.get("dias_atraso") or 0 for cob in vencidas_restantes),
+                default=0,
+            )
+            c["parcelas"] = len(vencidas_restantes)
+
+            # Decisão total vs parcial baseada no que SOBROU
+            if not vencidas_restantes or c["valor"] <= 0.5:
+                c["_regularizado_hoje"] = True
+            elif foi_hoje:
+                c["_pago_parcial_hoje"] = True
+        else:
+            # FALLBACK: API não retornou IDs (caso raro com a nova config)
+            # ou IDs não casaram com _cobracas (cobrança paga não tava no
+            # snapshot do BQ). Usa lógica antiga: compara pago vs saldo.
+            saldo_vencido = sum(
+                float(cob.get("valor") or 0)
+                for cob in c.get("_cobracas", [])
+                if (cob.get("dias_atraso") or 0) > 0
+            )
+            pago = float(info["valor_total"])
+            quitou_tudo = pago + 0.5 >= saldo_vencido
+
+            if quitou_tudo:
+                c["_regularizado_hoje"] = True
+                # Marca todas vencidas como pagas (não sabe quais, mas se
+                # pago >= saldo então prática significa "pagou tudo")
                 for cob in c.get("_cobracas", []):
                     if (cob.get("dias_atraso") or 0) > 0:
                         cob["valor"] = 0
@@ -350,63 +387,17 @@ def aplicar_pagamentos_hoje_no_store():
                 c["valor"] = 0
                 c["dias_atraso"] = 0
                 c["parcelas"] = 0
-                c["_cobracas_ajustadas"] = True
-        else:
-            # PARCIAL: identifica QUAL cobrança foi paga via heurística
-            # (face value compatível com pago, tolerância 50% pra juros).
-            # Cobranças identificadas são marcadas como pagas; valor e
-            # dias_atraso do cliente são recalculados a partir do que sobrou.
-            # Resultado: card, detail e score ficam 100% coerentes.
-            if foi_hoje:
-                c["_pago_parcial_hoje"] = True
-            if not c.get("_cobracas_ajustadas"):
-                vencidas = [
-                    cob for cob in c.get("_cobracas", [])
-                    if (cob.get("dias_atraso") or 0) > 0
-                ]
-                # Ordena pela mais antiga primeiro (maior atraso = mais juros
-                # acumulado, mais provável de ter sido a paga)
-                vencidas.sort(key=lambda cob: cob.get("dias_atraso", 0), reverse=True)
+            else:
+                if foi_hoje:
+                    c["_pago_parcial_hoje"] = True
+                # Subtrai pago do valor total (saldo aproximado)
+                try:
+                    saldo_antigo = float(c.get("valor") or 0)
+                    c["valor"] = max(0.0, saldo_antigo - pago)
+                except (TypeError, ValueError):
+                    pass
 
-                pago_restante = pago
-                matched_any = False
-                for cob in vencidas:
-                    face = float(cob.get("valor", 0))
-                    if face <= 0:
-                        continue
-                    # Match: face ≤ pago_restante ≤ face × 1.5
-                    # (cobre face exato + até 50% de juros/multa)
-                    if face <= pago_restante <= face * 1.5:
-                        cob["valor"] = 0
-                        cob["dias_atraso"] = 0
-                        pago_restante -= face
-                        matched_any = True
-                        if pago_restante < 1:  # esgotou o pago
-                            break
-
-                if matched_any:
-                    # Recalcula tudo a partir das vencidas que sobraram
-                    vencidas_restantes = [
-                        cob for cob in c.get("_cobracas", [])
-                        if (cob.get("dias_atraso") or 0) > 0
-                    ]
-                    c["valor"] = sum(float(cob.get("valor", 0)) for cob in vencidas_restantes)
-                    c["dias_atraso"] = max(
-                        (cob.get("dias_atraso") or 0 for cob in vencidas_restantes),
-                        default=0,
-                    )
-                    c["parcelas"] = len(vencidas_restantes)
-                else:
-                    # Heurística falhou (valor pago não casa com nenhuma
-                    # cobrança individual). Fallback: subtrai o pago do
-                    # valor total. Saldo aproximado, score levemente off.
-                    try:
-                        saldo_antigo = float(c.get("valor") or 0)
-                        c["valor"] = max(0.0, saldo_antigo - pago)
-                    except (TypeError, ValueError):
-                        pass
-
-                c["_cobracas_ajustadas"] = True
+        c["_cobracas_ajustadas"] = True
 
     # 2) Adicionar a regularizados — pagamentos de clientes inadimplentes
     # (atuais OU em algum snapshot do mês). Em-dia normais ficam fora.
