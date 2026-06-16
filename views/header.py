@@ -37,13 +37,14 @@ def render_header():
         outros_online = [u for u in online if u["email"] != _meu_email]
         online_html = ""
         if outros_online:
-            # Verde InChurch (#7cc243) — consistente com badge e logo.
-            # Sem label "ONLINE" — pills com bola verde já comunicam (Slack-style).
+            # Mesmo estilo das pills "Atualizado" e badge do usuário (border
+            # cinza #2a2f42, padding 6px 14px, font 13px) — só o bullet fica
+            # verde como indicador de presença.
             online_html = "".join(
-                f'<span style="display:inline-flex;align-items:center;gap:6px;'
-                f'background:#1e2333;border:1px solid rgba(124,194,67,.25);border-radius:20px;'
-                f'padding:5px 12px;font-size:12px;color:#e8eaf0;font-weight:500">'
-                f'<span style="width:7px;height:7px;background:#7cc243;border-radius:50%"></span>'
+                f'<span style="display:inline-flex;align-items:center;gap:8px;'
+                f'background:#1e2333;border:1px solid #2a2f42;border-radius:20px;'
+                f'padding:6px 14px;font-size:13px;color:#e8eaf0;font-weight:500">'
+                f'<span style="width:8px;height:8px;background:#7cc243;border-radius:50%;display:inline-block"></span>'
                 f'{u["nome"].split()[0] if u["nome"] else u["email"]}'
                 f'</span>'
                 for u in outros_online[:4]  # cap pra não estourar o header
