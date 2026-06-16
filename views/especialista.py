@@ -320,8 +320,12 @@ def _render_especialista(store, clientes, role):
         return
 
     # ── Agregado por especialista — Volume + Eficácia (base pra matriz) ───
+    # Exclui "Sem especialista" da comparação: não é uma pessoa pra comparar
+    # performance, é o bucket de clientes não atribuídos. Incluir distorce
+    # a média da equipe e faz Ana/Priscila parecerem acima do que são.
+    df_per_matriz = df_per[df_per["atendente"] != "Sem especialista"]
     agg_esp = (
-        df_per.groupby("atendente")
+        df_per_matriz.groupby("atendente")
         .agg(pagamentos=("id", "nunique"), valor=("valor", "sum"))
         .reset_index()
     )
