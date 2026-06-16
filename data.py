@@ -328,12 +328,13 @@ def aplicar_pagamentos_hoje_no_store():
         foi_hoje = bool(info.get("foi_hoje"))
         c["_valor_pago_hoje"] = info["valor_total"]
 
+        if c.get("_cobracas_ajustadas"):
+            continue  # já foi ajustado em invocação anterior
+
         # Set de IDs pagos vindo da API
         paid_ids = {str(x) for x in info.get("cobrancas_ids", []) if x}
 
-        # Tentativa de match por ID — preciso e sem ambiguidade.
-        # Idempotente: se já foi marcado em invocação anterior, refazer não
-        # muda nada (cob.valor já é 0). Por isso pode rodar sempre.
+        # Tentativa de match por ID — preciso e sem ambiguidade
         matched_any = False
         if paid_ids:
             for cob in c.get("_cobracas", []):
@@ -358,23 +359,15 @@ def aplicar_pagamentos_hoje_no_store():
             )
             c["parcelas"] = len(vencidas_restantes)
 
-            # AUTORITATIVO: a presença/ausência de vencidas_restantes determina
-            # o status. Se ainda sobra vencida, FORÇA não-regularizado (limpa
-            # flag wrongly setada por outro path — ex: cron antigo, heurística
-            # comparando pago vs saldo já reduzido).
+            # Decisão total vs parcial baseada no que SOBROU
             if not vencidas_restantes or c["valor"] <= 0.5:
                 c["_regularizado_hoje"] = True
-                c.pop("_pago_parcial_hoje", None)
-            else:
-                c.pop("_regularizado_hoje", None)
-                if foi_hoje:
-                    c["_pago_parcial_hoje"] = True
-                else:
-                    c.pop("_pago_parcial_hoje", None)
-        elif not c.get("_cobracas_ajustadas"):
-            # FALLBACK (não idempotente — subtrai valor): API não retornou IDs
-            # ou IDs não casaram com _cobracas. Usa lógica antiga: compara
-            # pago vs saldo. Guard pra não subtrair múltiplas vezes.
+            elif foi_hoje:
+                c["_pago_parcial_hoje"] = True
+        else:
+            # FALLBACK: API não retornou IDs (caso raro com a nova config)
+            # ou IDs não casaram com _cobracas (cobrança paga não tava no
+            # snapshot do BQ). Usa lógica antiga: compara pago vs saldo.
             saldo_vencido = sum(
                 float(cob.get("valor") or 0)
                 for cob in c.get("_cobracas", [])
@@ -385,7 +378,8 @@ def aplicar_pagamentos_hoje_no_store():
 
             if quitou_tudo:
                 c["_regularizado_hoje"] = True
-                c.pop("_pago_parcial_hoje", None)
+                # Marca todas vencidas como pagas (não sabe quais, mas se
+                # pago >= saldo então prática significa "pagou tudo")
                 for cob in c.get("_cobracas", []):
                     if (cob.get("dias_atraso") or 0) > 0:
                         cob["valor"] = 0
@@ -394,15 +388,16 @@ def aplicar_pagamentos_hoje_no_store():
                 c["dias_atraso"] = 0
                 c["parcelas"] = 0
             else:
-                c.pop("_regularizado_hoje", None)
                 if foi_hoje:
                     c["_pago_parcial_hoje"] = True
+                # Subtrai pago do valor total (saldo aproximado)
                 try:
                     saldo_antigo = float(c.get("valor") or 0)
                     c["valor"] = max(0.0, saldo_antigo - pago)
                 except (TypeError, ValueError):
                     pass
-            c["_cobracas_ajustadas"] = True
+
+        c["_cobracas_ajustadas"] = True
 
     # 2) Adicionar a regularizados — pagamentos de clientes inadimplentes
     # (atuais OU em algum snapshot do mês). Em-dia normais ficam fora.
