@@ -1266,9 +1266,13 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataF
                 (i.cid IS NULL) AS eh_regularizacao,
                 (i.cid IS NOT NULL) AS eh_parcial
             FROM liq
+            -- Janela de 60 dias: contato precisa ter sido nos 60 dias antes
+            -- do pagamento. Sem isso, "via contato" incluía contatos de meses
+            -- atrás pra faturas diferentes — atribuição imprecisa.
             LEFT JOIN contatos c
               ON c.cid = liq.id_sacado_sac
               AND c.data_tarefa <= liq.dt_pagamento
+              AND DATE_DIFF(liq.dt_pagamento, c.data_tarefa, DAY) <= 60
               AND c.rn = 1
             LEFT JOIN grupos g
               ON g.cid = liq.id_sacado_sac
