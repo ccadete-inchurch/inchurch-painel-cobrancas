@@ -138,6 +138,7 @@ from data import (  # noqa: E402
     load_cooldowns_from_painel,
     gerar_tarefas_do_dia,
     salvar_snapshot_inadimplentes_hoje,
+    aplicar_pagamentos_hoje_no_store,
     _EMAIL_GRUPO,
 )
 
@@ -147,17 +148,28 @@ def main():
     print("Cron: gerando lote diário", flush=True)
     print("=" * 60, flush=True)
 
-    print("[1/5] Carregando clientes do BigQuery...", flush=True)
+    print("[1/6] Carregando clientes do BigQuery...", flush=True)
     clientes, n_reg = processar_dados_bigquery()
     print(f"      {len(clientes)} clientes inadimplentes, {n_reg} regularizados", flush=True)
 
-    print("[2/5] Lendo mensagens N8N (Postgres)...", flush=True)
+    print("[2/6] Lendo mensagens N8N (Postgres)...", flush=True)
     load_mensagens_from_bq()
 
-    print("[3/5] Lendo cooldowns do painel...", flush=True)
+    print("[3/6] Lendo cooldowns do painel...", flush=True)
     load_cooldowns_from_painel()
 
-    print("[4/5] Gerando lote por atendente...", flush=True)
+    print("[4/6] Aplicando overlay de pagamentos recentes (3 dias)...", flush=True)
+    # CRÍTICO: rodar ANTES de gerar_tarefas_do_dia. Cliente que pagou nos
+    # últimos 3 dias (com crédito ainda pendente) é detectado via API e
+    # marcado como _regularizado_hoje — assim não entra no lote.
+    try:
+        aplicar_pagamentos_hoje_no_store()
+        _n_reg_overlay = sum(1 for c in clientes if c.get("_regularizado_hoje"))
+        print(f"      {_n_reg_overlay} clientes marcados como regularizados via overlay", flush=True)
+    except Exception as e:
+        print(f"      [WARN] Overlay falhou: {e}", flush=True)
+
+    print("[5/6] Gerando lote por atendente...", flush=True)
     resumo = {}
     for email_atd, nome_atd in _EMAIL_GRUPO.items():
         buckets = gerar_tarefas_do_dia(clientes, email_atd) or {}
@@ -166,7 +178,7 @@ def main():
         resumo[nome_atd] = {"total": len(buckets), "ligacao": n_lig, "mensagem": n_msg}
         print(f"      {nome_atd}: {len(buckets)} tarefas (lig={n_lig}, msg={n_msg})", flush=True)
 
-    print("[5/5] Salvando snapshot diário de inadimplentes...", flush=True)
+    print("[6/6] Salvando snapshot diário de inadimplentes...", flush=True)
     salvar_snapshot_inadimplentes_hoje(clientes)
     print(f"      snapshot de {len(clientes)} clientes gravado", flush=True)
 

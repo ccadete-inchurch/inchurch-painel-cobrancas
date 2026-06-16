@@ -191,12 +191,20 @@ def _superlogica_get(path: str, params: dict | None = None) -> tuple[int, dict |
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_pagamentos_hoje_api() -> dict:
-    """Delta real-time: agrega cobranças liquidadas hoje via API Superlógica,
-    contornando o lag de 1 dia do BQ Splgc. Pagina até esgotar (limite 200/pg).
+    """Delta real-time: agrega cobranças liquidadas nos últimos 3 dias via API
+    Superlógica, contornando o lag entre liquidação e crédito (compensação
+    bancária D+1, D+2). Pagina até esgotar (limite 200/pg).
     Cache TTL 5min — atualiza automaticamente sem precisar de refresh manual.
 
-    Retorno: {cliente_id (str): {valor_total, nome, cnpj, dt_liquidacao, cobrancas_ids}}.
-    Match no store é direto: cliente_id ↔ store['clientes'][i]['id'].
+    Por que 3 dias e não 1: cliente paga sex, crédito chega ter/qua. Sem essa
+    janela, o sistema só "vê" o pagamento quando crédito entra — atendente
+    fica cobrando quem já pagou por 1-3 dias úteis.
+
+    Retorno: {cliente_id (str): {valor_total, nome, cnpj, dt_liquidacao,
+    dt_liquidacao_date (date), cobrancas_ids, foi_hoje (bool)}}.
+    `foi_hoje` indica se a liquidação foi exatamente hoje (importante pra
+    distinguir comportamento de UI — pago hoje mostra badge "PAGOU R$ HOJE";
+    pago em dia passado fica silencioso).
     """
     from datetime import date as _date, datetime as _datetime, timezone as _tz, timedelta as _td
     from helpers import hoje_lote as _hoje_lote
@@ -205,6 +213,9 @@ def fetch_pagamentos_hoje_api() -> dict:
     # cards do lote do dia anterior ainda estão em CONCLUÍDA.
     _BRT = _tz(_td(hours=-3))
     hoje = _date.fromisoformat(_hoje_lote())
+    janela_dias = 3  # cobre fim de semana + feriados curtos
+    dt_inicio = hoje - _td(days=janela_dias - 1)
+    dt_inicio_iso = dt_inicio.strftime("%Y-%m-%d")
     hoje_iso = hoje.strftime("%Y-%m-%d")
 
     agg: dict[str, dict] = {}
@@ -212,7 +223,7 @@ def fetch_pagamentos_hoje_api() -> dict:
     while True:
         status, body, _ = _superlogica_get("/cobranca", {
             "filtrarpor": "liquidacao",
-            "dtInicio":   hoje_iso,
+            "dtInicio":   dt_inicio_iso,
             "dtFim":      hoje_iso,
             "apenasColunasPrincipais": 1,
             "itensPorPagina": 200,
@@ -224,17 +235,14 @@ def fetch_pagamentos_hoje_api() -> dict:
             cid = str(item.get("id_sacado_sac") or "")
             if not cid:
                 continue
-            # Validação defensiva: a API SL não filtra estritamente por
-            # dtInicio/dtFim — retorna itens com dt_liquidacao_recb de dias
-            # passados também (provavelmente por causa de dt_recebimento_recb
-            # futura — janela de compensação bancária). Confirmamos via BQ que
-            # dia 24/05 (domingo) a API retornou itens liquidados em 20-22/05.
-            # Filtramos aqui pra só aceitar liquidações realmente de hoje.
+            # Validação defensiva: filtra dt_liq dentro da janela [hoje-2d, hoje].
+            # A API SL não filtra estritamente por dtInicio/dtFim — retorna
+            # itens fora da janela (provavelmente por dt_recebimento_recb).
             dt_liq_str = str(item.get("dt_liquidacao_recb") or "")
             try:
                 # API retorna em MM/DD/YYYY (formato US)
                 dt_liq = _datetime.strptime(dt_liq_str[:10], "%m/%d/%Y").date()
-                if dt_liq != hoje:
+                if dt_liq < dt_inicio or dt_liq > hoje:
                     continue
             except (ValueError, TypeError):
                 # Sem data parseável — descarta por segurança
@@ -244,17 +252,29 @@ def fetch_pagamentos_hoje_api() -> dict:
             except (TypeError, ValueError):
                 valor = 0.0
             id_receb = str(item.get("id_recebimento_recb") or "")
+            foi_hoje = (dt_liq == hoje)
             if cid in agg:
                 agg[cid]["valor_total"] += valor
                 if id_receb:
                     agg[cid]["cobrancas_ids"].append(id_receb)
+                # Se alguma liquidação foi hoje, marca foi_hoje=True
+                # (cliente que teve pagamento parcial passado + total hoje
+                # deve ser tratado como pagou hoje pra fins de badge)
+                if foi_hoje:
+                    agg[cid]["foi_hoje"] = True
+                # Guarda a data mais recente (pra exibir em store["regularizados"])
+                if dt_liq > agg[cid]["dt_liquidacao_date"]:
+                    agg[cid]["dt_liquidacao_date"] = dt_liq
+                    agg[cid]["dt_liquidacao"] = dt_liq_str
             else:
                 agg[cid] = {
-                    "valor_total":   valor,
-                    "nome":          str(item.get("st_nome_sac") or ""),
-                    "cnpj":          str(item.get("st_cgc_sac") or ""),
-                    "dt_liquidacao": dt_liq_str,
-                    "cobrancas_ids": [id_receb] if id_receb else [],
+                    "valor_total":        valor,
+                    "nome":               str(item.get("st_nome_sac") or ""),
+                    "cnpj":               str(item.get("st_cgc_sac") or ""),
+                    "dt_liquidacao":      dt_liq_str,
+                    "dt_liquidacao_date": dt_liq,
+                    "foi_hoje":           foi_hoje,
+                    "cobrancas_ids":      [id_receb] if id_receb else [],
                 }
         if len(body) < 200:
             break
@@ -299,6 +319,7 @@ def aplicar_pagamentos_hoje_no_store():
             continue
 
         info = pagamentos[cid]
+        foi_hoje = bool(info.get("foi_hoje"))
         c["_valor_pago_hoje"] = info["valor_total"]
 
         # Decisão total vs parcial: comparação por VALOR, não por id_recebimento.
@@ -316,15 +337,21 @@ def aplicar_pagamentos_hoje_no_store():
         quitou_tudo = pago + 0.5 >= saldo_vencido
 
         if quitou_tudo:
-            # Totalmente regularizado — sai da inadimplência
+            # Totalmente regularizado — sai da inadimplência. Mesma flag pra
+            # pago hoje E pago em dia passado (ex.: cliente pagou sexta, hoje
+            # é segunda, crédito quarta — overlay detecta via API e marca aqui).
             c["_regularizado_hoje"] = True
         else:
-            # Pagou só parte — fica na inadimplência com saldo reduzido
-            c["_pago_parcial_hoje"] = True
+            # Pagou só parte — fica na inadimplência com saldo reduzido.
+            # Badge "PAGOU R$ X HOJE" só aparece se foi liquidado HOJE.
+            # Pago parcial em dia passado: ajusta valor (atendente cobra saldo
+            # correto) mas SEM badge — atendente nem precisa saber, é só lag.
+            if foi_hoje:
+                c["_pago_parcial_hoje"] = True
             # Ajusta valor visível subtraindo o que foi pago — UMA SÓ VEZ.
-            # O overlay roda a cada render; sem o gate '_valor_ajustado_parcial',
-            # cada execução subtrai de novo e o saldo zera artificialmente
-            # após poucos reruns. BQ amanhã corrige tudo via replicação normal.
+            # O overlay roda a cada render; sem o gate, cada execução subtrai
+            # de novo e o saldo zera artificialmente após poucos reruns.
+            # Gate é o mesmo pra "pago hoje" e "pago dia passado".
             if not c.get("_valor_ajustado_parcial"):
                 try:
                     saldo_antigo = float(c.get("valor") or 0)
@@ -350,13 +377,22 @@ def aplicar_pagamentos_hoje_no_store():
         ids_inadimplencia_contexto = ids_atuais | ids_recentes
         st.session_state[_CTX_KEY] = ids_inadimplencia_contexto
 
-    hoje_br = _date.fromisoformat(_hoje_lote()).strftime("%d/%m/%Y")
-    ids_existentes_hoje = {
-        str(r.get("id") or "") for r in store["regularizados"]
-        if str(r.get("data") or "") == hoje_br
+    # Index de regularizados existentes por (cid, data) — pra evitar duplicar
+    # quando o overlay roda múltiplas vezes ou cliente paga em vários dias
+    # dentro da janela de 3 dias.
+    ids_existentes_por_data = {
+        (str(r.get("id") or ""), str(r.get("data") or ""))
+        for r in store["regularizados"]
     }
     for cid, info in pagamentos.items():
-        if cid in ids_existentes_hoje:
+        # Data real da liquidação no formato DD/MM/YYYY (não hoje_br se foi
+        # liquidado em dia passado — queremos a data factual em Pagamentos).
+        dt_liq_d = info.get("dt_liquidacao_date")
+        if dt_liq_d is None:
+            continue
+        data_liq_br = dt_liq_d.strftime("%d/%m/%Y")
+
+        if (cid, data_liq_br) in ids_existentes_por_data:
             continue
         # Skip: cliente nunca foi inadimplente no mês — pagamento normal,
         # não pertence à tela de Pagamentos (que é de cobrança).
@@ -374,7 +410,7 @@ def aplicar_pagamentos_hoje_no_store():
         atendente = st.session_state.get("_painel_atendente_atual", {}).get(cid, "")
         store["regularizados"].append({
             "id":        cid,
-            "data":      hoje_br,
+            "data":      data_liq_br,
             "nome":      info["nome"],
             "cnpj":      info["cnpj"],
             "valor":     info["valor_total"],
@@ -2097,8 +2133,15 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
         except Exception:
             pass  # Em caso de erro, segue com cache atual
 
-    # Geração inicial: 4 fases (30 lig + 50 msg, ≤10/15 inativos, overflow B)
-    grupo_clientes = [c for c in clientes if c.get("_grupo") == atendente]
+    # Geração inicial: 4 fases (30 lig + 50 msg, ≤10/15 inativos, overflow B).
+    # Exclui clientes já regularizados (pago via API hoje OU últimos 3 dias).
+    # Sem essa filtragem, cliente que pagou sex aparecia no lote da seg porque
+    # BQ ainda não tinha replicado a liquidação (compensação D+1/D+2).
+    grupo_clientes = [
+        c for c in clientes
+        if c.get("_grupo") == atendente
+        and not c.get("_regularizado_hoje")
+    ]
     pares = selecionar_lote_com_quotas(grupo_clientes, lote_clientes=[])
     buckets = {cid: bucket for cid, bucket in pares}
 
