@@ -135,12 +135,11 @@ def _render_historico(store):
     if not df.empty:
         def _eh_reg(r):
             _rid = str(r.get("id") or "")
-            _rdt = str(r.get("data") or "")
             # 2 fontes simples:
-            # 1) Hoje via overlay (real-time)
+            # 1) Overlay marcou regularizado (janela 3d — não amarra a hoje_str)
             # 2) Cliente fora da carteira atual (sem saldo)
             return (
-                (_rid in ids_reg_hoje_all and _rdt == hoje_str)
+                _rid in ids_reg_hoje_all
                 or _rid not in _clientes_lookup
             )
         df_reg_periodo = df[df.apply(_eh_reg, axis=1)]
@@ -250,7 +249,10 @@ def _render_historico(store):
         _rid = str(row.get("id") or "")
         _rdt = str(row.get("data") or "")
         _cli_atual = _clientes_lookup.get(_rid)
-        eh_reg_hoje = _rid in ids_reg_hoje and _rdt == hoje_str
+        # Overlay tem janela de 3 dias — se cliente foi marcado como
+        # _regularizado_hoje, a liquidação que disparou isso pode ser de
+        # ontem ou anteontem (creditada hoje). Não exigir _rdt==hoje_str.
+        eh_reg_hoje = _rid in ids_reg_hoje
         eh_reg_sem_saldo = _cli_atual is None  # saiu da carteira → regularizou
         eh_regularizado = eh_reg_hoje or eh_reg_sem_saldo
         reg_badge = (
