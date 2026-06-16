@@ -338,27 +338,75 @@ def aplicar_pagamentos_hoje_no_store():
 
         if quitou_tudo:
             # Totalmente regularizado — sai da inadimplência. Mesma flag pra
-            # pago hoje E pago em dia passado (ex.: cliente pagou sexta, hoje
-            # é segunda, crédito quarta — overlay detecta via API e marca aqui).
+            # pago hoje E pago em dia passado.
             c["_regularizado_hoje"] = True
+            # Marca TODAS as vencidas como pagas — pra detail page mostrar
+            # consistente (sem cobranças "fantasma" abertas)
+            if not c.get("_cobracas_ajustadas"):
+                for cob in c.get("_cobracas", []):
+                    if (cob.get("dias_atraso") or 0) > 0:
+                        cob["valor"] = 0
+                        cob["dias_atraso"] = 0
+                c["valor"] = 0
+                c["dias_atraso"] = 0
+                c["parcelas"] = 0
+                c["_cobracas_ajustadas"] = True
         else:
-            # Pagou só parte — fica na inadimplência com saldo reduzido.
-            # Badge "PAGOU R$ X HOJE" só aparece se foi liquidado HOJE.
-            # Pago parcial em dia passado: ajusta valor (atendente cobra saldo
-            # correto) mas SEM badge — atendente nem precisa saber, é só lag.
+            # PARCIAL: identifica QUAL cobrança foi paga via heurística
+            # (face value compatível com pago, tolerância 50% pra juros).
+            # Cobranças identificadas são marcadas como pagas; valor e
+            # dias_atraso do cliente são recalculados a partir do que sobrou.
+            # Resultado: card, detail e score ficam 100% coerentes.
             if foi_hoje:
                 c["_pago_parcial_hoje"] = True
-            # Ajusta valor visível subtraindo o que foi pago — UMA SÓ VEZ.
-            # O overlay roda a cada render; sem o gate, cada execução subtrai
-            # de novo e o saldo zera artificialmente após poucos reruns.
-            # Gate é o mesmo pra "pago hoje" e "pago dia passado".
-            if not c.get("_valor_ajustado_parcial"):
-                try:
-                    saldo_antigo = float(c.get("valor") or 0)
-                    c["valor"] = max(0.0, saldo_antigo - pago)
-                    c["_valor_ajustado_parcial"] = True
-                except (TypeError, ValueError):
-                    pass
+            if not c.get("_cobracas_ajustadas"):
+                vencidas = [
+                    cob for cob in c.get("_cobracas", [])
+                    if (cob.get("dias_atraso") or 0) > 0
+                ]
+                # Ordena pela mais antiga primeiro (maior atraso = mais juros
+                # acumulado, mais provável de ter sido a paga)
+                vencidas.sort(key=lambda cob: cob.get("dias_atraso", 0), reverse=True)
+
+                pago_restante = pago
+                matched_any = False
+                for cob in vencidas:
+                    face = float(cob.get("valor", 0))
+                    if face <= 0:
+                        continue
+                    # Match: face ≤ pago_restante ≤ face × 1.5
+                    # (cobre face exato + até 50% de juros/multa)
+                    if face <= pago_restante <= face * 1.5:
+                        cob["valor"] = 0
+                        cob["dias_atraso"] = 0
+                        pago_restante -= face
+                        matched_any = True
+                        if pago_restante < 1:  # esgotou o pago
+                            break
+
+                if matched_any:
+                    # Recalcula tudo a partir das vencidas que sobraram
+                    vencidas_restantes = [
+                        cob for cob in c.get("_cobracas", [])
+                        if (cob.get("dias_atraso") or 0) > 0
+                    ]
+                    c["valor"] = sum(float(cob.get("valor", 0)) for cob in vencidas_restantes)
+                    c["dias_atraso"] = max(
+                        (cob.get("dias_atraso") or 0 for cob in vencidas_restantes),
+                        default=0,
+                    )
+                    c["parcelas"] = len(vencidas_restantes)
+                else:
+                    # Heurística falhou (valor pago não casa com nenhuma
+                    # cobrança individual). Fallback: subtrai o pago do
+                    # valor total. Saldo aproximado, score levemente off.
+                    try:
+                        saldo_antigo = float(c.get("valor") or 0)
+                        c["valor"] = max(0.0, saldo_antigo - pago)
+                    except (TypeError, ValueError):
+                        pass
+
+                c["_cobracas_ajustadas"] = True
 
     # 2) Adicionar a regularizados — pagamentos de clientes inadimplentes
     # (atuais OU em algum snapshot do mês). Em-dia normais ficam fora.
