@@ -7,7 +7,7 @@ from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, di
 
 
 @st.dialog("Editar Registro", width="large")
-def dialog_editar(eid):
+def dialog_editar(eid, from_fixados: bool = False):
     store   = get_store()
     cliente = next((c for c in store["clientes"] if c["id"] == eid), None)
     if not cliente:
@@ -250,11 +250,15 @@ def dialog_editar(eid):
         d = parse_date_br(h["retorno"])
         eh_fixado = bool(d and d <= hoje)
 
-    # Monta lista de botões dinamicamente baseado em role + se é fixado.
+    # Monta lista de botões dinamicamente baseado em role + se é fixado +
+    # origem da chamada. "Concluir fixado" só aparece quando o dialog foi
+    # aberto da seção Clientes Fixados (dashboard) — em outros lugares
+    # (Atividades, Cliente, tabela Inadimplência) o botão não faz sentido
+    # operacional porque a atendente não tá no contexto de gestão de fixados.
     botoes = []
     if not somente_leitura:
         botoes.append("salvar")
-    if eh_fixado:
+    if eh_fixado and from_fixados:
         botoes.append("concluir")
     botoes.append("cancelar")
 

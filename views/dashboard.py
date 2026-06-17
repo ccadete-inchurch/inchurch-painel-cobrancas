@@ -544,7 +544,7 @@ def _render_dashboard(store, clientes, role):
                         unsafe_allow_html=True,
                     )
                     if st.button(icone_btn, key=f"pend_atend_{i}_{c['id']}", width="stretch", help=help_btn):
-                        dialog_editar(c["id"])
+                        dialog_editar(c["id"], from_fixados=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
             # Paginação minimalista: só setas + indicador 'X / Y'.
