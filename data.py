@@ -242,13 +242,21 @@ def fetch_pagamentos_hoje_api() -> dict:
             # A API SL não filtra estritamente por dtInicio/dtFim — retorna
             # itens fora da janela (provavelmente por dt_recebimento_recb).
             dt_liq_str = str(item.get("dt_liquidacao_recb") or "")
-            try:
-                # API retorna em MM/DD/YYYY (formato US)
-                dt_liq = _datetime.strptime(dt_liq_str[:10], "%m/%d/%Y").date()
-                if dt_liq < dt_inicio or dt_liq > hoje:
+            dt_liq = None
+            # Tenta múltiplos formatos — SL às vezes retorna US (MM/DD/YYYY),
+            # outras vezes BR (DD/MM/YYYY) ou ISO (YYYY-MM-DD). Cron de
+            # 2026-06-17 marcou 0 clientes — provável que o formato mudou
+            # e o parse %m/%d/%Y antigo rejeitava silenciosamente tudo.
+            # Ordem: ISO (sempre não-ambíguo) → BR (SL é brasileiro) → US
+            # (fallback histórico). Datas tipo "05/06/2026" são ambíguas mas
+            # BR é a hipótese mais provável.
+            for _fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+                try:
+                    dt_liq = _datetime.strptime(dt_liq_str[:10], _fmt).date()
+                    break
+                except (ValueError, TypeError):
                     continue
-            except (ValueError, TypeError):
-                # Sem data parseável — descarta por segurança
+            if dt_liq is None or dt_liq < dt_inicio or dt_liq > hoje:
                 continue
             try:
                 valor = float(item.get("vl_total_recb") or 0)
