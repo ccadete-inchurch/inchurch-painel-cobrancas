@@ -6,7 +6,7 @@ from auth import get_store, current_nome, current_email, current_role
 from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html
 
 
-@st.dialog("✏ Editar Registro", width="large")
+@st.dialog("Editar Registro", width="large")
 def dialog_editar(eid):
     store   = get_store()
     cliente = next((c for c in store["clientes"] if c["id"] == eid), None)
@@ -176,11 +176,27 @@ def dialog_editar(eid):
                     st.toast(f"✅ {cliente['nome']} salvo!", icon="✅")
                     st.rerun()
             elif acao == "concluir":
-                if st.button("✅ Concluir fixado", width="stretch", type="primary",
+                # CSS local pro botão primário do dialog — verde InChurch mais
+                # escuro do que o tom padrão (#7cc243) pra ficar legível com
+                # texto branco e diferenciar do tema neutro de Salvar.
+                st.markdown("""
+                <style>
+                div[role="dialog"] button[kind="primary"]{
+                    background-color:#4a8a2c !important;
+                    border:1px solid #4a8a2c !important;
+                    color:#ffffff !important;
+                }
+                div[role="dialog"] button[kind="primary"]:hover{
+                    background-color:#3d731f !important;
+                    border-color:#3d731f !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+                if st.button("Concluir fixado", width="stretch", type="primary",
                              help="Apaga promessa/retorno; status 'promise' → 'contacted'"):
                     from data import concluir_pendencia
                     concluir_pendencia(eid)
-                    st.toast(f"✅ {cliente['nome']} concluído", icon="✅")
+                    st.toast(f"{cliente['nome']} concluído", icon="✅")
                     st.rerun()
             elif acao == "cancelar":
                 rotulo = "✕ Fechar" if somente_leitura else "✕ Cancelar"
