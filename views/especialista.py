@@ -217,10 +217,27 @@ def _render_especialista(store, clientes, role):
         df_per = df_per[df_per["atendente"] == filtro_esp]
 
     # ── Cards agregados ───────────────────────────────────────────────────
-    total_pgto = int(df_per["id"].astype(str).nunique()) if not df_per.empty else 0
+    # Cliente é classificado UMA vez só pra evitar double-count quando BQ
+    # snapshot (defasado) e overlay (real-time) discordam. Cenário típico:
+    # cliente paga 15/06, crédito chega 17/06 — BQ snapshot ainda tem ele
+    # → marca como PARC; overlay vê pagamento na API → marca como REG.
+    # Antes: cliente aparecia em REG E PARC, soma divergia do total.
+    # Agora: prioriza REG > PARC (REG é estado final, PARC é intermediário).
     total_valor = float(df_per["valor"].sum()) if not df_per.empty else 0.0
-    total_reg = int(df_per[df_per["eh_regularizacao"]]["id"].astype(str).nunique()) if not df_per.empty else 0
-    total_parc = int(df_per[df_per["eh_parcial"]]["id"].astype(str).nunique()) if not df_per.empty else 0
+    if not df_per.empty:
+        df_per_str = df_per.copy()
+        df_per_str["id"] = df_per_str["id"].astype(str)
+        df_cli = df_per_str.groupby("id").agg(
+            tem_reg=("eh_regularizacao", "any"),
+            tem_parc=("eh_parcial", "any"),
+        )
+        total_pgto = len(df_cli)
+        total_reg = int(df_cli["tem_reg"].sum())
+        total_parc = int((df_cli["tem_parc"] & ~df_cli["tem_reg"]).sum())
+    else:
+        total_pgto = 0
+        total_reg = 0
+        total_parc = 0
     inadimplentes_atual = sum(
         1 for c in clientes
         if not c.get("_regularizado_hoje")
