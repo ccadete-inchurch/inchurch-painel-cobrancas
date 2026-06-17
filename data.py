@@ -327,6 +327,11 @@ def aplicar_pagamentos_hoje_no_store():
         info = pagamentos[cid]
         foi_hoje = bool(info.get("foi_hoje"))
         c["_valor_pago_hoje"] = info["valor_total"]
+        # Data da liquidação pro badge "PAGOU R$ X EM dd/mm" quando não foi hoje
+        _dt_liq_d = info.get("dt_liquidacao_date")
+        if _dt_liq_d:
+            c["_dt_pagamento_recente"] = _dt_liq_d.strftime("%d/%m")
+        c["_pagamento_foi_hoje"] = foi_hoje
 
         if c.get("_cobracas_ajustadas"):
             continue  # já foi ajustado em invocação anterior
@@ -359,10 +364,12 @@ def aplicar_pagamentos_hoje_no_store():
             )
             c["parcelas"] = len(vencidas_restantes)
 
-            # Decisão total vs parcial baseada no que SOBROU
+            # Decisão total vs parcial baseada no que SOBROU.
+            # Parcial é marcado independente de foi_hoje — o badge usa
+            # _pagamento_foi_hoje pra decidir entre "HOJE" e "EM dd/mm".
             if not vencidas_restantes or c["valor"] <= 0.5:
                 c["_regularizado_hoje"] = True
-            elif foi_hoje:
+            else:
                 c["_pago_parcial_hoje"] = True
         else:
             # FALLBACK: API não retornou IDs (caso raro com a nova config)
@@ -388,8 +395,7 @@ def aplicar_pagamentos_hoje_no_store():
                 c["dias_atraso"] = 0
                 c["parcelas"] = 0
             else:
-                if foi_hoje:
-                    c["_pago_parcial_hoje"] = True
+                c["_pago_parcial_hoje"] = True
                 # Subtrai pago do valor total (saldo aproximado)
                 try:
                     saldo_antigo = float(c.get("valor") or 0)

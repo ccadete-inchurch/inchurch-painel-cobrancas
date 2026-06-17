@@ -217,11 +217,17 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     # com padding maior e borda sólida). É info crítica pra atendente —
     # cliente está pagando, prioridade alta.
     _vl_parcial = float(c.get("_valor_pago_hoje") or 0)
+    # Janela de 3 dias no overlay → pagamento pode ser hoje OU ontem/anteontem
+    # (creditado hoje). Label reflete a data real.
+    _quando = (
+        "HOJE" if c.get("_pagamento_foi_hoje")
+        else f"EM {c.get('_dt_pagamento_recente', '')}".rstrip()
+    )
     parcial_badge = (
         f'<span style="background:rgba(124,194,67,.18);color:#7cc243;font-size:10px;'
         f'font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;'
         f'border:1px solid rgba(124,194,67,.35);'
-        f'vertical-align:middle">PAGOU {fmt_moeda_plain(_vl_parcial)} HOJE</span>'
+        f'vertical-align:middle">PAGOU {fmt_moeda_plain(_vl_parcial)} {_quando}</span>'
     ) if c.get("_pago_parcial_hoje") and not _regularizado and _vl_parcial > 0 else ""
     motivo_txt, motivo_style = _motivo(bucket, acoes, c)
     _motivo_css = {
