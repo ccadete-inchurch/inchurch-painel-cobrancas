@@ -6,7 +6,7 @@ from auth import get_store, current_nome, current_email, current_role
 from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html
 
 
-@st.dialog("Editar Registro")
+@st.dialog("Editar Registro", width="large")
 def dialog_editar(eid):
     store   = get_store()
     cliente = next((c for c in store["clientes"] if c["id"] == eid), None)
@@ -14,11 +14,17 @@ def dialog_editar(eid):
         st.error("Cliente não encontrado.")
         return
 
-    # CSS local do dialog — injetado UMA vez no topo pra não afetar
-    # alinhamento dos botões (style block dentro de column criava elemento
-    # extra que empurrava o botão pra baixo).
+    # CSS local do dialog:
+    # - Limita o width a 760px (entre 'small' apertado e 'large' enorme em
+    #   notebooks). 'large' nativo do streamlit ocupa quase tudo da tela.
+    # - Estiliza o botão primário (Concluir fixado) verde escuro+branco.
+    # Injetado UMA vez no topo pra não afetar alinhamento dos botões.
     st.markdown("""
     <style>
+    div[role="dialog"]{
+        max-width:760px !important;
+        width:90vw !important;
+    }
     div[role="dialog"] button[kind="primary"]{
         background-color:#4a8a2c !important;
         border:1px solid #4a8a2c !important;
