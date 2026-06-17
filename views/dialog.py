@@ -6,13 +6,30 @@ from auth import get_store, current_nome, current_email, current_role
 from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html
 
 
-@st.dialog("Editar Registro", width="large")
+@st.dialog("Editar Registro")
 def dialog_editar(eid):
     store   = get_store()
     cliente = next((c for c in store["clientes"] if c["id"] == eid), None)
     if not cliente:
         st.error("Cliente não encontrado.")
         return
+
+    # CSS local do dialog — injetado UMA vez no topo pra não afetar
+    # alinhamento dos botões (style block dentro de column criava elemento
+    # extra que empurrava o botão pra baixo).
+    st.markdown("""
+    <style>
+    div[role="dialog"] button[kind="primary"]{
+        background-color:#4a8a2c !important;
+        border:1px solid #4a8a2c !important;
+        color:#ffffff !important;
+    }
+    div[role="dialog"] button[kind="primary"]:hover{
+        background-color:#3d731f !important;
+        border-color:#3d731f !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     # Admin/gestor vê o registro como está salvo no histórico das atendentes
     # (modo read-only). Atendente vê o próprio histórico (modo edição).
@@ -70,18 +87,18 @@ def dialog_editar(eid):
 
     def _render_cobranca_row(cob):
         return (
-            f'<div style="background:#1e2333;border:1px solid #2a2f42;border-radius:8px;'
-            f'padding:12px 16px;margin-bottom:6px;display:flex;align-items:center;'
+            f'<div style="background:#1e2333;border:1px solid #2a2f42;border-radius:10px;'
+            f'padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;'
             f'justify-content:space-between;gap:16px">'
             f'<div style="display:flex;flex-direction:column;min-width:0">'
-            f'<div style="font-size:17px;font-weight:700;color:#e8eaf0;'
+            f'<div style="font-size:18px;font-weight:700;color:#e8eaf0;'
             f'font-variant-numeric:tabular-nums">{fmt_moeda_plain(cob["valor"])}</div>'
-            f'<div style="font-size:12px;color:#8b94a5;margin-top:2px">Vence {cob["vencimento"]}</div>'
+            f'<div style="font-size:13px;color:#8b94a5;margin-top:3px">Vence {cob["vencimento"]}</div>'
             f'</div>'
-            f'<div style="display:flex;align-items:center;gap:14px;flex-shrink:0">'
-            f'<span style="font-size:14px;color:#e8eaf0;font-variant-numeric:tabular-nums">'
+            f'<div style="display:flex;align-items:center;gap:16px;flex-shrink:0">'
+            f'<span style="font-size:16px;color:#e8eaf0;font-variant-numeric:tabular-nums">'
             f'<span style="color:#8b94a5">Atraso:</span> <strong>{cob["dias_atraso"]}d</strong></span>'
-            f'<span style="background:#ff5555;color:#fff;padding:4px 8px;'
+            f'<span style="background:#ff5555;color:#fff;padding:4px 9px;'
             f'border-radius:4px;font-size:12px;font-weight:600">INADIMPLENTE</span>'
             f'</div>'
             f'</div>'
@@ -180,22 +197,6 @@ def dialog_editar(eid):
                     st.toast(f"✅ {cliente['nome']} salvo!", icon="✅")
                     st.rerun()
             elif acao == "concluir":
-                # CSS local pro botão primário do dialog — verde InChurch mais
-                # escuro do que o tom padrão (#7cc243) pra ficar legível com
-                # texto branco e diferenciar do tema neutro de Salvar.
-                st.markdown("""
-                <style>
-                div[role="dialog"] button[kind="primary"]{
-                    background-color:#4a8a2c !important;
-                    border:1px solid #4a8a2c !important;
-                    color:#ffffff !important;
-                }
-                div[role="dialog"] button[kind="primary"]:hover{
-                    background-color:#3d731f !important;
-                    border-color:#3d731f !important;
-                }
-                </style>
-                """, unsafe_allow_html=True)
                 if st.button("Concluir fixado", width="stretch", type="primary",
                              help="Apaga promessa/retorno; status 'promise' → 'contacted'"):
                     from data import concluir_pendencia
