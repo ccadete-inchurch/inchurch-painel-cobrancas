@@ -834,6 +834,10 @@ def _render_atividades(store, clientes, role):
                 if acoes_hj.get("lig"):
                     return "tentar_novamente"
             if bucket == "ligacao":
+                # Cooldown 7d ativo (3 falhas anteriores, ativou após cron) —
+                # mesmo tratamento do acordo: vai pra TENTAR NOVAMENTE.
+                if streak_lig is not None and streak_lig > 0:
+                    return "tentar_novamente"
                 return "ligacao"
             if bucket != "ligacao":
                 if acoes_hj.get("msg"):
