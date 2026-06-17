@@ -82,9 +82,8 @@ def dialog_editar(eid):
             f'<div style="display:flex;align-items:center;gap:10px;flex-shrink:0">'
             f'<span style="color:#ef4444;font-weight:700;font-size:14px;'
             f'font-variant-numeric:tabular-nums">{cob["dias_atraso"]}d</span>'
-            f'<span style="background:rgba(239,68,68,.15);color:#ef4444;'
-            f'border:1px solid rgba(239,68,68,.35);padding:3px 10px;border-radius:4px;'
-            f'font-size:10px;font-weight:700;letter-spacing:0.5px">INADIMPLENTE</span>'
+            f'<span style="background:#ff5555;color:#fff;padding:4px 8px;'
+            f'border-radius:4px;font-size:12px;font-weight:600">INADIMPLENTE</span>'
             f'</div>'
             f'</div>'
         )
