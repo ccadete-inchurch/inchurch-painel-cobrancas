@@ -90,13 +90,11 @@ def dialog_editar(eid):
     somente_leitura = role in ("admin", "gestor")
     h = get_hist_unificado(eid) if somente_leitura else get_hist(eid)
     if somente_leitura:
-        # Custom em vez de st.info pra ter padding menor (st.info ocupa muito
-        # espaço vertical com pouca info útil).
+        # Texto puro em azul — sem retângulo de fundo (econômico em espaço
+        # vertical e visualmente discreto). Só aparece pra admin/gestor.
         st.markdown(
-            '<div style="background:rgba(95,163,255,.08);'
-            'border:1px solid rgba(95,163,255,.25);color:#5fa3ff;'
-            'padding:6px 12px;border-radius:6px;font-size:13px;'
-            'margin-bottom:8px;font-weight:500">👁 Modo visualização</div>',
+            '<div style="color:#5fa3ff;font-size:13px;font-weight:500;'
+            'margin:0 0 10px 0">👁 Modo visualização</div>',
             unsafe_allow_html=True,
         )
 
