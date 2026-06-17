@@ -54,6 +54,27 @@ def dialog_editar(eid):
         background:transparent !important;
         border:none !important;
     }
+    /* Cascata de altura: stHorizontalBlock → stColumn → stVerticalBlock →
+       stMarkdown → .dialog-info. Cada nível precisa estar configurado pra
+       repassar a altura, senão o dialog-info colapsa pro conteúdo
+       intrínseco (resultado: 4 cards com alturas diferentes). */
+    div[role="dialog"] [data-testid="stHorizontalBlock"]{
+        align-items:stretch !important;
+    }
+    div[role="dialog"] [data-testid="stColumn"]{
+        display:flex !important;
+        flex-direction:column !important;
+    }
+    div[role="dialog"] [data-testid="stColumn"] > [data-testid="stVerticalBlock"]{
+        flex:1 1 auto !important;
+        height:100% !important;
+    }
+    div[role="dialog"] [data-testid="stColumn"] [data-testid="stMarkdown"]{
+        height:100% !important;
+    }
+    div[role="dialog"] [data-testid="stColumn"] [data-testid="stMarkdown"] > div{
+        height:100% !important;
+    }
     div[role="dialog"] .dialog-info{
         height:100% !important;
         display:flex !important;
