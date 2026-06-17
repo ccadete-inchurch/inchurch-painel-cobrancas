@@ -2995,14 +2995,18 @@ def calcular_pendencias(clientes):
 
 
 def concluir_pendencia(cid: str):
-    """Marca compromisso (promise/retorno) como concluído removendo só as
-    datas. Status, lastContact e notes ficam intactos — porque o atendente
-    não conversou com o cliente, só fechou um compromisso vencido. Atualizar
-    lastContact aqui mascararia como se tivesse rolado contato real.
+    """Marca compromisso (promise/retorno) como concluído.
 
-    Cliente sai da lista de Fixados porque o trigger (data expirada) sumiu;
-    se o status era 'promise', continua como 'promise' até atendente editar
-    explicitamente — refletindo o que foi acordado, não o que aconteceu.
+    Comportamento:
+      - Apaga promiseDate e retorno (cliente sai da lista de Fixados)
+      - Se status era 'promise', rebaixa pra 'contacted' (promessa perdeu
+        a data → não faz sentido manter como promise; cliente foi contactado
+        no passado, então 'contacted' é o estado natural). Outros statuses
+        (negotiating, etc.) ficam intactos.
+      - lastContact NÃO é atualizado — atendente clicar botão não significa
+        que falou com cliente. Update de lastContact vem só de mensagem ou
+        ligação real (na tela Atividades).
+      - Notes intactas.
 
     Regra de quem modifica o quê:
       - Atendente (Ana/Priscila): modifica só o próprio historico
@@ -3028,6 +3032,8 @@ def concluir_pendencia(cid: str):
         h = dict(historicos[uid][cid])
         h.pop("promiseDate", None)
         h.pop("retorno", None)
+        if h.get("status") == "promise":
+            h["status"] = "contacted"
         store["historico"][uid][cid] = h
         try:
             save_hist_to_bq(uid, cid, h)

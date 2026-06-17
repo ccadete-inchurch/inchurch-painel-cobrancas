@@ -580,7 +580,7 @@ def _render_dashboard(store, clientes, role):
     with tb:
         # CSV exporta a base FILTRADA atual (consistente com o que aparece na tela)
         if not df.empty:
-            sl   = {"pending": "Sem contato", "contacted": "Contactado", "promise": "Prometeu pagar", "negotiating": "Negociando", "paid": "Regularizado"}
+            sl   = {"pending": "Sem contato", "contacted": "Contactado", "promise": "Prometeu pagar", "negotiating": "Negociando"}
             rows = []
             for _, c in df.iterrows():
                 rows.append([

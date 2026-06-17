@@ -40,14 +40,12 @@ STATUS_LABELS = {
     "contacted":   "Contactado",
     "promise":     "Prometeu pagar",
     "negotiating": "Negociando",
-    "paid":        "Regularizado",
 }
 STATUS_COLORS = {
     "pending":     "#ef4444",
     "contacted":   "#f59e0b",
     "promise":     "#f97316",
     "negotiating": "#5fa3ff",
-    "paid":        "#22c55e",
 }
 # Chave de exibição (com emoji) → chave interna  (usado no dialog de edição)
 STATUS_OPTS = {

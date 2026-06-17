@@ -165,14 +165,12 @@ def status_html(s):
         "contacted":   "badge-contacted",
         "promise":     "badge-promise",
         "negotiating": "badge-negotiating",
-        "paid":        "badge-paid",
     }
     lbl = {
         "pending":     "Sem contato",
         "contacted":   "Contactado",
         "promise":     "Prometeu pagar",
         "negotiating": "Negociando",
-        "paid":        "Regularizado",
     }
     return f'<span class="badge {cls.get(s, "badge-pending")}">{lbl.get(s, "Sem contato")}</span>'
 
@@ -233,7 +231,7 @@ def get_hist_unificado(cid: str) -> dict:
     atendente_uids = set(nome_por_uid.keys())
     melhor = {}
     origens = []
-    ordem = {"promise": 3, "negotiating": 2, "contacted": 1, "pending": 0, "paid": -1}
+    ordem = {"promise": 3, "negotiating": 2, "contacted": 1, "pending": 0}
     for uid, ch in historicos.items():
         if uid not in atendente_uids:
             continue
@@ -281,7 +279,7 @@ def _any_atendente_engaged(cid, except_uid=None) -> bool:
 
 def get_effective_status(cid) -> str:
     """Status visível na tela. Regra:
-    - Promise/negotiating/paid: do histórico unificado (admin = união,
+    - Promise/negotiating: do histórico unificado (admin = união,
       atendente = próprio). Decisão pessoal vence.
     - Contacted: se o BOT agiu OU outra ATENDENTE marcou algo (qualquer
       status != pending) — reflete que o time tocou no cliente.
@@ -293,7 +291,7 @@ def get_effective_status(cid) -> str:
     """
     h = get_hist_unificado(cid)
     manual_st = h.get("status", "")
-    if manual_st in ("promise", "negotiating", "paid"):
+    if manual_st in ("promise", "negotiating"):
         return manual_st
     import streamlit as st
     from auth import current_role, current_uid
