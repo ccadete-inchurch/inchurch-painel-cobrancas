@@ -44,6 +44,21 @@ def dialog_editar(eid):
         color:#8b94a5 !important;
         font-size:13px !important;
         padding:6px 0 !important;
+        background:transparent !important;
+    }
+    div[role="dialog"] [data-testid="stExpander"] details summary:hover{
+        color:#e8eaf0 !important;
+    }
+    div[role="dialog"] [data-testid="stExpander"] details > div{
+        padding:6px 0 0 0 !important;
+        background:transparent !important;
+        border:none !important;
+    }
+    div[role="dialog"] .dialog-info{
+        height:100% !important;
+        display:flex !important;
+        flex-direction:column !important;
+        justify-content:flex-start !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -54,7 +69,15 @@ def dialog_editar(eid):
     somente_leitura = role in ("admin", "gestor")
     h = get_hist_unificado(eid) if somente_leitura else get_hist(eid)
     if somente_leitura:
-        st.info("👁 Modo visualização")
+        # Custom em vez de st.info pra ter padding menor (st.info ocupa muito
+        # espaço vertical com pouca info útil).
+        st.markdown(
+            '<div style="background:rgba(95,163,255,.08);'
+            'border:1px solid rgba(95,163,255,.25);color:#5fa3ff;'
+            'padding:6px 12px;border-radius:6px;font-size:13px;'
+            'margin-bottom:8px;font-weight:500">👁 Modo visualização</div>',
+            unsafe_allow_html=True,
+        )
 
     # Cabeçalho informativo
     c1, c2, c3, c4 = st.columns(4)
