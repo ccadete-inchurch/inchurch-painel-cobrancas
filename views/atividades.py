@@ -137,18 +137,19 @@ def _motivo(bucket, acoes, c) -> tuple:
     # virou acordo durante o dia mas bucket=msg, segue como msg normal — não muda
     # de coluna no meio do expediente.
     if tem_acordo and bucket == "ligacao":
-        # Estado HOJE — só liga (atendeu ou tentou e não atendeu)
+        # Atendeu hoje vence tudo — info mais positiva, atendente já fechou
         if acoes_hj.get("atend"):
             return f"{prefixo_ac} · ligação realizada hoje · ligação prioritária", "blue"
-        if acoes_hj.get("lig"):
-            return f"{prefixo_ac} · não atendeu ligação hoje · ligação prioritária", "purple"
 
-        # Cliente em cooldown 7d por 3 tentativas falhadas — bloqueia ligação.
-        # Vai pra coluna TENTAR NOVAMENTE (cor purple) com label mais claro
-        # pra atendente: "não atendeu as últimas 3 ligações" é melhor que
-        # "cooldown 7d (3 tentativas falhadas)" do ponto de vista de quem opera.
+        # Cooldown 7d (3 falhas) tem prioridade sobre "tentou hoje" — é a
+        # info mais útil pra atendente (ela precisa SABER que esse cliente
+        # já está bloqueado). Senão, ao tentar hoje, o badge perdia o
+        # contexto do cooldown e virava só "não atendeu ligação hoje".
         if streak_lig is not None and streak_lig > 0:
             return f"{prefixo_ac} · não atendeu as últimas 3 ligações · ligação prioritária", "purple"
+
+        if acoes_hj.get("lig"):
+            return f"{prefixo_ac} · não atendeu ligação hoje · ligação prioritária", "purple"
 
         # Sem ação de ligação hoje — info de cooldown/histórico de ligação
         if tentou_sem_atender:
@@ -166,6 +167,13 @@ def _motivo(bucket, acoes, c) -> tuple:
     # Bucket=ligacao: tarefa é ligar → atender ou tentar é o que importa
     if acoes_hj.get("atend"):
         return "Ligação atendida hoje", "blue"
+
+    # Cooldown 7d (3 falhas) prevalece sobre "tentou hoje" — atendente
+    # precisa saber que o cliente já está bloqueado, mesmo se ela
+    # insistiu hoje. Mesma lógica do acordo (acima).
+    if bucket == "ligacao" and streak_lig is not None and streak_lig > 0:
+        return "Não atendeu as últimas 3 ligações · Ligação", "purple"
+
     if acoes_hj.get("lig"):
         return "Não atendeu ligação hoje", "purple"
 
