@@ -36,6 +36,15 @@ def dialog_editar(eid):
         font-size:20px !important;
         font-weight:700 !important;
     }
+    /* Reduz o gap entre o header do dialog (título + X) e o conteúdo —
+       era ~40px de respiro, sobra muito espaço vazio. */
+    div[role="dialog"] [data-testid="stDialogHeader"]{
+        padding-bottom:8px !important;
+        margin-bottom:0 !important;
+    }
+    div[role="dialog"] [data-testid="stDialogBody"]{
+        padding-top:8px !important;
+    }
     div[role="dialog"] button[kind="primary"]{
         background-color:#4a8a2c !important;
         border:1px solid #4a8a2c !important;

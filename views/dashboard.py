@@ -592,7 +592,7 @@ def _render_dashboard(store, clientes, role):
             df_exp = pd.DataFrame(rows, columns=["Grupo","Nome","CNPJ","Saldo","Competências","Vencimento","Dias Atraso","Status","Último Contato","Observações","Acordo"])
             st.download_button(
                 "⬇ CSV",
-                df_exp.to_csv(index=False).encode("utf-8-sig"),
+                df_exp.to_csv(index=False, sep=";").encode("utf-8-sig"),
                 f"cobrancas_{date.today()}.csv",
                 "text/csv",
                 width="stretch",
