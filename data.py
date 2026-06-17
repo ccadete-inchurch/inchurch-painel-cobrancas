@@ -725,21 +725,35 @@ def fetch_historico_atrasos(cliente_id: str) -> pd.DataFrame:
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
+    # IMPORTANTE: a tabela splgc-cobrancas_liquidacao-all tem MÚLTIPLAS linhas
+    # por cobrança (uma por evento de liquidação — juros, ajustes, split de
+    # pagamento). Por isso dedupe via id_recebimento_recb ANTES de contar/somar.
+    # Sem isso, 1 cobrança paga em 3 eventos virava "3 pagos" na grade —
+    # cliente parecia ter pago mais do que pagou de verdade.
     query = f"""
-    WITH em_atraso AS (
-      SELECT DISTINCT id_recebimento_recb, dt_vencimento_recb, comp_valor, 'atraso' AS situacao
+    WITH em_atraso_unique AS (
+      SELECT id_recebimento_recb, dt_vencimento_recb,
+             SUM(comp_valor) AS comp_valor
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
       WHERE fl_status_recb = '0'
         AND id_sacado_sac = '{cliente_id}'
         AND dt_vencimento_recb <= CURRENT_TIMESTAMP()
+      GROUP BY id_recebimento_recb, dt_vencimento_recb
     ),
-    pago AS (
-      SELECT DISTINCT id_recebimento_recb, dt_vencimento_recb, comp_valor, 'pago' AS situacao
+    pago_unique AS (
+      SELECT id_recebimento_recb, dt_vencimento_recb,
+             SUM(comp_valor) AS comp_valor
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
       WHERE fl_status_recb = '1'
         AND id_sacado_sac = '{cliente_id}'
         AND dt_vencimento_recb >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 365 DAY)
         AND dt_vencimento_recb <= CURRENT_TIMESTAMP()
+      GROUP BY id_recebimento_recb, dt_vencimento_recb
+    ),
+    unificado AS (
+      SELECT id_recebimento_recb, dt_vencimento_recb, comp_valor, 'atraso' AS situacao FROM em_atraso_unique
+      UNION ALL
+      SELECT id_recebimento_recb, dt_vencimento_recb, comp_valor, 'pago' AS situacao FROM pago_unique
     )
     SELECT
       FORMAT_TIMESTAMP('%Y-%m', dt_vencimento_recb) AS mes,
@@ -747,7 +761,7 @@ def fetch_historico_atrasos(cliente_id: str) -> pd.DataFrame:
       COUNTIF(situacao = 'pago')   AS parcelas_pagas,
       ROUND(SUM(CASE WHEN situacao = 'atraso' THEN comp_valor ELSE 0 END), 2) AS valor_atraso,
       ROUND(SUM(CASE WHEN situacao = 'pago'   THEN comp_valor ELSE 0 END), 2) AS valor_pago
-    FROM (SELECT * FROM em_atraso UNION ALL SELECT * FROM pago)
+    FROM unificado
     GROUP BY 1
     ORDER BY 1 ASC
     """
