@@ -18,6 +18,8 @@ def dialog_editar(eid):
     # - Limita o width a 760px (entre 'small' apertado e 'large' enorme em
     #   notebooks). 'large' nativo do streamlit ocupa quase tudo da tela.
     # - Estiliza o botão primário (Concluir fixado) verde escuro+branco.
+    # - Remove o border padrão do st.expander dentro do dialog — fica
+    #   discreto pra não competir visualmente com os cards de cobrança.
     # Injetado UMA vez no topo pra não afetar alinhamento dos botões.
     st.markdown("""
     <style>
@@ -33,6 +35,15 @@ def dialog_editar(eid):
     div[role="dialog"] button[kind="primary"]:hover{
         background-color:#3d731f !important;
         border-color:#3d731f !important;
+    }
+    div[role="dialog"] [data-testid="stExpander"] details{
+        border:none !important;
+        background:transparent !important;
+    }
+    div[role="dialog"] [data-testid="stExpander"] details summary{
+        color:#8b94a5 !important;
+        font-size:13px !important;
+        padding:6px 0 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -92,20 +103,26 @@ def dialog_editar(eid):
     )
 
     def _render_cobranca_row(cob):
+        # Linha compacta single-row: economiza ~50% de altura comparado ao
+        # card de 2 linhas. Cliente com 18 parcelas (caso real visto) cabe
+        # sem dialog gigante. min-width fixo no "Atraso" e badge garante
+        # que valores diferentes (23d vs 112d) não desalinhem visualmente.
         return (
-            f'<div style="background:#1e2333;border:1px solid #2a2f42;border-radius:10px;'
-            f'padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;'
-            f'justify-content:space-between;gap:16px">'
-            f'<div style="display:flex;flex-direction:column;min-width:0">'
-            f'<div style="font-size:18px;font-weight:700;color:#e8eaf0;'
-            f'font-variant-numeric:tabular-nums">{fmt_moeda_plain(cob["valor"])}</div>'
-            f'<div style="font-size:13px;color:#8b94a5;margin-top:3px">Vence {cob["vencimento"]}</div>'
+            f'<div style="background:#1e2333;border:1px solid #2a2f42;border-radius:8px;'
+            f'padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;'
+            f'justify-content:space-between;gap:12px;font-size:14px">'
+            f'<div style="display:flex;align-items:baseline;gap:10px;min-width:0">'
+            f'<span style="font-weight:700;color:#e8eaf0;font-variant-numeric:tabular-nums">'
+            f'{fmt_moeda_plain(cob["valor"])}</span>'
+            f'<span style="color:#8b94a5;font-size:12px">Vence {cob["vencimento"]}</span>'
             f'</div>'
-            f'<div style="display:flex;align-items:center;gap:16px;flex-shrink:0">'
-            f'<span style="font-size:16px;color:#e8eaf0;font-variant-numeric:tabular-nums">'
+            f'<div style="display:flex;align-items:center;gap:12px;flex-shrink:0">'
+            f'<span style="color:#e8eaf0;font-variant-numeric:tabular-nums;'
+            f'min-width:85px;text-align:right">'
             f'<span style="color:#8b94a5">Atraso:</span> <strong>{cob["dias_atraso"]}d</strong></span>'
-            f'<span style="background:#ff5555;color:#fff;padding:4px 9px;'
-            f'border-radius:4px;font-size:12px;font-weight:600">INADIMPLENTE</span>'
+            f'<span style="background:#ff5555;color:#fff;padding:3px 8px;'
+            f'border-radius:4px;font-size:11px;font-weight:600;'
+            f'min-width:95px;text-align:center;display:inline-block">INADIMPLENTE</span>'
             f'</div>'
             f'</div>'
         )
