@@ -913,6 +913,107 @@ def salvar_snapshot_inadimplentes_hoje(clientes: list | None = None):
         pass
 
 
+def detectar_reincidentes(clientes_hoje: list) -> set:
+    """Retorna IDs de clientes que estão na inadimplência HOJE mas NÃO
+    estavam no snapshot mais recente disponível (últimos 7 dias).
+
+    Por que 7 dias: cobre fim de semana + feriado + eventual falha do cron
+    no(s) dia(s) anterior(es). Se não houver baseline em 7 dias, retorna
+    set vazio (safety — sem comparação, não sabe quem é reincidente).
+    """
+    ids_hoje = {str(c["id"]) for c in clientes_hoje if c.get("id")}
+    if not ids_hoje:
+        return set()
+    client = get_bq_client()
+    if not client:
+        return set()
+    try:
+        df = client.query(f"""
+            WITH ult AS (
+                SELECT data_snapshot
+                FROM `{_SNAPSHOT_TABLE}`
+                WHERE data_snapshot < CURRENT_DATE('America/Sao_Paulo')
+                  AND data_snapshot >= DATE_SUB(
+                      CURRENT_DATE('America/Sao_Paulo'), INTERVAL 7 DAY)
+                ORDER BY data_snapshot DESC
+                LIMIT 1
+            )
+            SELECT DISTINCT id_sacado_sac
+            FROM `{_SNAPSHOT_TABLE}`
+            WHERE data_snapshot = (SELECT data_snapshot FROM ult)
+        """).to_dataframe()
+    except Exception:
+        return set()
+    ids_anteriores = {str(x) for x in df.get("id_sacado_sac", []).tolist()} if not df.empty else set()
+    if not ids_anteriores:
+        return set()
+    return ids_hoje - ids_anteriores
+
+
+def resetar_status_reincidentes(clientes_hoje: list) -> int:
+    """Reseta status/promiseDate/retorno pra clientes que voltaram à
+    inadimplência. Preserva notes e lastContact (contexto histórico vale).
+
+    Motivo: status (promessa, retorno, negociando) e datas se referem à
+    dívida ANTERIOR — que foi paga. Manter polui o painel da atendente com
+    info obsoleta. Notes e lastContact ficam pra atendente saber que já
+    tinha trabalhado com esse cliente antes.
+
+    Roda no cron diário antes de gerar_tarefas_do_dia. Consulta BQ direto
+    (não depende do store em memória, que no cron headless não tem
+    historicos carregados).
+
+    Retorna número de historicos resetados (pra logging do cron).
+    """
+    voltaram = detectar_reincidentes(clientes_hoje)
+    if not voltaram:
+        return 0
+    client = get_bq_client()
+    if not client:
+        return 0
+
+    ids_str = ", ".join(f"'{cid}'" for cid in voltaram)
+    try:
+        df = client.query(f"""
+            WITH ranked AS (
+                SELECT uid, cliente_id, historico_json,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY uid, cliente_id
+                           ORDER BY updated_at DESC
+                       ) AS rn
+                FROM `{_HIST_TABLE}`
+                WHERE cliente_id IN ({ids_str})
+            )
+            SELECT uid, cliente_id, historico_json
+            FROM ranked WHERE rn = 1
+        """).to_dataframe()
+    except Exception:
+        return 0
+
+    n_resets = 0
+    for _, row in df.iterrows():
+        try:
+            h = json.loads(row["historico_json"]) if row["historico_json"] else {}
+        except (ValueError, TypeError):
+            continue
+        tem_sujeira = (
+            (h.get("status") and h["status"] not in ("pending", ""))
+            or h.get("promiseDate")
+            or h.get("retorno")
+        )
+        if not tem_sujeira:
+            continue
+        h["status"] = "pending"
+        h.pop("promiseDate", None)
+        h.pop("retorno", None)
+        try:
+            save_hist_to_bq(str(row["uid"]), str(row["cliente_id"]), h)
+            n_resets += 1
+        except Exception:
+            pass
+    return n_resets
+
+
 @st.cache_data(ttl=3600)
 def fetch_snapshot_inicio_mes() -> set:
     """IDs dos clientes do PRIMEIRO snapshot do mês atual.
@@ -2894,8 +2995,14 @@ def calcular_pendencias(clientes):
 
 
 def concluir_pendencia(cid: str):
-    """Marca compromisso (promise/retorno) como concluído. Apaga promiseDate e
-    retorno; status 'promise' transita pra 'contacted'; atualiza lastContact.
+    """Marca compromisso (promise/retorno) como concluído removendo só as
+    datas. Status, lastContact e notes ficam intactos — porque o atendente
+    não conversou com o cliente, só fechou um compromisso vencido. Atualizar
+    lastContact aqui mascararia como se tivesse rolado contato real.
+
+    Cliente sai da lista de Fixados porque o trigger (data expirada) sumiu;
+    se o status era 'promise', continua como 'promise' até atendente editar
+    explicitamente — refletindo o que foi acordado, não o que aconteceu.
 
     Regra de quem modifica o quê:
       - Atendente (Ana/Priscila): modifica só o próprio historico
@@ -2903,11 +3010,9 @@ def concluir_pendencia(cid: str):
         (limpa o fixado da tela de todo mundo que estava vendo)
     """
     import hashlib
-    from datetime import date as _date
     from auth import current_role, current_uid, get_store as _gs
 
     role     = current_role()
-    hoje_str = _date.today().strftime("%d/%m/%Y")
     store    = _gs()
     historicos = store.get("historico", {}) or {}
 
@@ -2923,9 +3028,6 @@ def concluir_pendencia(cid: str):
         h = dict(historicos[uid][cid])
         h.pop("promiseDate", None)
         h.pop("retorno", None)
-        if h.get("status") == "promise":
-            h["status"] = "contacted"
-        h["lastContact"] = hoje_str
         store["historico"][uid][cid] = h
         try:
             save_hist_to_bq(uid, cid, h)
