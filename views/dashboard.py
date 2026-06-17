@@ -382,7 +382,7 @@ def _render_dashboard(store, clientes, role):
             )
         filtro_atend = "Todos"
         with fcol:
-            if role in ("admin", "gestor"):
+            if role == "admin":
                 from data import _EMAIL_GRUPO as _EG
                 filtro_atend = st.selectbox(
                     "Grupo",
@@ -418,8 +418,8 @@ def _render_dashboard(store, clientes, role):
             st.markdown('<div class="pend-wrap">', unsafe_allow_html=True)
             cols_p = st.columns(min(CARDS_POR_LINHA, len(pend_pag)))
             # Ícone do botão adapta por role
-            icone_btn = "✏" if role not in ("admin", "gestor") else "👁"
-            help_btn  = "Atender" if role not in ("admin", "gestor") else "Ver detalhes"
+            icone_btn = "✏" if role != "admin" else "👁"
+            help_btn  = "Atender" if role != "admin" else "Ver detalhes"
             # Cor do card vem do STATUS efetivo da cobrança (não do prazo).
             # Promessa vencida normalmente vem com status='promise', mas o
             # cliente pode ter status='negotiating' com retorno vencido — daí
@@ -474,7 +474,7 @@ def _render_dashboard(store, clientes, role):
 
                 origens = _h.get("_atendentes_origem") or []
                 origem_tag = ""
-                if origens and role in ("admin", "gestor"):
+                if origens and role == "admin":
                     # Ícone de pessoa (mesmo SVG da tela Atividades) + nome
                     origem_tag = (
                         f'<div style="display:flex;align-items:center;gap:5px;'
@@ -499,7 +499,7 @@ def _render_dashboard(store, clientes, role):
                 grupo_html = ""
                 _g = c.get("_grupo") or ""
                 _g_display = _g if _g and _g not in ("nan", "NaN", "—") else "Sem especialista"
-                if role not in ("admin", "gestor") and c.get("_grupo"):
+                if role != "admin" and c.get("_grupo"):
                     grupo_html = (
                         f'<div style="display:flex;align-items:center;gap:5px;'
                         f'margin-top:4px;font-size:11px;color:#9ca3af">'
@@ -672,9 +672,8 @@ def _render_dashboard(store, clientes, role):
     # ── Tabela ────────────────────────────────────────────────────────────────
     # Score: coluna dedicada com gradiente branco→cinza pra valores baixos,
     # laranja só pra score alto (>=150). Reduz ruído visual sem perder a info.
-    has_edit = (role != "gestor")
-    col_w    = [2.8, 1.1, 1.4, 1, 1, 1.5, 1.5, 1.5] + ([0.7] if has_edit else [])
-    hdrs_t   = ["Cliente", "Score", "Saldo devedor", "Atraso em dias", "Histórico", "Telefone", "Grupo", "Último Contato"] + ([""] if has_edit else [])
+    col_w    = [2.8, 1.1, 1.4, 1, 1, 1.5, 1.5, 1.5, 0.7]
+    hdrs_t   = ["Cliente", "Score", "Saldo devedor", "Atraso em dias", "Histórico", "Telefone", "Grupo", "Último Contato", ""]
 
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
     # Fundo escuro aplicado via container CSS abaixo.
@@ -788,10 +787,9 @@ def _render_dashboard(store, clientes, role):
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{_g_row_display}</div>', unsafe_allow_html=True)
             with rcols[7]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
-            if has_edit:
-                with rcols[8]:
-                    if st.button("✏", key=f"edit_{row['id']}_{ridx}", width="stretch", help=f"Editar {row['nome']}"):
-                        dialog_editar(row["id"])
+            with rcols[8]:
+                if st.button("✏", key=f"edit_{row['id']}_{ridx}", width="stretch", help=f"Editar {row['nome']}"):
+                    dialog_editar(row["id"])
 
             if ridx < n_rows - 1:
                 st.markdown('<div style="height:0.5px;background:#2a2f42;margin:0"></div>', unsafe_allow_html=True)

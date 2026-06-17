@@ -1535,7 +1535,7 @@ def load_historico_from_bq():
     """Carrega historico do BQ para o session_state.
 
     Atendente: carrega só o próprio historico.
-    Admin/gestor: carrega o próprio + o das atendentes (Ana/Priscila), pra
+    Admin: carrega o próprio + o das atendentes (Ana/Priscila), pra
         que `_hist_pra_pendencias` consiga montar a união dos fixados.
     """
     import hashlib
@@ -1548,11 +1548,11 @@ def load_historico_from_bq():
         return
     ensure_historico_table()
 
-    # Decide quais uids carregar: atendente carrega só o próprio; admin/gestor
+    # Decide quais uids carregar: atendente carrega só o próprio; admin
     # carrega o próprio + Ana e Priscila (uids derivados via md5 do email).
     role = current_role()
     uids = {uid_logado}
-    if role in ("admin", "gestor"):
+    if role == "admin":
         for email in _EMAIL_GRUPO.keys():
             uids.add(hashlib.md5(email.encode()).hexdigest())
 
@@ -2222,7 +2222,7 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
     """
     atendente = _EMAIL_GRUPO.get(email_logado)
     if not atendente:
-        # gestor vê todos — bucket fake só pra render (não usado em filtro)
+        # admin vê todos — bucket fake só pra render (não usado em filtro)
         return {c["id"]: "ligacao" for c in clientes}
 
     hoje = hoje_lote()
@@ -2969,7 +2969,7 @@ def _hist_pra_pendencias(cid: str) -> dict:
 def calcular_pendencias(clientes):
     # "Sem contato há X dias" foi removido: esse fluxo é do kanban (Atividades),
     # não dos Clientes Fixados. Aqui ficam só compromissos explícitos da atendente.
-    # Admin/gestor vê fixados das duas atendentes (união); cada atendente vê só
+    # Admin vê fixados das duas atendentes (união); cada atendente vê só
     # os próprios. Decidido via _hist_pra_pendencias.
     # Retorna tupla (cliente, hist, tipo, mensagem, dias_atraso) ordenada por
     # dias_atraso DESC pra priorizar visualmente os mais antigos.
@@ -3010,7 +3010,7 @@ def concluir_pendencia(cid: str):
 
     Regra de quem modifica o quê:
       - Atendente (Ana/Priscila): modifica só o próprio historico
-      - Admin/gestor: modifica TODAS as atendentes que têm o cliente marcado
+      - Admin: modifica TODAS as atendentes que têm o cliente marcado
         (limpa o fixado da tela de todo mundo que estava vendo)
     """
     import hashlib
@@ -3020,7 +3020,7 @@ def concluir_pendencia(cid: str):
     store    = _gs()
     historicos = store.get("historico", {}) or {}
 
-    if role in ("admin", "gestor"):
+    if role == "admin":
         atendente_uids = {hashlib.md5(e.encode()).hexdigest() for e in _EMAIL_GRUPO.keys()}
         uids_modificar = [u for u in atendente_uids if cid in historicos.get(u, {})]
     else:

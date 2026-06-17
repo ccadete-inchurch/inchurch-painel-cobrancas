@@ -84,14 +84,14 @@ def dialog_editar(eid):
     </style>
     """, unsafe_allow_html=True)
 
-    # Admin/gestor vê o registro como está salvo no histórico das atendentes
+    # Admin vê o registro como está salvo no histórico das atendentes
     # (modo read-only). Atendente vê o próprio histórico (modo edição).
     role = current_role()
-    somente_leitura = role in ("admin", "gestor")
+    somente_leitura = role == "admin"
     h = get_hist_unificado(eid) if somente_leitura else get_hist(eid)
     if somente_leitura:
         # Texto puro em azul — sem retângulo de fundo (econômico em espaço
-        # vertical e visualmente discreto). Só aparece pra admin/gestor.
+        # vertical e visualmente discreto). Só aparece pra admin.
         st.markdown(
             '<div style="color:#5fa3ff;font-size:13px;font-weight:500;'
             'margin:0 0 10px 0">👁 Modo visualização</div>',
@@ -181,7 +181,7 @@ def dialog_editar(eid):
 
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    # Campos (desabilitados se admin/gestor — modo só leitura)
+    # Campos (desabilitados se admin — modo só leitura)
     status_sel = st.selectbox(
         "Status de Cobrança",
         list(STATUS_OPTS.keys()),

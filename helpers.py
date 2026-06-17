@@ -211,17 +211,17 @@ def get_hist(cid):
 def get_hist_unificado(cid: str) -> dict:
     """Histórico efetivo do cliente respeitando o role:
       - Atendente (Ana/Priscila): só o próprio histórico
-      - Admin/gestor: união dos historicos das atendentes — escolhe estado
+      - Admin: união dos historicos das atendentes — escolhe estado
         mais 'ativo' quando duas marcaram o mesmo cliente
-        (promise > negotiating > contacted > pending > paid). Também anota
+        (promise > negotiating > contacted > pending). Também anota
         `_atendentes_origem` (lista de nomes) pra UI mostrar de quem veio.
 
-    O histórico do próprio admin/gestor é ignorado pra evitar poluição.
+    O histórico do próprio admin é ignorado pra evitar poluição.
     """
     import hashlib
     from auth import current_role
     role = current_role()
-    if role not in ("admin", "gestor"):
+    if role != "admin":
         return get_hist(cid)
 
     # Lazy import pra evitar ciclo helpers ↔ data
@@ -301,7 +301,7 @@ def get_effective_status(cid) -> str:
         return "contacted"
     # Atendente: checa se uma COLEGA marcou algo (admin já vê união acima)
     role = current_role()
-    if role not in ("admin", "gestor"):
+    if role != "admin":
         if _any_atendente_engaged(cid, except_uid=current_uid()):
             return "contacted"
     return manual_st or "pending"

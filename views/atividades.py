@@ -192,7 +192,7 @@ def _motivo(bucket, acoes, c) -> tuple:
             return f"Última mensagem há {dias_msg}d · Mensagem", "msg"
         return "Sem mensagem anterior · Mensagem", "msg"
 
-    # Sem bucket (gestor "Todos os clientes") — fallback por acoes
+    # Sem bucket (admin "Todos os clientes") — fallback por acoes
     if "ligar" in acoes:
         if tentou_sem_atender:
             return f"Não atendeu ligação há {dias_lig_tent}d · Ligação", "purple"
@@ -313,9 +313,8 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     # Botão "Detalhes" grudado no rodapé do card (visualmente integrado).
     # Streamlit não permite st.button dentro de markdown HTML, então usa
     # st.button externo + CSS (no _render_atividades) que reduz o tamanho.
-    if role != "gestor":
-        if st.button("Detalhes ›", key=f"atv_{c['id']}_{idx}", width="stretch"):
-            dialog_editar(c["id"])
+    if st.button("Detalhes ›", key=f"atv_{c['id']}_{idx}", width="stretch"):
+        dialog_editar(c["id"])
 
 
 def _render_atividades(store, clientes, role):
@@ -387,7 +386,7 @@ def _render_atividades(store, clientes, role):
     _nomes_atendentes = list(_EMAIL_GRUPO.values())
     _modo_admin       = "Todos os clientes"
     _atendente_sel    = None
-    if role in ("admin", "gestor"):
+    if role == "admin":
         _admin_spacer, _admin_box = st.columns([2.6, 2.4])
         with _admin_box:
             with st.container(border=True):
@@ -448,7 +447,7 @@ def _render_atividades(store, clientes, role):
     )
 
     # ── Indicadores 'Hoje' — fragment próprio, auto-refresh 60s ───────────────
-    # Layout horizontal: 'No Lote' (quando aplicável) e 'No Total' (admin/gestor).
+    # Layout horizontal: 'No Lote' (quando aplicável) e 'No Total' (admin).
     # Atendente: vê só 'No Lote' (sua carteira do dia).
     # Admin 'Todos os clientes': vê só 'No Total'.
     # Admin 'Lote do dia' de X: vê 'No Lote de X' + 'No Total'.
@@ -476,15 +475,15 @@ def _render_atividades(store, clientes, role):
             return inad_n, reg_n, reg_v, parc_n, parc_v
 
         # Decide quais seções renderizar baseado no contexto:
-        #   Atendente:                          mostra só 'No Lote'
-        #   Admin/Gestor em 'Lote do dia':      mostra só 'No Lote' (o atendente
-        #                                       selecionado já contextualiza)
-        #   Admin/Gestor em 'Todos os clientes': mostra só 'No Total'
+        #   Atendente:                     mostra só 'No Lote'
+        #   Admin em 'Lote do dia':        mostra só 'No Lote' (o atendente
+        #                                  selecionado já contextualiza)
+        #   Admin em 'Todos os clientes':  mostra só 'No Total'
         _mostrar_lote = (email in _EMAIL_GRUPO) or (
-            role in ("admin", "gestor") and _modo_admin == "Lote do dia" and _atendente_sel
+            role == "admin" and _modo_admin == "Lote do dia" and _atendente_sel
         )
         _mostrar_total = (
-            role in ("admin", "gestor") and _modo_admin == "Todos os clientes"
+            role == "admin" and _modo_admin == "Todos os clientes"
         )
 
         # Mix de fontes:
@@ -688,14 +687,14 @@ def _render_atividades(store, clientes, role):
                 atd = sum(1 for _, a in items if a.get("atend"))
             return {"mensagens": msg, "ligacoes": lig, "atendidas": atd}
 
-        # Em 'Todos os clientes' (admin/gestor), os cards M/L/A respeitam
+        # Em 'Todos os clientes' (admin), os cards M/L/A respeitam
         # os filtros Grupo e Situação. Permite admin focar nos números de
         # um grupo específico sem ter que entrar no modo 'Lote do dia'.
         # Atendente e admin 'Lote do dia' continuam com escopo do lote.
         atendente_logado = _EMAIL_GRUPO.get(email)
         if atendente_logado:
             dados_m, label_m = _metricas_lote_painel(ids_hoje, buckets_hoje), atendente_logado
-        elif role in ("admin", "gestor") and _modo_admin == "Lote do dia" and _atendente_sel:
+        elif role == "admin" and _modo_admin == "Lote do dia" and _atendente_sel:
             _key_lote_adm = f"_tarefas_admin_{hoje_lote()}_{_atendente_sel}"
             _buckets_adm  = st.session_state.get(_key_lote_adm, {}) or {}
             _ids_lote_adm = set(_buckets_adm.keys())
@@ -852,12 +851,12 @@ def _render_atividades(store, clientes, role):
                 return "mensagem"
             return "aguardar"
 
-        _e_lote = email in _EMAIL_GRUPO or (role in ("admin", "gestor") and _modo_admin == "Lote do dia")
+        _e_lote = email in _EMAIL_GRUPO or (role == "admin" and _modo_admin == "Lote do dia")
 
         # Admin em 'Todos os clientes': IDs em qualquer lote do dia, pra
         # aplicar opacidade nos cards FORA do lote (sinaliza que não estão
         # sendo trabalhados por ninguém hoje).
-        _modo_todos_admin = role in ("admin", "gestor") and _modo_admin == "Todos os clientes"
+        _modo_todos_admin = role == "admin" and _modo_admin == "Todos os clientes"
         ids_em_lote_hoje = fetch_ids_em_qualquer_lote_hoje() if _modo_todos_admin else set()
 
         acordos = []; ligacao = []; so_msg = []; tentar_nov = []; concluida = []; aguardar = []

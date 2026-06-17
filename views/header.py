@@ -6,7 +6,6 @@ from data import get_store, ping_online, get_online_users
 
 _ROLE_DISPLAY = {
     "admin":     "ADMIN",
-    "gestor":    "GESTOR",
     "atendente": "SPECIALIST",
 }
 

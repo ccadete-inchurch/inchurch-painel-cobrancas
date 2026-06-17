@@ -62,8 +62,8 @@ alt.themes.enable("inchurch_dark")
 
 
 def _render_especialista(store, clientes, role):
-    if role not in ("admin", "gestor"):
-        st.error("Acesso restrito — apenas Admin e Gestor.")
+    if role != "admin":
+        st.error("Acesso restrito — apenas Admin.")
         return
 
     # ── Header ────────────────────────────────────────────────────────────

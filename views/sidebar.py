@@ -56,8 +56,8 @@ def render_sidebar():
     nav_item("Pagamentos",         "historico")
     nav_item("Próximas Cobranças", "proximas")
     nav_item("Cliente",            "cliente")
-    # Especialista: análise por atendente (gráficos) — admin/gestor only
-    if current_role() in ("admin", "gestor"):
+    # Especialista: análise por atendente (gráficos) — admin only
+    if current_role() == "admin":
         nav_item("Especialista",   "especialista")
 
     # Spacer pra não esconder último nav atrás do botão Sair (fixed bottom)
