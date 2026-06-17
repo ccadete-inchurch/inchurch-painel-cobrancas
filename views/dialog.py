@@ -66,35 +66,30 @@ def dialog_editar(eid):
     cobracas_inad = sorted(
         [c for c in cliente.get("_cobracas", []) if c["dias_atraso"] and c["dias_atraso"] > 0],
         key=lambda c: c["dias_atraso"],
-        reverse=True,
     )
-
-    def _render_cobranca_row(cob):
-        return (
-            f'<div style="background:#1e2333;border:1px solid #2a2f42;border-radius:8px;'
-            f'padding:12px 16px;margin-bottom:6px;display:flex;align-items:center;'
-            f'justify-content:space-between;gap:16px">'
-            f'<div style="display:flex;flex-direction:column;min-width:0">'
-            f'<div style="font-size:17px;font-weight:700;color:#e8eaf0;'
-            f'font-variant-numeric:tabular-nums">{fmt_moeda_plain(cob["valor"])}</div>'
-            f'<div style="font-size:12px;color:#8b94a5;margin-top:2px">Vence {cob["vencimento"]}</div>'
-            f'</div>'
-            f'<div style="display:flex;align-items:center;gap:10px;flex-shrink:0">'
-            f'<span style="color:#ef4444;font-weight:700;font-size:14px;'
-            f'font-variant-numeric:tabular-nums">{cob["dias_atraso"]}d</span>'
-            f'<span style="background:#ff5555;color:#fff;padding:4px 8px;'
-            f'border-radius:4px;font-size:12px;font-weight:600">INADIMPLENTE</span>'
-            f'</div>'
-            f'</div>'
-        )
-
+    _badge_inad = (
+        '<span style="background:#ff5555;color:#fff;padding:4px 8px;'
+        'border-radius:4px;font-size:12px;font-weight:600">INADIMPLENTE</span>'
+    )
     if cobracas_inad:
         visiveis = cobracas_inad[:3]
         extras   = cobracas_inad[3:]
-        st.markdown("".join(_render_cobranca_row(c) for c in visiveis), unsafe_allow_html=True)
+        for cob in visiveis:
+            with st.container(border=True):
+                c1, c2, c3, c4 = st.columns(4)
+                with c1: st.markdown(f"**Valor:** {fmt_moeda_plain(cob['valor'])}")
+                with c2: st.markdown(f"**Vencimento:** {cob['vencimento']}")
+                with c3: st.markdown(f"**Atraso:** {cob['dias_atraso']}d")
+                with c4: st.markdown(_badge_inad, unsafe_allow_html=True)
         if extras:
             with st.expander(f"Ver mais {len(extras)} parcela{'s' if len(extras) > 1 else ''}"):
-                st.markdown("".join(_render_cobranca_row(c) for c in extras), unsafe_allow_html=True)
+                for cob in extras:
+                    with st.container(border=True):
+                        c1, c2, c3, c4 = st.columns(4)
+                        with c1: st.markdown(f"**Valor:** {fmt_moeda_plain(cob['valor'])}")
+                        with c2: st.markdown(f"**Vencimento:** {cob['vencimento']}")
+                        with c3: st.markdown(f"**Atraso:** {cob['dias_atraso']}d")
+                        with c4: st.markdown(_badge_inad, unsafe_allow_html=True)
     else:
         st.info("Nenhuma cobrança em atraso")
 
