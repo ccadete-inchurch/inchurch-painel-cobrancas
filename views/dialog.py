@@ -17,15 +17,24 @@ def dialog_editar(eid):
     # CSS local do dialog:
     # - Limita o width a 760px (entre 'small' apertado e 'large' enorme em
     #   notebooks). 'large' nativo do streamlit ocupa quase tudo da tela.
+    # - Reduz o tamanho do título "Editar Registro" pra subir o conteúdo.
     # - Estiliza o botão primário (Concluir fixado) verde escuro+branco.
-    # - Remove o border padrão do st.expander dentro do dialog — fica
-    #   discreto pra não competir visualmente com os cards de cobrança.
-    # Injetado UMA vez no topo pra não afetar alinhamento dos botões.
+    # - Remove o border padrão do st.expander dentro do dialog.
+    # - Force min-height nos cards do header pra ficarem iguais (a
+    #   cascata via stretch falhou em alguns DOMs do streamlit; min-height
+    #   é a abordagem robusta).
     st.markdown("""
     <style>
     div[role="dialog"]{
         max-width:760px !important;
         width:90vw !important;
+    }
+    /* Título "Editar Registro" menor pra economizar espaço vertical */
+    div[role="dialog"] h2,
+    div[role="dialog"] h1,
+    div[role="dialog"] [data-testid="stDialogHeader"] *{
+        font-size:20px !important;
+        font-weight:700 !important;
     }
     div[role="dialog"] button[kind="primary"]{
         background-color:#4a8a2c !important;
@@ -54,29 +63,10 @@ def dialog_editar(eid):
         background:transparent !important;
         border:none !important;
     }
-    /* Cascata de altura: stHorizontalBlock → stColumn → stVerticalBlock →
-       stMarkdown → .dialog-info. Cada nível precisa estar configurado pra
-       repassar a altura, senão o dialog-info colapsa pro conteúdo
-       intrínseco (resultado: 4 cards com alturas diferentes). */
-    div[role="dialog"] [data-testid="stHorizontalBlock"]{
-        align-items:stretch !important;
-    }
-    div[role="dialog"] [data-testid="stColumn"]{
-        display:flex !important;
-        flex-direction:column !important;
-    }
-    div[role="dialog"] [data-testid="stColumn"] > [data-testid="stVerticalBlock"]{
-        flex:1 1 auto !important;
-        height:100% !important;
-    }
-    div[role="dialog"] [data-testid="stColumn"] [data-testid="stMarkdown"]{
-        height:100% !important;
-    }
-    div[role="dialog"] [data-testid="stColumn"] [data-testid="stMarkdown"] > div{
-        height:100% !important;
-    }
+    /* Min-height força os 4 cards do header a terem altura igual.
+       Cascata via align-items:stretch é flaky no DOM do streamlit. */
     div[role="dialog"] .dialog-info{
-        height:100% !important;
+        min-height:130px !important;
         display:flex !important;
         flex-direction:column !important;
         justify-content:flex-start !important;
@@ -149,8 +139,10 @@ def dialog_editar(eid):
         # card de 2 linhas. Cliente com 18 parcelas (caso real visto) cabe
         # sem dialog gigante. min-width fixo no "Atraso" e badge garante
         # que valores diferentes (23d vs 112d) não desalinhem visualmente.
+        # Fundo #13161f (mesmo do .dialog-info) — antes estava #1e2333
+        # mais claro, destoava do resto do dialog.
         return (
-            f'<div style="background:#1e2333;border:1px solid #2a2f42;border-radius:8px;'
+            f'<div style="background:#13161f;border:1px solid #1e2333;border-radius:8px;'
             f'padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;'
             f'justify-content:space-between;gap:12px;font-size:14px">'
             f'<div style="display:flex;align-items:baseline;gap:10px;min-width:0">'
