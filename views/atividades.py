@@ -470,13 +470,18 @@ def _render_atividades(store, clientes, role):
             for c in cs:
                 vlr = float(c.get("_valor_pago_hoje") or 0)
                 if c.get("_regularizado_hoje"):
-                    reg_n += 1
-                    reg_v += vlr
+                    # REGULARIZAÇÕES = só HOJE (placar do dia). Pagamentos
+                    # detectados pelo overlay nos últimos 3 dias mas que NÃO
+                    # foram hoje (ex: pagou 15/06, crédito chega 17/06) saem
+                    # do contador — mantém só o trabalho do dia.
+                    # INAD continua desconsiderando esses (eles JÁ pagaram,
+                    # só BQ não viu) — coerente com o lote.
+                    if c.get("_pagamento_foi_hoje"):
+                        reg_n += 1
+                        reg_v += vlr
                 else:
                     inad_n += 1
-                    # PARCIAIS = só pagamentos de HOJE. Pagamentos de dias
-                    # anteriores entram em Pagamentos (histórico), não no
-                    # placar do dia da atendente.
+                    # PARCIAIS = só pagamentos de HOJE. Mesma lógica das REG.
                     if vlr > 0 and c.get("_pagamento_foi_hoje"):
                         parc_n += 1
                         parc_v += vlr
