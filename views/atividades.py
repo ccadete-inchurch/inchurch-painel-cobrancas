@@ -217,18 +217,15 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     # com padding maior e borda sólida). É info crítica pra atendente —
     # cliente está pagando, prioridade alta.
     _vl_parcial = float(c.get("_valor_pago_hoje") or 0)
-    # Janela de 3 dias no overlay → pagamento pode ser hoje OU ontem/anteontem
-    # (creditado hoje). Label reflete a data real.
-    _quando = (
-        "HOJE" if c.get("_pagamento_foi_hoje")
-        else f"EM {c.get('_dt_pagamento_recente', '')}".rstrip()
-    )
+    # Badge SÓ pra pagamentos de hoje — pagamentos passados aparecem em
+    # Pagamentos (histórico). No card de atividades a info só interessa se
+    # foi hoje (atendente já pode considerar no atendimento).
     parcial_badge = (
         f'<span style="background:rgba(124,194,67,.18);color:#7cc243;font-size:10px;'
         f'font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;'
         f'border:1px solid rgba(124,194,67,.35);'
-        f'vertical-align:middle">PAGOU {fmt_moeda_plain(_vl_parcial)} {_quando}</span>'
-    ) if c.get("_pago_parcial_hoje") and not _regularizado and _vl_parcial > 0 else ""
+        f'vertical-align:middle">PAGOU {fmt_moeda_plain(_vl_parcial)} HOJE</span>'
+    ) if c.get("_pagamento_foi_hoje") and not _regularizado and _vl_parcial > 0 else ""
     motivo_txt, motivo_style = _motivo(bucket, acoes, c)
     _motivo_css = {
         "red":    "color:#ff5555;background:rgba(239,68,68,.08);border-left:2px solid #ff5555;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
@@ -467,7 +464,10 @@ def _render_atividades(store, clientes, role):
                     reg_v += vlr
                 else:
                     inad_n += 1
-                    if vlr > 0:
+                    # PARCIAIS = só pagamentos de HOJE. Pagamentos de dias
+                    # anteriores entram em Pagamentos (histórico), não no
+                    # placar do dia da atendente.
+                    if vlr > 0 and c.get("_pagamento_foi_hoje"):
                         parc_n += 1
                         parc_v += vlr
             return inad_n, reg_n, reg_v, parc_n, parc_v
