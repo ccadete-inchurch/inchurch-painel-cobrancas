@@ -29,21 +29,36 @@ def dialog_editar(eid):
         max-width:760px !important;
         width:90vw !important;
     }
-    /* Título "Editar Registro" menor pra economizar espaço vertical */
-    div[role="dialog"] h2,
+    /* Título "Editar Registro" menor + reset agressivo de spacing.
+       Streamlit injeta margin/padding em vários níveis (header, h1/h2,
+       body container, primeiro filho do body). Reset todos pra eliminar
+       o gap grande entre título e o conteúdo. */
     div[role="dialog"] h1,
-    div[role="dialog"] [data-testid="stDialogHeader"] *{
+    div[role="dialog"] h2,
+    div[role="dialog"] h3{
         font-size:20px !important;
         font-weight:700 !important;
+        margin:0 !important;
+        padding:0 !important;
+        line-height:1.3 !important;
     }
-    /* Reduz o gap entre o header do dialog (título + X) e o conteúdo —
-       era ~40px de respiro, sobra muito espaço vazio. */
+    div[role="dialog"] header,
     div[role="dialog"] [data-testid="stDialogHeader"]{
-        padding-bottom:8px !important;
-        margin-bottom:0 !important;
+        padding:12px 16px 6px 16px !important;
+        margin:0 !important;
+        min-height:auto !important;
     }
     div[role="dialog"] [data-testid="stDialogBody"]{
-        padding-top:8px !important;
+        padding-top:6px !important;
+        margin-top:0 !important;
+    }
+    div[role="dialog"] [data-testid="stDialogBody"] > div:first-child{
+        margin-top:0 !important;
+        padding-top:0 !important;
+    }
+    /* stVerticalBlock dentro do body — gap menor entre elementos */
+    div[role="dialog"] [data-testid="stDialogBody"] [data-testid="stVerticalBlock"]{
+        gap:0.5rem !important;
     }
     div[role="dialog"] button[kind="primary"]{
         background-color:#4a8a2c !important;
