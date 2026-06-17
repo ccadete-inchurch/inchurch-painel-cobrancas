@@ -143,9 +143,12 @@ def _motivo(bucket, acoes, c) -> tuple:
         if acoes_hj.get("lig"):
             return f"{prefixo_ac} · não atendeu ligação hoje · ligação prioritária", "purple"
 
-        # Cliente em cooldown 7d por 3 tentativas falhadas — bloqueia ligação
+        # Cliente em cooldown 7d por 3 tentativas falhadas — bloqueia ligação.
+        # Vai pra coluna TENTAR NOVAMENTE (cor purple) com label mais claro
+        # pra atendente: "não atendeu as últimas 3 ligações" é melhor que
+        # "cooldown 7d (3 tentativas falhadas)" do ponto de vista de quem opera.
         if streak_lig is not None and streak_lig > 0:
-            return f"{prefixo_ac} · cooldown {streak_lig}d (3 tentativas falhadas) · ligação prioritária", "red"
+            return f"{prefixo_ac} · não atendeu as últimas 3 ligações · ligação prioritária", "purple"
 
         # Sem ação de ligação hoje — info de cooldown/histórico de ligação
         if tentou_sem_atender:
@@ -178,7 +181,7 @@ def _motivo(bucket, acoes, c) -> tuple:
 
     if bucket == "ligacao":
         if streak_lig is not None and streak_lig > 0:
-            return f"Cooldown {streak_lig}d (3 tentativas falhadas) · Ligação", "purple"
+            return "Não atendeu as últimas 3 ligações · Ligação", "purple"
         if tentou_sem_atender:
             return f"Não atendeu ligação há {dias_lig_tent}d · Ligação", "purple"
         if dias_lig_atend is not None:
@@ -803,7 +806,8 @@ def _render_atividades(store, clientes, role):
             fila = [(s, a, c, h) for s, a, c, h in fila if _match(c)]
 
         # ── Separar por coluna ────────────────────────────────────────────────
-        def _canal(bucket, acoes, acoes_hj, regularizado=False, eh_acordo=False):
+        def _canal(bucket, acoes, acoes_hj, regularizado=False, eh_acordo=False,
+                   streak_lig=None):
             # Estado "hoje" lê SÓ BQ painel (acoes_hj). N8N não é mais usado pra
             # decidir coluna — só pra badge informativo de "última mensagem há Xd"
             # no _motivo.
@@ -817,6 +821,11 @@ def _render_atividades(store, clientes, role):
                 if acoes_hj.get("atend"):
                     return "concluida"
                 if acoes_hj.get("lig"):
+                    return "tentar_novamente"
+                # Cooldown 7d ativo (3 falhas anteriores) — acordo não tem
+                # alternativa, mas a atendente vê visualmente que o cliente
+                # tá em "tentar novamente" em vez de urgente.
+                if streak_lig is not None and streak_lig > 0:
                     return "tentar_novamente"
                 return "urgente"
             if bucket != "mensagem":
@@ -853,9 +862,11 @@ def _render_atividades(store, clientes, role):
             bucket = buckets_hoje.get(c["id"]) if isinstance(buckets_hoje, dict) else None
             acoes_hj = get_painel_acoes_hoje(c["id"])
             eh_acordo = bool(c.get("_tem_acordo")) and (c.get("dias_atraso") or 0) >= 7
+            _streak = get_streak_cooldown_dias(c["id"])
             canal = _canal(bucket, a, acoes_hj,
                            regularizado=bool(c.get("_regularizado_hoje")) or bool(c.get("_regularizado_antes_hoje")),
-                           eh_acordo=eh_acordo)
+                           eh_acordo=eh_acordo,
+                           streak_lig=_streak)
             if _e_lote and canal == "aguardar":
                 continue
             if   canal == "urgente":          acordos.append(item)
