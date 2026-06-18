@@ -31,6 +31,61 @@ def _norm_atendente_raw(s: str) -> str:
     return s if s and s not in ("—", "nan", "NaN", "Sistema (BigQuery)") else "Sem especialista"
 
 
+def _build_overlay_rows(clientes, df_bq, dt_inicio, dt_fim):
+    """Constrói linhas do overlay pra acrescentar ao df do BQ.
+
+    Cada cliente com _regularizado_hoje OU _pago_parcial_hoje vira 1 linha
+    com a DATA REAL da liquidação (_dt_liquidacao_real). Se a data real
+    cair fora do período [dt_inicio, dt_fim], a linha é descartada.
+
+    Deduplica contra BQ por (id, dt) — se BQ já replicou aquele pagamento,
+    não duplica.
+
+    Retorna lista de dicts pronta pra virar DataFrame.
+    """
+    if not clientes:
+        return []
+    # IDs por dia que já estão no BQ — evita dupla contagem
+    ids_por_dia_bq = {}
+    if not df_bq.empty:
+        for _, row in df_bq.iterrows():
+            d = row["data_dt"].date() if hasattr(row["data_dt"], "date") else row["data_dt"]
+            ids_por_dia_bq.setdefault(d, set()).add(str(row["id"]))
+
+    rows = []
+    for c in clientes:
+        eh_reg = bool(c.get("_regularizado_hoje"))
+        eh_parc = bool(c.get("_pago_parcial_hoje"))
+        if not (eh_reg or eh_parc):
+            continue
+        dt_real = c.get("_dt_liquidacao_real")
+        if dt_real is None:
+            continue
+        # Filtra por período
+        if dt_real < dt_inicio or dt_real > dt_fim:
+            continue
+        cid = str(c.get("id") or "")
+        # Deduplica contra BQ
+        if cid in ids_por_dia_bq.get(dt_real, set()):
+            continue
+        valor = float(c.get("_valor_pago_hoje") or 0)
+        if valor <= 0:
+            continue
+        atendente = _norm_atendente_raw(c.get("_grupo"))
+        rows.append({
+            "id": cid,
+            "atendente": atendente,
+            "valor": valor,
+            "dt_pagamento": dt_real.isoformat(),
+            "data_dt": pd.to_datetime(dt_real),
+            "eh_regularizacao": eh_reg,
+            "eh_parcial": eh_parc,
+            # Default conservador: via_contato (não temos rastro em real-time)
+            "tipo_atribuicao": "via_contato",
+        })
+    return rows
+
+
 def _altair_theme():
     """Tema escuro pros gráficos Altair — combina com o painel."""
     return {
@@ -131,50 +186,19 @@ def _render_especialista(store, clientes, role):
     df_reg["data_dt"] = pd.to_datetime(df_reg["dt_pagamento"], errors="coerce")
     df_reg = df_reg.dropna(subset=["data_dt"])
 
-    # ── Overlay real-time: pagamentos via API Superlógica HOJE ─────────────
-    # BQ replica 1×/dia (lag), então pagamentos de hoje só aparecem amanhã
-    # no df_reg. O overlay (store["clientes"] com _regularizado_hoje /
-    # _pago_parcial_hoje) preenche essa lacuna. Mesma lógica da tela
-    # Pagamentos — Especialista também fica real-time.
-    if hoje >= dt_inicio and hoje <= dt_fim:
-        hoje_dt = pd.to_datetime(hoje.isoformat())
-        # Evita duplicata: ids que já estão em df_reg pra HOJE (caso BQ tenha
-        # replicado mais cedo do que esperado)
-        ids_hoje_bq = set()
-        if not df_reg.empty:
-            _mask = df_reg["data_dt"].dt.date == hoje
-            ids_hoje_bq = set(df_reg.loc[_mask, "id"].astype(str))
-
-        overlay_rows = []
-        for c in clientes:
-            eh_reg = bool(c.get("_regularizado_hoje"))
-            eh_parc = bool(c.get("_pago_parcial_hoje"))
-            if not (eh_reg or eh_parc):
-                continue
-            cid = str(c.get("id") or "")
-            if cid in ids_hoje_bq:
-                continue
-            valor_hoje = float(c.get("_valor_pago_hoje") or 0)
-            if valor_hoje <= 0:
-                continue
-            atendente = _norm_atendente_raw(c.get("_grupo"))
-            overlay_rows.append({
-                "id": cid,
-                "atendente": atendente,
-                "valor": valor_hoje,
-                "dt_pagamento": hoje.isoformat(),
-                "data_dt": hoje_dt,
-                "eh_regularizacao": eh_reg,
-                "eh_parcial": eh_parc,
-                # Sem distinção de via_contato pra overlay (não temos rastro
-                # do contato em real-time). Default conservador: via_contato.
-                "tipo_atribuicao": "via_contato",
-            })
-        if overlay_rows:
-            df_reg = pd.concat(
-                [df_reg, pd.DataFrame(overlay_rows)],
-                ignore_index=True,
-            )
+    # ── Overlay real-time: pagamentos via API Superlógica ──────────────────
+    # BQ replica 1×/dia (lag), então pagamentos recentes só aparecem amanhã
+    # no df_reg. Overlay (store["clientes"] com _regularizado_hoje /
+    # _pago_parcial_hoje + _dt_liquidacao_real) preenche essa lacuna.
+    # IMPORTANTE: usa a data REAL de liquidação (não hoje). Cliente que pagou
+    # 15/06 aparece no dia 15/06 do gráfico, não em hoje — antes inflava a
+    # barra de hoje com 19 limbos.
+    overlay_rows = _build_overlay_rows(clientes, df_reg, dt_inicio, dt_fim)
+    if overlay_rows:
+        df_reg = pd.concat(
+            [df_reg, pd.DataFrame(overlay_rows)],
+            ignore_index=True,
+        )
 
     with fp2:
         especialistas_disp = sorted(
@@ -252,8 +276,12 @@ def _render_especialista(store, clientes, role):
 
     # Sub-texto contextual no 'Pagamentos' — se filtrando por 1 especialista,
     # mostra comparativo com a média da equipe.
-    team_especialistas = int(df_per_all["atendente"].nunique()) if not df_per_all.empty else 0
-    team_total_pgto = int(df_per_all["id"].astype(str).nunique()) if not df_per_all.empty else 0
+    # Exclui 'Sem especialista' do cálculo: não é uma pessoa real, é o
+    # bucket de clientes não atribuídos a Ana/Priscila. Incluir enviesa a
+    # média (Ana/Priscila parecem 95% acima quando na verdade é só a divisão).
+    df_team = df_per_all[df_per_all["atendente"] != "Sem especialista"] if not df_per_all.empty else df_per_all
+    team_especialistas = int(df_team["atendente"].nunique()) if not df_team.empty else 0
+    team_total_pgto = int(df_team["id"].astype(str).nunique()) if not df_team.empty else 0
     media_por_esp = (team_total_pgto / team_especialistas) if team_especialistas else 0
     if filtro_esp != "Todos" and team_especialistas:
         diff_pct = ((total_pgto - media_por_esp) / media_por_esp * 100) if media_por_esp else 0
@@ -557,7 +585,8 @@ def _render_especialista(store, clientes, role):
         unsafe_allow_html=True,
     )
     # Calcula primeiro dia há 6 meses (1º dia do mês há 5 meses pra trás)
-    _hoje_trend = date.today()
+    # Usa BRT pra consistência com o resto da tela.
+    _hoje_trend = date.fromisoformat(hoje_brt())
     _ano = _hoje_trend.year
     _mes = _hoje_trend.month - 5
     while _mes <= 0:
@@ -572,6 +601,15 @@ def _render_especialista(store, clientes, role):
         })
         df_trend["data_dt"] = pd.to_datetime(df_trend["dt_pagamento"], errors="coerce")
         df_trend = df_trend.dropna(subset=["data_dt"])
+        # Adiciona linhas do overlay (mesmos critérios do df_reg principal)
+        # pra que o mês atual reflita pagamentos detectados em real-time.
+        # Sem isso, mês corrente subestima (faltam os pagamentos do dia).
+        _trend_overlay = _build_overlay_rows(clientes, df_trend, _trend_inicio, _hoje_trend)
+        if _trend_overlay:
+            df_trend = pd.concat(
+                [df_trend, pd.DataFrame(_trend_overlay)],
+                ignore_index=True,
+            )
         # Aplica filtro de Situação no trend também (consistência com o resto)
         if ids_situacao_ok is not None:
             df_trend = df_trend[df_trend["id"].astype(str).isin(ids_situacao_ok)]

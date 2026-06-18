@@ -336,9 +336,12 @@ def aplicar_pagamentos_hoje_no_store():
         foi_hoje = bool(info.get("foi_hoje"))
         c["_valor_pago_hoje"] = info["valor_total"]
         # Data da liquidação pro badge "PAGOU R$ X EM dd/mm" quando não foi hoje
+        # E pra atribuir o pagamento ao dia REAL nos gráficos do Especialista
+        # (em vez de "hoje" pra todos, que enviesa a barra do dia atual).
         _dt_liq_d = info.get("dt_liquidacao_date")
         if _dt_liq_d:
             c["_dt_pagamento_recente"] = _dt_liq_d.strftime("%d/%m")
+            c["_dt_liquidacao_real"] = _dt_liq_d
         c["_pagamento_foi_hoje"] = foi_hoje
 
         if c.get("_cobracas_ajustadas"):
