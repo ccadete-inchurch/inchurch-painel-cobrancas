@@ -7,8 +7,6 @@ from helpers import fmt_moeda_plain, fmt_moeda, get_effective_atendente, hoje_lo
 from data import (
     fetch_ids_em_qualquer_lote_hoje,
     fetch_cobrancas_liquidacao,
-    fetch_pagamentos_hoje_api,
-    fetch_inadimplentes_uniao_mes,
 )
 
 
@@ -48,63 +46,38 @@ def _build_regularizados_fresh(store) -> list:
                 "inativo":   bool(row.get("inativo", False)),
             })
 
-    # Adiciona overlay (últimos 3 dias via API SL) — captura limbos que o BQ
-    # ainda não replicou (cliente pagou 15/06 mas crédito chega 17/06+).
-    # Dedup por (id, data) — se BQ já tem cliente X em data Y, overlay não
-    # adiciona de novo.
-    try:
-        pagamentos_api = fetch_pagamentos_hoje_api()
-    except Exception:
-        pagamentos_api = {}
-
-    if pagamentos_api:
-        existing = {(r["id"], r["data"]) for r in regs}
-        # Lookup de inativo via store["clientes"]
-        clientes_lookup = {str(c.get("id") or ""): c for c in store.get("clientes", [])}
-
-        # FILTRO CRÍTICO: contexto de inadimplência. A API SL retorna TODOS
-        # os pagamentos (em dia + em atraso). A tela Pagamentos é de
-        # cobrança, então só clientes que ESTÃO ou ESTIVERAM inadimplentes
-        # recente são relevantes. Sem esse filtro, em-dia entrariam aqui e
-        # inflavam a contagem (caso real: dia 15 mostrava 141 quando o
-        # BQ direto tinha só 27).
-        # Cacheado em session_state pra não rebuildar a cada render.
-        _CTX_KEY = "_ids_inadimplencia_contexto_pagamentos"
-        ids_inadimplencia_contexto = st.session_state.get(_CTX_KEY)
-        if ids_inadimplencia_contexto is None:
-            ids_atuais = {str(c.get("id") or "") for c in store.get("clientes", [])}
-            try:
-                ids_recentes = fetch_inadimplentes_uniao_mes()
-            except Exception:
-                ids_recentes = set()
-            ids_inadimplencia_contexto = ids_atuais | ids_recentes
-            st.session_state[_CTX_KEY] = ids_inadimplencia_contexto
-
-        for cid, info in pagamentos_api.items():
-            dt_liq_d = info.get("dt_liquidacao_date")
-            if dt_liq_d is None:
-                continue
-            if float(info.get("valor_total") or 0) <= 0:
-                continue
-            # Skip se cliente nunca foi inadimplente no mês — pagamento em
-            # dia normal, não pertence à tela de cobrança.
-            if cid not in ids_inadimplencia_contexto:
-                continue
-            data_liq_br = dt_liq_d.strftime("%d/%m/%Y")
-            if (cid, data_liq_br) in existing:
-                continue
-            cli = clientes_lookup.get(cid)
-            inativo = bool(cli.get("_inativo")) if cli else False
-            regs.append({
-                "id":        cid,
-                "nome":      info.get("nome") or "",
-                "cnpj":      info.get("cnpj") or "",
-                "valor":     float(info["valor_total"]),
-                "atendente": "",  # resolvido via get_effective_atendente
-                "data":      data_liq_br,
-                "tipo":      "overlay",
-                "inativo":   inativo,
-            })
+    # Adiciona overlay — MESMA lógica da tela Especialista pra uniformizar.
+    # Itera store["clientes"] (atuais) e usa flags _regularizado_hoje/
+    # _pago_parcial_hoje setadas pelo overlay (aplicar_pagamentos_hoje_no_store).
+    # Cliente em-dia NÃO está em store["clientes"] → não entra. Cliente
+    # limbo (pagou 15/06, crédito vindo) está com a flag setada → entra
+    # com a data real do pagamento (_dt_liquidacao_real).
+    existing = {(r["id"], r["data"]) for r in regs}
+    for c in store.get("clientes", []):
+        eh_reg = bool(c.get("_regularizado_hoje"))
+        eh_parc = bool(c.get("_pago_parcial_hoje"))
+        if not (eh_reg or eh_parc):
+            continue
+        dt_real = c.get("_dt_liquidacao_real")
+        if dt_real is None:
+            continue
+        valor = float(c.get("_valor_pago_hoje") or 0)
+        if valor <= 0:
+            continue
+        cid = str(c.get("id") or "")
+        data_liq_br = dt_real.strftime("%d/%m/%Y")
+        if (cid, data_liq_br) in existing:
+            continue
+        regs.append({
+            "id":        cid,
+            "nome":      str(c.get("nome") or ""),
+            "cnpj":      str(c.get("cnpj") or ""),
+            "valor":     valor,
+            "atendente": "",  # resolvido via get_effective_atendente
+            "data":      data_liq_br,
+            "tipo":      "overlay",
+            "inativo":   bool(c.get("_inativo", False)),
+        })
     return regs
 
 
