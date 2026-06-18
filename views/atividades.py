@@ -465,24 +465,30 @@ def _render_atividades(store, clientes, role):
         # Helper: conta inadimplentes restantes (não regularizados hoje) +
         # regularizações + parciais. REG e PARC são mutuamente exclusivas;
         # INAD inclui parciais (cliente que pagou parte continua inadimplente).
-        def _agg(cs):
+        def _agg(cs, strict_hoje=False):
+            """Conta inad, reg, parc.
+
+            strict_hoje=False (modo LOTE): cliente está no lote do dia,
+            então qualquer regularização/parcial detectada vale — é trabalho
+            do dia. Cobre o caso: cliente que pagou ontem mas BQ não viu,
+            entrou no lote de hoje, overlay detectou durante o dia.
+
+            strict_hoje=True (modo TOTAL): exige _pagamento_foi_hoje pra
+            excluir limbo de outros dias. Reflete só pagamentos do DIA
+            (placar honesto sem inflação dos 3d do overlay).
+            """
             inad_n, reg_n, reg_v, parc_n, parc_v = 0, 0, 0.0, 0, 0.0
             for c in cs:
                 vlr = float(c.get("_valor_pago_hoje") or 0)
+                foi_hoje = c.get("_pagamento_foi_hoje")
                 if c.get("_regularizado_hoje"):
-                    # REGULARIZAÇÕES = só HOJE (placar do dia). Pagamentos
-                    # detectados pelo overlay nos últimos 3 dias mas que NÃO
-                    # foram hoje (ex: pagou 15/06, crédito chega 17/06) saem
-                    # do contador — mantém só o trabalho do dia.
-                    # INAD continua desconsiderando esses (eles JÁ pagaram,
-                    # só BQ não viu) — coerente com o lote.
-                    if c.get("_pagamento_foi_hoje"):
+                    # No LOTE: conta direto. No TOTAL: só se foi_hoje.
+                    if not strict_hoje or foi_hoje:
                         reg_n += 1
                         reg_v += vlr
                 else:
                     inad_n += 1
-                    # PARCIAIS = só pagamentos de HOJE. Mesma lógica das REG.
-                    if vlr > 0 and c.get("_pagamento_foi_hoje"):
+                    if vlr > 0 and (not strict_hoje or foi_hoje):
                         parc_n += 1
                         parc_v += vlr
             return inad_n, reg_n, reg_v, parc_n, parc_v
@@ -519,8 +525,10 @@ def _render_atividades(store, clientes, role):
             _carteira_cs = [c for c in clientes_full if c.get("_grupo") == _atendente_nome]
             lote_inad_n = sum(1 for c in _carteira_cs if not c.get("_regularizado_hoje"))
             # Reg + Parc: só do lote do dia (mérito do trabalho do atendente).
+            # strict_hoje=False — cliente em lote é trabalho do dia mesmo se
+            # liquidação foi ontem (BQ não viu, overlay detectou).
             _lote_cs = [c for c in clientes_full if c.get("id") in _ids_lote]
-            _, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v = _agg(_lote_cs)
+            _, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v = _agg(_lote_cs, strict_hoje=False)
         # Dados do TOTAL — respeita filtros Grupo (incluindo 'Sem especialista')
         # e Situação. Sublabel removido por feedback — visual mais limpo.
         total_inad_n = total_reg_n = total_parc_n = 0
@@ -545,7 +553,9 @@ def _render_atividades(store, clientes, role):
                 _total_cs = [c for c in _total_cs if not c.get("_inativo")]
             elif _fs == "Inativos":
                 _total_cs = [c for c in _total_cs if c.get("_inativo")]
-            total_inad_n, total_reg_n, total_reg_v, total_parc_n, total_parc_v = _agg(_total_cs)
+            # strict_hoje=True — placar honesto do DIA, sem inflar com limbo
+            # de pagamentos de 3 dias atrás detectados pelo overlay.
+            total_inad_n, total_reg_n, total_reg_v, total_parc_n, total_parc_v = _agg(_total_cs, strict_hoje=True)
 
         def _palavra(n, sing, plur):
             return sing if n == 1 else plur
