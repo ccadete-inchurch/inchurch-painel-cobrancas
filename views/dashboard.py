@@ -238,7 +238,7 @@ def _render_dashboard(store, clientes, role):
                 f'<div class="metric-card" style="min-height:220px;padding:20px 18px;display:flex;flex-direction:column">'
                 f'<div class="metric-label" style="font-size:13px">{label}</div>'
                 f'<div class="metric-value" style="color:{cor};font-size:46px">{val:,}</div>'
-                f'<div class="metric-sub" style="font-size:13px">{sub}</div></div>',
+                f'<div class="metric-sub" style="font-size:15px">{sub}</div></div>',
                 unsafe_allow_html=True,
             )
     # 6º card: variação no mês (layout vertical com sub-linhas)
