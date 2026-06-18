@@ -1212,18 +1212,22 @@ def fetch_regularizados_mes_atual() -> set:
 def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
     """Eficácia REAL de contato por especialista no período.
 
-    Diferente da eficácia simplificada (regularizações via contato / contatos
-    em pagamentos), esta usa o DENOMINADOR CORRETO: total de clientes únicos
-    que o especialista contactou no período, mesmo que não tenham pagado.
+    Eficácia REAL = clientes_contactados_que_pagaram_no_período /
+                    clientes_contactados_no_período
 
-    Eficácia REAL = clientes_contactados_que_regularizaram / clientes_contactados_unicos
+    Antes a fórmula usava o snapshot atual ('cliente NÃO está mais
+    inadimplente hoje') no numerador, o que misturava janelas: o
+    denominador era do período, o numerador era 'até hoje'. Pra
+    'Mês atual' funcionava por coincidência (período termina hoje),
+    mas pra qualquer período histórico (mês anterior, últimos 30 dias,
+    etc.) inflava com pagamentos feitos DEPOIS do fim do período.
 
-    Exemplo de diferença (junho/2026):
-      Métrica anterior: Ana 18/20 = 90% (só pagamentos com contato)
-      Métrica REAL:     Ana 20/166 = 12% (todos clientes contactados)
+    Agora ambos respeitam a janela do filtro: 'contactados no período E
+    pagaram em atraso no período'. Comparação entre meses fica honesta
+    — cada mês fecha com sua eficácia.
 
-    Reflete o que realmente acontece: a maioria dos contatos não converte
-    imediatamente — cliente é abordado, prazo dado, etc.
+    Denominador (total de contactados) inclui clientes que nem pagaram —
+    reflete o esforço real, não só o que converteu.
     """
     client = get_bq_client()
     if not client:
@@ -1245,20 +1249,24 @@ def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.D
                   )
                 GROUP BY cid, atendente
             ),
-            inad_hoje AS (
+            pagamentos_periodo AS (
+                -- Clientes que liquidaram cobrança EM ATRASO dentro do período.
+                -- Mesmo critério das outras métricas da tela: fl_status='1'
+                -- e dt_liquidacao > dt_vencimento.
                 SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
-                FROM `{_SNAPSHOT_TABLE}`
-                WHERE data_snapshot = (
-                    SELECT MAX(data_snapshot) FROM `{_SNAPSHOT_TABLE}`
-                )
+                FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+                WHERE fl_status_recb = '1'
+                  AND dt_liquidacao_recb > dt_vencimento_recb
+                  AND DATE(dt_liquidacao_recb) >= DATE('{dt_inicio_iso}')
+                  AND DATE(dt_liquidacao_recb) <= DATE('{dt_fim_iso}')
             )
             SELECT
                 c.atendente,
                 COUNT(DISTINCT c.cid) AS clientes_contactados,
-                COUNT(DISTINCT IF(i.cid IS NULL, c.cid, NULL)) AS regularizaram,
-                COUNT(DISTINCT IF(i.cid IS NOT NULL, c.cid, NULL)) AS ainda_inadimplentes
+                COUNT(DISTINCT IF(p.cid IS NOT NULL, c.cid, NULL)) AS regularizaram,
+                COUNT(DISTINCT IF(p.cid IS NULL, c.cid, NULL)) AS ainda_inadimplentes
             FROM contatos_periodo c
-            LEFT JOIN inad_hoje i ON i.cid = c.cid
+            LEFT JOIN pagamentos_periodo p ON p.cid = c.cid
             GROUP BY c.atendente
         """).to_dataframe()
         if df.empty:
