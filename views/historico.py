@@ -4,7 +4,12 @@ import pandas as pd
 import streamlit as st
 
 from helpers import fmt_moeda_plain, fmt_moeda, get_effective_atendente, hoje_lote
-from data import fetch_ids_em_qualquer_lote_hoje, fetch_cobrancas_liquidacao, fetch_pagamentos_hoje_api
+from data import (
+    fetch_ids_em_qualquer_lote_hoje,
+    fetch_cobrancas_liquidacao,
+    fetch_pagamentos_hoje_api,
+    fetch_inadimplentes_uniao_mes,
+)
 
 
 def _build_regularizados_fresh(store) -> list:
@@ -56,11 +61,34 @@ def _build_regularizados_fresh(store) -> list:
         existing = {(r["id"], r["data"]) for r in regs}
         # Lookup de inativo via store["clientes"]
         clientes_lookup = {str(c.get("id") or ""): c for c in store.get("clientes", [])}
+
+        # FILTRO CRÍTICO: contexto de inadimplência. A API SL retorna TODOS
+        # os pagamentos (em dia + em atraso). A tela Pagamentos é de
+        # cobrança, então só clientes que ESTÃO ou ESTIVERAM inadimplentes
+        # recente são relevantes. Sem esse filtro, em-dia entrariam aqui e
+        # inflavam a contagem (caso real: dia 15 mostrava 141 quando o
+        # BQ direto tinha só 27).
+        # Cacheado em session_state pra não rebuildar a cada render.
+        _CTX_KEY = "_ids_inadimplencia_contexto_pagamentos"
+        ids_inadimplencia_contexto = st.session_state.get(_CTX_KEY)
+        if ids_inadimplencia_contexto is None:
+            ids_atuais = {str(c.get("id") or "") for c in store.get("clientes", [])}
+            try:
+                ids_recentes = fetch_inadimplentes_uniao_mes()
+            except Exception:
+                ids_recentes = set()
+            ids_inadimplencia_contexto = ids_atuais | ids_recentes
+            st.session_state[_CTX_KEY] = ids_inadimplencia_contexto
+
         for cid, info in pagamentos_api.items():
             dt_liq_d = info.get("dt_liquidacao_date")
             if dt_liq_d is None:
                 continue
             if float(info.get("valor_total") or 0) <= 0:
+                continue
+            # Skip se cliente nunca foi inadimplente no mês — pagamento em
+            # dia normal, não pertence à tela de cobrança.
+            if cid not in ids_inadimplencia_contexto:
                 continue
             data_liq_br = dt_liq_d.strftime("%d/%m/%Y")
             if (cid, data_liq_br) in existing:
