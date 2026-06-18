@@ -382,10 +382,25 @@ def aplicar_pagamentos_hoje_no_store():
                 c["_regularizado_hoje"] = True
             else:
                 c["_pago_parcial_hoje"] = True
-        else:
-            # FALLBACK: API não retornou IDs (caso raro com a nova config)
-            # ou IDs não casaram com _cobracas (cobrança paga não tava no
-            # snapshot do BQ). Usa lógica antiga: compara pago vs saldo.
+        elif paid_ids:
+            # API retornou IDs mas nenhum bate com _cobracas. Significa
+            # que cliente pagou uma cobrança QUE NÃO ESTÁ na lista de
+            # vencidas — provavelmente uma futura antecipada (BQ filtra
+            # fl_status='0', cobrança paga sai da lista).
+            #
+            # Caso real: Igreja Evangélica Ministério Somar pagou cobrança
+            # 124395 (vence 06/07, antecipada). _cobracas só tem 122582
+            # (vence 05/06, vencida). Subtrair 329,80 do saldo de 783,33
+            # estaria errado — esse pagamento NÃO é parcial da vencida.
+            #
+            # Resultado: NÃO mexe no saldo, NÃO marca _pago_parcial_hoje.
+            # O cliente continua inadimplente normalmente. O pagamento
+            # ainda aparece na tela Pagamentos via _valor_pago_hoje.
+            pass
+        elif not c.get("_cobracas_ajustadas"):
+            # FALLBACK SÓ se API não retornou IDs (caso raro). Sem IDs
+            # não temos como saber qual cobrança foi paga, então assumimos
+            # que foi vencida e usamos lógica antiga (compara pago vs saldo).
             saldo_vencido = sum(
                 float(cob.get("valor") or 0)
                 for cob in c.get("_cobracas", [])
