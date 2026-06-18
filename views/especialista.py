@@ -72,6 +72,14 @@ def _build_overlay_rows(clientes, df_bq, dt_inicio, dt_fim):
         if valor <= 0:
             continue
         atendente = _norm_atendente_raw(c.get("_grupo"))
+        # Atribuição:
+        # - Cliente sem grupo (Sem especialista) → sem_atribuicao (não tem
+        #   ninguém pra creditar). Antes default era via_contato, o que
+        #   incorretamente inflava "via contato" do Sem especialista.
+        # - Cliente com grupo (Ana/Priscila) → via_contato como default
+        #   conservador (em real-time não temos como checar se a atendente
+        #   realmente fez contato pra esse cliente).
+        tipo_atrib = "sem_atribuicao" if atendente == "Sem especialista" else "via_contato"
         rows.append({
             "id": cid,
             "atendente": atendente,
@@ -80,8 +88,7 @@ def _build_overlay_rows(clientes, df_bq, dt_inicio, dt_fim):
             "data_dt": pd.to_datetime(dt_real),
             "eh_regularizacao": eh_reg,
             "eh_parcial": eh_parc,
-            # Default conservador: via_contato (não temos rastro em real-time)
-            "tipo_atribuicao": "via_contato",
+            "tipo_atribuicao": tipo_atrib,
         })
     return rows
 
@@ -283,7 +290,9 @@ def _render_especialista(store, clientes, role):
     team_especialistas = int(df_team["atendente"].nunique()) if not df_team.empty else 0
     team_total_pgto = int(df_team["id"].astype(str).nunique()) if not df_team.empty else 0
     media_por_esp = (team_total_pgto / team_especialistas) if team_especialistas else 0
-    if filtro_esp != "Todos" and team_especialistas:
+    # Não mostra "vs média" pra 'Sem especialista' — ele não é uma pessoa
+    # real (é o bucket de clientes não atribuídos), comparar não faz sentido.
+    if filtro_esp not in ("Todos", "Sem especialista") and team_especialistas:
         diff_pct = ((total_pgto - media_por_esp) / media_por_esp * 100) if media_por_esp else 0
         sinal = "+" if diff_pct >= 0 else ""
         cor_diff = "#22c55e" if diff_pct >= 0 else "#ef4444"
@@ -669,19 +678,39 @@ def _render_especialista(store, clientes, role):
         unsafe_allow_html=True,
     )
     # Agregado por especialista — pagamentos, regularizações, parciais, valor,
-    # contagem via contato direto vs espontâneo, e eficácia do contato.
+    # contagem via contato direto vs espontâneo.
+    # IMPORTANTE: dedup POR CLIENTE antes de agregar, senão Sara (com 2
+    # linhas: BQ + overlay) conta duas vezes em reg/parc — mesma raiz do
+    # bug dos cards. Aplica regra de prioridade REG > PARC (estado final).
     df_per["reg_via_contato"] = (
         df_per["eh_regularizacao"].astype(bool)
         & (df_per["tipo_atribuicao"] == "via_contato")
     )
-    rank_agg = (
-        df_per.groupby("atendente")
+    # Passo 1: classifica cada cliente UMA vez (qualquer linha reg → reg;
+    # qualquer via_contato → via_contato; valor total)
+    per_cli_rank = (
+        df_per.groupby(["id", "atendente"])
         .agg(
-            pagamentos=("id", "nunique"),
-            regularizacoes=("eh_regularizacao", lambda s: int(s.sum())),
-            parciais=("eh_parcial", lambda s: int(s.sum())),
-            via_contato=("tipo_atribuicao", lambda s: int((s == "via_contato").sum())),
-            reg_via_contato=("reg_via_contato", lambda s: int(s.sum())),
+            tem_reg=("eh_regularizacao", "any"),
+            tem_parc=("eh_parcial", "any"),
+            tem_via_contato=("tipo_atribuicao", lambda s: (s == "via_contato").any()),
+            tem_reg_via_contato=("reg_via_contato", "any"),
+            valor=("valor", "sum"),
+        )
+        .reset_index()
+    )
+    # Aplica prioridade REG > PARC
+    per_cli_rank["eh_reg_final"] = per_cli_rank["tem_reg"]
+    per_cli_rank["eh_parc_final"] = per_cli_rank["tem_parc"] & ~per_cli_rank["tem_reg"]
+    # Passo 2: agrega por atendente (cada linha já é 1 cliente)
+    rank_agg = (
+        per_cli_rank.groupby("atendente")
+        .agg(
+            pagamentos=("id", "size"),
+            regularizacoes=("eh_reg_final", "sum"),
+            parciais=("eh_parc_final", "sum"),
+            via_contato=("tem_via_contato", "sum"),
+            reg_via_contato=("tem_reg_via_contato", "sum"),
             valor=("valor", "sum"),
         )
         .reset_index()
