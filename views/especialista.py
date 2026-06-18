@@ -440,7 +440,6 @@ def _render_especialista(store, clientes, role):
             alt.Tooltip("pagamentos:Q", title="Pagamentos"),
             alt.Tooltip("eficacia_real:Q", title="Eficácia (%)", format=".2f"),
             alt.Tooltip("clientes_contactados:Q", title="Contatados"),
-            alt.Tooltip("regularizaram:Q", title="Regularizaram (dos contatados)"),
             alt.Tooltip("valor:Q", title="Valor recuperado", format=",.2f"),
         ],
     )
