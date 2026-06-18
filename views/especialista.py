@@ -6,7 +6,7 @@ import streamlit as st
 
 from auth import current_role
 from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_por_especialista
-from helpers import fmt_moeda_plain
+from helpers import fmt_moeda_plain, hoje_brt
 
 
 # Paleta categórica — verde InChurch pras atendentes ativas + cinza forte
@@ -89,7 +89,11 @@ def _render_especialista(store, clientes, role):
             key="esp_situacao",
         )
 
-    hoje = date.today()
+    # IMPORTANTE: usar BRT, não date.today() (que segue UTC no servidor).
+    # Senão, depois das 21h BRT (= 00h UTC do próximo dia), 'hoje' viraria o
+    # dia seguinte e o overlay marcava todas as linhas com data errada —
+    # gráfico "Pagamentos por Dia" pulava o dia real e enchia o dia seguinte.
+    hoje = date.fromisoformat(hoje_brt())
     if periodo == "Este mês":
         dt_inicio = hoje.replace(day=1)
         dt_fim = hoje
