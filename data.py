@@ -1235,10 +1235,12 @@ def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.D
     try:
         df = client.query(f"""
             WITH contatos_periodo AS (
+                -- Clientes contactados no período. Usa PRIMEIRO contato pra
+                -- saber a data a partir de qual pagamento conta como conversão.
                 SELECT
                     CAST(id_sacado_sac AS STRING) AS cid,
                     atendente,
-                    MAX(data_tarefa) AS ult_contato
+                    MIN(data_tarefa) AS primeiro_contato
                 FROM `{_TAREFAS_TABLE}`
                 WHERE data_tarefa >= DATE('{dt_inicio_iso}')
                   AND data_tarefa <= DATE('{dt_fim_iso}')
@@ -1249,16 +1251,21 @@ def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.D
                   )
                 GROUP BY cid, atendente
             ),
-            pagamentos_periodo AS (
-                -- Clientes que liquidaram cobrança EM ATRASO dentro do período.
-                -- Mesmo critério das outras métricas da tela: fl_status='1'
-                -- e dt_liquidacao > dt_vencimento.
-                SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
-                FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
-                WHERE fl_status_recb = '1'
-                  AND dt_liquidacao_recb > dt_vencimento_recb
-                  AND DATE(dt_liquidacao_recb) >= DATE('{dt_inicio_iso}')
-                  AND DATE(dt_liquidacao_recb) <= DATE('{dt_fim_iso}')
+            pagamentos_apos_contato AS (
+                -- Cliente que pagou EM ATRASO no período E o pagamento foi
+                -- DEPOIS do primeiro contato (causalidade temporal).
+                -- Sem essa condição, pagamentos antigos (antes do contato)
+                -- contavam como conversão — inflavam eficácia em períodos
+                -- longos onde contatos começaram recentemente.
+                SELECT DISTINCT CAST(p.id_sacado_sac AS STRING) AS cid
+                FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` p
+                JOIN contatos_periodo c
+                  ON CAST(p.id_sacado_sac AS STRING) = c.cid
+                WHERE p.fl_status_recb = '1'
+                  AND p.dt_liquidacao_recb > p.dt_vencimento_recb
+                  AND DATE(p.dt_liquidacao_recb) >= DATE('{dt_inicio_iso}')
+                  AND DATE(p.dt_liquidacao_recb) <= DATE('{dt_fim_iso}')
+                  AND DATE(p.dt_liquidacao_recb) >= c.primeiro_contato
             )
             SELECT
                 c.atendente,
@@ -1266,7 +1273,7 @@ def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.D
                 COUNT(DISTINCT IF(p.cid IS NOT NULL, c.cid, NULL)) AS regularizaram,
                 COUNT(DISTINCT IF(p.cid IS NULL, c.cid, NULL)) AS ainda_inadimplentes
             FROM contatos_periodo c
-            LEFT JOIN pagamentos_periodo p ON p.cid = c.cid
+            LEFT JOIN pagamentos_apos_contato p ON p.cid = c.cid
             GROUP BY c.atendente
         """).to_dataframe()
         if df.empty:
