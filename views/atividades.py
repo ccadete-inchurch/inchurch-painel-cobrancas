@@ -478,6 +478,12 @@ def _render_atividades(store, clientes, role):
             strict_hoje=True (modo TOTAL): exige _pagamento_foi_hoje pra
             excluir limbo de outros dias. Reflete só pagamentos do DIA
             (placar honesto sem inflação dos 3d do overlay).
+
+            Pra parcial, exige _pago_parcial_hoje (a flag explícita do
+            overlay) — sem isso, cliente que pagou cobrança FUTURA
+            antecipada (ex: Igreja Evangélica Ministério Somar pagou
+            cobrança que vence 06/07) era contado erroneamente como
+            parcial só porque _valor_pago_hoje > 0.
             """
             inad_n, reg_n, reg_v, parc_n, parc_v = 0, 0, 0.0, 0, 0.0
             for c in cs:
@@ -490,7 +496,11 @@ def _render_atividades(store, clientes, role):
                         reg_v += vlr
                 else:
                     inad_n += 1
-                    if vlr > 0 and (not strict_hoje or foi_hoje):
+                    if (
+                        c.get("_pago_parcial_hoje")
+                        and vlr > 0
+                        and (not strict_hoje or foi_hoje)
+                    ):
                         parc_n += 1
                         parc_v += vlr
             return inad_n, reg_n, reg_v, parc_n, parc_v
