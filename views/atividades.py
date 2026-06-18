@@ -228,28 +228,17 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     # com padding maior e borda sólida). É info crítica pra atendente —
     # cliente está pagando, prioridade alta.
     _vl_parcial = float(c.get("_valor_pago_hoje") or 0)
-    # Badge de pagamento parcial — sempre aparece se cliente está no lote
-    # (overlay marcou _pago_parcial_hoje). Se liquidação foi hoje, mostra
-    # "HOJE". Se foi em outro dia (overlay 3d window detectou ontem mas
-    # crédito chega depois), mostra "EM dd/mm" pra atendente saber.
-    # Sem esse badge, o cliente parcial fica "fantasma" — o card "PARCIAL"
-    # mostra +1 mas atendente não identifica quem é.
+    # Badge de pagamento parcial — aparece sempre que overlay marcou
+    # _pago_parcial_hoje, mostra "HOJE" (perspectiva do sistema: o sistema
+    # detectou hoje, mesmo que liquidação real tenha sido ontem). Coerente
+    # com o badge "Regularizado hoje" que segue mesma lógica.
     _eh_parcial = bool(c.get("_pago_parcial_hoje")) and not _regularizado and _vl_parcial > 0
-    if _eh_parcial:
-        if c.get("_pagamento_foi_hoje"):
-            _label_pgto = "HOJE"
-        elif c.get("_dt_pagamento_recente"):
-            _label_pgto = f"EM {c.get('_dt_pagamento_recente')}"
-        else:
-            _label_pgto = ""  # fallback raro
-        parcial_badge = (
-            f'<span style="background:rgba(124,194,67,.18);color:#7cc243;font-size:10px;'
-            f'font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;'
-            f'border:1px solid rgba(124,194,67,.35);'
-            f'vertical-align:middle">PAGOU {fmt_moeda_plain(_vl_parcial)} {_label_pgto}</span>'
-        )
-    else:
-        parcial_badge = ""
+    parcial_badge = (
+        f'<span style="background:rgba(124,194,67,.18);color:#7cc243;font-size:10px;'
+        f'font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;'
+        f'border:1px solid rgba(124,194,67,.35);'
+        f'vertical-align:middle">PAGOU {fmt_moeda_plain(_vl_parcial)} HOJE</span>'
+    ) if _eh_parcial else ""
     motivo_txt, motivo_style = _motivo(bucket, acoes, c)
     _motivo_css = {
         "red":    "color:#ff5555;background:rgba(239,68,68,.08);border-left:2px solid #ff5555;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
