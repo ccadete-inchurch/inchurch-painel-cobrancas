@@ -416,63 +416,12 @@ def aplicar_pagamentos_hoje_no_store():
 
         c["_cobracas_ajustadas"] = True
 
-    # 2) Adicionar a regularizados — pagamentos de clientes inadimplentes
-    # (atuais OU em algum snapshot do mês). Em-dia normais ficam fora.
-    #
-    # Performance: contexto é computado 1x por sessão (cacheado em
-    # session_state). Sem isso, a cada render do app o set comprehension
-    # roda + fetch_inadimplentes_uniao_mes é consultado.
-    _CTX_KEY = "_ids_inadimplencia_contexto"
-    ids_inadimplencia_contexto = st.session_state.get(_CTX_KEY)
-    if ids_inadimplencia_contexto is None:
-        ids_atuais = {str(c.get("id") or "") for c in store["clientes"]}
-        try:
-            ids_recentes = fetch_inadimplentes_uniao_mes()
-        except Exception:
-            ids_recentes = set()
-        ids_inadimplencia_contexto = ids_atuais | ids_recentes
-        st.session_state[_CTX_KEY] = ids_inadimplencia_contexto
-
-    # Index de regularizados existentes por (cid, data) — pra evitar duplicar
-    # quando o overlay roda múltiplas vezes ou cliente paga em vários dias
-    # dentro da janela de 3 dias.
-    ids_existentes_por_data = {
-        (str(r.get("id") or ""), str(r.get("data") or ""))
-        for r in store["regularizados"]
-    }
-    for cid, info in pagamentos.items():
-        # Data real da liquidação no formato DD/MM/YYYY (não hoje_br se foi
-        # liquidado em dia passado — queremos a data factual em Pagamentos).
-        dt_liq_d = info.get("dt_liquidacao_date")
-        if dt_liq_d is None:
-            continue
-        data_liq_br = dt_liq_d.strftime("%d/%m/%Y")
-
-        if (cid, data_liq_br) in ids_existentes_por_data:
-            continue
-        # Skip: cliente nunca foi inadimplente no mês — pagamento normal,
-        # não pertence à tela de Pagamentos (que é de cobrança).
-        if cid not in ids_inadimplencia_contexto:
-            continue
-        # Skip: pagamento sem valor (R$ 0,00) — ocorre quando a API retorna
-        # registros de estorno/cancelamento ou itens com vl_total_recb=null.
-        # Esses não devem aparecer como "regularizado" na tela Pagamentos.
-        if float(info.get("valor_total") or 0) <= 0:
-            continue
-        cliente_match = next((c for c in store["clientes"] if str(c.get("id")) == cid), None)
-        inativo = bool(cliente_match.get("_inativo")) if cliente_match else False
-        # Atendente associada ao cliente — pega do mapa carregado por
-        # load_atendente_atual_painel(). Vazio se cliente sem dono.
-        atendente = st.session_state.get("_painel_atendente_atual", {}).get(cid, "")
-        store["regularizados"].append({
-            "id":        cid,
-            "data":      data_liq_br,
-            "nome":      info["nome"],
-            "cnpj":      info["cnpj"],
-            "valor":     info["valor_total"],
-            "atendente": atendente,
-            "inativo":   inativo,
-        })
+    # ANTES: havia uma seção "2) Adicionar a regularizados" que appendava
+    # entries em store["regularizados"] pra alimentar a tela Pagamentos.
+    # REMOVIDO porque causava acúmulo descontrolado via cache_dados.json
+    # (sessões e dias se sobrepunham, dedup imperfeito). A tela Pagamentos
+    # agora rebuilda do zero a cada render via _build_regularizados_fresh
+    # em views/historico.py — BQ + overlay com dedup limpo, sem persistência.
 
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────

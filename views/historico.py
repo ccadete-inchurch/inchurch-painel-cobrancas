@@ -1,10 +1,83 @@
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 import streamlit as st
 
 from helpers import fmt_moeda_plain, fmt_moeda, get_effective_atendente, hoje_lote
-from data import fetch_ids_em_qualquer_lote_hoje
+from data import fetch_ids_em_qualquer_lote_hoje, fetch_cobrancas_liquidacao, fetch_pagamentos_hoje_api
+
+
+def _build_regularizados_fresh(store) -> list:
+    """Rebuilda a lista de pagamentos do zero a cada render — BQ + overlay 3d.
+
+    Por que: store['regularizados'] acumulava entries entre sessões via cache
+    file (cache_dados.json). Cliente Sara que pagou 15/06 era adicionada via
+    overlay; quando o BQ replicava no dia seguinte, BQ + overlay coexistiam
+    com dedup imperfeito por (id, data). Resultado: a Pagamentos mostrava
+    339 quando o BQ + overlay real era ~199.
+
+    Aqui fazemos fresh: BQ tem nome/cnpj/inativo, overlay adiciona limbos
+    (liquidados últimos 3d, crédito vindo). Sem persistência → sem acúmulo.
+    """
+    df_liq = fetch_cobrancas_liquidacao()
+    regs = []
+    if not df_liq.empty:
+        for _, row in df_liq.iterrows():
+            liq_raw = row.get("data_liquidacao")
+            try:
+                data_liq = (
+                    datetime.strptime(str(liq_raw)[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+                    if pd.notna(liq_raw) and liq_raw
+                    else date.today().strftime("%d/%m/%Y")
+                )
+            except Exception:
+                data_liq = date.today().strftime("%d/%m/%Y")
+            regs.append({
+                "id":        str(row["codigo"]),
+                "nome":      str(row.get("nome") or ""),
+                "cnpj":      str(row.get("cnpj") or ""),
+                "valor":     float(row["valor"]) if pd.notna(row.get("valor")) else 0.0,
+                "atendente": "Sistema (BigQuery)",
+                "data":      data_liq,
+                "tipo":      "auto",
+                "inativo":   bool(row.get("inativo", False)),
+            })
+
+    # Adiciona overlay (últimos 3 dias via API SL) — captura limbos que o BQ
+    # ainda não replicou (cliente pagou 15/06 mas crédito chega 17/06+).
+    # Dedup por (id, data) — se BQ já tem cliente X em data Y, overlay não
+    # adiciona de novo.
+    try:
+        pagamentos_api = fetch_pagamentos_hoje_api()
+    except Exception:
+        pagamentos_api = {}
+
+    if pagamentos_api:
+        existing = {(r["id"], r["data"]) for r in regs}
+        # Lookup de inativo via store["clientes"]
+        clientes_lookup = {str(c.get("id") or ""): c for c in store.get("clientes", [])}
+        for cid, info in pagamentos_api.items():
+            dt_liq_d = info.get("dt_liquidacao_date")
+            if dt_liq_d is None:
+                continue
+            if float(info.get("valor_total") or 0) <= 0:
+                continue
+            data_liq_br = dt_liq_d.strftime("%d/%m/%Y")
+            if (cid, data_liq_br) in existing:
+                continue
+            cli = clientes_lookup.get(cid)
+            inativo = bool(cli.get("_inativo")) if cli else False
+            regs.append({
+                "id":        cid,
+                "nome":      info.get("nome") or "",
+                "cnpj":      info.get("cnpj") or "",
+                "valor":     float(info["valor_total"]),
+                "atendente": "",  # resolvido via get_effective_atendente
+                "data":      data_liq_br,
+                "tipo":      "overlay",
+                "inativo":   inativo,
+            })
+    return regs
 
 
 def _render_historico(store):
@@ -15,7 +88,10 @@ def _render_historico(store):
         unsafe_allow_html=True,
     )
 
-    reg = store["regularizados"]
+    # Rebuilda fresh do BQ + overlay a cada render — não usa mais
+    # store["regularizados"] (que acumulava via cache file).
+    with st.spinner("Carregando pagamentos..."):
+        reg = _build_regularizados_fresh(store)
     if not reg:
         st.info("Nenhum cliente regularizado ainda.")
         return
