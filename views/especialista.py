@@ -392,12 +392,13 @@ def _render_especialista(store, clientes, role):
         df_ef = df_ef[df_ef["atendente"] == filtro_esp]
     if not df_ef.empty:
         agg_esp = agg_esp.merge(
-            df_ef[["atendente", "eficacia_real", "clientes_contactados"]],
+            df_ef[["atendente", "eficacia_real", "clientes_contactados", "regularizaram"]],
             on="atendente", how="left",
-        ).fillna({"eficacia_real": 0, "clientes_contactados": 0})
+        ).fillna({"eficacia_real": 0, "clientes_contactados": 0, "regularizaram": 0})
     else:
         agg_esp["eficacia_real"] = 0
         agg_esp["clientes_contactados"] = 0
+        agg_esp["regularizaram"] = 0
 
     # ── Matriz de Desempenho (scatter Volume × Eficácia) ──────────────────
     # Cada atendente vira um ponto. Quadrante superior direito = star
@@ -439,6 +440,7 @@ def _render_especialista(store, clientes, role):
             alt.Tooltip("pagamentos:Q", title="Pagamentos"),
             alt.Tooltip("eficacia_real:Q", title="Eficácia (%)", format=".2f"),
             alt.Tooltip("clientes_contactados:Q", title="Contatados"),
+            alt.Tooltip("regularizaram:Q", title="Regularizaram (dos contatados)"),
             alt.Tooltip("valor:Q", title="Valor recuperado", format=",.2f"),
         ],
     )
@@ -722,13 +724,17 @@ def _render_especialista(store, clientes, role):
     df_ef_real = fetch_eficacia_por_especialista(dt_inicio.isoformat(), dt_fim.isoformat())
     if df_ef_real.empty:
         rank_agg["eficacia"] = 0
+        rank_agg["ef_regularizaram"] = 0
+        rank_agg["ef_contatados"] = 0
     else:
         rank_agg = rank_agg.merge(
-            df_ef_real[["atendente", "eficacia_real"]],
+            df_ef_real[["atendente", "eficacia_real", "regularizaram", "clientes_contactados"]],
             on="atendente", how="left",
         )
         rank_agg["eficacia"] = rank_agg["eficacia_real"].fillna(0).astype(float)
-        rank_agg = rank_agg.drop(columns=["eficacia_real"])
+        rank_agg["ef_regularizaram"] = rank_agg["regularizaram"].fillna(0).astype(int)
+        rank_agg["ef_contatados"] = rank_agg["clientes_contactados"].fillna(0).astype(int)
+        rank_agg = rank_agg.drop(columns=["eficacia_real", "regularizaram", "clientes_contactados"])
     # Junta com carteira atual
     carteira_count = (
         pd.DataFrame([{"atendente": _norm_atendente_raw(c.get("_grupo"))} for c in clientes])
@@ -804,10 +810,16 @@ def _render_especialista(store, clientes, role):
         )
         # Eficácia REAL — faixas ajustadas (cobrança é trabalho difícil,
         # taxa típica de conversão é 10-20% em operação saudável).
+        # Tooltip mostra a fração explícita pra transparência: X de Y
+        # contatados regularizaram. Antes só dava pra ver o percentual.
         _ef = row["eficacia"]
         _ef_cor = "#22c55e" if _ef >= 30 else ("#f59e0b" if _ef >= 15 else "#ef4444")
+        _ef_reg = int(row.get("ef_regularizaram", 0) or 0)
+        _ef_cont = int(row.get("ef_contatados", 0) or 0)
+        _ef_tip = f"{_ef_reg} de {_ef_cont} clientes contactados regularizaram"
         rcols[6].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:{_ef_cor};font-weight:700">{_ef:.2f}%</div>',
+            f'<div title="{_ef_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
+            f'color:{_ef_cor};font-weight:700">{_ef:.2f}%</div>',
             unsafe_allow_html=True,
         )
         rcols[7].markdown(
