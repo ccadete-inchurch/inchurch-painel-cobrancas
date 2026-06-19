@@ -2,6 +2,7 @@ import base64
 import json
 import secrets as _secrets
 import urllib.parse
+from datetime import datetime
 
 import requests
 import streamlit as st
@@ -88,7 +89,7 @@ def tela_login():
     _logo_html = (
         f'<img src="{LOGO_SRC}" style="height:56px;object-fit:contain">'
         if LOGO_SRC else
-        '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:30px;color:#7cc243;letter-spacing:-0.5px">InChurch</span>'
+        '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:30px;color:#7cc243;letter-spacing:-0.5px">inChurch</span>'
     )
     st.markdown(f"""
     <style>
@@ -113,10 +114,7 @@ def tela_login():
                   border-radius:50%;border:1px solid rgba(124,194,67,0.06)"></div>
 
       <div>
-        <div style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:1.6px;
-                    color:#7cc243;background:rgba(124,194,67,0.1);
-                    border:1px solid rgba(124,194,67,0.25);padding:3px 9px;
-                    border-radius:5px;margin-bottom:10px">VERSÃO 2.0</div>
+        <div style="font-size:11px;color:#6b7280;font-weight:500;letter-spacing:0.5px;margin-bottom:6px">v2.0</div>
         <div>{_logo_html}</div>
       </div>
 
@@ -156,7 +154,7 @@ def tela_login():
         </div>
       </div>
 
-      <div style="font-size:14px;color:#6b7280">© 2026 InChurch · Uso interno</div>
+      <div style="font-size:14px;color:#6b7280">© {datetime.now().year} inChurch · Uso interno</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -251,47 +249,4 @@ def tela_login():
                 _poll_google_oauth(nonce)
             except Exception:
                 pass
-
-        _card_css = (
-            "background:rgba(124,194,67,0.04);border:1px solid rgba(124,194,67,0.12);"
-            "border-radius:10px;padding:14px"
-        )
-        _t = "font-size:13px;color:#e8eaf0;font-weight:600;margin-bottom:3px"
-        _d = "font-size:11.5px;color:#6b7280;line-height:1.45"
-        _changelog_html = (
-            '<div style="padding:48px 48px 0 36px;max-width:520px">'
-            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">'
-            '<div style="height:1px;flex:1;background:linear-gradient(90deg,transparent,#1e2333)"></div>'
-            '<div style="font-size:10px;font-weight:700;letter-spacing:2px;color:#7cc243;text-transform:uppercase">Novidades da Versão 2.0</div>'
-            '<div style="height:1px;flex:1;background:linear-gradient(90deg,#1e2333,transparent)"></div>'
-            '</div>'
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'
-            f'<div style="{_card_css}"><div style="font-size:18px;margin-bottom:6px">⚡</div>'
-            f'<div style="{_t}">Pagamentos em tempo real</div>'
-            f'<div style="{_d}">Overlay de 3 dias via API Superlógica usando data de liquidação</div></div>'
-            f'<div style="{_card_css}"><div style="font-size:18px;margin-bottom:6px">📈</div>'
-            f'<div style="{_t}">Análise por Especialista</div>'
-            f'<div style="{_d}">Ranking, eficácia, evolução mensal e matriz por atendente</div></div>'
-            f'<div style="{_card_css}"><div style="font-size:18px;margin-bottom:6px">🎯</div>'
-            f'<div style="{_t}">Eficácia com causalidade</div>'
-            f'<div style="{_d}">Conta só pagamentos depois do primeiro contato no período</div></div>'
-            f'<div style="{_card_css}"><div style="font-size:18px;margin-bottom:6px">🔁</div>'
-            f'<div style="{_t}">Reset automático de reincidentes</div>'
-            f'<div style="{_d}">Cron detecta quem voltou a ficar inadimplente e reabre o caso</div></div>'
-            f'<div style="{_card_css}"><div style="font-size:18px;margin-bottom:6px">⏰</div>'
-            f'<div style="{_t}">Cooldown de 7 dias</div>'
-            f'<div style="{_d}">Cliente sem resposta ganha selo de tentar novamente</div></div>'
-            f'<div style="{_card_css}"><div style="font-size:18px;margin-bottom:6px">📊</div>'
-            f'<div style="{_t}">Histórico de atrasos</div>'
-            f'<div style="{_d}">Pré-aviso para clientes com padrão repetido de inadimplência</div></div>'
-            '</div>'
-            '<div style="margin-top:22px;padding:14px 16px;background:rgba(124,194,67,0.06);border-left:3px solid #7cc243;border-radius:6px">'
-            '<div style="font-size:11px;font-weight:700;color:#7cc243;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Sob o capô</div>'
-            '<div style="font-size:12px;color:#9ca3af;line-height:1.55">'
-            'Tela de Pagamentos refatorada sem cache acumulado · contadores Lote vs Total semanticamente corretos · '
-            'overlay corrige cobrança futura paga antecipada · cards de Atividades e kanban reformulados · '
-            'timezone BRT consistente em toda a navegação.'
-            '</div></div></div>'
-        )
-        st.markdown(_changelog_html, unsafe_allow_html=True)
 

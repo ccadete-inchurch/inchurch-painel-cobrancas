@@ -40,10 +40,7 @@ def render_sidebar():
 
     st.sidebar.markdown(f"""
     <div style="padding:24px 20px 18px;border-bottom:1px solid #1e2333;margin-bottom:8px">
-        <div style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:1.4px;
-                    color:#7cc243;background:rgba(124,194,67,0.1);
-                    border:1px solid rgba(124,194,67,0.25);padding:2px 7px;
-                    border-radius:4px;margin-bottom:8px">VERSÃO 2.0</div>
+        <div style="font-size:10px;color:#6b7280;font-weight:500;letter-spacing:0.5px;margin-bottom:4px">v2.0</div>
         {logo_sb}
         <div style="font-size:12px;color:#8b94a5;margin-top:6px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600">Painel de Cobrança</div>
     </div>
