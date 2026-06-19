@@ -112,7 +112,13 @@ def tela_login():
       <div style="position:absolute;top:22%;left:-70px;width:200px;height:200px;
                   border-radius:50%;border:1px solid rgba(124,194,67,0.06)"></div>
 
-      <div>{_logo_html}</div>
+      <div>
+        <div style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:1.6px;
+                    color:#7cc243;background:rgba(124,194,67,0.1);
+                    border:1px solid rgba(124,194,67,0.25);padding:3px 9px;
+                    border-radius:5px;margin-bottom:10px">VERSÃO 2.0</div>
+        <div>{_logo_html}</div>
+      </div>
 
       <div>
         <div style="display:inline-flex;align-items:center;gap:7px;
@@ -245,4 +251,97 @@ def tela_login():
                 _poll_google_oauth(nonce)
             except Exception:
                 pass
+
+        st.markdown("""
+        <div style="padding:48px 48px 0 36px;max-width:520px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+            <div style="height:1px;flex:1;background:linear-gradient(90deg,transparent,#1e2333)"></div>
+            <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:#7cc243;
+                        text-transform:uppercase">Novidades da Versão 2.0</div>
+            <div style="height:1px;flex:1;background:linear-gradient(90deg,#1e2333,transparent)"></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+
+            <div style="background:rgba(124,194,67,0.04);border:1px solid rgba(124,194,67,0.12);
+                        border-radius:10px;padding:14px">
+              <div style="font-size:18px;margin-bottom:6px">⚡</div>
+              <div style="font-size:13px;color:#e8eaf0;font-weight:600;margin-bottom:3px">
+                Pagamentos em tempo real
+              </div>
+              <div style="font-size:11.5px;color:#6b7280;line-height:1.45">
+                Overlay de 3 dias via API Superlógica usando data de liquidação
+              </div>
+            </div>
+
+            <div style="background:rgba(124,194,67,0.04);border:1px solid rgba(124,194,67,0.12);
+                        border-radius:10px;padding:14px">
+              <div style="font-size:18px;margin-bottom:6px">📈</div>
+              <div style="font-size:13px;color:#e8eaf0;font-weight:600;margin-bottom:3px">
+                Análise por Especialista
+              </div>
+              <div style="font-size:11.5px;color:#6b7280;line-height:1.45">
+                Ranking, eficácia, evolução mensal e matriz por atendente
+              </div>
+            </div>
+
+            <div style="background:rgba(124,194,67,0.04);border:1px solid rgba(124,194,67,0.12);
+                        border-radius:10px;padding:14px">
+              <div style="font-size:18px;margin-bottom:6px">🎯</div>
+              <div style="font-size:13px;color:#e8eaf0;font-weight:600;margin-bottom:3px">
+                Eficácia com causalidade
+              </div>
+              <div style="font-size:11.5px;color:#6b7280;line-height:1.45">
+                Conta só pagamentos depois do primeiro contato no período
+              </div>
+            </div>
+
+            <div style="background:rgba(124,194,67,0.04);border:1px solid rgba(124,194,67,0.12);
+                        border-radius:10px;padding:14px">
+              <div style="font-size:18px;margin-bottom:6px">🔁</div>
+              <div style="font-size:13px;color:#e8eaf0;font-weight:600;margin-bottom:3px">
+                Reset automático de reincidentes
+              </div>
+              <div style="font-size:11.5px;color:#6b7280;line-height:1.45">
+                Cron detecta quem voltou a ficar inadimplente e reabre o caso
+              </div>
+            </div>
+
+            <div style="background:rgba(124,194,67,0.04);border:1px solid rgba(124,194,67,0.12);
+                        border-radius:10px;padding:14px">
+              <div style="font-size:18px;margin-bottom:6px">⏰</div>
+              <div style="font-size:13px;color:#e8eaf0;font-weight:600;margin-bottom:3px">
+                Cooldown de 7 dias
+              </div>
+              <div style="font-size:11.5px;color:#6b7280;line-height:1.45">
+                Cliente sem resposta ganha selo de tentar novamente
+              </div>
+            </div>
+
+            <div style="background:rgba(124,194,67,0.04);border:1px solid rgba(124,194,67,0.12);
+                        border-radius:10px;padding:14px">
+              <div style="font-size:18px;margin-bottom:6px">📊</div>
+              <div style="font-size:13px;color:#e8eaf0;font-weight:600;margin-bottom:3px">
+                Histórico de atrasos
+              </div>
+              <div style="font-size:11.5px;color:#6b7280;line-height:1.45">
+                Pré-aviso para clientes com padrão repetido de inadimplência
+              </div>
+            </div>
+
+          </div>
+
+          <div style="margin-top:22px;padding:14px 16px;background:rgba(124,194,67,0.06);
+                      border-left:3px solid #7cc243;border-radius:6px">
+            <div style="font-size:11px;font-weight:700;color:#7cc243;letter-spacing:1px;
+                        text-transform:uppercase;margin-bottom:4px">Sob o capô</div>
+            <div style="font-size:12px;color:#9ca3af;line-height:1.55">
+              Tela de Pagamentos refatorada sem cache acumulado · contadores
+              Lote vs Total semanticamente corretos · overlay corrige cobrança
+              futura paga antecipada · cards de Atividades e kanban
+              reformulados · timezone BRT consistente em toda a navegação.
+            </div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
