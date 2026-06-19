@@ -20,6 +20,13 @@ def render_sidebar():
     # competir — já aparecem no header top-right).
     st.sidebar.markdown("""
     <style>
+    section[data-testid="stSidebar"],
+    section[data-testid="stSidebar"] > div,
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"],
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        overflow: hidden !important;
+        overscroll-behavior: contain !important;
+    }
     section[data-testid="stSidebar"] [data-testid="stElementContainer"]:last-of-type {
         position: fixed !important;
         bottom: 16px !important;
