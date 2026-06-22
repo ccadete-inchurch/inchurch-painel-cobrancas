@@ -1183,6 +1183,95 @@ def fetch_snapshot_ontem() -> set:
 
 
 @st.cache_data(ttl=3600)
+def fetch_npl_metrics() -> dict:
+    """Métricas NPL da carteira ativa (Non-Performing Loans):
+    - TOTAL: % clientes com qualquer cobrança vencida
+    - 30D+:  % com atraso >= 30 dias
+    - 90D+:  % com atraso >= 90 dias
+    Para cada uma: % da carteira, n. clientes, R$ em aberto, delta p.p. vs 7d.
+
+    Denominador: clientes únicos com cobranças ativas (dt_desativacao_sac IS NULL).
+    Delta: mesma fórmula aplicada ao "snapshot virtual" de 7 dias atrás
+    (cobrança estava aberta em D-7 se status='0' agora OU paga depois de D-7).
+    """
+    client = get_bq_client()
+    if not client:
+        return {}
+
+    today_str = date.today().isoformat()
+    ref_str   = (date.today() - timedelta(days=7)).isoformat()
+
+    query = f"""
+    WITH carteira AS (
+      SELECT COUNT(DISTINCT id_sacado_sac) AS n
+      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
+      WHERE dt_desativacao_sac IS NULL
+    ),
+    cobrs AS (
+      SELECT
+        c.id_sacado_sac                  AS cid,
+        c.id_recebimento_recb            AS rid,
+        DATE(MAX(c.dt_vencimento_recb))  AS venc,
+        SUM(c.comp_valor)                AS valor,
+        MAX(c.fl_status_recb)            AS status,
+        DATE(MAX(l.dt_liquidacao_recb))  AS liq
+      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
+      LEFT JOIN `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` l
+        ON c.id_recebimento_recb = l.id_recebimento_recb
+      WHERE c.dt_desativacao_sac IS NULL
+      GROUP BY c.id_sacado_sac, c.id_recebimento_recb
+    ),
+    hoje AS (
+      SELECT
+        COUNT(DISTINCT IF(status = '0' AND venc < DATE('{today_str}'), cid, NULL)) AS total_n,
+        COUNT(DISTINCT IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 30, cid, NULL)) AS d30_n,
+        COUNT(DISTINCT IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 90, cid, NULL)) AS d90_n,
+        SUM(IF(status = '0' AND venc < DATE('{today_str}'), valor, 0)) AS total_r,
+        SUM(IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 30, valor, 0)) AS d30_r,
+        SUM(IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 90, valor, 0)) AS d90_r
+      FROM cobrs
+    ),
+    ref AS (
+      SELECT
+        COUNT(DISTINCT IF(venc < DATE('{ref_str}') AND (status = '0' OR liq >= DATE('{ref_str}')), cid, NULL)) AS total_n,
+        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) >= 30 AND (status = '0' OR liq >= DATE('{ref_str}')), cid, NULL)) AS d30_n,
+        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) >= 90 AND (status = '0' OR liq >= DATE('{ref_str}')), cid, NULL)) AS d90_n
+      FROM cobrs
+    )
+    SELECT
+      c.n AS carteira,
+      h.total_n, h.d30_n, h.d90_n,
+      h.total_r, h.d30_r, h.d90_r,
+      r.total_n AS r_total_n, r.d30_n AS r_d30_n, r.d90_n AS r_d90_n
+    FROM carteira c, hoje h, ref r
+    """
+    try:
+        df = client.query(query).to_dataframe()
+    except Exception:
+        return {}
+    if df.empty:
+        return {}
+
+    r = df.iloc[0]
+    carteira = int(r["carteira"]) or 1
+    return {
+        "carteira": carteira,
+        "total_pct":   float(r["total_n"]) / carteira * 100,
+        "total_n":     int(r["total_n"]),
+        "total_r":     float(r["total_r"] or 0),
+        "d30_pct":     float(r["d30_n"]) / carteira * 100,
+        "d30_n":       int(r["d30_n"]),
+        "d30_r":       float(r["d30_r"] or 0),
+        "d90_pct":     float(r["d90_n"]) / carteira * 100,
+        "d90_n":       int(r["d90_n"]),
+        "d90_r":       float(r["d90_r"] or 0),
+        "delta_total": (float(r["total_n"]) - float(r["r_total_n"])) / carteira * 100,
+        "delta_d30":   (float(r["d30_n"])   - float(r["r_d30_n"]))   / carteira * 100,
+        "delta_d90":   (float(r["d90_n"])   - float(r["r_d90_n"]))   / carteira * 100,
+    }
+
+
+@st.cache_data(ttl=3600)
 def fetch_regularizados_mes_atual() -> set:
     """IDs distintos de clientes que pagaram pelo menos uma cobrança EM ATRASO
     no mês atual. Filtra dt_liquidacao_recb > dt_vencimento_recb pra capturar

@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -368,6 +368,54 @@ def _render_atividades(store, clientes, role):
     hoje_str = date.today().strftime("%d/%m/%Y")
     nome  = current_nome()  or "usuário"
     email = current_email() or ""
+
+    # ── Cards NPL no topo: TOTAL, 30D+, 90D+ (carteira inteira) ─────────────
+    # Sempre da carteira global da inChurch (não filtra por atendente) — é
+    # saúde da carteira como um todo. Atendente vê o status do lote nos
+    # cards abaixo do "Bem-vindo".
+    _npl = fetch_npl_metrics() or {}
+    if _npl:
+        def _delta_html(v: float) -> str:
+            if abs(v) < 0.05:
+                return '<span style="color:#9ca3af;font-size:12px">— 0,0 p.p.</span>'
+            arrow, color = ("▼", "#22c55e") if v < 0 else ("▲", "#f59e0b")
+            val = f"{abs(v):.1f}".replace(".", ",")
+            return (
+                f'<span style="color:{color};font-size:12px;font-weight:600">'
+                f'{arrow} {val} p.p.</span>'
+            )
+
+        def _fmt_rs(v: float) -> str:
+            s = f"{v:,.2f}"
+            return s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+        def _card(label: str, pct: float, delta: float, rs: float) -> str:
+            pct_str = f"{pct:.1f}".replace(".", ",")
+            return (
+                '<div style="flex:1;background:rgba(124,194,67,0.04);'
+                'border:1px solid rgba(124,194,67,0.15);border-radius:12px;'
+                'padding:18px 20px;min-width:0">'
+                f'<div style="font-size:10px;font-weight:700;color:#9ca3af;'
+                f'text-transform:uppercase;letter-spacing:1.6px;margin-bottom:10px">'
+                f'{label}</div>'
+                f'<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">'
+                f'<span style="font-size:30px;font-weight:800;color:#e8eaf0;'
+                f'letter-spacing:-1px;line-height:1">{pct_str}%</span>'
+                f'{_delta_html(delta)}'
+                f'</div>'
+                f'<div style="font-size:12px;color:#6b7280">'
+                f'R$ {_fmt_rs(rs)} em aberto</div>'
+                '</div>'
+            )
+
+        _html = (
+            '<div style="display:flex;gap:14px;margin-top:8px;margin-bottom:8px">'
+            + _card("Inadimplência total",   _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
+            + _card("Atraso 30 dias ou mais", _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
+            + _card("Atraso 90 dias ou mais", _npl["d90_pct"],   _npl["delta_d90"],   _npl["d90_r"])
+            + '</div>'
+        )
+        st.markdown(_html, unsafe_allow_html=True)
 
     # ── Gera / carrega lote de 80 tarefas do dia ──────────────────────────────
     # session_state guarda {id: bucket} pra rotear cada cliente direto na coluna
