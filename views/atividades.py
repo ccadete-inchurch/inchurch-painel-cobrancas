@@ -450,13 +450,24 @@ def _render_atividades(store, clientes, role):
             buckets_hoje = buckets_lote
 
     # ── Cards NPL: TOTAL, 30D+, 90D+ (acima do "Bem-vindo") ─────────────────
-    # Respeita filtro do Painel Administrativo:
-    #   Admin "Todos os clientes": carteira global da inChurch
-    #   Admin "Lote do dia" de X:  carteira da X (contatados últimos 30d)
-    #   Atendente comum:           sua própria carteira (contatados últimos 30d)
+    # Combina 3 fontes de filtro em ordem de precedência:
+    #   1. Painel Administrativo (admin "Lote do dia" de X): trava em X
+    #   2. Filtro "Grupo" abaixo do "Bem-vindo": admin pode escolher Ana,
+    #      Priscila ou Sem especialista
+    #   3. Filtro "Situação": Todos / Ativos / Inativos
+    # Atendente comum logada sempre vê sua própria carteira.
+    _filtro_grupo   = st.session_state.get("atv_filtro_grupo", "Todos")
+    _filtro_inativo = st.session_state.get("atv_filtro_inativo", "Todos")
+
     if role == "admin" and _modo_admin == "Lote do dia" and _atendente_sel:
         _npl_atendente = _atendente_sel
         _npl_escopo = f"Carteira de {_atendente_sel}"
+    elif role == "admin" and _filtro_grupo == "Sem especialista":
+        _npl_atendente = "__SEM_ESPECIALISTA__"
+        _npl_escopo = "Sem especialista"
+    elif role == "admin" and _filtro_grupo in _EMAIL_GRUPO.values():
+        _npl_atendente = _filtro_grupo
+        _npl_escopo = f"Carteira de {_filtro_grupo}"
     elif email in _EMAIL_GRUPO:
         _npl_atendente = _EMAIL_GRUPO[email]
         _npl_escopo = f"Sua carteira ({_npl_atendente})"
@@ -464,7 +475,12 @@ def _render_atividades(store, clientes, role):
         _npl_atendente = None
         _npl_escopo = "Carteira inChurch"
 
-    _npl = fetch_npl_metrics(_npl_atendente) or {}
+    _sit_map = {"Ativos": "ativos", "Inativos": "inativos"}
+    _npl_situacao = _sit_map.get(_filtro_inativo, "todos")
+    if _npl_situacao != "todos":
+        _npl_escopo += f" · {_filtro_inativo.lower()}"
+
+    _npl = fetch_npl_metrics(_npl_atendente, _npl_situacao) or {}
     if _npl:
         def _delta_html(v: float) -> str:
             if abs(v) < 0.05:

@@ -1183,21 +1183,24 @@ def fetch_snapshot_ontem() -> set:
 
 
 @st.cache_data(ttl=3600)
-def fetch_npl_metrics(atendente: str = None) -> dict:
+def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
     """Métricas NPL da carteira (Non-Performing Loans):
     - TOTAL: % clientes com qualquer cobrança vencida
     - 30D+:  % com atraso >= 30 dias
     - 90D+:  % com atraso >= 90 dias
     Para cada uma: % da carteira, n. clientes, R$ em aberto, delta p.p. vs 30d.
 
-    Denominador: clientes únicos COM ou SEM cobrança em aberto. Inclui
-    desativados (a inadimplência antiga é passivo real, mesmo do cliente já
-    saído do produto — sem isso, 90D+ fica zerado porque o Splgc desativa
+    Denominador: clientes únicos. Inclui desativados por padrão (a
+    inadimplência antiga é passivo real, mesmo do cliente já saído do
+    produto — sem isso, 90D+ fica zerado porque o Splgc desativa
     automaticamente atrasos longos).
 
-    Se atendente é fornecido, restringe carteira aos clientes atribuídos
-    formalmente à essa atendente via splgc-grupo (o campo 'grupo' contém o
-    nome da atendente responsável).
+    Parâmetros:
+        atendente:  Nome do grupo (ex: 'Ana Carolina'). Filtra via splgc-grupo.
+                    "__SEM_ESPECIALISTA__" para clientes sem grupo atribuído.
+                    None para carteira global.
+        situacao:   'todos' (default), 'ativos' (dt_desativacao_sac IS NULL),
+                    ou 'inativos' (dt_desativacao_sac IS NOT NULL).
 
     Delta: mesma fórmula aplicada ao "snapshot virtual" de 30 dias atrás
     (cobrança estava aberta em D-30 se status='0' agora OU paga depois de D-30).
@@ -1209,21 +1212,49 @@ def fetch_npl_metrics(atendente: str = None) -> dict:
     today_str = date.today().isoformat()
     ref_str   = (date.today() - timedelta(days=30)).isoformat()
 
-    if atendente:
+    # ── Filtro de atendente (via splgc-grupo) ─────────────────────────────
+    contacts_cte = ""
+    cond_carteira_atend = ""
+    cond_cobrs_atend = ""
+    if atendente == "__SEM_ESPECIALISTA__":
+        contacts_cte = """contacts AS (
+          SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
+          FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
+          WHERE CAST(id_sacado_sac AS STRING) NOT IN (
+            SELECT DISTINCT CAST(id_sacado_sac AS STRING)
+            FROM `business-intelligence-467516.Splgc.splgc-grupo`
+            WHERE grupo IS NOT NULL
+          )
+        ),
+        """
+        cond_carteira_atend = "CAST(id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
+        cond_cobrs_atend = "CAST(c.id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
+    elif atendente:
         ate_safe = atendente.replace("'", "''")
-        contacts_cte = f"""
-        contacts AS (
+        contacts_cte = f"""contacts AS (
           SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
           FROM `business-intelligence-467516.Splgc.splgc-grupo`
           WHERE grupo = '{ate_safe}'
         ),
         """
-        carteira_filter = "WHERE CAST(id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
-        cobrs_filter    = "WHERE CAST(c.id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
-    else:
-        contacts_cte    = ""
-        carteira_filter = ""
-        cobrs_filter    = ""
+        cond_carteira_atend = "CAST(id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
+        cond_cobrs_atend = "CAST(c.id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
+
+    # ── Filtro de situação (dt_desativacao_sac) ───────────────────────────
+    cond_carteira_sit = ""
+    cond_cobrs_sit = ""
+    if situacao == "ativos":
+        cond_carteira_sit = "dt_desativacao_sac IS NULL"
+        cond_cobrs_sit = "c.dt_desativacao_sac IS NULL"
+    elif situacao == "inativos":
+        cond_carteira_sit = "dt_desativacao_sac IS NOT NULL"
+        cond_cobrs_sit = "c.dt_desativacao_sac IS NOT NULL"
+
+    # ── Combina condições em WHERE ────────────────────────────────────────
+    conds_c = [c for c in [cond_carteira_atend, cond_carteira_sit] if c]
+    conds_b = [c for c in [cond_cobrs_atend,    cond_cobrs_sit]    if c]
+    carteira_filter = "WHERE " + " AND ".join(conds_c) if conds_c else ""
+    cobrs_filter    = "WHERE " + " AND ".join(conds_b) if conds_b else ""
 
     query = f"""
     WITH {contacts_cte}
