@@ -397,7 +397,7 @@ def _render_atividades(store, clientes, role):
     _modo_admin       = "Todos os clientes"
     _atendente_sel    = None
     if role == "admin":
-        _admin_box, _admin_spacer = st.columns([1.6, 3.4])
+        _admin_spacer, _admin_box = st.columns([3.4, 1.6])
         with _admin_box:
             with st.container(border=True):
                 st.markdown(
