@@ -1183,29 +1183,54 @@ def fetch_snapshot_ontem() -> set:
 
 
 @st.cache_data(ttl=3600)
-def fetch_npl_metrics() -> dict:
-    """Métricas NPL da carteira ativa (Non-Performing Loans):
+def fetch_npl_metrics(atendente: str = None) -> dict:
+    """Métricas NPL da carteira (Non-Performing Loans):
     - TOTAL: % clientes com qualquer cobrança vencida
     - 30D+:  % com atraso >= 30 dias
     - 90D+:  % com atraso >= 90 dias
-    Para cada uma: % da carteira, n. clientes, R$ em aberto, delta p.p. vs 7d.
+    Para cada uma: % da carteira, n. clientes, R$ em aberto, delta p.p. vs 30d.
 
-    Denominador: clientes únicos com cobranças ativas (dt_desativacao_sac IS NULL).
-    Delta: mesma fórmula aplicada ao "snapshot virtual" de 7 dias atrás
-    (cobrança estava aberta em D-7 se status='0' agora OU paga depois de D-7).
+    Denominador: clientes únicos COM ou SEM cobrança em aberto. Inclui
+    desativados (a inadimplência antiga é passivo real, mesmo do cliente já
+    saído do produto — sem isso, 90D+ fica zerado porque o Splgc desativa
+    automaticamente atrasos longos).
+
+    Se atendente é fornecido, restringe carteira aos clientes atribuídos
+    formalmente à essa atendente via splgc-grupo (o campo 'grupo' contém o
+    nome da atendente responsável).
+
+    Delta: mesma fórmula aplicada ao "snapshot virtual" de 30 dias atrás
+    (cobrança estava aberta em D-30 se status='0' agora OU paga depois de D-30).
     """
     client = get_bq_client()
     if not client:
         return {}
 
     today_str = date.today().isoformat()
-    ref_str   = (date.today() - timedelta(days=7)).isoformat()
+    ref_str   = (date.today() - timedelta(days=30)).isoformat()
+
+    if atendente:
+        ate_safe = atendente.replace("'", "''")
+        contacts_cte = f"""
+        contacts AS (
+          SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
+          FROM `business-intelligence-467516.Splgc.splgc-grupo`
+          WHERE grupo = '{ate_safe}'
+        ),
+        """
+        carteira_filter = "WHERE CAST(id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
+        cobrs_filter    = "WHERE CAST(c.id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
+    else:
+        contacts_cte    = ""
+        carteira_filter = ""
+        cobrs_filter    = ""
 
     query = f"""
-    WITH carteira AS (
+    WITH {contacts_cte}
+    carteira AS (
       SELECT COUNT(DISTINCT id_sacado_sac) AS n
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
-      WHERE dt_desativacao_sac IS NULL
+      {carteira_filter}
     ),
     cobrs AS (
       SELECT
@@ -1218,7 +1243,7 @@ def fetch_npl_metrics() -> dict:
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
       LEFT JOIN `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` l
         ON c.id_recebimento_recb = l.id_recebimento_recb
-      WHERE c.dt_desativacao_sac IS NULL
+      {cobrs_filter}
       GROUP BY c.id_sacado_sac, c.id_recebimento_recb
     ),
     hoje AS (

@@ -369,54 +369,6 @@ def _render_atividades(store, clientes, role):
     nome  = current_nome()  or "usuário"
     email = current_email() or ""
 
-    # ── Cards NPL no topo: TOTAL, 30D+, 90D+ (carteira inteira) ─────────────
-    # Sempre da carteira global da inChurch (não filtra por atendente) — é
-    # saúde da carteira como um todo. Atendente vê o status do lote nos
-    # cards abaixo do "Bem-vindo".
-    _npl = fetch_npl_metrics() or {}
-    if _npl:
-        def _delta_html(v: float) -> str:
-            if abs(v) < 0.05:
-                return '<span style="color:#9ca3af;font-size:12px">— 0,0 p.p.</span>'
-            arrow, color = ("▼", "#22c55e") if v < 0 else ("▲", "#f59e0b")
-            val = f"{abs(v):.1f}".replace(".", ",")
-            return (
-                f'<span style="color:{color};font-size:12px;font-weight:600">'
-                f'{arrow} {val} p.p.</span>'
-            )
-
-        def _fmt_rs(v: float) -> str:
-            s = f"{v:,.2f}"
-            return s.replace(",", "X").replace(".", ",").replace("X", ".")
-
-        def _card(label: str, pct: float, delta: float, rs: float) -> str:
-            pct_str = f"{pct:.1f}".replace(".", ",")
-            return (
-                '<div style="flex:1;background:rgba(124,194,67,0.04);'
-                'border:1px solid rgba(124,194,67,0.15);border-radius:12px;'
-                'padding:18px 20px;min-width:0">'
-                f'<div style="font-size:10px;font-weight:700;color:#9ca3af;'
-                f'text-transform:uppercase;letter-spacing:1.6px;margin-bottom:10px">'
-                f'{label}</div>'
-                f'<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">'
-                f'<span style="font-size:30px;font-weight:800;color:#e8eaf0;'
-                f'letter-spacing:-1px;line-height:1">{pct_str}%</span>'
-                f'{_delta_html(delta)}'
-                f'</div>'
-                f'<div style="font-size:12px;color:#6b7280">'
-                f'R$ {_fmt_rs(rs)} em aberto</div>'
-                '</div>'
-            )
-
-        _html = (
-            '<div style="display:flex;gap:14px;margin-top:8px;margin-bottom:8px">'
-            + _card("Inadimplência total",   _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
-            + _card("Atraso 30 dias ou mais", _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
-            + _card("Atraso 90 dias ou mais", _npl["d90_pct"],   _npl["delta_d90"],   _npl["d90_r"])
-            + '</div>'
-        )
-        st.markdown(_html, unsafe_allow_html=True)
-
     # ── Gera / carrega lote de 80 tarefas do dia ──────────────────────────────
     # session_state guarda {id: bucket} pra rotear cada cliente direto na coluna
     # certa (mensagem/ligacao) sem recalcular acoes. Gestor/admin só geram lote
@@ -496,6 +448,69 @@ def _render_atividades(store, clientes, role):
                 clientes.extend(fetch_regularizados_do_dia(ids_regularizados_adm))
             # Quando admin visualiza lote de outro atendente, usa o bucket dele
             buckets_hoje = buckets_lote
+
+    # ── Cards NPL: TOTAL, 30D+, 90D+ (acima do "Bem-vindo") ─────────────────
+    # Respeita filtro do Painel Administrativo:
+    #   Admin "Todos os clientes": carteira global da inChurch
+    #   Admin "Lote do dia" de X:  carteira da X (contatados últimos 30d)
+    #   Atendente comum:           sua própria carteira (contatados últimos 30d)
+    if role == "admin" and _modo_admin == "Lote do dia" and _atendente_sel:
+        _npl_atendente = _atendente_sel
+        _npl_escopo = f"Carteira de {_atendente_sel}"
+    elif email in _EMAIL_GRUPO:
+        _npl_atendente = _EMAIL_GRUPO[email]
+        _npl_escopo = f"Sua carteira ({_npl_atendente})"
+    else:
+        _npl_atendente = None
+        _npl_escopo = "Carteira inChurch"
+
+    _npl = fetch_npl_metrics(_npl_atendente) or {}
+    if _npl:
+        def _delta_html(v: float) -> str:
+            if abs(v) < 0.05:
+                return '<span style="color:#9ca3af;font-size:12px">— 0,0 p.p.</span>'
+            arrow, color = ("▼", "#22c55e") if v < 0 else ("▲", "#f59e0b")
+            val = f"{abs(v):.1f}".replace(".", ",")
+            return (
+                f'<span style="color:{color};font-size:12px;font-weight:600">'
+                f'{arrow} {val} p.p. vs 30d</span>'
+            )
+
+        def _fmt_rs(v: float) -> str:
+            s = f"{v:,.2f}"
+            return s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+        def _card(label: str, pct: float, delta: float, rs: float) -> str:
+            pct_str = f"{pct:.1f}".replace(".", ",")
+            return (
+                '<div style="flex:1;background:rgba(124,194,67,0.04);'
+                'border:1px solid rgba(124,194,67,0.15);border-radius:12px;'
+                'padding:18px 20px;min-width:0">'
+                f'<div style="font-size:10px;font-weight:700;color:#9ca3af;'
+                f'text-transform:uppercase;letter-spacing:1.6px;margin-bottom:10px">'
+                f'{label}</div>'
+                f'<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">'
+                f'<span style="font-size:30px;font-weight:800;color:#e8eaf0;'
+                f'letter-spacing:-1px;line-height:1">{pct_str}%</span>'
+                f'{_delta_html(delta)}'
+                f'</div>'
+                f'<div style="font-size:12px;color:#6b7280">'
+                f'R$ {_fmt_rs(rs)} em aberto</div>'
+                '</div>'
+            )
+
+        _html = (
+            '<div style="margin-top:20px;margin-bottom:4px">'
+            f'<div style="font-size:10px;font-weight:700;color:#6b7280;'
+            f'text-transform:uppercase;letter-spacing:1.6px;margin-bottom:8px">'
+            f'{_npl_escopo} · {_npl["carteira"]} clientes</div>'
+            '<div style="display:flex;gap:14px">'
+            + _card("Inadimplência total",   _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
+            + _card("Atraso 30 dias ou mais", _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
+            + _card("Atraso 90 dias ou mais", _npl["d90_pct"],   _npl["delta_d90"],   _npl["d90_r"])
+            + '</div></div>'
+        )
+        st.markdown(_html, unsafe_allow_html=True)
 
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
