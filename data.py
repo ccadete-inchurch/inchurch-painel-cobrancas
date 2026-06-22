@@ -1192,7 +1192,7 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
     Buckets 30d e 90d são EXCLUSIVOS (não cumulativos). A faixa de 30-89 dias
     fica oculta entre os dois — convenção padrão de dashboards de cobrança.
 
-    Para cada uma: % da carteira, n. clientes, R$ em aberto, delta p.p. vs 30d.
+    Para cada uma: % da carteira, n. clientes, R$ em aberto, delta p.p. vs ontem.
 
     Denominador: clientes únicos. Inclui desativados por padrão (a
     inadimplência antiga é passivo real, mesmo do cliente já saído do
@@ -1206,15 +1206,17 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
         situacao:   'todos' (default), 'ativos' (dt_desativacao_sac IS NULL),
                     ou 'inativos' (dt_desativacao_sac IS NOT NULL).
 
-    Delta: mesma fórmula aplicada ao "snapshot virtual" de 30 dias atrás
-    (cobrança estava aberta em D-30 se status='0' agora OU paga depois de D-30).
+    Delta: mesma fórmula aplicada ao "snapshot virtual" de ONTEM (D-1)
+    (cobrança estava aberta ontem se status='0' agora OU paga depois de D-1).
+    Janela DoD (Day over Day) alinha com convenção de dashboards de cobrança
+    operacionais.
     """
     client = get_bq_client()
     if not client:
         return {}
 
     today_str = date.today().isoformat()
-    ref_str   = (date.today() - timedelta(days=30)).isoformat()
+    ref_str   = (date.today() - timedelta(days=1)).isoformat()
 
     # ── Filtro de atendente (via splgc-grupo) ─────────────────────────────
     contacts_cte = ""

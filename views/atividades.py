@@ -489,7 +489,7 @@ def _render_atividades(store, clientes, role):
             val = f"{abs(v):.1f}".replace(".", ",")
             return (
                 f'<span style="color:{color};font-size:12px;font-weight:600">'
-                f'{arrow} {val} p.p. vs 30d</span>'
+                f'{arrow} {val} p.p. vs ontem</span>'
             )
 
         def _fmt_rs(v: float) -> str:
