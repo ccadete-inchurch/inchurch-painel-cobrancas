@@ -1184,10 +1184,14 @@ def fetch_snapshot_ontem() -> set:
 
 @st.cache_data(ttl=3600)
 def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
-    """Métricas NPL da carteira (Non-Performing Loans):
-    - TOTAL: % clientes com qualquer cobrança vencida
-    - 30D+:  % com atraso >= 30 dias
-    - 90D+:  % com atraso >= 90 dias
+    """Métricas NPL da carteira (Non-Performing Loans), com buckets exclusivos:
+    - TOTAL: % clientes com qualquer cobrança vencida (atraso >= 1 dia)
+    - 30d:   % com atraso ENTRE 1 e 30 dias (bucket recente)
+    - 90d:   % com atraso >= 90 dias (bucket crítico / NPL ratio)
+
+    Buckets 30d e 90d são EXCLUSIVOS (não cumulativos). A faixa de 30-89 dias
+    fica oculta entre os dois — convenção padrão de dashboards de cobrança.
+
     Para cada uma: % da carteira, n. clientes, R$ em aberto, delta p.p. vs 30d.
 
     Denominador: clientes únicos. Inclui desativados por padrão (a
@@ -1280,17 +1284,17 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
     hoje AS (
       SELECT
         COUNT(DISTINCT IF(status = '0' AND venc < DATE('{today_str}'), cid, NULL)) AS total_n,
-        COUNT(DISTINCT IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 30, cid, NULL)) AS d30_n,
+        COUNT(DISTINCT IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) BETWEEN 1 AND 30, cid, NULL)) AS d30_n,
         COUNT(DISTINCT IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 90, cid, NULL)) AS d90_n,
         SUM(IF(status = '0' AND venc < DATE('{today_str}'), valor, 0)) AS total_r,
-        SUM(IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 30, valor, 0)) AS d30_r,
+        SUM(IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) BETWEEN 1 AND 30, valor, 0)) AS d30_r,
         SUM(IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 90, valor, 0)) AS d90_r
       FROM cobrs
     ),
     ref AS (
       SELECT
         COUNT(DISTINCT IF(venc < DATE('{ref_str}') AND (status = '0' OR liq >= DATE('{ref_str}')), cid, NULL)) AS total_n,
-        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) >= 30 AND (status = '0' OR liq >= DATE('{ref_str}')), cid, NULL)) AS d30_n,
+        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) BETWEEN 1 AND 30 AND (status = '0' OR liq >= DATE('{ref_str}')), cid, NULL)) AS d30_n,
         COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) >= 90 AND (status = '0' OR liq >= DATE('{ref_str}')), cid, NULL)) AS d90_n
       FROM cobrs
     )

@@ -521,9 +521,9 @@ def _render_atividades(store, clientes, role):
             f'text-transform:uppercase;letter-spacing:1.6px;margin-bottom:8px">'
             f'{_npl_escopo} · {_npl["carteira"]} clientes</div>'
             '<div style="display:flex;gap:14px">'
-            + _card("Inadimplência total",   _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
-            + _card("Atraso 30 dias ou mais", _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
-            + _card("Atraso 90 dias ou mais", _npl["d90_pct"],   _npl["delta_d90"],   _npl["d90_r"])
+            + _card("Inadimplência total", _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
+            + _card("Atraso até 30 dias",  _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
+            + _card("Atraso 90 dias ou mais", _npl["d90_pct"], _npl["delta_d90"],  _npl["d90_r"])
             + '</div></div>'
         )
         st.markdown(_html, unsafe_allow_html=True)
