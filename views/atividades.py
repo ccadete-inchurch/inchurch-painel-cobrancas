@@ -484,12 +484,12 @@ def _render_atividades(store, clientes, role):
     if _npl:
         def _delta_html(v: float) -> str:
             if abs(v) < 0.05:
-                return '<span style="color:#9ca3af;font-size:12px">— 0,0 p.p.</span>'
+                return '<span style="color:#9ca3af;font-size:14px">— 0,0 p.p.</span>'
             arrow, color = ("▼", "#22c55e") if v < 0 else ("▲", "#f59e0b")
             val = f"{abs(v):.1f}".replace(".", ",")
             return (
-                f'<span style="color:{color};font-size:12px;font-weight:600">'
-                f'{arrow} {val} p.p. vs ontem</span>'
+                f'<span style="color:{color};font-size:14px;font-weight:600">'
+                f'{arrow} {val} p.p. vs 7d</span>'
             )
 
         def _fmt_rs(v: float) -> str:
@@ -501,24 +501,24 @@ def _render_atividades(store, clientes, role):
             return (
                 '<div style="flex:1;background:rgba(124,194,67,0.04);'
                 'border:1px solid rgba(124,194,67,0.15);border-radius:12px;'
-                'padding:18px 20px;min-width:0">'
-                f'<div style="font-size:10px;font-weight:700;color:#9ca3af;'
-                f'text-transform:uppercase;letter-spacing:1.6px;margin-bottom:10px">'
+                'padding:22px 24px;min-width:0">'
+                f'<div style="font-size:12px;font-weight:700;color:#9ca3af;'
+                f'text-transform:uppercase;letter-spacing:1.6px;margin-bottom:12px">'
                 f'{label}</div>'
-                f'<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">'
-                f'<span style="font-size:30px;font-weight:800;color:#e8eaf0;'
-                f'letter-spacing:-1px;line-height:1">{pct_str}%</span>'
+                f'<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">'
+                f'<span style="font-size:38px;font-weight:800;color:#e8eaf0;'
+                f'letter-spacing:-1.2px;line-height:1">{pct_str}%</span>'
                 f'{_delta_html(delta)}'
                 f'</div>'
-                f'<div style="font-size:12px;color:#6b7280">'
+                f'<div style="font-size:14px;color:#6b7280">'
                 f'R$ {_fmt_rs(rs)} em aberto</div>'
                 '</div>'
             )
 
         _html = (
             '<div style="margin-top:20px;margin-bottom:4px">'
-            f'<div style="font-size:10px;font-weight:700;color:#6b7280;'
-            f'text-transform:uppercase;letter-spacing:1.6px;margin-bottom:8px">'
+            f'<div style="font-size:12px;font-weight:700;color:#6b7280;'
+            f'text-transform:uppercase;letter-spacing:1.6px;margin-bottom:10px">'
             f'{_npl_escopo} · {_npl["carteira"]} clientes</div>'
             '<div style="display:flex;gap:14px">'
             + _card("Inadimplência total", _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
