@@ -397,7 +397,7 @@ def _render_atividades(store, clientes, role):
     _modo_admin       = "Todos os clientes"
     _atendente_sel    = None
     if role == "admin":
-        _admin_spacer, _admin_box = st.columns([3.4, 1.6])
+        _admin_spacer, _admin_box = st.columns([2.8, 2.2])
         with _admin_box:
             with st.container(border=True):
                 st.markdown(
@@ -485,11 +485,11 @@ def _render_atividades(store, clientes, role):
         def _delta_html(v: float) -> str:
             if abs(v) < 0.05:
                 return '<span style="color:#9ca3af;font-size:14px">— 0,0 p.p.</span>'
-            arrow, color = ("▼", "#22c55e") if v < 0 else ("▲", "#f59e0b")
+            arrow, color = ("▼", "#22c55e") if v < 0 else ("▲", "#fb7185")
             val = f"{abs(v):.1f}".replace(".", ",")
             return (
                 f'<span style="color:{color};font-size:14px;font-weight:600">'
-                f'{arrow} {val} p.p. vs 7d</span>'
+                f'{arrow} {val} p.p.</span>'
             )
 
         def _fmt_rs(v: float) -> str:
@@ -501,9 +501,9 @@ def _render_atividades(store, clientes, role):
             return (
                 '<div style="flex:1;background:rgba(124,194,67,0.04);'
                 'border:1px solid rgba(124,194,67,0.15);border-radius:12px;'
-                'padding:22px 24px;min-width:0">'
-                f'<div style="font-size:12px;font-weight:700;color:#9ca3af;'
-                f'text-transform:uppercase;letter-spacing:1.6px;margin-bottom:12px">'
+                'padding:24px 26px;min-width:0">'
+                f'<div style="font-size:15px;font-weight:700;color:#9ca3af;'
+                f'text-transform:uppercase;letter-spacing:1.6px;margin-bottom:14px">'
                 f'{label}</div>'
                 f'<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">'
                 f'<span style="font-size:38px;font-weight:800;color:#e8eaf0;'
@@ -517,8 +517,8 @@ def _render_atividades(store, clientes, role):
 
         _html = (
             '<div style="margin-top:20px;margin-bottom:4px">'
-            f'<div style="font-size:15px;font-weight:700;color:#9ca3af;'
-            f'text-transform:uppercase;letter-spacing:1.4px;margin-bottom:12px">'
+            f'<div style="font-size:18px;font-weight:700;color:#9ca3af;'
+            f'text-transform:uppercase;letter-spacing:1.4px;margin-bottom:14px">'
             f'{_npl_escopo} · {_npl["carteira"]} clientes</div>'
             '<div style="display:flex;gap:14px">'
             + _card("Inadimplência total", _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
