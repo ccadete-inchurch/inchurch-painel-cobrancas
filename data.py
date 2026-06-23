@@ -588,7 +588,8 @@ def fetch_cobrancas_competencia():
         MAX(u.nm_grupo)                                                   AS grupo,
         MAX(p.parcelas_em_atraso)                                         AS parcelas,
         MAX(CASE WHEN ac.id_sacado_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS tem_acordo,
-        MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
+        MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo,
+        MAX(c.comp_st_conta_cont)                                         AS tipo
     FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
     LEFT JOIN (
         SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(grupo) AS nm_grupo
@@ -1265,8 +1266,13 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
         cond_cobrs_sit = "c.dt_desativacao_sac IS NOT NULL"
 
     # ── Combina condições em WHERE ────────────────────────────────────────
-    conds_c = [c for c in [cond_carteira_atend, cond_carteira_sit] if c]
-    conds_b = [c for c in [cond_cobrs_atend,    cond_cobrs_sit]    if c]
+    # Filtro de tipo: só Setup (1.2.1) + Mensalidade (1.2.2). Alinhamento
+    # com a metodologia "por receita" do outro dashboard. SQL level apenas.
+    cond_carteira_tipo = "comp_st_conta_cont IN ('1.2.1', '1.2.2')"
+    cond_cobrs_tipo    = "c.comp_st_conta_cont IN ('1.2.1', '1.2.2')"
+
+    conds_c = [c for c in [cond_carteira_atend, cond_carteira_sit, cond_carteira_tipo] if c]
+    conds_b = [c for c in [cond_cobrs_atend,    cond_cobrs_sit,    cond_cobrs_tipo]    if c]
     carteira_filter = "WHERE " + " AND ".join(conds_c) if conds_c else ""
     cobrs_filter    = "WHERE " + " AND ".join(conds_b) if conds_b else ""
 
@@ -1452,11 +1458,22 @@ def compute_npl_today_overlay(
     total_n = d30_n = d90_n = 0
     total_r = d30_r = d90_r = 0.0
 
+    # Tipos válidos pra alinhar com SQL: só Setup (1.2.1) + Mensalidade (1.2.2).
+    # PERMISSIVO: se a cobrança não tem tipo populado (cache stale do store
+    # carregado antes do deploy desta feature), inclui mesmo assim. Quando
+    # store recarregar com tipo (TTL 1h), filtro fica estrito.
+    _TIPOS_VALIDOS = {"1.2.1", "1.2.2"}
+
+    def _tipo_ok(cob):
+        t = str(cob.get("tipo") or "")
+        return (not t) or (t in _TIPOS_VALIDOS)
+
     for c in filtered:
         cobr_vencidas = [
             cob for cob in (c.get("_cobracas") or [])
             if (cob.get("dias_atraso") or 0) > 0
             and float(cob.get("valor") or 0) > 0
+            and _tipo_ok(cob)
         ]
         if not cobr_vencidas:
             continue
@@ -2989,6 +3006,10 @@ def processar_dados_bigquery():
                     "vencimento":     vencimento,
                     "dias_atraso":    dias_atraso,
                     "status":         str(row["status"] or ""),
+                    # comp_st_conta_cont: 1.2.1=Setup, 1.2.2=Mensalidade.
+                    # Usado SÓ pelos cards NPL (filtro por receita). Outras
+                    # telas (kanban, indicador) ignoram esse campo.
+                    "tipo":           str(row.get("tipo") or ""),
                 }
                 clientes_dict[codigo]["_cobracas"].append(cobranca_item)
                 if dias_atraso and dias_atraso > 0:
