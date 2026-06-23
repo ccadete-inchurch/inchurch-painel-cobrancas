@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -482,6 +482,35 @@ def _render_atividades(store, clientes, role):
 
     _npl = fetch_npl_metrics(_npl_atendente, _npl_situacao) or {}
     if _npl:
+        # ── Overlay live: substitui valores de HOJE pelos calculados em Python
+        # a partir de store["clientes"] (que já tem _regularizado_hoje aplicado).
+        # D-30 fica do BQ (já passou tempo suficiente pra todas liquidações
+        # replicarem). Resultado: cards NPL batem com o indicador "INADIMPLENTES"
+        # embaixo do "Bem-vindo" — ambos usam o mesmo store + overlay.
+        _ja_pagou_set = fetch_clientes_com_pagamento_set()
+        _today = compute_npl_today_overlay(
+            store.get("clientes", []) or [],
+            atendente=_npl_atendente,
+            situacao=_npl_situacao,
+            ja_pagou_set=_ja_pagou_set,
+        )
+        _carteira = _npl["carteira"]
+        # Sobrescreve valores de hoje + delta com versão overlay
+        _npl = {
+            **_npl,
+            "total_n":     _today["total_n"],
+            "total_r":     _today["total_r"],
+            "total_pct":   _today["total_n"] / _carteira * 100,
+            "d30_n":       _today["d30_n"],
+            "d30_r":       _today["d30_r"],
+            "d30_pct":     _today["d30_n"] / _carteira * 100,
+            "d90_n":       _today["d90_n"],
+            "d90_r":       _today["d90_r"],
+            "d90_pct":     _today["d90_n"] / _carteira * 100,
+            "delta_total": (_today["total_n"] - _npl["r_total_n"]) / _carteira * 100,
+            "delta_d30":   (_today["d30_n"]   - _npl["r_d30_n"])   / _carteira * 100,
+            "delta_d90":   (_today["d90_n"]   - _npl["r_d90_n"])   / _carteira * 100,
+        }
         def _delta_html(v: float) -> str:
             if abs(v) < 0.005:
                 return '<span style="color:#9ca3af;font-size:14px">— 0,00 p.p.</span>'

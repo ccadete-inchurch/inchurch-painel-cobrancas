@@ -1339,6 +1339,9 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
     carteira = int(r["carteira"]) or 1
     return {
         "carteira": carteira,
+        # Hoje (BQ snapshot — pode estar 1 dia atrasado, replicação 04:00 BRT).
+        # Pra valores "live" (overlay aplicado), usar compute_npl_today_overlay
+        # em atividades.py e sobrescrever total_n/d30_n/d90_n/total_r/d30_r/d90_r.
         "total_pct":   float(r["total_n"]) / carteira * 100,
         "total_n":     int(r["total_n"]),
         "total_r":     float(r["total_r"] or 0),
@@ -1348,9 +1351,142 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
         "d90_pct":     float(r["d90_n"]) / carteira * 100,
         "d90_n":       int(r["d90_n"]),
         "d90_r":       float(r["d90_r"] or 0),
+        # D-30 reference (sempre BQ — 30 dias atrás já tem todas liquidações
+        # replicadas). Não precisa de overlay aqui.
+        "r_total_n":   int(r["r_total_n"]),
+        "r_d30_n":     int(r["r_d30_n"]),
+        "r_d90_n":     int(r["r_d90_n"]),
+        # Delta MoM com base no BQ snapshot. Caso queira "delta live", recalcule
+        # em atividades.py usando (overlay.total_n - r_total_n) / carteira.
         "delta_total": (float(r["total_n"]) - float(r["r_total_n"])) / carteira * 100,
         "delta_d30":   (float(r["d30_n"])   - float(r["r_d30_n"]))   / carteira * 100,
         "delta_d90":   (float(r["d90_n"])   - float(r["r_d90_n"]))   / carteira * 100,
+    }
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_clientes_com_pagamento_set() -> frozenset:
+    """Set frozenset de cids (string) que já pagaram pelo menos 1 boleto.
+    Usado pelo filtro #4 do NPL — exclui clientes em onboarding sem pagamento prévio.
+
+    Retorna frozenset (em vez de set) pra ser hashable, importante pro
+    @st.cache_data não dar erro de serialização.
+    """
+    client = get_bq_client()
+    if not client:
+        return frozenset()
+    try:
+        df = client.query("""
+            SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
+            FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+            WHERE dt_liquidacao_recb IS NOT NULL
+        """).to_dataframe()
+        return frozenset(str(row["cid"]) for _, row in df.iterrows())
+    except Exception:
+        return frozenset()
+
+
+def compute_npl_today_overlay(
+    clientes_full: list,
+    atendente: str = None,
+    situacao: str = "todos",
+    ja_pagou_set: frozenset = None,
+) -> dict:
+    """Computa métricas NPL de HOJE a partir de store['clientes'] (overlay aplicado).
+
+    Por que existe: fetch_npl_metrics consulta BQ direto, que tem replicação
+    diária às 04:00 BRT. Entre BQ sync e agora, pagamentos confirmados na API
+    Superlógica não estão no BQ ainda — o overlay (em aplicar_pagamentos_hoje_no_store)
+    marca esses clientes com _regularizado_hoje=True. Esta função usa essa
+    informação pra dar contagens "live" em vez do snapshot BQ stale.
+
+    Aplicação:
+        - Pula clientes com _regularizado_hoje=True (já pagou TODOS atrasos)
+        - Mantém clientes com _pago_parcial_hoje=True (ainda tem cobrança vencida)
+        - Soma R$ apenas das cobranças com dias_atraso > 0 (vencidas mesmo)
+
+    Buckets (aging exclusivo):
+        - d30: cobranças com atraso BETWEEN 1 AND 30 dias
+        - d90: cobranças com atraso >= 90 dias
+        - faixa 31-89 fica oculta (não tem card próprio)
+
+    Args:
+        clientes_full:  store['clientes'] já com overlay aplicado
+        atendente:      nome do grupo (ex: 'Ana Carolina'), '__SEM_ESPECIALISTA__'
+                        ou None (todos)
+        situacao:       'todos', 'ativos' (_inativo=False) ou 'inativos'
+        ja_pagou_set:   frozenset de cids com pagamento prévio (filtro #4).
+                        Se None, não aplica filtro #4.
+
+    Returns:
+        dict {total_n, d30_n, d90_n, total_r, d30_r, d90_r}
+        Contagens são de CLIENTES distintos por bucket (cliente pode estar em
+        múltiplos buckets se tiver cobranças em faixas diferentes).
+        Valores R$ são soma das cobranças por bucket.
+    """
+    # ── Filtro de atendente ────────────────────────────────────────────────
+    if atendente == "__SEM_ESPECIALISTA__":
+        filtered = [
+            c for c in clientes_full
+            if not c.get("_grupo") or str(c.get("_grupo")) in ("—", "", "nan", "NaN")
+        ]
+    elif atendente:
+        filtered = [c for c in clientes_full if c.get("_grupo") == atendente]
+    else:
+        filtered = list(clientes_full)
+
+    # ── Filtro de situação (ativos/inativos) ───────────────────────────────
+    if situacao == "ativos":
+        filtered = [c for c in filtered if not c.get("_inativo")]
+    elif situacao == "inativos":
+        filtered = [c for c in filtered if c.get("_inativo")]
+
+    # ── Filtro #4: cliente já pagou alguma vez ─────────────────────────────
+    if ja_pagou_set is not None:
+        filtered = [c for c in filtered if str(c.get("id") or "") in ja_pagou_set]
+
+    # ── Overlay: pula clientes que pagaram tudo nos últimos 3 dias ─────────
+    filtered = [c for c in filtered if not c.get("_regularizado_hoje")]
+
+    # ── Agrega buckets ─────────────────────────────────────────────────────
+    total_n = d30_n = d90_n = 0
+    total_r = d30_r = d90_r = 0.0
+
+    for c in filtered:
+        cobr_vencidas = [
+            cob for cob in (c.get("_cobracas") or [])
+            if (cob.get("dias_atraso") or 0) > 0
+            and float(cob.get("valor") or 0) > 0
+        ]
+        if not cobr_vencidas:
+            continue
+
+        total_n += 1
+        has_1_30 = has_90 = False
+
+        for cob in cobr_vencidas:
+            dias = cob.get("dias_atraso") or 0
+            valor = float(cob.get("valor") or 0)
+            total_r += valor
+            if 1 <= dias <= 30:
+                d30_r += valor
+                has_1_30 = True
+            if dias >= 90:
+                d90_r += valor
+                has_90 = True
+
+        if has_1_30:
+            d30_n += 1
+        if has_90:
+            d90_n += 1
+
+    return {
+        "total_n": total_n,
+        "d30_n":   d30_n,
+        "d90_n":   d90_n,
+        "total_r": total_r,
+        "d30_r":   d30_r,
+        "d90_r":   d90_r,
     }
 
 
