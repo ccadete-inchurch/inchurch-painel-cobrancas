@@ -483,10 +483,10 @@ def _render_atividades(store, clientes, role):
     _npl = fetch_npl_metrics(_npl_atendente, _npl_situacao) or {}
     if _npl:
         def _delta_html(v: float) -> str:
-            if abs(v) < 0.05:
-                return '<span style="color:#9ca3af;font-size:14px">— 0,0 p.p.</span>'
+            if abs(v) < 0.005:
+                return '<span style="color:#9ca3af;font-size:14px">— 0,00 p.p.</span>'
             arrow, color = ("▼", "#22c55e") if v < 0 else ("▲", "#fb7185")
-            val = f"{abs(v):.1f}".replace(".", ",")
+            val = f"{abs(v):.2f}".replace(".", ",")
             return (
                 f'<span style="color:{color};font-size:14px;font-weight:600">'
                 f'{arrow} {val} p.p.</span>'
@@ -497,10 +497,10 @@ def _render_atividades(store, clientes, role):
             return s.replace(",", "X").replace(".", ",").replace("X", ".")
 
         def _card(label: str, pct: float, delta: float, rs: float) -> str:
-            pct_str = f"{pct:.1f}".replace(".", ",")
+            pct_str = f"{pct:.2f}".replace(".", ",")
             return (
-                '<div style="flex:1;background:rgba(124,194,67,0.04);'
-                'border:1px solid rgba(124,194,67,0.15);border-radius:12px;'
+                '<div style="flex:1;background:#181c26;'
+                'border:1px solid #2a2f42;border-radius:12px;'
                 'padding:24px 26px;min-width:0">'
                 f'<div style="font-size:15px;font-weight:700;color:#9ca3af;'
                 f'text-transform:uppercase;letter-spacing:1.6px;margin-bottom:14px">'

@@ -23,9 +23,9 @@ def _render_proximas(_store, _clientes):
         unsafe_allow_html=True,
     )
 
-    # Filtros: período, busca, situação, grupo. O grupo é populado depois
+    # Filtros: período, situação, grupo. O grupo é populado depois
     # que carregamos os dados (precisa do conjunto de grupos disponíveis).
-    fp1, fp2, fp3, fp4 = st.columns([2, 2, 2, 2])
+    fp1, fp2, fp3 = st.columns([2, 2, 2])
     with fp1:
         periodo = st.selectbox(
             "Período",
@@ -34,12 +34,6 @@ def _render_proximas(_store, _clientes):
             key="proximas_periodo",
         )
     with fp2:
-        busca = st.text_input(
-            "Buscar",
-            placeholder="Nome, CNPJ ou ID do sacado...",
-            key="proximas_busca",
-        )
-    with fp3:
         filtro_situacao = st.selectbox(
             "Situação",
             ["Todos", "Apenas ativos", "Apenas inativos"],
@@ -88,21 +82,13 @@ def _render_proximas(_store, _clientes):
         not r["grupo"] or r["grupo"] in ("—", "", "nan", "NaN")
         for r in rows
     )
-    with fp4:
+    with fp3:
         filtro_grupo = st.selectbox(
             "Grupo",
             ["Todos"] + grupos_disp + (["Sem especialista"] if _tem_sem_grupo else []),
             key="proximas_grupo",
         )
 
-    if busca:
-        b = busca.lower().strip()
-        rows = [
-            r for r in rows
-            if b in r["nome"].lower()
-            or b in r["cnpj"].lower()
-            or b in r["id"].lower()
-        ]
     if filtro_situacao == "Apenas ativos":
         rows = [r for r in rows if not r.get("inativo")]
     elif filtro_situacao == "Apenas inativos":
