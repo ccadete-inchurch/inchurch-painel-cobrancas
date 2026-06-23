@@ -588,7 +588,8 @@ def fetch_cobrancas_competencia():
         MAX(u.nm_grupo)                                                   AS grupo,
         MAX(p.parcelas_em_atraso)                                         AS parcelas,
         MAX(CASE WHEN ac.id_sacado_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS tem_acordo,
-        MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
+        MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo,
+        MAX(c.comp_st_conta_cont)                                         AS tipo
     FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
     LEFT JOIN (
         SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(grupo) AS nm_grupo
@@ -1265,10 +1266,18 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
         cond_cobrs_sit = "c.dt_desativacao_sac IS NOT NULL"
 
     # ── Combina condições em WHERE ────────────────────────────────────────
-    conds_c = [c for c in [cond_carteira_atend, cond_carteira_sit] if c]
-    conds_b = [c for c in [cond_cobrs_atend,    cond_cobrs_sit]    if c]
-    carteira_filter = "WHERE " + " AND ".join(conds_c) if conds_c else ""
-    cobrs_filter    = "WHERE " + " AND ".join(conds_b) if conds_b else ""
+    # Filtro de tipo: só Setup (1.2.1) + Mensalidade (1.2.2). Alinha com a
+    # metodologia "por receita" do outro dashboard — exclui avulsas, taxas,
+    # eventos. Aplica em TODAS as queries NPL (cliente e R$) — inclusive na
+    # carteira (denominador). Cliente da carteira = quem tem pelo menos 1
+    # cobrança Setup/Mensalidade na história.
+    cond_carteira_tipo = "comp_st_conta_cont IN ('1.2.1', '1.2.2')"
+    cond_cobrs_tipo    = "c.comp_st_conta_cont IN ('1.2.1', '1.2.2')"
+
+    conds_c = [c for c in [cond_carteira_atend, cond_carteira_sit, cond_carteira_tipo] if c]
+    conds_b = [c for c in [cond_cobrs_atend, cond_cobrs_sit, cond_cobrs_tipo] if c]
+    carteira_filter   = "WHERE " + " AND ".join(conds_c) if conds_c else ""
+    cobrs_tipo_filter = "WHERE " + " AND ".join(conds_b) if conds_b else ""
 
     query = f"""
     WITH {contacts_cte}
@@ -1301,7 +1310,7 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
         ON c.id_recebimento_recb = l.id_recebimento_recb
       LEFT JOIN clientes_com_pagamento jp
         ON CAST(c.id_sacado_sac AS STRING) = jp.cid
-      {cobrs_filter}
+      {cobrs_tipo_filter}
       GROUP BY c.id_sacado_sac, c.id_recebimento_recb
     ),
     hoje AS (
@@ -1452,11 +1461,16 @@ def compute_npl_today_overlay(
     total_n = d30_n = d90_n = 0
     total_r = d30_r = d90_r = 0.0
 
+    # Tipos válidos: só Setup (1.2.1) + Mensalidade (1.2.2). Aligned com BQ
+    # query do fetch_npl_metrics — consistente com cards "por cliente".
+    _TIPOS_VALIDOS = {"1.2.1", "1.2.2"}
+
     for c in filtered:
         cobr_vencidas = [
             cob for cob in (c.get("_cobracas") or [])
             if (cob.get("dias_atraso") or 0) > 0
             and float(cob.get("valor") or 0) > 0
+            and str(cob.get("tipo") or "") in _TIPOS_VALIDOS
         ]
         if not cobr_vencidas:
             continue
@@ -2989,6 +3003,9 @@ def processar_dados_bigquery():
                     "vencimento":     vencimento,
                     "dias_atraso":    dias_atraso,
                     "status":         str(row["status"] or ""),
+                    # comp_st_conta_cont: 1.2.1=Setup, 1.2.2=Mensalidade. Permite filtrar
+                    # cards NPL "por receita" (só assinatura core).
+                    "tipo":           str(row.get("tipo") or ""),
                 }
                 clientes_dict[codigo]["_cobracas"].append(cobranca_item)
                 if dias_atraso and dias_atraso > 0:
