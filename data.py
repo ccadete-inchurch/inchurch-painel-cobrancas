@@ -1508,6 +1508,182 @@ def compute_npl_today_overlay(
 
 
 @st.cache_data(ttl=3600)
+def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
+    """Métricas NPL "por receita" — % por R$ com janela rolante.
+
+    Alinha com a metodologia do outro dashboard (items 5 + 7 da comparação):
+    - Item 5 — janela rolante:
+        - Total: boletos vencidos em [D-365, D] (12 meses TTM)
+        - 30d:   boletos vencidos em [D-30, D]
+        - 90d:   boletos vencidos em [D-90, D]
+    - Item 7 — % por R$: % = R$ aberto / R$ emitido × 100
+
+    "Em aberto em data D" = dt_liquidacao_recb IS NULL OR > D — reconstrói
+    histórico via liquidacao (não usa fl_status_recb).
+
+    Filtros (mesmos do fetch_npl_metrics):
+    - Atendente: via splgc-grupo
+    - Situação: dt_desativacao_sac
+    - #4 (já pagou): EXISTS dt_liquidacao_recb IS NOT NULL
+    - Tipo: comp_st_conta_cont IN ('1.2.1', '1.2.2') — Setup + Mensalidade
+
+    Delta MoM: mesma métrica em D-30. Janelas no D-30:
+        Total ref: [D-395, D-30]
+        30d ref:   [D-60, D-30]
+        90d ref:   [D-120, D-30]
+
+    NÃO usa overlay live — só BQ snapshot. Lag de ~1 dia tem impacto < 5%
+    em janelas de 30/90/365 dias. Se precisar de overlay, adicionar
+    posteriormente via store['clientes'].
+
+    Returns dict com:
+        total_pct, total_aberto, total_emitido, delta_total_pp
+        d30_pct, d30_aberto, d30_emitido, delta_d30_pp
+        d90_pct, d90_aberto, d90_emitido, delta_d90_pp
+    """
+    client = get_bq_client()
+    if not client:
+        return {}
+
+    today_str = hoje_brt()
+    today_dt = date.fromisoformat(today_str)
+
+    # ── Filtro de atendente ────────────────────────────────────────────────
+    contacts_cte = ""
+    cond_atend = ""
+    if atendente == "__SEM_ESPECIALISTA__":
+        contacts_cte = """contacts AS (
+          SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
+          FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
+          WHERE CAST(id_sacado_sac AS STRING) NOT IN (
+            SELECT DISTINCT CAST(id_sacado_sac AS STRING)
+            FROM `business-intelligence-467516.Splgc.splgc-grupo`
+            WHERE grupo IS NOT NULL
+          )
+        ),
+        """
+        cond_atend = "CAST(c.id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
+    elif atendente:
+        ate_safe = atendente.replace("'", "''")
+        contacts_cte = f"""contacts AS (
+          SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
+          FROM `business-intelligence-467516.Splgc.splgc-grupo`
+          WHERE grupo = '{ate_safe}'
+        ),
+        """
+        cond_atend = "CAST(c.id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
+
+    # ── Filtro de situação ─────────────────────────────────────────────────
+    cond_sit = ""
+    if situacao == "ativos":
+        cond_sit = "c.dt_desativacao_sac IS NULL"
+    elif situacao == "inativos":
+        cond_sit = "c.dt_desativacao_sac IS NOT NULL"
+
+    # ── Filtro #4 (já pagou) + tipo (Setup/Mensalidade) ────────────────────
+    cond_tipo = "c.comp_st_conta_cont IN ('1.2.1', '1.2.2')"
+    cond_4    = "jp.cid IS NOT NULL"
+
+    # Combina todas as condições de filtro
+    conds = [c for c in [cond_atend, cond_sit, cond_tipo, cond_4] if c]
+    where_clause = "WHERE " + " AND ".join(conds) if conds else ""
+
+    query = f"""
+    WITH {contacts_cte}
+    clientes_com_pagamento AS (
+      SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
+      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+      WHERE dt_liquidacao_recb IS NOT NULL
+    ),
+    boletos AS (
+      SELECT
+        c.id_sacado_sac AS cid,
+        c.id_recebimento_recb AS rid,
+        DATE(MAX(c.dt_vencimento_recb)) AS venc,
+        SUM(c.comp_valor) AS valor,
+        MAX(c.fl_status_recb) AS status,
+        DATE(MAX(l.dt_liquidacao_recb)) AS liq
+      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
+      LEFT JOIN `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` l
+        ON c.id_recebimento_recb = l.id_recebimento_recb
+      LEFT JOIN clientes_com_pagamento jp
+        ON CAST(c.id_sacado_sac AS STRING) = jp.cid
+      {where_clause}
+      GROUP BY c.id_sacado_sac, c.id_recebimento_recb
+    )
+    SELECT
+      -- HOJE: Total TTM (12 meses) — boletos vencidos em [D-365, D]
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 365 DAY) AND DATE('{today_str}'), valor, 0)) AS total_emitido_hoje,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 365 DAY) AND DATE('{today_str}')
+             AND (status='0' OR liq > DATE('{today_str}')), valor, 0)) AS total_aberto_hoje,
+
+      -- HOJE: 30d — boletos vencidos em [D-30, D]
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY) AND DATE('{today_str}'), valor, 0)) AS d30_emitido_hoje,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY) AND DATE('{today_str}')
+             AND (status='0' OR liq > DATE('{today_str}')), valor, 0)) AS d30_aberto_hoje,
+
+      -- HOJE: 90d — boletos vencidos em [D-90, D]
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 90 DAY) AND DATE('{today_str}'), valor, 0)) AS d90_emitido_hoje,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 90 DAY) AND DATE('{today_str}')
+             AND (status='0' OR liq > DATE('{today_str}')), valor, 0)) AS d90_aberto_hoje,
+
+      -- D-30 REF: Total TTM [D-395, D-30]
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 395 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY), valor, 0)) AS total_emitido_ref,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 395 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
+             AND (status='0' OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS total_aberto_ref,
+
+      -- D-30 REF: 30d [D-60, D-30]
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 60 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY), valor, 0)) AS d30_emitido_ref,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 60 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
+             AND (status='0' OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS d30_aberto_ref,
+
+      -- D-30 REF: 90d [D-120, D-30]
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 120 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY), valor, 0)) AS d90_emitido_ref,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 120 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
+             AND (status='0' OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS d90_aberto_ref
+    FROM boletos
+    """
+    try:
+        df = client.query(query).to_dataframe()
+    except Exception:
+        return {}
+    if df.empty:
+        return {}
+
+    r = df.iloc[0]
+
+    def _pct(aberto, emitido):
+        if not emitido or emitido == 0:
+            return 0.0
+        return float(aberto) / float(emitido) * 100
+
+    total_pct_hoje = _pct(r["total_aberto_hoje"], r["total_emitido_hoje"])
+    d30_pct_hoje   = _pct(r["d30_aberto_hoje"],   r["d30_emitido_hoje"])
+    d90_pct_hoje   = _pct(r["d90_aberto_hoje"],   r["d90_emitido_hoje"])
+    total_pct_ref  = _pct(r["total_aberto_ref"],  r["total_emitido_ref"])
+    d30_pct_ref    = _pct(r["d30_aberto_ref"],    r["d30_emitido_ref"])
+    d90_pct_ref    = _pct(r["d90_aberto_ref"],    r["d90_emitido_ref"])
+
+    return {
+        # Total (12 meses TTM)
+        "total_pct":        total_pct_hoje,
+        "total_aberto":     float(r["total_aberto_hoje"] or 0),
+        "total_emitido":    float(r["total_emitido_hoje"] or 0),
+        "delta_total_pp":   total_pct_hoje - total_pct_ref,
+        # 30d (janela rolante)
+        "d30_pct":          d30_pct_hoje,
+        "d30_aberto":       float(r["d30_aberto_hoje"] or 0),
+        "d30_emitido":      float(r["d30_emitido_hoje"] or 0),
+        "delta_d30_pp":     d30_pct_hoje - d30_pct_ref,
+        # 90d (janela rolante)
+        "d90_pct":          d90_pct_hoje,
+        "d90_aberto":       float(r["d90_aberto_hoje"] or 0),
+        "d90_emitido":      float(r["d90_emitido_hoje"] or 0),
+        "delta_d90_pp":     d90_pct_hoje - d90_pct_ref,
+    }
+
+
+@st.cache_data(ttl=3600)
 def fetch_regularizados_mes_atual() -> set:
     """IDs distintos de clientes que pagaram pelo menos uma cobrança EM ATRASO
     no mês atual. Filtra dt_liquidacao_recb > dt_vencimento_recb pra capturar

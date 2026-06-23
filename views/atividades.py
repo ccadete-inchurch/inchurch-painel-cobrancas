@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -544,8 +544,12 @@ def _render_atividades(store, clientes, role):
                 '</div>'
             )
 
-        _html = (
+        # ═══════════════ SEÇÃO 1 — INADIMPLÊNCIA POR CLIENTE ════════════════
+        _html_cliente = (
             '<div style="margin-top:20px;margin-bottom:4px">'
+            f'<div style="font-size:11px;font-weight:700;color:#7cc243;'
+            f'text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">'
+            f'Inadimplência por cliente</div>'
             f'<div style="font-size:18px;font-weight:700;color:#9ca3af;'
             f'text-transform:uppercase;letter-spacing:1.4px;margin-bottom:14px">'
             f'{_npl_escopo} · {_npl["carteira"]} clientes</div>'
@@ -555,7 +559,48 @@ def _render_atividades(store, clientes, role):
             + _card("Atraso 90 dias ou mais", _npl["d90_pct"], _npl["delta_d90"],  _npl["d90_r"])
             + '</div></div>'
         )
-        st.markdown(_html, unsafe_allow_html=True)
+        st.markdown(_html_cliente, unsafe_allow_html=True)
+
+        # ═══════════════ SEÇÃO 2 — INADIMPLÊNCIA POR RECEITA ════════════════
+        # Métricas alinhadas com a metodologia do outro dashboard:
+        #   - Janela rolante (% R$ aberto / R$ emitido na janela)
+        #   - Total: 12 meses TTM (vencidos em [D-365, D])
+        #   - 30d: vencidos em [D-30, D]
+        #   - 90d: vencidos em [D-90, D]
+        # Mesmos filtros (atendente, situação, #4, tipo Setup/Mensalidade).
+        # NÃO usa overlay live — snapshot BQ apenas (lag de 1 dia tem
+        # impacto < 5% em janelas longas, aceitável aqui).
+        _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao) or {}
+        if _rolling:
+            _html_receita = (
+                '<div style="margin-top:24px;margin-bottom:4px">'
+                f'<div style="font-size:11px;font-weight:700;color:#5fa3ff;'
+                f'text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">'
+                f'Inadimplência por receita (Setup + Mensalidade)</div>'
+                f'<div style="font-size:14px;color:#6b7280;margin-bottom:14px">'
+                f'% R$ aberto / R$ emitido · janela rolante · sem overlay live</div>'
+                '<div style="display:flex;gap:14px">'
+                + _card(
+                    "Inadimplência total (12m)",
+                    _rolling["total_pct"],
+                    _rolling["delta_total_pp"],
+                    _rolling["total_aberto"],
+                )
+                + _card(
+                    "Janela 30 dias",
+                    _rolling["d30_pct"],
+                    _rolling["delta_d30_pp"],
+                    _rolling["d30_aberto"],
+                )
+                + _card(
+                    "Janela 90 dias",
+                    _rolling["d90_pct"],
+                    _rolling["delta_d90_pp"],
+                    _rolling["d90_aberto"],
+                )
+                + '</div></div>'
+            )
+            st.markdown(_html_receita, unsafe_allow_html=True)
 
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
