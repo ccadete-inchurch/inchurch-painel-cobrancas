@@ -480,6 +480,10 @@ def _render_atividades(store, clientes, role):
     if _npl_situacao != "todos":
         _npl_escopo += f" · {_filtro_inativo.lower()}"
 
+    # Acumula HTML do NPL pra renderizar DEPOIS (após Bem-vindo + Indicadores).
+    # Ordem visual da tela: Bem-vindo → Indicadores → NPL cards (análise macro).
+    _npl_html_parts = []
+
     _npl = fetch_npl_metrics(_npl_atendente, _npl_situacao) or {}
     if _npl:
         # ── Overlay live: substitui valores de HOJE pelos calculados em Python
@@ -555,7 +559,7 @@ def _render_atividades(store, clientes, role):
             f'margin-top:4px">{_npl["carteira"]:,} clientes na carteira</div>'
             '</div>'
         )
-        st.markdown(_header_html, unsafe_allow_html=True)
+        _npl_html_parts.append(_header_html)
 
         # ─── SEÇÃO 1: POR CLIENTE — aging exclusivo, com overlay live ───────
         _label_cliente = (
@@ -570,7 +574,7 @@ def _render_atividades(store, clientes, role):
             + _card("Atraso 90 dias ou mais", _npl["d90_pct"], _npl["delta_d90"],  _npl["d90_r"])
             + '</div>'
         )
-        st.markdown(_label_cliente + _cards_cliente, unsafe_allow_html=True)
+        _npl_html_parts.append(_label_cliente + _cards_cliente)
 
         # ─── SEÇÃO 2: POR RECEITA — janela rolante em R$, sem overlay ───────
         # Métricas alinhadas com metodologia do outro dashboard:
@@ -600,11 +604,13 @@ def _render_atividades(store, clientes, role):
                 )
                 + '</div>'
             )
-            st.markdown(_label_receita + _cards_receita, unsafe_allow_html=True)
+            _npl_html_parts.append(_label_receita + _cards_receita)
 
+    # ═══════════════ ORDEM DE RENDER: Bem-vindo → Indicadores → NPL ═══════
+    # 1. Bem-vindo (saudação personalizada no topo)
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
-        f'font-weight:800;color:#e8eaf0;margin-top:32px;margin-bottom:32px;letter-spacing:-1.5px;line-height:1.1">'
+        f'font-weight:800;color:#e8eaf0;margin-top:32px;margin-bottom:28px;letter-spacing:-1.5px;line-height:1.1">'
         f'Bem-vindo(a), {nome}!</div>',
         unsafe_allow_html=True,
     )
@@ -806,8 +812,17 @@ def _render_atividades(store, clientes, role):
                     st.markdown(html, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    # Indicadores 'Hoje' — ACIMA dos filtros (linha horizontal de destaque)
+    # 2. Indicadores do dia (foco operacional — lote, regularizações, parciais)
     _indicadores_hoje()
+
+    # 3. NPL Cards (análise macro — carteira + por cliente + por receita).
+    # Separação visual: margem maior pra destacar como bloco analítico distinto
+    # dos indicadores operacionais acima.
+    if _npl_html_parts:
+        st.markdown('<div style="height:28px"></div>', unsafe_allow_html=True)
+        for _h in _npl_html_parts:
+            st.markdown(_h, unsafe_allow_html=True)
+        st.markdown('<div style="height:20px"></div>', unsafe_allow_html=True)
 
     # ── Filtros (fora do fragment — Streamlit preserva valor por session_state)
     # 'nan' (string) cai aqui quando _grupo veio de pandas com NaN convertido
