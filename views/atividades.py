@@ -544,48 +544,49 @@ def _render_atividades(store, clientes, role):
                 '</div>'
             )
 
-        # ═══════════════ SEÇÃO 1 — INADIMPLÊNCIA POR CLIENTE ════════════════
-        _html_cliente = (
-            '<div style="margin-top:20px;margin-bottom:4px">'
-            f'<div style="font-size:11px;font-weight:700;color:#7cc243;'
-            f'text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">'
-            f'Inadimplência por cliente</div>'
+        # ═══════════════ HEADER DA CARTEIRA (single, no topo) ═══════════════
+        _header_html = (
+            '<div style="margin-top:20px;margin-bottom:18px">'
             f'<div style="font-size:18px;font-weight:700;color:#9ca3af;'
-            f'text-transform:uppercase;letter-spacing:1.4px;margin-bottom:14px">'
+            f'text-transform:uppercase;letter-spacing:1.4px">'
             f'{_npl_escopo} · {_npl["carteira"]} clientes</div>'
-            '<div style="display:flex;gap:14px">'
+            '</div>'
+        )
+        st.markdown(_header_html, unsafe_allow_html=True)
+
+        # ─── SEÇÃO 1: POR CLIENTE — aging exclusivo, com overlay live ───────
+        _label_cliente = (
+            '<div style="margin-bottom:10px;display:flex;align-items:center;gap:12px">'
+            '<div style="font-size:10px;color:#6b7280;letter-spacing:1.2px;'
+            'text-transform:uppercase;white-space:nowrap">Por cliente</div>'
+            '<div style="flex:1;height:1px;background:#1e2333"></div>'
+            '</div>'
+        )
+        _cards_cliente = (
+            '<div style="display:flex;gap:14px;margin-bottom:6px">'
             + _card("Inadimplência total", _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
             + _card("Atraso até 30 dias",  _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
             + _card("Atraso 90 dias ou mais", _npl["d90_pct"], _npl["delta_d90"],  _npl["d90_r"])
-            + '</div></div>'
+            + '</div>'
         )
-        st.markdown(_html_cliente, unsafe_allow_html=True)
+        st.markdown(_label_cliente + _cards_cliente, unsafe_allow_html=True)
 
-        # ═══════════════ SEÇÃO 2 — INADIMPLÊNCIA POR RECEITA ════════════════
-        # Métricas alinhadas com a metodologia do outro dashboard:
-        #   - Janela rolante (% R$ aberto / R$ emitido na janela)
-        #   - Total: 12 meses TTM (vencidos em [D-365, D])
+        # ─── SEÇÃO 2: POR RECEITA — janela rolante em R$, sem overlay ───────
+        # Métricas alinhadas com metodologia do outro dashboard:
         #   - 30d: vencidos em [D-30, D]
         #   - 90d: vencidos em [D-90, D]
         # Mesmos filtros (atendente, situação, #4, tipo Setup/Mensalidade).
-        # NÃO usa overlay live — snapshot BQ apenas (lag de 1 dia tem
-        # impacto < 5% em janelas longas, aceitável aqui).
         _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao) or {}
         if _rolling:
-            _html_receita = (
-                '<div style="margin-top:24px;margin-bottom:4px">'
-                f'<div style="font-size:11px;font-weight:700;color:#5fa3ff;'
-                f'text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">'
-                f'Inadimplência por receita (Setup + Mensalidade)</div>'
-                f'<div style="font-size:14px;color:#6b7280;margin-bottom:14px">'
-                f'% R$ aberto / R$ emitido · janela rolante · sem overlay live</div>'
+            _label_receita = (
+                '<div style="margin-top:20px;margin-bottom:10px;display:flex;align-items:center;gap:12px">'
+                '<div style="font-size:10px;color:#6b7280;letter-spacing:1.2px;'
+                'text-transform:uppercase;white-space:nowrap">Por receita (Setup + Mensalidade)</div>'
+                '<div style="flex:1;height:1px;background:#1e2333"></div>'
+                '</div>'
+            )
+            _cards_receita = (
                 '<div style="display:flex;gap:14px">'
-                + _card(
-                    "Inadimplência total (12m)",
-                    _rolling["total_pct"],
-                    _rolling["delta_total_pp"],
-                    _rolling["total_aberto"],
-                )
                 + _card(
                     "Janela 30 dias",
                     _rolling["d30_pct"],
@@ -598,9 +599,9 @@ def _render_atividades(store, clientes, role):
                     _rolling["delta_d90_pp"],
                     _rolling["d90_aberto"],
                 )
-                + '</div></div>'
+                + '</div>'
             )
-            st.markdown(_html_receita, unsafe_allow_html=True)
+            st.markdown(_label_receita + _cards_receita, unsafe_allow_html=True)
 
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
