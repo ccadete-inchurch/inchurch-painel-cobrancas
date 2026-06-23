@@ -548,24 +548,15 @@ def _render_atividades(store, clientes, role):
                 '</div>'
             )
 
-        # ═══════════════ HEADER DA CARTEIRA — typography limpa ═══════════════
-        # Hierarquia: escopo grande + claro + sem uppercase pra ficar elegante;
-        # contagem de clientes em peso leve, cor cinza, abaixo como subtítulo
-        _header_html = (
-            '<div style="margin-top:20px;margin-bottom:22px">'
-            f'<div style="font-size:28px;font-weight:700;color:#e8eaf0;'
-            f'letter-spacing:-0.8px;line-height:1.15">{_npl_escopo}</div>'
-            f'<div style="font-size:14px;font-weight:400;color:#6b7280;'
-            f'margin-top:4px">{_npl["carteira"]:,} clientes na carteira</div>'
-            '</div>'
-        )
-        _npl_html_parts.append(_header_html)
-
         # ─── SEÇÃO 1: POR CLIENTE — aging exclusivo, com overlay live ───────
+        # Label inclui contagem ("POR CLIENTE · 1.268 clientes") — denominador
+        # dos cards aparece junto com o título da seção. Sem header de "carteira"
+        # no topo (essa info vai antes dos indicadores, dando contexto operacional).
         _label_cliente = (
             '<div style="font-size:17px;color:#9ca3af;letter-spacing:1.4px;'
-            'text-transform:uppercase;margin-bottom:14px;font-weight:600">'
-            'Por cliente</div>'
+            'text-transform:uppercase;margin-bottom:14px;font-weight:600;'
+            'margin-top:20px">'
+            f'Por cliente · {_npl["carteira"]:,} clientes</div>'
         )
         _cards_cliente = (
             '<div style="display:flex;gap:14px;margin-bottom:6px">'
@@ -606,8 +597,16 @@ def _render_atividades(store, clientes, role):
             )
             _npl_html_parts.append(_label_receita + _cards_receita)
 
-    # ═══════════════ ORDEM DE RENDER: Bem-vindo → Indicadores → NPL ═══════
-    # 1. Bem-vindo (saudação personalizada no topo)
+    # ═══════════════ ORDEM DE RENDER ═══════════════
+    # 1. NPL Cards no topo (POR CLIENTE · N clientes + POR RECEITA)
+    # 2. Bem-vindo (saudação personalizada)
+    # 3. Label "Carteira de X" + Indicadores (operacional do dia)
+    # 4. Filtros + Kanban
+    if _npl_html_parts:
+        for _h in _npl_html_parts:
+            st.markdown(_h, unsafe_allow_html=True)
+
+    # 2. Bem-vindo
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
         f'font-weight:800;color:#e8eaf0;margin-top:32px;margin-bottom:28px;letter-spacing:-1.5px;line-height:1.1">'
@@ -812,17 +811,17 @@ def _render_atividades(store, clientes, role):
                     st.markdown(html, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    # 2. Indicadores do dia (foco operacional — lote, regularizações, parciais)
+    # 3. Label "Carteira de X" + Indicadores operacionais
+    # Esse label aparece UMA vez aqui (acima dos indicadores) — dá contexto
+    # de scope pra atendente que não tem painel admin. Filtro Situação não é
+    # repetido (já está no dropdown).
+    st.markdown(
+        f'<div style="font-size:17px;color:#9ca3af;letter-spacing:1.4px;'
+        f'text-transform:uppercase;margin-top:8px;margin-bottom:14px;font-weight:600">'
+        f'{_npl_escopo if _npl else "Carteira"}</div>',
+        unsafe_allow_html=True,
+    )
     _indicadores_hoje()
-
-    # 3. NPL Cards (análise macro — carteira + por cliente + por receita).
-    # Separação visual: margem maior pra destacar como bloco analítico distinto
-    # dos indicadores operacionais acima.
-    if _npl_html_parts:
-        st.markdown('<div style="height:28px"></div>', unsafe_allow_html=True)
-        for _h in _npl_html_parts:
-            st.markdown(_h, unsafe_allow_html=True)
-        st.markdown('<div style="height:20px"></div>', unsafe_allow_html=True)
 
     # ── Filtros (fora do fragment — Streamlit preserva valor por session_state)
     # 'nan' (string) cai aqui quando _grupo veio de pandas com NaN convertido
