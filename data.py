@@ -1192,7 +1192,7 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
     Buckets 30d e 90d são EXCLUSIVOS (não cumulativos). A faixa de 30-89 dias
     fica oculta entre os dois — convenção padrão de dashboards de cobrança.
 
-    Para cada uma: % da carteira, n. clientes, R$ em aberto, delta p.p. vs 7d.
+    Para cada uma: % da carteira, n. clientes, R$ em aberto, delta p.p. vs 30d.
 
     Denominador: clientes únicos. Inclui desativados por padrão (a
     inadimplência antiga é passivo real, mesmo do cliente já saído do
@@ -1206,10 +1206,11 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
         situacao:   'todos' (default), 'ativos' (dt_desativacao_sac IS NULL),
                     ou 'inativos' (dt_desativacao_sac IS NOT NULL).
 
-    Delta: mesma fórmula aplicada ao "snapshot virtual" de 7 DIAS atrás
-    (cobrança estava aberta em D-7 se status='0' agora OU paga depois de D-7).
-    Janela WoW (Week over Week) — captura movimento semanal real, suaviza
-    efeito de fim de semana, e reflete o esforço da semana das atendentes.
+    Delta: mesma fórmula aplicada ao "snapshot virtual" de 30 DIAS atrás
+    (cobrança estava aberta em D-30 se status='0' agora OU paga depois de D-30).
+    Janela MoM (Month over Month) — padrão da indústria financeira, alinha
+    com o ciclo mensal de assinatura inChurch e dá deltas mais legíveis
+    (2-4 p.p. típicos vs 0-0,5 p.p. de WoW em carteiras pequenas).
     """
     client = get_bq_client()
     if not client:
@@ -1219,7 +1220,7 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
     # (UTC 02:00 = BRT 23:00 do dia anterior), inflando inadimplência.
     today_str = hoje_brt()
     today_dt  = date.fromisoformat(today_str)
-    ref_str   = (today_dt - timedelta(days=7)).isoformat()
+    ref_str   = (today_dt - timedelta(days=30)).isoformat()
 
     # ── Filtro de atendente (via splgc-grupo) ─────────────────────────────
     contacts_cte = ""
