@@ -556,11 +556,9 @@ def _render_atividades(store, clientes, role):
 
         # ─── SEÇÃO 1: POR CLIENTE — aging exclusivo, com overlay live ───────
         _label_cliente = (
-            '<div style="margin-bottom:10px;display:flex;align-items:center;gap:12px">'
-            '<div style="font-size:10px;color:#6b7280;letter-spacing:1.2px;'
-            'text-transform:uppercase;white-space:nowrap">Por cliente</div>'
-            '<div style="flex:1;height:1px;background:#1e2333"></div>'
-            '</div>'
+            '<div style="font-size:14px;color:#9ca3af;letter-spacing:1.5px;'
+            'text-transform:uppercase;margin-bottom:12px;font-weight:600">'
+            'Por cliente</div>'
         )
         _cards_cliente = (
             '<div style="display:flex;gap:14px;margin-bottom:6px">'
@@ -579,11 +577,9 @@ def _render_atividades(store, clientes, role):
         _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao) or {}
         if _rolling:
             _label_receita = (
-                '<div style="margin-top:20px;margin-bottom:10px;display:flex;align-items:center;gap:12px">'
-                '<div style="font-size:10px;color:#6b7280;letter-spacing:1.2px;'
-                'text-transform:uppercase;white-space:nowrap">Por receita (Setup + Mensalidade)</div>'
-                '<div style="flex:1;height:1px;background:#1e2333"></div>'
-                '</div>'
+                '<div style="font-size:14px;color:#9ca3af;letter-spacing:1.5px;'
+                'text-transform:uppercase;margin-top:24px;margin-bottom:12px;font-weight:600">'
+                'Por receita (Setup + Mensalidade)</div>'
             )
             _cards_receita = (
                 '<div style="display:flex;gap:14px">'
