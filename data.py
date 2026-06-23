@@ -91,7 +91,7 @@ from google.cloud import bigquery
 
 from config import MAP_COB, MAP_INAD, DIAS_SEM_CONTATO
 from auth import get_store, current_nome
-from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel, fmt_tel_lista, hoje_lote
+from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel, fmt_tel_lista, hoje_lote, hoje_brt
 
 
 # ── Feriados nacionais ────────────────────────────────────────────────────────
@@ -1215,8 +1215,11 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
     if not client:
         return {}
 
-    today_str = date.today().isoformat()
-    ref_str   = (date.today() - timedelta(days=7)).isoformat()
+    # Usar BRT, não UTC — date.today() do servidor pode adiantar 1 dia
+    # (UTC 02:00 = BRT 23:00 do dia anterior), inflando inadimplência.
+    today_str = hoje_brt()
+    today_dt  = date.fromisoformat(today_str)
+    ref_str   = (today_dt - timedelta(days=7)).isoformat()
 
     # ── Filtro de atendente (via splgc-grupo) ─────────────────────────────
     contacts_cte = ""
