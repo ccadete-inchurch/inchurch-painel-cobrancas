@@ -1199,6 +1199,10 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
     produto — sem isso, 90D+ fica zerado porque o Splgc desativa
     automaticamente atrasos longos).
 
+    Numerador: só clientes que já pagaram pelo menos 1 boleto na história
+    (`EXISTS dt_liquidacao_recb IS NOT NULL`). Exclui novos em onboarding/
+    disputa comercial — esses são CS/vendas, não cobrança operacional.
+
     Parâmetros:
         atendente:  Nome do grupo (ex: 'Ana Carolina'). Filtra via splgc-grupo.
                     "__SEM_ESPECIALISTA__" para clientes sem grupo atribuído.
@@ -1268,6 +1272,16 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
 
     query = f"""
     WITH {contacts_cte}
+    -- Clientes que já pagaram pelo menos 1 boleto na história — exclui
+    -- novos em onboarding / disputa comercial sem pagamento prévio.
+    -- Inadimplência "operacional": só conta quem já pagou antes e agora
+    -- parou. Cliente novo com primeiro boleto vencido NÃO é inadimplência
+    -- da régua de cobrança, é onboarding/CS.
+    clientes_com_pagamento AS (
+      SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
+      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+      WHERE dt_liquidacao_recb IS NOT NULL
+    ),
     carteira AS (
       SELECT COUNT(DISTINCT id_sacado_sac) AS n
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
@@ -1280,28 +1294,31 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
         DATE(MAX(c.dt_vencimento_recb))  AS venc,
         SUM(c.comp_valor)                AS valor,
         MAX(c.fl_status_recb)            AS status,
-        DATE(MAX(l.dt_liquidacao_recb))  AS liq
+        DATE(MAX(l.dt_liquidacao_recb))  AS liq,
+        MAX(IF(jp.cid IS NOT NULL, 1, 0)) AS ja_pagou
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
       LEFT JOIN `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` l
         ON c.id_recebimento_recb = l.id_recebimento_recb
+      LEFT JOIN clientes_com_pagamento jp
+        ON CAST(c.id_sacado_sac AS STRING) = jp.cid
       {cobrs_filter}
       GROUP BY c.id_sacado_sac, c.id_recebimento_recb
     ),
     hoje AS (
       SELECT
-        COUNT(DISTINCT IF(status = '0' AND venc < DATE('{today_str}'), cid, NULL)) AS total_n,
-        COUNT(DISTINCT IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) BETWEEN 1 AND 30, cid, NULL)) AS d30_n,
-        COUNT(DISTINCT IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 90, cid, NULL)) AS d90_n,
-        SUM(IF(status = '0' AND venc < DATE('{today_str}'), valor, 0)) AS total_r,
-        SUM(IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) BETWEEN 1 AND 30, valor, 0)) AS d30_r,
-        SUM(IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 90, valor, 0)) AS d90_r
+        COUNT(DISTINCT IF(status = '0' AND venc < DATE('{today_str}') AND ja_pagou = 1, cid, NULL)) AS total_n,
+        COUNT(DISTINCT IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) BETWEEN 1 AND 30 AND ja_pagou = 1, cid, NULL)) AS d30_n,
+        COUNT(DISTINCT IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 90 AND ja_pagou = 1, cid, NULL)) AS d90_n,
+        SUM(IF(status = '0' AND venc < DATE('{today_str}') AND ja_pagou = 1, valor, 0)) AS total_r,
+        SUM(IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) BETWEEN 1 AND 30 AND ja_pagou = 1, valor, 0)) AS d30_r,
+        SUM(IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 90 AND ja_pagou = 1, valor, 0)) AS d90_r
       FROM cobrs
     ),
     ref AS (
       SELECT
-        COUNT(DISTINCT IF(venc < DATE('{ref_str}') AND (status = '0' OR liq >= DATE('{ref_str}')), cid, NULL)) AS total_n,
-        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) BETWEEN 1 AND 30 AND (status = '0' OR liq >= DATE('{ref_str}')), cid, NULL)) AS d30_n,
-        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) >= 90 AND (status = '0' OR liq >= DATE('{ref_str}')), cid, NULL)) AS d90_n
+        COUNT(DISTINCT IF(venc < DATE('{ref_str}') AND (status = '0' OR liq >= DATE('{ref_str}')) AND ja_pagou = 1, cid, NULL)) AS total_n,
+        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) BETWEEN 1 AND 30 AND (status = '0' OR liq >= DATE('{ref_str}')) AND ja_pagou = 1, cid, NULL)) AS d30_n,
+        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) >= 90 AND (status = '0' OR liq >= DATE('{ref_str}')) AND ja_pagou = 1, cid, NULL)) AS d90_n
       FROM cobrs
     )
     SELECT
