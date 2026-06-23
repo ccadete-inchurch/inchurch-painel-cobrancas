@@ -544,20 +544,23 @@ def _render_atividades(store, clientes, role):
                 '</div>'
             )
 
-        # ═══════════════ HEADER DA CARTEIRA (single, no topo) ═══════════════
+        # ═══════════════ HEADER DA CARTEIRA — typography limpa ═══════════════
+        # Hierarquia: escopo grande + claro + sem uppercase pra ficar elegante;
+        # contagem de clientes em peso leve, cor cinza, abaixo como subtítulo
         _header_html = (
-            '<div style="margin-top:20px;margin-bottom:18px">'
-            f'<div style="font-size:18px;font-weight:700;color:#9ca3af;'
-            f'text-transform:uppercase;letter-spacing:1.4px">'
-            f'{_npl_escopo} · {_npl["carteira"]} clientes</div>'
+            '<div style="margin-top:20px;margin-bottom:22px">'
+            f'<div style="font-size:28px;font-weight:700;color:#e8eaf0;'
+            f'letter-spacing:-0.8px;line-height:1.15">{_npl_escopo}</div>'
+            f'<div style="font-size:14px;font-weight:400;color:#6b7280;'
+            f'margin-top:4px">{_npl["carteira"]:,} clientes na carteira</div>'
             '</div>'
         )
         st.markdown(_header_html, unsafe_allow_html=True)
 
         # ─── SEÇÃO 1: POR CLIENTE — aging exclusivo, com overlay live ───────
         _label_cliente = (
-            '<div style="font-size:14px;color:#9ca3af;letter-spacing:1.5px;'
-            'text-transform:uppercase;margin-bottom:12px;font-weight:600">'
+            '<div style="font-size:17px;color:#9ca3af;letter-spacing:1.4px;'
+            'text-transform:uppercase;margin-bottom:14px;font-weight:600">'
             'Por cliente</div>'
         )
         _cards_cliente = (
@@ -577,9 +580,9 @@ def _render_atividades(store, clientes, role):
         _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao) or {}
         if _rolling:
             _label_receita = (
-                '<div style="font-size:14px;color:#9ca3af;letter-spacing:1.5px;'
-                'text-transform:uppercase;margin-top:24px;margin-bottom:12px;font-weight:600">'
-                'Por receita (Setup + Mensalidade)</div>'
+                '<div style="font-size:17px;color:#9ca3af;letter-spacing:1.4px;'
+                'text-transform:uppercase;margin-top:24px;margin-bottom:14px;font-weight:600">'
+                'Por receita</div>'
             )
             _cards_receita = (
                 '<div style="display:flex;gap:14px">'
