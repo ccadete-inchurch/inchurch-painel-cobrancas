@@ -856,78 +856,85 @@ def _render_atividades(store, clientes, role):
             st.session_state["_show_npl_cards"] = True
         _show_npl = st.session_state["_show_npl_cards"]
 
-        # Botao clicavel COM APARENCIA de selectbox (borda, fundo, chevron
-        # V a direita). Comportamento e' toggle (1 clique alterna), nao
-        # dropdown. CSS replica o visual nativo do st.selectbox pra criar
-        # identidade com os outros controles (GRUPO/SITUACAO/Visualizacao).
+        # Botao V estilizado: usa o chevron "▾" do selectbox e a textura
+        # dos cards (background + borda iguais). Mantem o V no canto
+        # como toggle, so ajusta a aparencia visual.
         st.markdown('''
         <style>
-        /* Esconde o ":" automatico do label do botao (Streamlit nao gera) */
         div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
             div[data-testid="stColumn"] {
             padding-top: 0 !important;
             padding-bottom: 0 !important;
         }
-        /* Botao com aparencia de selectbox dark */
+        /* Botao do V - aparencia de selectbox/card: bg escuro + borda */
         div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"] {
-            background: #262730 !important;
-            border: 1px solid rgba(250, 250, 250, 0.2) !important;
-            border-radius: 8px !important;
-            color: #fafafa !important;
-            font-family: "Source Sans Pro", sans-serif !important;
-            font-size: 16px !important;
-            font-weight: 400 !important;
-            padding: 8px 12px !important;
-            min-height: 38px !important;
-            box-shadow: none !important;
-            justify-content: space-between !important;
-            text-align: left !important;
-            transition: border-color 0.15s ease;
-            position: relative !important;
-        }
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"]:hover,
+            button[data-testid="stBaseButton-secondary"],
         div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
             button[data-testid="stBaseButton-secondary"]:focus,
         div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"]:active,
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
             button[data-testid="stBaseButton-secondary"]:focus-visible {
-            border-color: rgba(124, 194, 67, 0.6) !important;
-            color: #fafafa !important;
-            background: #262730 !important;
+            background: #181c26 !important;
+            border: 1px solid #2a2f42 !important;
+            border-radius: 8px !important;
             outline: none !important;
             box-shadow: none !important;
+            color: #a3a8b8 !important;
+            font-family: "Source Sans Pro", -apple-system, sans-serif !important;
+            font-size: 16px !important;
+            font-weight: 400 !important;
+            line-height: 1 !important;
+            padding: 6px 14px !important;
+            min-height: 38px !important;
+            transition: border-color 0.15s ease, color 0.15s ease;
         }
-        /* Chevron V apos o texto - simula o do selectbox nativo */
         div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"]::after {
-            content: "▾";
-            font-size: 14px;
-            color: #a3a8b8;
-            margin-left: 12px;
+            button[data-testid="stBaseButton-secondary"]:hover {
+            background: #181c26 !important;
+            border-color: #7cc243 !important;
+            color: #fafafa !important;
         }
         </style>
         ''', unsafe_allow_html=True)
 
-        # Mini-label uppercase acima do botao (mesma vibe do "VISUALIZACAO"
-        # acima do selectbox do painel admin)
         st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-        _btn_col, _spacer = st.columns([6, 14])
+
+        # Layout: botão V à ESQUERDA + texto IMPERATIVO colado ao lado
+        # ("Clique aqui para ver/ocultar..."). Convida ação clara.
+        _btn_col, _txt_col, _spacer = st.columns(
+            [1, 14, 6], vertical_alignment="center"
+        )
         with _btn_col:
-            st.markdown(
-                '<div style="font-family:\'Source Sans Pro\',sans-serif;'
-                'font-size:14px;font-weight:400;color:rgba(250,250,250,0.6);'
-                'margin-bottom:6px">Análise da carteira</div>',
-                unsafe_allow_html=True,
-            )
-            _label_btn = "Ocultar" if _show_npl else "Mostrar"
-            if st.button(_label_btn, key="_npl_toggle_btn",
-                         use_container_width=True):
+            # V estilizado do selectbox. Mesmo char em ambos estados — o
+            # rerun atualiza o conteúdo abaixo, dando feedback do toggle.
+            if st.button("▾", key="_npl_toggle_btn",
+                         help="Ocultar análise" if _show_npl else "Mostrar análise"):
                 st.session_state["_show_npl_cards"] = not _show_npl
                 st.rerun()
+        with _txt_col:
+            _label_txt = (
+                "Clique aqui para ocultar análise da carteira"
+                if _show_npl else
+                "Clique aqui para ver análise da carteira"
+            )
+            # Mesmo estilo das labels de filtro (GRUPO, SITUAÇÃO, BUSCAR):
+            # uppercase, pequeno, letter-spacing, peso 600 e cor cinza
+            # mais discreta (#6b7280) — bate com o tom das labels Streamlit.
+            st.markdown(
+                f'<div style="font-family:-apple-system,BlinkMacSystemFont,'
+                f'\'Segoe UI\',Roboto,sans-serif;font-size:14px;'
+                f'font-weight:600;color:#6b7280;letter-spacing:1.5px;'
+                f'text-transform:uppercase">'
+                f'{_label_txt}</div>',
+                unsafe_allow_html=True,
+            )
 
-        # Respiro até os cards
-        st.markdown('<div style="height:14px"></div>', unsafe_allow_html=True)
+        # Sem linha divisória — só respiro mínimo até os cards
+        st.markdown(
+            '<div style="height:14px"></div>',
+            unsafe_allow_html=True,
+        )
 
         if _show_npl:
             for _h in _npl_html_parts:
