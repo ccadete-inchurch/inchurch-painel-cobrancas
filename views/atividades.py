@@ -392,41 +392,26 @@ def _render_atividades(store, clientes, role):
         if ids_regularizados:
             clientes.extend(fetch_regularizados_do_dia(ids_regularizados))
 
-    # ── Painel administrativo (alinhado à direita) ──────────────────────────
+    # ── Painel administrativo OCULTADO (temporário, pra admin ver visual igual atendente)
+    # Pra restaurar, descomente o bloco abaixo. Defaults garantem que admin
+    # cai em 'Todos os clientes' sem _atendente_sel — mesmo comportamento de
+    # quando o painel mostrava mas nada estava selecionado.
     _nomes_atendentes = list(_EMAIL_GRUPO.values())
     _modo_admin       = "Todos os clientes"
     _atendente_sel    = None
-    if role == "admin":
-        _admin_spacer, _admin_box = st.columns([2.8, 2.2])
-        with _admin_box:
-            with st.container(border=True):
-                st.markdown(
-                    '<div style="display:flex;align-items:center;gap:6px;'
-                    'font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;'
-                    'letter-spacing:0.7px;margin-bottom:8px">'
-                    '<svg width="13" height="13" viewBox="0 0 24 24" fill="#9ca3af">'
-                    '<path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>'
-                    '</svg>'
-                    'Painel Administrativo</div>',
-                    unsafe_allow_html=True,
-                )
-                _cm, _ca = st.columns([1, 1])
-                with _cm:
-                    _modo_admin = st.selectbox(
-                        "Visualização",
-                        ["Todos os clientes", "Lote do dia"],
-                        label_visibility="collapsed",
-                        key="_admin_modo",
-                    )
-                with _ca:
-                    if _modo_admin == "Lote do dia":
-                        _atendente_sel = st.selectbox(
-                            "Especialista",
-                            _nomes_atendentes,
-                            label_visibility="collapsed",
-                            key="_admin_atendente",
-                        )
+    # if role == "admin":
+    #     _admin_spacer, _admin_box = st.columns([2.8, 2.2])
+    #     with _admin_box:
+    #         with st.container(border=True):
+    #             st.markdown('<div ...>Painel Administrativo</div>', unsafe_allow_html=True)
+    #             _cm, _ca = st.columns([1, 1])
+    #             with _cm:
+    #                 _modo_admin = st.selectbox("Visualização", ...)
+    #             with _ca:
+    #                 if _modo_admin == "Lote do dia":
+    #                     _atendente_sel = st.selectbox("Especialista", ...)
 
+    if role == "admin":
         if _modo_admin == "Lote do dia" and _atendente_sel:
             _key_lote = f"_tarefas_admin_{hoje_lote()}_{_atendente_sel}"
             if _key_lote not in st.session_state:
@@ -549,14 +534,14 @@ def _render_atividades(store, clientes, role):
             )
 
         # ─── SEÇÃO 1: POR CLIENTE — aging exclusivo, com overlay live ───────
-        # Label inclui contagem ("POR CLIENTE · 1.268 clientes") — denominador
-        # dos cards aparece junto com o título da seção. Sem header de "carteira"
-        # no topo (essa info vai antes dos indicadores, dando contexto operacional).
+        # Contagem da carteira aparece DENTRO do card de indicadores
+        # (como linha "X CLIENTES" acima de INADIMPLENTES) — não precisa
+        # repetir no label da seção.
         _label_cliente = (
             '<div style="font-size:17px;color:#9ca3af;letter-spacing:1.4px;'
             'text-transform:uppercase;margin-bottom:14px;font-weight:600;'
             'margin-top:20px">'
-            f'Por cliente · {_npl["carteira"]:,} clientes</div>'
+            'Por cliente</div>'
         )
         _cards_cliente = (
             '<div style="display:flex;gap:14px;margin-bottom:6px">'
@@ -692,8 +677,19 @@ def _render_atividades(store, clientes, role):
                 _buckets = st.session_state.get(_key, {}) or {}
                 _ids_lote = set(_buckets.keys())
             # Inadimplentes: carteira inteira do atendente — descontando reg.
+            # APLICA filtro Situação (Ativos/Inativos/Todos) pra consistência
+            # com cards NPL e dropdown — atendente espera que indicadores
+            # tambem respeitem o filtro que ela aplicou.
             _carteira_cs = [c for c in clientes_full if c.get("_grupo") == _atendente_nome]
+            _fs_lote = st.session_state.get("atv_filtro_inativo", "Todos")
+            if _fs_lote == "Ativos":
+                _carteira_cs = [c for c in _carteira_cs if not c.get("_inativo")]
+            elif _fs_lote == "Inativos":
+                _carteira_cs = [c for c in _carteira_cs if c.get("_inativo")]
             lote_inad_n = sum(1 for c in _carteira_cs if not c.get("_regularizado_hoje"))
+            # Carteira total da atendente (após filtro situação) — vai como
+            # primeira linha do card "X CLIENTES"
+            lote_carteira_n = len(_carteira_cs)
             # Reg + Parc: só do lote do dia (mérito do trabalho do atendente).
             # strict_hoje=False — cliente em lote é trabalho do dia mesmo se
             # liquidação foi ontem (BQ não viu, overlay detectou).
@@ -704,6 +700,8 @@ def _render_atividades(store, clientes, role):
         total_inad_n = total_reg_n = total_parc_n = 0
         total_reg_v = total_parc_v = 0.0
         total_label = ""  # sublabel removido por feedback
+        total_carteira_n = 0
+        lote_carteira_n_safe = locals().get("lote_carteira_n", 0)
         if _mostrar_total:
             _fg = st.session_state.get("atv_filtro_grupo", "Todos")
             _fs = st.session_state.get("atv_filtro_inativo", "Todos")
@@ -726,6 +724,8 @@ def _render_atividades(store, clientes, role):
             # strict_hoje=True — placar honesto do DIA, sem inflar com limbo
             # de pagamentos de 3 dias atrás detectados pelo overlay.
             total_inad_n, total_reg_n, total_reg_v, total_parc_n, total_parc_v = _agg(_total_cs, strict_hoje=True)
+            # Carteira total filtrada (vira primeira linha do card "X CLIENTES")
+            total_carteira_n = len(_total_cs)
 
         def _palavra(n, sing, plur):
             return sing if n == 1 else plur
@@ -749,11 +749,21 @@ def _render_atividades(store, clientes, role):
             'style="flex-shrink:0"><circle cx="12" cy="12" r="9"></circle>'
             '<path d="M12 6v6l4 2"></path></svg>'
         )
+        # Ícone people/users pra linha CLIENTES (carteira total)
+        _ico_cli = (
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" '
+            'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" '
+            'style="flex-shrink:0">'
+            '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>'
+            '<circle cx="9" cy="7" r="4"></circle>'
+            '<path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>'
+            '<path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>'
+        )
 
-        # Card vertical empilhado: Inadimplentes (1ª linha) + divisor + Reg +
-        # divisor + Parc. Mesmo padrão que tinha antes; Inadimplentes só foi
-        # adicionada no topo pra mostrar quanto da carteira ainda tá pendente.
-        def _card_html(label_topo, sublabel, inad_n, reg_n, reg_v, parc_n, parc_v):
+        # Card vertical empilhado: Clientes (carteira, 1ª linha) + Inadimplentes +
+        # Reg + Parc. Linha CLIENTES dá contexto de scope pra atendente saber
+        # quantos clientes tem na carteira filtrada (respeitando Situação).
+        def _card_html(label_topo, sublabel, carteira_n, inad_n, reg_n, reg_v, parc_n, parc_v):
             _inad_palavra = _palavra(inad_n, "inadimplente", "inadimplentes").upper()
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
             _parc_palavra = _palavra(parc_n, "parcial", "parciais").upper()
@@ -777,10 +787,13 @@ def _render_atividades(store, clientes, role):
                 )
 
             _divisor = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
+            _cli_palavra = _palavra(carteira_n, "cliente", "clientes").upper()
 
             return (
                 f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
                 f'border-radius:10px;padding:14px 18px">'
+                f'{_linha(_ico_cli, carteira_n, _cli_palavra, "", "")}'
+                f'{_divisor}'
                 f'{_linha(_ico_inad, inad_n, _inad_palavra, "", "")}'
                 f'{_divisor}'
                 f'{_linha(_ico_reg, reg_n, _reg_palavra, _reg_v_fmt, "#7cc243")}'
@@ -794,11 +807,13 @@ def _render_atividades(store, clientes, role):
         if _mostrar_lote:
             cards_html.append(_card_html(
                 "No Lote", "",
+                lote_carteira_n_safe,
                 lote_inad_n, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v,
             ))
         if _mostrar_total:
             cards_html.append(_card_html(
                 "No Total", total_label,
+                total_carteira_n,
                 total_inad_n, total_reg_n, total_reg_v, total_parc_n, total_parc_v,
             ))
 
