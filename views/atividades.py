@@ -856,24 +856,74 @@ def _render_atividades(store, clientes, role):
             st.session_state["_show_npl_cards"] = True
         _show_npl = st.session_state["_show_npl_cards"]
 
-        # Selectbox no MESMO estilo do "Visualização" do Painel Administrativo
-        # (com bordas, fundo, label uppercase). Mantém identidade visual
-        # com o resto da banda de controles da tela (GRUPO, SITUAÇÃO, etc).
-        st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+        # Botao clicavel COM APARENCIA de selectbox (borda, fundo, chevron
+        # V a direita). Comportamento e' toggle (1 clique alterna), nao
+        # dropdown. CSS replica o visual nativo do st.selectbox pra criar
+        # identidade com os outros controles (GRUPO/SITUACAO/Visualizacao).
+        st.markdown('''
+        <style>
+        /* Esconde o ":" automatico do label do botao (Streamlit nao gera) */
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            div[data-testid="stColumn"] {
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+        }
+        /* Botao com aparencia de selectbox dark */
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"] {
+            background: #262730 !important;
+            border: 1px solid rgba(250, 250, 250, 0.2) !important;
+            border-radius: 8px !important;
+            color: #fafafa !important;
+            font-family: "Source Sans Pro", sans-serif !important;
+            font-size: 16px !important;
+            font-weight: 400 !important;
+            padding: 8px 12px !important;
+            min-height: 38px !important;
+            box-shadow: none !important;
+            justify-content: space-between !important;
+            text-align: left !important;
+            transition: border-color 0.15s ease;
+            position: relative !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"]:hover,
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"]:focus,
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"]:focus-visible {
+            border-color: rgba(124, 194, 67, 0.6) !important;
+            color: #fafafa !important;
+            background: #262730 !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }
+        /* Chevron V apos o texto - simula o do selectbox nativo */
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"]::after {
+            content: "▾";
+            font-size: 14px;
+            color: #a3a8b8;
+            margin-left: 12px;
+        }
+        </style>
+        ''', unsafe_allow_html=True)
 
-        _select_col, _spacer = st.columns([6, 14])
-        with _select_col:
-            _opcoes = ["Mostrar", "Ocultar"]
-            _idx_atual = 0 if _show_npl else 1
-            _acao = st.selectbox(
-                "Análise da carteira",
-                _opcoes,
-                index=_idx_atual,
-                key="_npl_toggle_select",
+        # Mini-label uppercase acima do botao (mesma vibe do "VISUALIZACAO"
+        # acima do selectbox do painel admin)
+        st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+        _btn_col, _spacer = st.columns([6, 14])
+        with _btn_col:
+            st.markdown(
+                '<div style="font-family:\'Source Sans Pro\',sans-serif;'
+                'font-size:14px;font-weight:400;color:rgba(250,250,250,0.6);'
+                'margin-bottom:6px">Análise da carteira</div>',
+                unsafe_allow_html=True,
             )
-            _quer_mostrar = (_acao == "Mostrar")
-            if _quer_mostrar != _show_npl:
-                st.session_state["_show_npl_cards"] = _quer_mostrar
+            _label_btn = "Ocultar" if _show_npl else "Mostrar"
+            if st.button(_label_btn, key="_npl_toggle_btn",
+                         use_container_width=True):
+                st.session_state["_show_npl_cards"] = not _show_npl
                 st.rerun()
 
         # Respiro até os cards
