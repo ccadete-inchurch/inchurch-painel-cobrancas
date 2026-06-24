@@ -856,35 +856,57 @@ def _render_atividades(store, clientes, role):
             st.session_state["_show_npl_cards"] = True
         _show_npl = st.session_state["_show_npl_cards"]
 
-        # Padrão "section header": título uppercase à esquerda + chevron
-        # transparente à direita, separados por uma linha sutil. Mantém
-        # estrutura intencional mesmo quando colapsado (sem nada "flutuando").
+        # Botão chevron ultra-compacto: sem caixa visível, sem padding,
+        # sem outline em focus. Aplica também em :hover/:focus/:active
+        # pra impedir Streamlit de renderizar o box-shadow padrão.
         st.markdown('''
         <style>
+        /* Container do row do botao - reduz altura minima */
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"]) {
+            min-height: 0 !important;
+            margin-bottom: 0 !important;
+        }
         div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"] {
+            div[data-testid="stColumn"] {
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+        }
+        /* Botao chevron - zero estilo visual exceto a cor do texto */
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"],
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"]:hover,
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"]:focus,
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"]:active,
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"]:focus-visible {
             background: transparent !important;
             border: none !important;
-            color: #6b7280 !important;
+            outline: none !important;
+            box-shadow: none !important;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
             font-size: 18px !important;
-            font-weight: 400 !important;
+            font-weight: 500 !important;
             line-height: 1 !important;
-            padding: 4px 0 !important;
-            min-height: auto !important;
-            box-shadow: none !important;
-            transition: color 0.15s ease;
+            padding: 0 !important;
+            margin: 0 !important;
+            min-height: 0 !important;
+            height: auto !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"] {
+            color: #6b7280 !important;
         }
         div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
             button[data-testid="stBaseButton-secondary"]:hover {
-            background: transparent !important;
-            border: none !important;
             color: #e8eaf0 !important;
         }
         </style>
         ''', unsafe_allow_html=True)
 
-        st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
 
         # Layout: botão V à ESQUERDA + texto IMPERATIVO colado ao lado
         # ("Clique aqui para ver/ocultar..."). Convida ação clara.
@@ -911,10 +933,9 @@ def _render_atividades(store, clientes, role):
                 unsafe_allow_html=True,
             )
 
-        # Sem linha divisória — apenas respiro vertical (whitespace)
-        # delimita o header dos cards. Padrão de design mais limpo.
+        # Sem linha divisória — só respiro mínimo até os cards
         st.markdown(
-            '<div style="height:24px"></div>',
+            '<div style="height:14px"></div>',
             unsafe_allow_html=True,
         )
 
@@ -922,9 +943,8 @@ def _render_atividades(store, clientes, role):
             for _h in _npl_html_parts:
                 st.markdown(_h, unsafe_allow_html=True)
 
-        # Espaço respiratório antes dos filtros (independente de
-        # expandido/colapsado) - bloco da analise nao gruda no filtro
-        st.markdown('<div style="height:36px"></div>', unsafe_allow_html=True)
+        # Espaço antes dos filtros
+        st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
 
     # ── Filtros (fora do fragment — Streamlit preserva valor por session_state)
     # 'nan' (string) cai aqui quando _grupo veio de pandas com NaN convertido
