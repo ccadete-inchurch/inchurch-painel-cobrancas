@@ -1659,12 +1659,13 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
     elif situacao == "inativos":
         cond_sit = "c.dt_desativacao_sac IS NOT NULL"
 
-    # ── Filtro #4 (já pagou) + tipo (Setup/Mensalidade) ────────────────────
+    # ── Filtro de tipo (Setup/Mensalidade) ─────────────────────────────────
+    # Filtro #4 (ja pagou) agora e' aplicado no CTE 'boletos' apos a agregacao,
+    # nao mais aqui (era 'jp.cid IS NOT NULL', mas jp nao existe em boletos_agg).
     cond_tipo = "c.comp_st_conta_cont IN ('1.2.1', '1.2.2')"
-    cond_4    = "jp.cid IS NOT NULL"
 
-    # Combina todas as condições de filtro
-    conds = [c for c in [cond_atend, cond_sit, cond_tipo, cond_4] if c]
+    # Combina as condições aplicáveis em boletos_agg (sem referência a jp.cid)
+    conds = [c for c in [cond_atend, cond_sit, cond_tipo] if c]
     where_clause = "WHERE " + " AND ".join(conds) if conds else ""
 
     # Espelhar 100% a metodologia da Pagina 4:
@@ -1672,9 +1673,13 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
     #    (NAO usa fl_status_recb, que reflete estado atual e nao historico)
     # 2) Filtro de desativacao por DATA DO VENCIMENTO de cada boleto:
     #    dt_desativacao_sac IS NULL OR dt_desativacao_sac > venc
-    #    (substitui o filtro global de situacao=ativos/inativos, que dava
-    #    falso negativo: cliente ativo no vencimento mas desativado hoje
-    #    era excluido indevidamente)
+    # 3) AGREGAR liquidacao ANTES do JOIN pra evitar fan-out:
+    #    A tabela liquidacao-all tem ~4.3 linhas por boleto (pagamentos
+    #    parciais, refundos, etc). Fazer LEFT JOIN direto inflava o SUM
+    #    de comp_valor em 4-5x, gerando denominador errado e % falsa.
+    #    Mesma logica pra cobrancas_competencia-all (~3 linhas/boleto):
+    #    cada linha e' uma rubrica (Setup, Mensalidade, modulos).
+    #    Agregamos cada uma 1x antes de juntar.
     query = f"""
     WITH {contacts_cte}
     clientes_com_pagamento AS (
@@ -1682,21 +1687,33 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
       WHERE dt_liquidacao_recb IS NOT NULL
     ),
-    boletos AS (
+    liquidacao_agg AS (
       SELECT
-        c.id_sacado_sac AS cid,
+        id_recebimento_recb,
+        MAX(DATE(dt_liquidacao_recb)) AS liq
+      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+      WHERE dt_liquidacao_recb IS NOT NULL
+      GROUP BY id_recebimento_recb
+    ),
+    boletos_agg AS (
+      SELECT
+        CAST(c.id_sacado_sac AS STRING) AS cid,
         c.id_recebimento_recb AS rid,
         DATE(MAX(c.dt_vencimento_recb)) AS venc,
-        SUM(c.comp_valor) AS valor,
-        DATE(MAX(l.dt_liquidacao_recb)) AS liq,
-        DATE(MAX(c.dt_desativacao_sac)) AS desat
+        DATE(MAX(c.dt_desativacao_sac)) AS desat,
+        SUM(c.comp_valor) AS valor
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
-      LEFT JOIN `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` l
-        ON c.id_recebimento_recb = l.id_recebimento_recb
-      LEFT JOIN clientes_com_pagamento jp
-        ON CAST(c.id_sacado_sac AS STRING) = jp.cid
       {where_clause}
       GROUP BY c.id_sacado_sac, c.id_recebimento_recb
+    ),
+    boletos AS (
+      SELECT
+        b.cid, b.rid, b.venc, b.desat, b.valor,
+        la.liq
+      FROM boletos_agg b
+      LEFT JOIN liquidacao_agg la ON b.rid = la.id_recebimento_recb
+      LEFT JOIN clientes_com_pagamento jp ON b.cid = jp.cid
+      WHERE jp.cid IS NOT NULL
     )
     SELECT
       -- HOJE: Total TTM (12 meses) — boletos vencidos em [D-365, D]
