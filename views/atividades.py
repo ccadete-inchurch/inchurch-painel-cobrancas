@@ -926,12 +926,12 @@ def _render_atividades(store, clientes, role):
                 "Clique aqui para ver análise da carteira"
             )
             # Mesmo estilo das labels de filtro (GRUPO, SITUAÇÃO, BUSCAR):
-            # uppercase, pequeno, letter-spacing, peso 600. Cria identidade
-            # visual coesa entre o toggle e a banda de filtros abaixo.
+            # uppercase, pequeno, letter-spacing, peso 600 e cor cinza
+            # mais discreta (#6b7280) — bate com o tom das labels Streamlit.
             st.markdown(
                 f'<div style="font-family:-apple-system,BlinkMacSystemFont,'
                 f'\'Segoe UI\',Roboto,sans-serif;font-size:14px;'
-                f'font-weight:600;color:#8b94a5;letter-spacing:1.5px;'
+                f'font-weight:600;color:#6b7280;letter-spacing:1.5px;'
                 f'text-transform:uppercase">'
                 f'{_label_txt}</div>',
                 unsafe_allow_html=True,

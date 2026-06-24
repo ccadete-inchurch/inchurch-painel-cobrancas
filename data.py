@@ -1271,7 +1271,15 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
     cond_carteira_tipo = "comp_st_conta_cont IN ('1.2.1', '1.2.2')"
     cond_cobrs_tipo    = "c.comp_st_conta_cont IN ('1.2.1', '1.2.2')"
 
-    conds_c = [c for c in [cond_carteira_atend, cond_carteira_sit, cond_carteira_tipo] if c]
+    # Filtro #4 no DENOMINADOR (carteira): exclui onboarding. Quem nunca
+    # pagou nao e' inadimplente — e' cliente novo / disputa. Sem isso, o
+    # % saia subestimado (denom inflado por onboarding).
+    cond_carteira_jp = (
+        "CAST(id_sacado_sac AS STRING) "
+        "IN (SELECT cid FROM clientes_com_pagamento)"
+    )
+
+    conds_c = [c for c in [cond_carteira_atend, cond_carteira_sit, cond_carteira_tipo, cond_carteira_jp] if c]
     conds_b = [c for c in [cond_cobrs_atend,    cond_cobrs_sit,    cond_cobrs_tipo]    if c]
     carteira_filter = "WHERE " + " AND ".join(conds_c) if conds_c else ""
     cobrs_filter    = "WHERE " + " AND ".join(conds_b) if conds_b else ""
@@ -1288,6 +1296,12 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
       WHERE dt_liquidacao_recb IS NOT NULL
     ),
+    -- Denominador: exclui onboarding (clientes que nunca pagaram).
+    -- Razão: quem nunca pagou não pode ser considerado inadimplente — é
+    -- cliente novo / disputa comercial, escopo de CS, não da cobrança.
+    -- Sem essa exclusão, o numerador (que tem ja_pagou=1) e o denominador
+    -- (que incluía todos) divergiam — % saía subestimada.
+    -- Filtro de ja_pagou ja vem dentro do {carteira_filter}.
     carteira AS (
       SELECT COUNT(DISTINCT id_sacado_sac) AS n
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
