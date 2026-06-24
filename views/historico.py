@@ -3,7 +3,7 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
-from helpers import fmt_moeda_plain, fmt_moeda, get_effective_atendente, hoje_lote
+from helpers import fmt_moeda_plain, get_effective_atendente, hoje_lote
 from data import (
     fetch_ids_em_qualquer_lote_hoje,
     fetch_cobrancas_liquidacao,

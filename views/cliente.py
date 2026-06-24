@@ -4,7 +4,7 @@ import altair as alt
 import streamlit as st
 
 from config import STATUS_LABELS, STATUS_COLORS
-from helpers import get_hist, get_hist_unificado, get_effective_status, get_effective_lastContact, get_effective_atendente, fmt_moeda_plain, dias_html
+from helpers import get_hist_unificado, get_effective_status, get_effective_lastContact, get_effective_atendente, fmt_moeda_plain, dias_html
 from data import fetch_historico_atrasos, fetch_evolucao_saldo_mensal
 from views.dialog import dialog_editar
 
