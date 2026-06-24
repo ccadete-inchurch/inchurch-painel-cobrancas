@@ -863,26 +863,28 @@ def _render_atividades(store, clientes, role):
             button[data-testid="stBaseButton-secondary"] {
             background: transparent !important;
             border: 1px solid transparent !important;
-            color: #6b7280 !important;
-            font-size: 14px !important;
-            padding: 2px 8px !important;
+            color: #9ca3af !important;
+            font-size: 22px !important;
+            font-weight: 700 !important;
+            line-height: 1 !important;
+            padding: 4px 12px !important;
             min-height: auto !important;
             box-shadow: none !important;
         }
         div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
             button[data-testid="stBaseButton-secondary"]:hover {
             color: #e8eaf0 !important;
-            background: rgba(124,194,67,0.05) !important;
+            background: rgba(124,194,67,0.08) !important;
             border-color: transparent !important;
         }
         </style>
         ''', unsafe_allow_html=True)
 
         st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
-        # Setinha alinhada à direita
-        _spacer, _arrow_col = st.columns([20, 1])
+        # Setinha alinhada à ESQUERDA
+        _arrow_col, _spacer = st.columns([1, 20])
         with _arrow_col:
-            _arrow = "⌄" if _show_npl else "›"
+            _arrow = "▼" if _show_npl else "▶"
             if st.button(_arrow, key="_npl_toggle_btn",
                          help="Ocultar análise" if _show_npl else "Mostrar análise"):
                 st.session_state["_show_npl_cards"] = not _show_npl
