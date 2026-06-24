@@ -906,9 +906,12 @@ def _render_atividades(store, clientes, role):
             [1, 14, 6], vertical_alignment="center"
         )
         with _btn_col:
-            # V estilizado do selectbox. Mesmo char em ambos estados — o
-            # rerun atualiza o conteúdo abaixo, dando feedback do toggle.
-            if st.button("▾", key="_npl_toggle_btn",
+            # V estilizado do selectbox que muda com o estado (feedback visual):
+            #   ▾ (apontando pra baixo) quando expandido = "conteudo embaixo"
+            #   ▸ (apontando pra direita) quando colapsado = "clique pra expandir"
+            # Padrao classico de accordion (Notion, Linear, Stripe).
+            _arrow = "▾" if _show_npl else "▸"
+            if st.button(_arrow, key="_npl_toggle_btn",
                          help="Ocultar análise" if _show_npl else "Mostrar análise"):
                 st.session_state["_show_npl_cards"] = not _show_npl
                 st.rerun()
