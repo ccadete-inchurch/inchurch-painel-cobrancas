@@ -884,12 +884,12 @@ def _render_atividades(store, clientes, role):
         </style>
         ''', unsafe_allow_html=True)
 
-        st.markdown('<div style="height:28px"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
 
         # Layout: botão V à ESQUERDA + texto IMPERATIVO colado ao lado
         # ("Clique aqui para ver/ocultar..."). Convida ação clara.
         _btn_col, _txt_col, _spacer = st.columns(
-            [1, 8, 12], vertical_alignment="center"
+            [1, 10, 10], vertical_alignment="center"
         )
         with _btn_col:
             _arrow = "⌃" if _show_npl else "⌄"
@@ -905,7 +905,7 @@ def _render_atividades(store, clientes, role):
             )
             st.markdown(
                 f'<div style="font-family:-apple-system,BlinkMacSystemFont,'
-                f'\'Segoe UI\',Roboto,sans-serif;font-size:13px;'
+                f'\'Segoe UI\',Roboto,sans-serif;font-size:15px;'
                 f'font-weight:500;color:#8b94a5;letter-spacing:0.2px">'
                 f'{_label_txt}</div>',
                 unsafe_allow_html=True,
