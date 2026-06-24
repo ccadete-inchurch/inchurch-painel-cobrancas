@@ -856,92 +856,28 @@ def _render_atividades(store, clientes, role):
             st.session_state["_show_npl_cards"] = True
         _show_npl = st.session_state["_show_npl_cards"]
 
-        # Botão chevron ultra-compacto: sem caixa visível, sem padding,
-        # sem outline em focus. Aplica também em :hover/:focus/:active
-        # pra impedir Streamlit de renderizar o box-shadow padrão.
-        st.markdown('''
-        <style>
-        /* Container do row do botao - reduz altura minima */
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"]) {
-            min-height: 0 !important;
-            margin-bottom: 0 !important;
-        }
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            div[data-testid="stColumn"] {
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-        }
-        /* Botao chevron - zero estilo visual exceto a cor do texto */
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"],
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"]:hover,
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"]:focus,
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"]:active,
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"]:focus-visible {
-            background: transparent !important;
-            border: none !important;
-            outline: none !important;
-            box-shadow: none !important;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-            font-size: 18px !important;
-            font-weight: 500 !important;
-            line-height: 1 !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            min-height: 0 !important;
-            height: auto !important;
-        }
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"] {
-            color: #6b7280 !important;
-        }
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"]:hover {
-            color: #e8eaf0 !important;
-        }
-        </style>
-        ''', unsafe_allow_html=True)
+        # Selectbox no MESMO estilo do "Visualização" do Painel Administrativo
+        # (com bordas, fundo, label uppercase). Mantém identidade visual
+        # com o resto da banda de controles da tela (GRUPO, SITUAÇÃO, etc).
+        st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-        st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
-
-        # Layout: botão V à ESQUERDA + texto IMPERATIVO colado ao lado
-        # ("Clique aqui para ver/ocultar..."). Convida ação clara.
-        _btn_col, _txt_col, _spacer = st.columns(
-            [1, 14, 6], vertical_alignment="center"
-        )
-        with _btn_col:
-            _arrow = "⌃" if _show_npl else "⌄"
-            if st.button(_arrow, key="_npl_toggle_btn",
-                         help="Ocultar análise" if _show_npl else "Mostrar análise"):
-                st.session_state["_show_npl_cards"] = not _show_npl
+        _select_col, _spacer = st.columns([6, 14])
+        with _select_col:
+            _opcoes = ["Mostrar", "Ocultar"]
+            _idx_atual = 0 if _show_npl else 1
+            _acao = st.selectbox(
+                "Análise da carteira",
+                _opcoes,
+                index=_idx_atual,
+                key="_npl_toggle_select",
+            )
+            _quer_mostrar = (_acao == "Mostrar")
+            if _quer_mostrar != _show_npl:
+                st.session_state["_show_npl_cards"] = _quer_mostrar
                 st.rerun()
-        with _txt_col:
-            _label_txt = (
-                "Clique aqui para ocultar análise da carteira"
-                if _show_npl else
-                "Clique aqui para ver análise da carteira"
-            )
-            # Mesmo estilo das labels de filtro (GRUPO, SITUAÇÃO, BUSCAR):
-            # uppercase, pequeno, letter-spacing, peso 600 e cor cinza
-            # mais discreta (#6b7280) — bate com o tom das labels Streamlit.
-            st.markdown(
-                f'<div style="font-family:-apple-system,BlinkMacSystemFont,'
-                f'\'Segoe UI\',Roboto,sans-serif;font-size:14px;'
-                f'font-weight:600;color:#6b7280;letter-spacing:1.5px;'
-                f'text-transform:uppercase">'
-                f'{_label_txt}</div>',
-                unsafe_allow_html=True,
-            )
 
-        # Sem linha divisória — só respiro mínimo até os cards
-        st.markdown(
-            '<div style="height:14px"></div>',
-            unsafe_allow_html=True,
-        )
+        # Respiro até os cards
+        st.markdown('<div style="height:14px"></div>', unsafe_allow_html=True)
 
         if _show_npl:
             for _h in _npl_html_parts:
