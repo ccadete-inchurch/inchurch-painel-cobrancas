@@ -199,11 +199,6 @@ def fmt_moeda_plain(v):
 
 # ── Utilitários de dados ──────────────────────────────────────────────────────
 
-def get_col(row, col):
-    v = row.get(col)
-    return "" if (v is None or (isinstance(v, float) and pd.isna(v))) else str(v).strip()
-
-
 def get_hist(cid):
     return get_store()["historico"].get(current_uid(), {}).get(cid, {})
 

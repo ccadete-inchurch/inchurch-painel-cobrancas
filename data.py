@@ -89,9 +89,8 @@ import requests
 import streamlit as st
 from google.cloud import bigquery
 
-from config import MAP_COB, MAP_INAD, DIAS_SEM_CONTATO
 from auth import get_store, current_nome
-from helpers import calc_dias, parse_date_br, get_col, get_hist, fmt_tel, fmt_tel_lista, hoje_lote, hoje_brt
+from helpers import calc_dias, parse_date_br, get_hist, fmt_tel, fmt_tel_lista, hoje_lote, hoje_brt
 
 
 # ── Feriados nacionais ────────────────────────────────────────────────────────
@@ -3327,90 +3326,6 @@ def processar_dados_bigquery():
     salvar_cache_local()
 
     return clientes, len(historico_regularizados)
-
-
-def importar_planilhas(f_cob, f_inad):
-    store = get_store()
-
-    def ler(f):
-        try:
-            return pd.read_excel(f) if f.name.endswith(("xlsx", "xls")) else pd.read_csv(f)
-        except Exception as e:
-            st.toast(f"⚠️ Erro ao ler {f.name}: {e}", icon="⚠️")
-            return pd.DataFrame()
-
-    df_cob  = ler(f_cob)
-    df_inad = ler(f_inad)
-    if df_cob.empty or df_inad.empty:
-        return [], 0, 0, 0
-
-    df_cob["_cod"]  = df_cob[MAP_COB["codigo"]].astype(str).str.strip()
-    df_inad["_cod"] = df_inad[MAP_INAD["codigo"]].astype(str).str.strip()
-
-    idx_cob = {}
-    for _, row in df_cob.iterrows():
-        cod = row["_cod"]
-        if not cod:
-            continue
-        try:
-            vd = pd.to_datetime(row.get(MAP_COB["vencimento"]))
-        except Exception:
-            vd = None
-        if cod not in idx_cob or (vd and idx_cob[cod]["vd"] and vd > idx_cob[cod]["vd"]):
-            idx_cob[cod] = {"vd": vd, "vr": row.get(MAP_COB["vencimento"]), "tel": get_col(row, MAP_COB["telefone"])}
-
-    ids_ant  = {c["id"]: c["valor"] for c in store["clientes"]}
-    clientes = []
-
-    for _, row in df_inad.iterrows():
-        cod = row["_cod"]
-        if not cod:
-            continue
-        nome = get_col(row, MAP_INAD["nome"])
-        cnpj = get_col(row, MAP_INAD["cnpj"])
-        tel  = get_col(row, MAP_INAD["telefone1"]) or get_col(row, MAP_INAD["telefone2"])
-        try:
-            valor = float(row.get(MAP_INAD["valor"]) or 0)
-        except Exception:
-            valor = 0.0
-        try:
-            parcelas = int(row.get(MAP_INAD["parcelas"]) or 0)
-        except Exception:
-            parcelas = 0
-
-        venc = ""
-        if cod in idx_cob:
-            vr = idx_cob[cod]["vr"]
-            if vr is not None and pd.notna(vr):
-                try:
-                    venc = pd.to_datetime(vr).strftime("%d/%m/%Y")
-                except Exception:
-                    venc = str(vr)
-            if not tel:
-                tel = idx_cob[cod]["tel"]
-
-        is_novo = cod not in ids_ant
-        is_upd  = (not is_novo) and (ids_ant.get(cod, 0) != valor)
-
-        clientes.append({
-            "id": cod, "cod": cod, "nome": nome, "cnpj": cnpj,
-            "telefone": tel, "valor": valor, "parcelas": parcelas,
-            "vencimento": venc, "dias_atraso": calc_dias(venc),
-            "_novo": is_novo, "_atualizado": is_upd,
-        })
-
-    ids_novos = {c["id"] for c in clientes}
-    removidos = [c for c in store["clientes"] if c["id"] not in ids_novos]
-    hoje      = date.today().strftime("%d/%m/%Y")
-    for c in removidos:
-        store["regularizados"].append({
-            "id": c["id"], "nome": c["nome"], "cnpj": c.get("cnpj", ""),
-            "valor": c["valor"], "atendente": current_nome(), "data": hoje, "tipo": "auto",
-        })
-
-    store["clientes"]           = clientes
-    store["ultima_atualizacao"] = datetime.now(timezone(timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M")
-    return clientes, sum(c["_novo"] for c in clientes), sum(c["_atualizado"] for c in clientes), len(removidos)
 
 
 def calcular_score(cliente, hist) -> int:

@@ -3,24 +3,6 @@ from pathlib import Path
 
 # ── Paginação e regras ────────────────────────────────────────────────────────
 PAGE_SIZE        = 50
-DIAS_SEM_CONTATO = 5
-
-# ── Mapeamento de colunas (importação via planilha) ───────────────────────────
-MAP_COB  = {
-    "codigo":    "código",
-    "vencimento":"dt_vencimento_recb",
-    "cnpj":      "st_cgc_sac",
-    "telefone":  "st_telefone_sac",
-}
-MAP_INAD = {
-    "codigo":   "código",
-    "nome":     "st_nome_sac",
-    "cnpj":     "st_cgc_sac",
-    "telefone1":"st_fax_sac",
-    "telefone2":"st_telefone_sac",
-    "valor":    "soma_cobrancas",
-    "parcelas": "quantidade_cobrancas",
-}
 
 # ── Ordenação da tabela ───────────────────────────────────────────────────────
 SORT_MAP = {
