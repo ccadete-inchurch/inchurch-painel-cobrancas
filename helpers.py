@@ -1,4 +1,3 @@
-import re
 from datetime import date, datetime, timedelta, timezone
 import pandas as pd
 
@@ -48,39 +47,6 @@ def fmt_tel_lista(valor) -> list[str]:
             seen.add(tel)
             out.append(tel)
     return out
-
-
-def _norm_tel(phone: str) -> str:
-    """Normaliza para DDD (2) + últimos 8 dígitos — chave para cruzar com n8n."""
-    p = re.sub(r'\D', '', phone or '')
-    if p.startswith('55') and len(p) > 11:
-        p = p[2:]
-    return (p[:2] + p[-8:]) if len(p) >= 10 else p
-
-
-def get_msg_status(telefone: str) -> str:
-    """Retorna o status da última interação n8n para o telefone do cliente.
-
-    Valores possíveis: sem_contato | mensagem | ligacao_pendente |
-                       tentar_novamente | concluida
-    """
-    import streamlit as st
-    chave = _norm_tel(telefone)
-    return st.session_state.get("_msg_status", {}).get(chave, "sem_contato")
-
-
-def get_msg_concluida_dias(telefone: str):
-    """Retorna quantos dias atrás foi a última ligação bem-sucedida, ou None."""
-    import streamlit as st
-    chave = _norm_tel(telefone)
-    return st.session_state.get("_msg_concluida_dias", {}).get(chave)
-
-
-def get_ultimo_contato_n8n_dias(telefone: str):
-    """Retorna quantos dias atrás foi o último contato pelo n8n (qualquer mensagem), ou None."""
-    import streamlit as st
-    chave = _norm_tel(telefone)
-    return st.session_state.get("_msg_ultimo_contato_dias", {}).get(chave)
 
 
 # ── Painel de tarefas (cooldowns autoritativos) ──────────────────────────────
