@@ -598,15 +598,11 @@ def _render_atividades(store, clientes, role):
             _npl_html_parts.append(_label_receita + _cards_receita)
 
     # ═══════════════ ORDEM DE RENDER ═══════════════
-    # 1. NPL Cards no topo (POR CLIENTE · N clientes + POR RECEITA)
-    # 2. Bem-vindo (saudação personalizada)
-    # 3. Label "Carteira de X" + Indicadores (operacional do dia)
+    # 1. Bem-vindo (saudação personalizada)
+    # 2. Indicadores operacionais (resumo do dia - clientes/inad/reg/parc)
+    # 3. NPL Cards (análise macro - Por cliente + Por receita)
     # 4. Filtros + Kanban
-    if _npl_html_parts:
-        for _h in _npl_html_parts:
-            st.markdown(_h, unsafe_allow_html=True)
-
-    # 2. Bem-vindo
+    # 1. Bem-vindo
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
         f'font-weight:800;color:#e8eaf0;margin-top:32px;margin-bottom:28px;letter-spacing:-1.5px;line-height:1.1">'
@@ -852,10 +848,14 @@ def _render_atividades(store, clientes, role):
                     st.markdown(html, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    # 3. Indicadores operacionais — sem label de "Carteira de X" acima
-    # porque é redundante com o filtro Grupo logo abaixo. A linha CLIENTES
-    # dentro do card já dá contexto de quantos clientes a atendente tem.
+    # 2. Indicadores operacionais (resumo do dia)
     _indicadores_hoje()
+
+    # 3. NPL Cards (análise macro - Por cliente + Por receita)
+    if _npl_html_parts:
+        st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+        for _h in _npl_html_parts:
+            st.markdown(_h, unsafe_allow_html=True)
 
     # ── Filtros (fora do fragment — Streamlit preserva valor por session_state)
     # 'nan' (string) cai aqui quando _grupo veio de pandas com NaN convertido
