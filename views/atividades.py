@@ -549,20 +549,21 @@ def _render_atividades(store, clientes, role):
             )
 
         # ─── SEÇÃO 1: POR CLIENTE — aging exclusivo, com overlay live ───────
-        # Contagem da carteira aparece DENTRO do card de indicadores
-        # (como linha "X CLIENTES" acima de INADIMPLENTES) — não precisa
-        # repetir no label da seção.
+        # Label mais presente (15px, branco) com indicador visual sutil à
+        # esquerda pra "ancorar" os cards abaixo — antes ficava jogado.
         _label_cliente = (
-            '<div style="font-size:13px;color:#6b7280;letter-spacing:1.2px;'
-            'text-transform:uppercase;margin-bottom:8px;font-weight:600;'
-            'margin-top:18px">'
-            'Por cliente</div>'
+            '<div style="display:flex;align-items:center;gap:8px;'
+            'margin-top:24px;margin-bottom:10px">'
+            '<div style="width:3px;height:14px;background:#7cc243;border-radius:2px"></div>'
+            '<div style="font-size:15px;color:#e8eaf0;letter-spacing:1.2px;'
+            'text-transform:uppercase;font-weight:700">Por cliente</div>'
+            '</div>'
         )
         _cards_cliente = (
             '<div style="display:flex;gap:14px;margin-bottom:6px">'
-            + _card("Total em atraso",          _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
-            + _card("Atrasos recentes · 1-30d", _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
-            + _card("Atrasos antigos · 90d+",   _npl["d90_pct"],   _npl["delta_d90"],   _npl["d90_r"])
+            + _card("Inadimplência total",     _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
+            + _card("Inadimplência recente",   _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
+            + _card("Inadimplência crônica",   _npl["d90_pct"],   _npl["delta_d90"],   _npl["d90_r"])
             + '</div>'
         )
         _npl_html_parts.append(_label_cliente + _cards_cliente)
@@ -575,20 +576,23 @@ def _render_atividades(store, clientes, role):
         _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao) or {}
         if _rolling:
             _label_receita = (
-                '<div style="font-size:13px;color:#6b7280;letter-spacing:1.2px;'
-                'text-transform:uppercase;margin-top:18px;margin-bottom:8px;font-weight:600">'
-                'Por receita</div>'
+                '<div style="display:flex;align-items:center;gap:8px;'
+                'margin-top:20px;margin-bottom:10px">'
+                '<div style="width:3px;height:14px;background:#5fa3ff;border-radius:2px"></div>'
+                '<div style="font-size:15px;color:#e8eaf0;letter-spacing:1.2px;'
+                'text-transform:uppercase;font-weight:700">Por receita</div>'
+                '</div>'
             )
             _cards_receita = (
-                '<div style="display:flex;gap:14px">'
+                '<div style="display:flex;gap:14px;margin-bottom:28px">'
                 + _card(
-                    "Vencidos no mês",
+                    "Inadimplência mensal",
                     _rolling["d30_pct"],
                     _rolling["delta_d30_pp"],
                     _rolling["d30_aberto"],
                 )
                 + _card(
-                    "Vencidos no trimestre",
+                    "Inadimplência trimestral",
                     _rolling["d90_pct"],
                     _rolling["delta_d90_pp"],
                     _rolling["d90_aberto"],
