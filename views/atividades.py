@@ -889,7 +889,7 @@ def _render_atividades(store, clientes, role):
         # Layout: botão V à ESQUERDA + texto IMPERATIVO colado ao lado
         # ("Clique aqui para ver/ocultar..."). Convida ação clara.
         _btn_col, _txt_col, _spacer = st.columns(
-            [1, 10, 10], vertical_alignment="center"
+            [1, 14, 6], vertical_alignment="center"
         )
         with _btn_col:
             _arrow = "⌃" if _show_npl else "⌄"
@@ -905,17 +905,16 @@ def _render_atividades(store, clientes, role):
             )
             st.markdown(
                 f'<div style="font-family:-apple-system,BlinkMacSystemFont,'
-                f'\'Segoe UI\',Roboto,sans-serif;font-size:15px;'
+                f'\'Segoe UI\',Roboto,sans-serif;font-size:19px;'
                 f'font-weight:500;color:#8b94a5;letter-spacing:0.2px">'
                 f'{_label_txt}</div>',
                 unsafe_allow_html=True,
             )
 
-        # Linha separadora sutil — dá ao header presença visual mesmo
-        # quando os cards estão colapsados
+        # Sem linha divisória — apenas respiro vertical (whitespace)
+        # delimita o header dos cards. Padrão de design mais limpo.
         st.markdown(
-            '<div style="height:1px;background:#1e2333;'
-            'margin:10px 0 18px"></div>',
+            '<div style="height:24px"></div>',
             unsafe_allow_html=True,
         )
 
