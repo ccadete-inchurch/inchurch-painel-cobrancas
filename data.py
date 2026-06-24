@@ -1580,21 +1580,32 @@ def compute_npl_today_overlay(
 def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
     """Métricas NPL "por receita" — % por R$ com janela rolante.
 
-    Alinha com a metodologia do outro dashboard (items 5 + 7 da comparação):
-    - Item 5 — janela rolante:
+    Espelha 100% a metodologia da Página 4 do outro dashboard:
+    - Janela rolante:
         - Total: boletos vencidos em [D-365, D] (12 meses TTM)
         - 30d:   boletos vencidos em [D-30, D]
         - 90d:   boletos vencidos em [D-90, D]
-    - Item 7 — % por R$: % = R$ aberto / R$ emitido × 100
+    - % por R$: % = R$ aberto / R$ emitido × 100
 
-    "Em aberto em data D" = dt_liquidacao_recb IS NULL OR > D — reconstrói
-    histórico via liquidacao (não usa fl_status_recb).
+    Critério "em aberto em data D" (NÃO usa fl_status_recb):
+        dt_liquidacao_recb IS NULL OR dt_liquidacao_recb > D
 
-    Filtros (mesmos do fetch_npl_metrics):
-    - Atendente: via splgc-grupo
-    - Situação: dt_desativacao_sac
-    - #4 (já pagou): EXISTS dt_liquidacao_recb IS NOT NULL
+    Filtros padrão (sempre aplicados):
     - Tipo: comp_st_conta_cont IN ('1.2.1', '1.2.2') — Setup + Mensalidade
+    - Onboarding: EXISTS dt_liquidacao_recb IS NOT NULL (já pagou ≥1)
+    - Desativação por DATA DO VENCIMENTO:
+        dt_desativacao_sac IS NULL OR dt_desativacao_sac > venc
+      → cliente conta se estava ATIVO no momento em que cada boleto venceu.
+        Diferente do filtro global de situacao=ativos (que olha status HOJE),
+        esse respeita a história — cliente ativo em D-90 mas desativado em
+        D-30 ainda gera inadimplência no bucket 90d.
+
+    Filtros adicionais opcionais:
+    - atendente: via splgc-grupo (Todos / Ana / Priscila / __SEM_ESPECIALISTA__)
+    - situacao: filtro de status ATUAL aplicado por cima da metodologia padrão
+        - "todos" (default): comportamento da Página 4 puro
+        - "ativos": apenas clientes ativos HOJE
+        - "inativos": apenas clientes inativos HOJE
 
     Delta MoM: mesma métrica em D-30. Janelas no D-30:
         Total ref: [D-395, D-30]
@@ -1602,8 +1613,7 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
         90d ref:   [D-120, D-30]
 
     NÃO usa overlay live — só BQ snapshot. Lag de ~1 dia tem impacto < 5%
-    em janelas de 30/90/365 dias. Se precisar de overlay, adicionar
-    posteriormente via store['clientes'].
+    em janelas de 30/90/365 dias.
 
     Returns dict com:
         total_pct, total_aberto, total_emitido, delta_total_pp
@@ -1657,6 +1667,14 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
     conds = [c for c in [cond_atend, cond_sit, cond_tipo, cond_4] if c]
     where_clause = "WHERE " + " AND ".join(conds) if conds else ""
 
+    # Espelhar 100% a metodologia da Pagina 4:
+    # 1) 'Aberto' usa puro dt_liquidacao_recb IS NULL OR > D
+    #    (NAO usa fl_status_recb, que reflete estado atual e nao historico)
+    # 2) Filtro de desativacao por DATA DO VENCIMENTO de cada boleto:
+    #    dt_desativacao_sac IS NULL OR dt_desativacao_sac > venc
+    #    (substitui o filtro global de situacao=ativos/inativos, que dava
+    #    falso negativo: cliente ativo no vencimento mas desativado hoje
+    #    era excluido indevidamente)
     query = f"""
     WITH {contacts_cte}
     clientes_com_pagamento AS (
@@ -1670,8 +1688,8 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
         c.id_recebimento_recb AS rid,
         DATE(MAX(c.dt_vencimento_recb)) AS venc,
         SUM(c.comp_valor) AS valor,
-        MAX(c.fl_status_recb) AS status,
-        DATE(MAX(l.dt_liquidacao_recb)) AS liq
+        DATE(MAX(l.dt_liquidacao_recb)) AS liq,
+        DATE(MAX(c.dt_desativacao_sac)) AS desat
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
       LEFT JOIN `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` l
         ON c.id_recebimento_recb = l.id_recebimento_recb
@@ -1682,34 +1700,46 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
     )
     SELECT
       -- HOJE: Total TTM (12 meses) — boletos vencidos em [D-365, D]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 365 DAY) AND DATE('{today_str}'), valor, 0)) AS total_emitido_hoje,
       SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 365 DAY) AND DATE('{today_str}')
-             AND (status='0' OR liq > DATE('{today_str}')), valor, 0)) AS total_aberto_hoje,
+             AND (desat IS NULL OR desat > venc), valor, 0)) AS total_emitido_hoje,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 365 DAY) AND DATE('{today_str}')
+             AND (desat IS NULL OR desat > venc)
+             AND (liq IS NULL OR liq > DATE('{today_str}')), valor, 0)) AS total_aberto_hoje,
 
       -- HOJE: 30d — boletos vencidos em [D-30, D]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY) AND DATE('{today_str}'), valor, 0)) AS d30_emitido_hoje,
       SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY) AND DATE('{today_str}')
-             AND (status='0' OR liq > DATE('{today_str}')), valor, 0)) AS d30_aberto_hoje,
+             AND (desat IS NULL OR desat > venc), valor, 0)) AS d30_emitido_hoje,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY) AND DATE('{today_str}')
+             AND (desat IS NULL OR desat > venc)
+             AND (liq IS NULL OR liq > DATE('{today_str}')), valor, 0)) AS d30_aberto_hoje,
 
       -- HOJE: 90d — boletos vencidos em [D-90, D]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 90 DAY) AND DATE('{today_str}'), valor, 0)) AS d90_emitido_hoje,
       SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 90 DAY) AND DATE('{today_str}')
-             AND (status='0' OR liq > DATE('{today_str}')), valor, 0)) AS d90_aberto_hoje,
+             AND (desat IS NULL OR desat > venc), valor, 0)) AS d90_emitido_hoje,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 90 DAY) AND DATE('{today_str}')
+             AND (desat IS NULL OR desat > venc)
+             AND (liq IS NULL OR liq > DATE('{today_str}')), valor, 0)) AS d90_aberto_hoje,
 
       -- D-30 REF: Total TTM [D-395, D-30]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 395 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY), valor, 0)) AS total_emitido_ref,
       SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 395 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
-             AND (status='0' OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS total_aberto_ref,
+             AND (desat IS NULL OR desat > venc), valor, 0)) AS total_emitido_ref,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 395 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
+             AND (desat IS NULL OR desat > venc)
+             AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS total_aberto_ref,
 
       -- D-30 REF: 30d [D-60, D-30]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 60 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY), valor, 0)) AS d30_emitido_ref,
       SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 60 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
-             AND (status='0' OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS d30_aberto_ref,
+             AND (desat IS NULL OR desat > venc), valor, 0)) AS d30_emitido_ref,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 60 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
+             AND (desat IS NULL OR desat > venc)
+             AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS d30_aberto_ref,
 
       -- D-30 REF: 90d [D-120, D-30]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 120 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY), valor, 0)) AS d90_emitido_ref,
       SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 120 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
-             AND (status='0' OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS d90_aberto_ref
+             AND (desat IS NULL OR desat > venc), valor, 0)) AS d90_emitido_ref,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 120 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
+             AND (desat IS NULL OR desat > venc)
+             AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS d90_aberto_ref
     FROM boletos
     """
     try:

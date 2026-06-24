@@ -886,9 +886,18 @@ def _render_atividades(store, clientes, role):
 
         st.markdown('<div style="height:28px"></div>', unsafe_allow_html=True)
 
-        # Header row: título à esquerda + chevron à direita
-        _hdr_col, _btn_col = st.columns([20, 1], vertical_alignment="center")
-        with _hdr_col:
+        # Layout: botão V à ESQUERDA + texto colado ao lado direito
+        # (não ocupa a tela inteira — fica agrupado no lado esquerdo)
+        _btn_col, _txt_col, _spacer = st.columns(
+            [1, 6, 14], vertical_alignment="center"
+        )
+        with _btn_col:
+            _arrow = "⌃" if _show_npl else "⌄"
+            if st.button(_arrow, key="_npl_toggle_btn",
+                         help="Ocultar análise" if _show_npl else "Mostrar análise"):
+                st.session_state["_show_npl_cards"] = not _show_npl
+                st.rerun()
+        with _txt_col:
             st.markdown(
                 '<div style="font-family:-apple-system,BlinkMacSystemFont,'
                 '\'Segoe UI\',Roboto,sans-serif;font-size:12px;font-weight:600;'
@@ -896,12 +905,6 @@ def _render_atividades(store, clientes, role):
                 'Análise da carteira</div>',
                 unsafe_allow_html=True,
             )
-        with _btn_col:
-            _arrow = "⌃" if _show_npl else "⌄"
-            if st.button(_arrow, key="_npl_toggle_btn",
-                         help="Ocultar análise" if _show_npl else "Mostrar análise"):
-                st.session_state["_show_npl_cards"] = not _show_npl
-                st.rerun()
 
         # Linha separadora sutil — dá ao header presença visual mesmo
         # quando os cards estão colapsados
