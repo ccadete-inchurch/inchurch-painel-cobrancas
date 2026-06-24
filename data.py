@@ -2630,37 +2630,6 @@ def save_hist_to_bq(uid: str, cid: str, data: dict):
 
 # ── Tarefas diárias ───────────────────────────────────────────────────────────
 
-def _classificar_lote(cliente):
-    """Classifica cliente para o lote diário.
-    Retorna (bucket, eh_inativo) onde bucket é 'ligacao' (urgente/ligar) ou 'mensagem'.
-    Retorna None se o cliente não tem ações elegíveis (cooldown já tratado em recomendar_acao).
-    """
-    acoes = recomendar_acao(cliente)
-    if not acoes:
-        return None
-    eh_ligacao = "urgente" in acoes or "ligar" in acoes
-    return ("ligacao" if eh_ligacao else "mensagem", bool(cliente.get("_inativo")))
-
-
-def _quota_atual_lote(lote_clientes):
-    """Conta quotas usadas pelo lote atual: (lig, msg, inat_lig, inat_msg)."""
-    lig = msg = inat_lig = inat_msg = 0
-    for c in lote_clientes:
-        cls = _classificar_lote(c)
-        if cls is None:
-            continue
-        bucket, eh_inativo = cls
-        if bucket == "ligacao":
-            lig += 1
-            if eh_inativo:
-                inat_lig += 1
-        else:
-            msg += 1
-            if eh_inativo:
-                inat_msg += 1
-    return lig, msg, inat_lig, inat_msg
-
-
 def _selecionar_top_30_50(clientes: list, lote_atual_ids: set | None = None) -> list:
     """Seleção de lote com ranking por score + fallback por inativos aleatórios.
     
@@ -2810,17 +2779,6 @@ def _selecionar_top_30_50(clientes: list, lote_atual_ids: set | None = None) -> 
     return novos
 
 
-def _quota_buckets_para(clientes_no_lote: list) -> dict:
-    """Reclassifica clientes JÁ comprometidos no lote (leitura).
-    Aplica top 30 LIG + top 50 MSG sobre o conjunto comprometido.
-    Caps inativos (10/15) são teto absoluto; sem cruzamento entre buckets.
-    Cliente sem elegibilidade alguma fica de fora do dict — atividades.py o
-    interpreta como 'aguardar/sem ação' (raro: só clientes em cooldown total).
-    """
-    pares = _selecionar_top_30_50(clientes_no_lote, lote_atual_ids=set())
-    return {cid: bucket for cid, bucket in pares}
-
-
 def selecionar_lote_com_quotas(grupo_clientes, lote_clientes=None):
     """Geração do lote do dia. Retorna lista [(id, bucket)].
     
@@ -2946,36 +2904,6 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
             pass
 
     return buckets
-
-
-def adicionar_tarefas_extras_bq(atendente: str, extra_ids: list, clientes: list | None = None):
-    """Insere clientes extras (complemento do lote) na tabela de tarefas diárias.
-    Mantida para compatibilidade — o lote do dia é estático e não usa mais este caminho."""
-    client = get_bq_client()
-    if not client or not extra_ids:
-        return
-    hoje = hoje_lote()
-    cliente_by_id = {c["id"]: c for c in (clientes or [])}
-    now_iso = datetime.now(timezone.utc).isoformat()
-    rows = []
-    for cid in extra_ids:
-        c = cliente_by_id.get(cid)
-        cls = _classificar_lote(c) if c else None
-        bucket = cls[0] if cls else "mensagem"
-        rows.append({
-            "id_sacado_sac":            cid,
-            "atendente":                atendente,
-            "data_tarefa":              hoje,
-            "dt_entrou_coluna_msg":     now_iso if bucket == "mensagem" else None,
-            "dt_entrou_coluna_ligacao": now_iso if bucket == "ligacao"  else None,
-            "mensagem_enviada":         False,
-            "ligacao_feita":            False,
-            "ligacao_atendida":         False,
-        })
-    try:
-        client.insert_rows_json(_TAREFAS_TABLE, rows)
-    except Exception:
-        pass
 
 
 def fetch_regularizados_do_dia(ids_lote: set) -> list:
@@ -3528,12 +3456,6 @@ def calcular_score(cliente, hist) -> int:
         score += dias_atraso * 2
 
     return int(score)
-
-
-def _dias_sem_contato(telefone: str = "") -> int | None:
-    """Retorna dias desde o último contato registrado pelo N8N."""
-    from helpers import get_ultimo_contato_n8n_dias
-    return get_ultimo_contato_n8n_dias(telefone) if telefone else None
 
 
 def recomendar_acao(cliente) -> list[str]:
