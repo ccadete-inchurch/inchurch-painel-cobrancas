@@ -392,26 +392,41 @@ def _render_atividades(store, clientes, role):
         if ids_regularizados:
             clientes.extend(fetch_regularizados_do_dia(ids_regularizados))
 
-    # ── Painel administrativo OCULTADO (temporário, pra admin ver visual igual atendente)
-    # Pra restaurar, descomente o bloco abaixo. Defaults garantem que admin
-    # cai em 'Todos os clientes' sem _atendente_sel — mesmo comportamento de
-    # quando o painel mostrava mas nada estava selecionado.
+    # ── Painel administrativo (alinhado à direita) ──────────────────────────
     _nomes_atendentes = list(_EMAIL_GRUPO.values())
     _modo_admin       = "Todos os clientes"
     _atendente_sel    = None
-    # if role == "admin":
-    #     _admin_spacer, _admin_box = st.columns([2.8, 2.2])
-    #     with _admin_box:
-    #         with st.container(border=True):
-    #             st.markdown('<div ...>Painel Administrativo</div>', unsafe_allow_html=True)
-    #             _cm, _ca = st.columns([1, 1])
-    #             with _cm:
-    #                 _modo_admin = st.selectbox("Visualização", ...)
-    #             with _ca:
-    #                 if _modo_admin == "Lote do dia":
-    #                     _atendente_sel = st.selectbox("Especialista", ...)
-
     if role == "admin":
+        _admin_spacer, _admin_box = st.columns([2.8, 2.2])
+        with _admin_box:
+            with st.container(border=True):
+                st.markdown(
+                    '<div style="display:flex;align-items:center;gap:6px;'
+                    'font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;'
+                    'letter-spacing:0.7px;margin-bottom:8px">'
+                    '<svg width="13" height="13" viewBox="0 0 24 24" fill="#9ca3af">'
+                    '<path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>'
+                    '</svg>'
+                    'Painel Administrativo</div>',
+                    unsafe_allow_html=True,
+                )
+                _cm, _ca = st.columns([1, 1])
+                with _cm:
+                    _modo_admin = st.selectbox(
+                        "Visualização",
+                        ["Todos os clientes", "Lote do dia"],
+                        label_visibility="collapsed",
+                        key="_admin_modo",
+                    )
+                with _ca:
+                    if _modo_admin == "Lote do dia":
+                        _atendente_sel = st.selectbox(
+                            "Especialista",
+                            _nomes_atendentes,
+                            label_visibility="collapsed",
+                            key="_admin_atendente",
+                        )
+
         if _modo_admin == "Lote do dia" and _atendente_sel:
             _key_lote = f"_tarefas_admin_{hoje_lote()}_{_atendente_sel}"
             if _key_lote not in st.session_state:
@@ -545,9 +560,9 @@ def _render_atividades(store, clientes, role):
         )
         _cards_cliente = (
             '<div style="display:flex;gap:14px;margin-bottom:6px">'
-            + _card("Inadimplência total", _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
-            + _card("Atraso até 30 dias",  _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
-            + _card("Atraso 90 dias ou mais", _npl["d90_pct"], _npl["delta_d90"],  _npl["d90_r"])
+            + _card("Total em atraso",          _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
+            + _card("Atrasos recentes · 1-30d", _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
+            + _card("Atrasos antigos · 90d+",   _npl["d90_pct"],   _npl["delta_d90"],   _npl["d90_r"])
             + '</div>'
         )
         _npl_html_parts.append(_label_cliente + _cards_cliente)
@@ -567,13 +582,13 @@ def _render_atividades(store, clientes, role):
             _cards_receita = (
                 '<div style="display:flex;gap:14px">'
                 + _card(
-                    "Janela 30 dias",
+                    "Vencidos no mês",
                     _rolling["d30_pct"],
                     _rolling["delta_d30_pp"],
                     _rolling["d30_aberto"],
                 )
                 + _card(
-                    "Janela 90 dias",
+                    "Vencidos no trimestre",
                     _rolling["d90_pct"],
                     _rolling["delta_d90_pp"],
                     _rolling["d90_aberto"],
@@ -687,9 +702,10 @@ def _render_atividades(store, clientes, role):
             elif _fs_lote == "Inativos":
                 _carteira_cs = [c for c in _carteira_cs if c.get("_inativo")]
             lote_inad_n = sum(1 for c in _carteira_cs if not c.get("_regularizado_hoje"))
-            # Carteira total da atendente (após filtro situação) — vai como
-            # primeira linha do card "X CLIENTES"
-            lote_carteira_n = len(_carteira_cs)
+            # Carteira TOTAL (não só inadimplentes) — vem do _npl["carteira"] que
+            # faz a query correta no BQ incluindo TODOS os clientes da Priscila/Ana
+            # (inadimplentes + adimplentes). clientes_full só tem inadimplentes.
+            lote_carteira_n = _npl.get("carteira", 0) if _npl else len(_carteira_cs)
             # Reg + Parc: só do lote do dia (mérito do trabalho do atendente).
             # strict_hoje=False — cliente em lote é trabalho do dia mesmo se
             # liquidação foi ontem (BQ não viu, overlay detectou).
@@ -724,8 +740,10 @@ def _render_atividades(store, clientes, role):
             # strict_hoje=True — placar honesto do DIA, sem inflar com limbo
             # de pagamentos de 3 dias atrás detectados pelo overlay.
             total_inad_n, total_reg_n, total_reg_v, total_parc_n, total_parc_v = _agg(_total_cs, strict_hoje=True)
-            # Carteira total filtrada (vira primeira linha do card "X CLIENTES")
-            total_carteira_n = len(_total_cs)
+            # Carteira TOTAL (não só inadimplentes) — _npl["carteira"] do BQ
+            # tem o número real (1.268 da Priscila com 1.2.1/1.2.2). _total_cs
+            # tem só os inadimplentes do filtro.
+            total_carteira_n = _npl.get("carteira", 0) if _npl else len(_total_cs)
 
         def _palavra(n, sing, plur):
             return sing if n == 1 else plur
