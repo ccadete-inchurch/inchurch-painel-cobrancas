@@ -125,22 +125,6 @@ def dias_html(dias):
     return f'<span class="da da-max">{int(dias)}d</span>'
 
 
-def status_html(s):
-    cls = {
-        "pending":     "badge-pending",
-        "contacted":   "badge-contacted",
-        "promise":     "badge-promise",
-        "negotiating": "badge-negotiating",
-    }
-    lbl = {
-        "pending":     "Sem contato",
-        "contacted":   "Contactado",
-        "promise":     "Prometeu pagar",
-        "negotiating": "Negociando",
-    }
-    return f'<span class="badge {cls.get(s, "badge-pending")}">{lbl.get(s, "Sem contato")}</span>'
-
-
 # ── Formatação de moeda ───────────────────────────────────────────────────────
 
 def fmt_moeda(v):
