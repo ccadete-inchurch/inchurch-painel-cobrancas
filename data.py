@@ -1102,10 +1102,6 @@ def fetch_snapshot_inicio_semana() -> set:
         return set()
 
 
-# Alias retrocompatível — quem ainda importar o nome antigo continua funcionando.
-fetch_snapshot_semana_passada = fetch_snapshot_inicio_semana
-
-
 @st.cache_data(ttl=3600)
 def fetch_inadimplentes_uniao_esta_semana() -> set:
     """IDs DISTINTOS de clientes inadimplentes em ALGUM dia desta semana
@@ -1133,10 +1129,6 @@ def fetch_inadimplentes_uniao_esta_semana() -> set:
         return {str(r["id_sacado_sac"]) for _, r in df.iterrows()}
     except Exception:
         return set()
-
-
-# Alias retrocompatível
-fetch_inadimplentes_uniao_semana = fetch_inadimplentes_uniao_esta_semana
 
 
 @st.cache_data(ttl=3600)
@@ -1914,91 +1906,6 @@ def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.D
         return df
     except Exception:
         return pd.DataFrame()
-
-
-@st.cache_data(ttl=3600)
-def fetch_eventos_regularizacao() -> set:
-    """Retorna set de (id_sacado_sac, data_dd_mm_aaaa) — eventos de regularização
-    histórica CONFIRMADOS via cross-check com pagamentos reais.
-
-    Estratégia em 2 passos:
-    1) DIFF de snapshots consecutivos → candidatos a regularização
-       (cliente em snapshot D-1 mas NÃO em snapshot D)
-    2) CROSS-CHECK com tabela de liquidações → confirma que houve
-       pagamento atrasado na janela [D-1, D]. Só então conta como
-       regularização real.
-
-    Elimina falsos positivos:
-    - Baixas administrativas (cliente saiu mas sem pagar)
-    - Parcelamentos (cobrança renegociada, não regularizada)
-    - Desativações de cadastro
-    - Qualquer outra saída que não seja pagamento
-
-    Limitações remanescentes:
-    - Só detecta a partir de ~26/05 (quando começou snapshot)
-    - Gaps de fim de semana: regularização sáb/dom atribuída à segunda
-    - Re-inadimplência funciona (cada par snapshot D-1/D detectado)
-
-    Usado pelo badge ✓ REGULARIZADO na tela Pagamentos.
-    """
-    client = get_bq_client()
-    if not client:
-        return set()
-    try:
-        df = client.query(f"""
-            WITH datas AS (
-                SELECT DISTINCT data_snapshot AS dt
-                FROM `{_SNAPSHOT_TABLE}`
-            ),
-            datas_com_lag AS (
-                SELECT
-                    dt AS dt_atual,
-                    LAG(dt) OVER (ORDER BY dt) AS dt_anterior
-                FROM datas
-            ),
-            candidatos AS (
-                -- Passo 1: clientes que saíram da carteira entre snapshots
-                SELECT
-                    pair.dt_atual,
-                    pair.dt_anterior,
-                    prev.id_sacado_sac
-                FROM datas_com_lag pair
-                JOIN `{_SNAPSHOT_TABLE}` prev
-                  ON prev.data_snapshot = pair.dt_anterior
-                LEFT JOIN `{_SNAPSHOT_TABLE}` curr
-                  ON curr.data_snapshot = pair.dt_atual
-                  AND CAST(curr.id_sacado_sac AS STRING) = CAST(prev.id_sacado_sac AS STRING)
-                WHERE curr.id_sacado_sac IS NULL
-                  AND pair.dt_anterior IS NOT NULL
-            ),
-            confirmados AS (
-                -- Passo 2: cross-check com pagamentos reais ATRASADOS
-                -- na janela [D-1, D]. Filtra falsos positivos (baixas etc).
-                -- IMPORTANTE: retorna a data do PAGAMENTO (não do snapshot)
-                -- pra match com a data exibida na tabela de Pagamentos.
-                -- Em fim de semana, pagamento em sábado pode ser detectado
-                -- na segunda, mas a data do badge é a do pagamento (sábado).
-                SELECT DISTINCT
-                    DATE(p.dt_liquidacao_recb) AS data_pagamento,
-                    CAST(c.id_sacado_sac AS STRING) AS id
-                FROM candidatos c
-                JOIN `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` p
-                  ON CAST(p.id_sacado_sac AS STRING) = CAST(c.id_sacado_sac AS STRING)
-                  AND DATE(p.dt_liquidacao_recb) > c.dt_anterior
-                  AND DATE(p.dt_liquidacao_recb) <= c.dt_atual
-                  AND p.dt_liquidacao_recb > p.dt_vencimento_recb
-                  AND p.fl_status_recb = '1'
-            )
-            SELECT
-                id,
-                FORMAT_DATE('%d/%m/%Y', data_pagamento) AS data
-            FROM confirmados
-        """).to_dataframe()
-        if df.empty:
-            return set()
-        return {(str(r["id"]), str(r["data"])) for _, r in df.iterrows()}
-    except Exception:
-        return set()
 
 
 @st.cache_data(ttl=1800)
