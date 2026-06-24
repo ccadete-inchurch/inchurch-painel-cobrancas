@@ -856,7 +856,8 @@ def _render_atividades(store, clientes, role):
             st.session_state["_show_npl_cards"] = True
         _show_npl = st.session_state["_show_npl_cards"]
 
-        # CSS pra deixar o botão da setinha minimalista (sem bg, borda, etc)
+        # CSS pra deixar o botão minimalista, tipografia consistente com
+        # outras labels da tela (uppercase, letter-spacing, cinza médio)
         st.markdown('''
         <style>
         div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
@@ -864,28 +865,33 @@ def _render_atividades(store, clientes, role):
             background: transparent !important;
             border: 1px solid transparent !important;
             color: #9ca3af !important;
-            font-size: 22px !important;
-            font-weight: 700 !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            letter-spacing: 1.4px !important;
+            text-transform: uppercase !important;
             line-height: 1 !important;
-            padding: 4px 12px !important;
+            padding: 8px 0 !important;
             min-height: auto !important;
             box-shadow: none !important;
+            text-align: left !important;
+            justify-content: flex-start !important;
         }
         div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
             button[data-testid="stBaseButton-secondary"]:hover {
             color: #e8eaf0 !important;
-            background: rgba(124,194,67,0.08) !important;
+            background: transparent !important;
             border-color: transparent !important;
         }
         </style>
         ''', unsafe_allow_html=True)
 
-        st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
-        # Setinha alinhada à ESQUERDA
-        _arrow_col, _spacer = st.columns([1, 20])
+        st.markdown('<div style="height:20px"></div>', unsafe_allow_html=True)
+        # Botão arrow + label "Análise da carteira" — alinhado à esquerda
+        _arrow_col, _spacer = st.columns([3, 12])
         with _arrow_col:
             _arrow = "▼" if _show_npl else "▶"
-            if st.button(_arrow, key="_npl_toggle_btn",
+            if st.button(f"{_arrow}  Análise da carteira", key="_npl_toggle_btn",
                          help="Ocultar análise" if _show_npl else "Mostrar análise"):
                 st.session_state["_show_npl_cards"] = not _show_npl
                 st.rerun()
