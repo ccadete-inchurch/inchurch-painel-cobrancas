@@ -561,9 +561,9 @@ def _render_atividades(store, clientes, role):
         )
         _cards_cliente = (
             '<div style="display:flex;gap:14px;margin-bottom:6px">'
-            + _card("Inadimplência total",     _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
-            + _card("Inadimplência recente",   _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
-            + _card("Inadimplência crônica",   _npl["d90_pct"],   _npl["delta_d90"],   _npl["d90_r"])
+            + _card("Inadimplência total",            _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
+            + _card("Inadimplência até 30 dias",      _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
+            + _card("Inadimplência 90 dias ou mais",  _npl["d90_pct"],   _npl["delta_d90"],   _npl["d90_r"])
             + '</div>'
         )
         _npl_html_parts.append(_label_cliente + _cards_cliente)
