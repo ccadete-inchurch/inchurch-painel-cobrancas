@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, fetch_carteira_count, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -702,10 +702,10 @@ def _render_atividades(store, clientes, role):
             elif _fs_lote == "Inativos":
                 _carteira_cs = [c for c in _carteira_cs if c.get("_inativo")]
             lote_inad_n = sum(1 for c in _carteira_cs if not c.get("_regularizado_hoje"))
-            # Carteira TOTAL (não só inadimplentes) — vem do _npl["carteira"] que
-            # faz a query correta no BQ incluindo TODOS os clientes da Priscila/Ana
-            # (inadimplentes + adimplentes). clientes_full só tem inadimplentes.
-            lote_carteira_n = _npl.get("carteira", 0) if _npl else len(_carteira_cs)
+            # Carteira TOTAL da atendente — SEM filtro de tipo (1.2.1/1.2.2)
+            # porque a tela mostra QUALQUER cobrança inadimplente, não só
+            # assinatura. fetch_carteira_count conta direto em splgc-grupo.
+            lote_carteira_n = fetch_carteira_count(_atendente_nome, _fs_lote.lower())
             # Reg + Parc: só do lote do dia (mérito do trabalho do atendente).
             # strict_hoje=False — cliente em lote é trabalho do dia mesmo se
             # liquidação foi ontem (BQ não viu, overlay detectou).
@@ -740,10 +740,18 @@ def _render_atividades(store, clientes, role):
             # strict_hoje=True — placar honesto do DIA, sem inflar com limbo
             # de pagamentos de 3 dias atrás detectados pelo overlay.
             total_inad_n, total_reg_n, total_reg_v, total_parc_n, total_parc_v = _agg(_total_cs, strict_hoje=True)
-            # Carteira TOTAL (não só inadimplentes) — _npl["carteira"] do BQ
-            # tem o número real (1.268 da Priscila com 1.2.1/1.2.2). _total_cs
-            # tem só os inadimplentes do filtro.
-            total_carteira_n = _npl.get("carteira", 0) if _npl else len(_total_cs)
+            # Carteira TOTAL filtrada — SEM filtro de tipo. Considera o
+            # filtro Grupo (Sem especialista / atendente específico / Todos)
+            # e Situação, mas inclui qualquer tipo de cobrança.
+            if _fg == "Sem especialista":
+                _ctx_atend = "__SEM_ESPECIALISTA__"
+            elif _atendente_sel:
+                _ctx_atend = _atendente_sel
+            elif _fg not in ("Todos", "", None):
+                _ctx_atend = _fg
+            else:
+                _ctx_atend = None
+            total_carteira_n = fetch_carteira_count(_ctx_atend, _fs.lower())
 
         def _palavra(n, sing, plur):
             return sing if n == 1 else plur
@@ -844,16 +852,9 @@ def _render_atividades(store, clientes, role):
                     st.markdown(html, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    # 3. Label "Carteira de X" + Indicadores operacionais
-    # Esse label aparece UMA vez aqui (acima dos indicadores) — dá contexto
-    # de scope pra atendente que não tem painel admin. Filtro Situação não é
-    # repetido (já está no dropdown).
-    st.markdown(
-        f'<div style="font-size:17px;color:#9ca3af;letter-spacing:1.4px;'
-        f'text-transform:uppercase;margin-top:8px;margin-bottom:14px;font-weight:600">'
-        f'{_npl_escopo if _npl else "Carteira"}</div>',
-        unsafe_allow_html=True,
-    )
+    # 3. Indicadores operacionais — sem label de "Carteira de X" acima
+    # porque é redundante com o filtro Grupo logo abaixo. A linha CLIENTES
+    # dentro do card já dá contexto de quantos clientes a atendente tem.
     _indicadores_hoje()
 
     # ── Filtros (fora do fragment — Streamlit preserva valor por session_state)

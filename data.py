@@ -1371,6 +1371,75 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
+def fetch_carteira_count(atendente: str = None, situacao: str = "todos") -> int:
+    """Total de clientes da carteira SEM filtro de tipo (1.2.1/1.2.2).
+
+    Usado pelo card 'X CLIENTES' do indicador — diferente de _npl['carteira']
+    que aplica filtro Setup+Mensalidade. Aqui contamos TODOS os clientes do
+    atendente, refletindo o universo que aparece no kanban/painel (qualquer
+    tipo de cobrança).
+
+    Args:
+        atendente: nome do grupo (ex: 'Ana Carolina'), '__SEM_ESPECIALISTA__'
+                   ou None (todos)
+        situacao: 'todos' (default), 'ativos' (dt_desativ NULL) ou 'inativos'
+
+    Returns:
+        int: contagem de id_sacado_sac únicos
+    """
+    client = get_bq_client()
+    if not client:
+        return 0
+
+    # Filtro de atendente via splgc-grupo
+    if atendente == "__SEM_ESPECIALISTA__":
+        atend_filter = """
+        WHERE CAST(id_sacado_sac AS STRING) NOT IN (
+          SELECT DISTINCT CAST(id_sacado_sac AS STRING)
+          FROM `business-intelligence-467516.Splgc.splgc-grupo`
+          WHERE grupo IS NOT NULL
+        )
+        """
+    elif atendente:
+        ate_safe = atendente.replace("'", "''")
+        atend_filter = f"""
+        WHERE CAST(id_sacado_sac AS STRING) IN (
+          SELECT DISTINCT CAST(id_sacado_sac AS STRING)
+          FROM `business-intelligence-467516.Splgc.splgc-grupo`
+          WHERE grupo = '{ate_safe}'
+        )
+        """
+    else:
+        atend_filter = ""
+
+    # Filtro de situação
+    sit_cond = ""
+    if situacao == "ativos":
+        sit_cond = "dt_desativacao_sac IS NULL"
+    elif situacao == "inativos":
+        sit_cond = "dt_desativacao_sac IS NOT NULL"
+
+    if sit_cond:
+        atend_filter = (
+            f"{atend_filter} AND {sit_cond}" if atend_filter
+            else f"WHERE {sit_cond}"
+        )
+
+    query = f"""
+    SELECT COUNT(DISTINCT id_sacado_sac) AS n
+    FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
+    {atend_filter}
+    """
+    try:
+        df = client.query(query).to_dataframe()
+        if df.empty:
+            return 0
+        return int(df.iloc[0]["n"])
+    except Exception:
+        return 0
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
 def fetch_clientes_com_pagamento_set() -> frozenset:
     """Set frozenset de cids (string) que já pagaram pelo menos 1 boleto.
     Usado pelo filtro #4 do NPL — exclui clientes em onboarding sem pagamento prévio.
