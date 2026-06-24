@@ -533,17 +533,17 @@ def _render_atividades(store, clientes, role):
             pct_str = f"{pct:.2f}".replace(".", ",")
             return (
                 '<div style="flex:1;background:#181c26;'
-                'border:1px solid #2a2f42;border-radius:12px;'
-                'padding:24px 26px;min-width:0">'
-                f'<div style="font-size:15px;font-weight:700;color:#9ca3af;'
-                f'text-transform:uppercase;letter-spacing:1.6px;margin-bottom:14px">'
+                'border:1px solid #2a2f42;border-radius:10px;'
+                'padding:16px 18px;min-width:0">'
+                f'<div style="font-size:12px;font-weight:700;color:#9ca3af;'
+                f'text-transform:uppercase;letter-spacing:1.4px;margin-bottom:8px">'
                 f'{label}</div>'
-                f'<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">'
-                f'<span style="font-size:38px;font-weight:800;color:#e8eaf0;'
-                f'letter-spacing:-1.2px;line-height:1">{pct_str}%</span>'
+                f'<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px">'
+                f'<span style="font-size:28px;font-weight:800;color:#e8eaf0;'
+                f'letter-spacing:-0.8px;line-height:1">{pct_str}%</span>'
                 f'{_delta_html(delta)}'
                 f'</div>'
-                f'<div style="font-size:14px;color:#6b7280">'
+                f'<div style="font-size:12px;color:#6b7280">'
                 f'R$ {_fmt_rs(rs)} em aberto</div>'
                 '</div>'
             )
@@ -553,9 +553,9 @@ def _render_atividades(store, clientes, role):
         # (como linha "X CLIENTES" acima de INADIMPLENTES) — não precisa
         # repetir no label da seção.
         _label_cliente = (
-            '<div style="font-size:17px;color:#9ca3af;letter-spacing:1.4px;'
-            'text-transform:uppercase;margin-bottom:14px;font-weight:600;'
-            'margin-top:20px">'
+            '<div style="font-size:13px;color:#6b7280;letter-spacing:1.2px;'
+            'text-transform:uppercase;margin-bottom:8px;font-weight:600;'
+            'margin-top:18px">'
             'Por cliente</div>'
         )
         _cards_cliente = (
@@ -575,8 +575,8 @@ def _render_atividades(store, clientes, role):
         _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao) or {}
         if _rolling:
             _label_receita = (
-                '<div style="font-size:17px;color:#9ca3af;letter-spacing:1.4px;'
-                'text-transform:uppercase;margin-top:24px;margin-bottom:14px;font-weight:600">'
+                '<div style="font-size:13px;color:#6b7280;letter-spacing:1.2px;'
+                'text-transform:uppercase;margin-top:18px;margin-bottom:8px;font-weight:600">'
                 'Por receita</div>'
             )
             _cards_receita = (
