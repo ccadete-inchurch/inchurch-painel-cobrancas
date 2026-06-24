@@ -39,18 +39,6 @@ def _atualizar_dados_periodicos(store_clientes):
         st.session_state["_painel_refresh_ts"] = _time.time()
 
 
-def _acao_badge(acoes: list[str]) -> str:
-    if "urgente" in acoes:
-        return '<span style="background:rgba(239,68,68,.18);color:#ff5555;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px">🔥 Urgente</span>'
-    if "ligar" in acoes and "mensagem" in acoes:
-        return '<span style="background:rgba(124,194,67,.15);color:#7cc243;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px">📞 Ligar</span> <span style="background:rgba(95,163,255,.15);color:#5fa3ff;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px">💬 Msg</span>'
-    if "ligar" in acoes:
-        return '<span style="background:rgba(124,194,67,.15);color:#7cc243;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px">📞 Ligar</span>'
-    if "mensagem" in acoes:
-        return '<span style="background:rgba(95,163,255,.15);color:#5fa3ff;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px">💬 Mensagem</span>'
-    return '<span style="background:rgba(107,114,128,.15);color:#6b7280;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px">✓ Aguardar</span>'
-
-
 def _score_cor(score: int) -> str:
     if score >= 150:
         return "#ff5555"

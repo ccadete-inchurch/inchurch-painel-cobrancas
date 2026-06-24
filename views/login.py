@@ -9,7 +9,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from config import LOGO_SRC
-from auth import login, login_google
+from auth import login_google
 
 _AUTH_URL  = "https://accounts.google.com/o/oauth2/auth"
 _TOKEN_URL = "https://oauth2.googleapis.com/token"

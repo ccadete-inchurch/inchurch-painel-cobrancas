@@ -41,23 +41,6 @@ def get_store():
     return st.session_state["store"]
 
 
-def hash_senha(s):
-    return hashlib.sha256(s.encode()).hexdigest()
-
-
-def login(email, senha):
-    for uid, u in get_store()["usuarios"].items():
-        if u["email"].lower() == email.lower() and u["senha_hash"] == hash_senha(senha):
-            st.session_state.update({
-                "user_uid":   uid,
-                "user_nome":  u["nome"],
-                "user_role":  u["role"],
-                "user_email": email.lower(),
-            })
-            return True
-    return False
-
-
 def login_google(email: str, nome: str) -> bool:
     """Permite apenas emails cadastrados em [usuarios] no secrets.toml."""
     email_lower = email.lower()
