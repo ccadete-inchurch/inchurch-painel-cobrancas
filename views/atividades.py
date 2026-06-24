@@ -549,15 +549,11 @@ def _render_atividades(store, clientes, role):
             )
 
         # ─── SEÇÃO 1: POR CLIENTE — aging exclusivo, com overlay live ───────
-        # Label mais presente (15px, branco) com indicador visual sutil à
-        # esquerda pra "ancorar" os cards abaixo — antes ficava jogado.
+        # Label minimalista — apenas texto cinza fraco, sem decoração
         _label_cliente = (
-            '<div style="display:flex;align-items:center;gap:8px;'
-            'margin-top:24px;margin-bottom:10px">'
-            '<div style="width:3px;height:14px;background:#7cc243;border-radius:2px"></div>'
-            '<div style="font-size:15px;color:#e8eaf0;letter-spacing:1.2px;'
-            'text-transform:uppercase;font-weight:700">Por cliente</div>'
-            '</div>'
+            '<div style="font-size:13px;color:#6b7280;letter-spacing:1.4px;'
+            'text-transform:uppercase;font-weight:600;margin-bottom:10px">'
+            'Por cliente</div>'
         )
         _cards_cliente = (
             '<div style="display:flex;gap:14px;margin-bottom:6px">'
@@ -576,12 +572,10 @@ def _render_atividades(store, clientes, role):
         _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao) or {}
         if _rolling:
             _label_receita = (
-                '<div style="display:flex;align-items:center;gap:8px;'
-                'margin-top:20px;margin-bottom:10px">'
-                '<div style="width:3px;height:14px;background:#5fa3ff;border-radius:2px"></div>'
-                '<div style="font-size:15px;color:#e8eaf0;letter-spacing:1.2px;'
-                'text-transform:uppercase;font-weight:700">Por receita</div>'
-                '</div>'
+                '<div style="font-size:13px;color:#6b7280;letter-spacing:1.4px;'
+                'text-transform:uppercase;font-weight:600;margin-top:20px;'
+                'margin-bottom:10px">'
+                'Por receita</div>'
             )
             _cards_receita = (
                 '<div style="display:flex;gap:14px;margin-bottom:28px">'
@@ -855,9 +849,14 @@ def _render_atividades(store, clientes, role):
     # 2. Indicadores operacionais (resumo do dia)
     _indicadores_hoje()
 
-    # 3. NPL Cards (análise macro - Por cliente + Por receita)
+    # 3. Separador visual entre bloco OPERACIONAL (acima) e ANALÍTICO (abaixo)
     if _npl_html_parts:
-        st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="margin-top:24px;margin-bottom:24px;'
+            'height:1px;background:#1e2333"></div>',
+            unsafe_allow_html=True,
+        )
+        # 4. NPL Cards (análise macro - Por cliente + Por receita)
         for _h in _npl_html_parts:
             st.markdown(_h, unsafe_allow_html=True)
 
