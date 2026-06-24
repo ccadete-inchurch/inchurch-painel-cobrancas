@@ -856,45 +856,58 @@ def _render_atividades(store, clientes, role):
             st.session_state["_show_npl_cards"] = True
         _show_npl = st.session_state["_show_npl_cards"]
 
-        # CSS pra deixar o botão minimalista, tipografia consistente com
-        # outras labels da tela (uppercase, letter-spacing, cinza médio)
+        # Botão V compacto com fundo cinza + label minimalista AO LADO
+        # (fora do botão). Visual: caixinha cinza pequena + texto guia
+        # que indica o que clicar faz, no mesmo padrão do design do app.
         st.markdown('''
         <style>
         div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
             button[data-testid="stBaseButton-secondary"] {
-            background: transparent !important;
-            border: 1px solid transparent !important;
+            background: #1e2333 !important;
+            border: 1px solid #2a2f42 !important;
             color: #9ca3af !important;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-            font-size: 13px !important;
+            font-size: 14px !important;
             font-weight: 600 !important;
-            letter-spacing: 1.4px !important;
-            text-transform: uppercase !important;
             line-height: 1 !important;
-            padding: 8px 0 !important;
+            padding: 6px 0 !important;
             min-height: auto !important;
+            border-radius: 8px !important;
             box-shadow: none !important;
-            text-align: left !important;
-            justify-content: flex-start !important;
+            width: 100% !important;
+            transition: background 0.15s ease, border-color 0.15s ease;
         }
         div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
             button[data-testid="stBaseButton-secondary"]:hover {
+            background: #252b3d !important;
+            border-color: #7cc243 !important;
             color: #e8eaf0 !important;
-            background: transparent !important;
-            border-color: transparent !important;
         }
         </style>
         ''', unsafe_allow_html=True)
 
         st.markdown('<div style="height:20px"></div>', unsafe_allow_html=True)
-        # Botão arrow + label "Análise da carteira" — alinhado à esquerda
-        _arrow_col, _spacer = st.columns([3, 12])
+        # Coluna estreita pro botão V + coluna larga pro texto guia ao lado
+        _arrow_col, _label_col = st.columns([1, 20], vertical_alignment="center")
         with _arrow_col:
             _arrow = "▼" if _show_npl else "▶"
-            if st.button(f"{_arrow}  Análise da carteira", key="_npl_toggle_btn",
+            if st.button(_arrow, key="_npl_toggle_btn",
                          help="Ocultar análise" if _show_npl else "Mostrar análise"):
                 st.session_state["_show_npl_cards"] = not _show_npl
                 st.rerun()
+        with _label_col:
+            _label_txt = (
+                "Clique para ocultar a análise da carteira"
+                if _show_npl else
+                "Clique para ver a análise da carteira"
+            )
+            st.markdown(
+                f'<div style="font-family:-apple-system,BlinkMacSystemFont,'
+                f'\'Segoe UI\',Roboto,sans-serif;font-size:13px;color:#6b7280;'
+                f'font-weight:500;letter-spacing:0.3px;padding-left:8px">'
+                f'{_label_txt}</div>',
+                unsafe_allow_html=True,
+            )
 
         if _show_npl:
             for _h in _npl_html_parts:
