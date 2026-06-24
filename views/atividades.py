@@ -886,10 +886,10 @@ def _render_atividades(store, clientes, role):
 
         st.markdown('<div style="height:28px"></div>', unsafe_allow_html=True)
 
-        # Layout: botão V à ESQUERDA + texto colado ao lado direito
-        # (não ocupa a tela inteira — fica agrupado no lado esquerdo)
+        # Layout: botão V à ESQUERDA + texto IMPERATIVO colado ao lado
+        # ("Clique aqui para ver/ocultar..."). Convida ação clara.
         _btn_col, _txt_col, _spacer = st.columns(
-            [1, 6, 14], vertical_alignment="center"
+            [1, 8, 12], vertical_alignment="center"
         )
         with _btn_col:
             _arrow = "⌃" if _show_npl else "⌄"
@@ -898,11 +898,16 @@ def _render_atividades(store, clientes, role):
                 st.session_state["_show_npl_cards"] = not _show_npl
                 st.rerun()
         with _txt_col:
+            _label_txt = (
+                "Clique aqui para ocultar análise da carteira"
+                if _show_npl else
+                "Clique aqui para ver análise da carteira"
+            )
             st.markdown(
-                '<div style="font-family:-apple-system,BlinkMacSystemFont,'
-                '\'Segoe UI\',Roboto,sans-serif;font-size:12px;font-weight:600;'
-                'letter-spacing:1.6px;color:#8b94a5;text-transform:uppercase">'
-                'Análise da carteira</div>',
+                f'<div style="font-family:-apple-system,BlinkMacSystemFont,'
+                f'\'Segoe UI\',Roboto,sans-serif;font-size:13px;'
+                f'font-weight:500;color:#8b94a5;letter-spacing:0.2px">'
+                f'{_label_txt}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -917,6 +922,10 @@ def _render_atividades(store, clientes, role):
         if _show_npl:
             for _h in _npl_html_parts:
                 st.markdown(_h, unsafe_allow_html=True)
+
+        # Espaço respiratório antes dos filtros (independente de
+        # expandido/colapsado) - bloco da analise nao gruda no filtro
+        st.markdown('<div style="height:36px"></div>', unsafe_allow_html=True)
 
     # ── Filtros (fora do fragment — Streamlit preserva valor por session_state)
     # 'nan' (string) cai aqui quando _grupo veio de pandas com NaN convertido
