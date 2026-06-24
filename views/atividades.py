@@ -850,10 +850,47 @@ def _render_atividades(store, clientes, role):
     _indicadores_hoje()
 
     # 3. NPL Cards (análise macro - Por cliente + Por receita)
+    # Setinha minimalista pra ocultar quando o usuario quer focar no kanban
     if _npl_html_parts:
+        if "_show_npl_cards" not in st.session_state:
+            st.session_state["_show_npl_cards"] = True
+        _show_npl = st.session_state["_show_npl_cards"]
+
+        # CSS pra deixar o botão da setinha minimalista (sem bg, borda, etc)
+        st.markdown('''
+        <style>
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"] {
+            background: transparent !important;
+            border: 1px solid transparent !important;
+            color: #6b7280 !important;
+            font-size: 14px !important;
+            padding: 2px 8px !important;
+            min-height: auto !important;
+            box-shadow: none !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
+            button[data-testid="stBaseButton-secondary"]:hover {
+            color: #e8eaf0 !important;
+            background: rgba(124,194,67,0.05) !important;
+            border-color: transparent !important;
+        }
+        </style>
+        ''', unsafe_allow_html=True)
+
         st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
-        for _h in _npl_html_parts:
-            st.markdown(_h, unsafe_allow_html=True)
+        # Setinha alinhada à direita
+        _spacer, _arrow_col = st.columns([20, 1])
+        with _arrow_col:
+            _arrow = "⌄" if _show_npl else "›"
+            if st.button(_arrow, key="_npl_toggle_btn",
+                         help="Ocultar análise" if _show_npl else "Mostrar análise"):
+                st.session_state["_show_npl_cards"] = not _show_npl
+                st.rerun()
+
+        if _show_npl:
+            for _h in _npl_html_parts:
+                st.markdown(_h, unsafe_allow_html=True)
 
     # ── Filtros (fora do fragment — Streamlit preserva valor por session_state)
     # 'nan' (string) cai aqui quando _grupo veio de pandas com NaN convertido
