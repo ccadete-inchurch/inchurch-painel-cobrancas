@@ -447,19 +447,27 @@ def _render_atividades(store, clientes, role):
     _filtro_grupo   = st.session_state.get("atv_filtro_grupo", "Todos")
     _filtro_inativo = st.session_state.get("atv_filtro_inativo", "Todos")
 
+    # Ordem de precedencia:
+    #   1. Admin em 'Lote do dia' de X: trava em X
+    #   2. Filtro Grupo "Sem especialista" (so admin tem essa opcao no dropdown)
+    #   3. Filtro Grupo igual a nome de atendente (admin ou atendente logada
+    #      escolhendo o proprio grupo)
+    #   4. Filtro Grupo = "Todos" (admin OU atendente em modo visao geral)
     if role == "admin" and _modo_admin == "Lote do dia" and _atendente_sel:
         _npl_atendente = _atendente_sel
         _npl_escopo = f"Carteira de {_atendente_sel}"
-    elif role == "admin" and _filtro_grupo == "Sem especialista":
+    elif _filtro_grupo == "Sem especialista":
         _npl_atendente = "__SEM_ESPECIALISTA__"
         _npl_escopo = "Sem especialista"
-    elif role == "admin" and _filtro_grupo in _EMAIL_GRUPO.values():
+    elif _filtro_grupo in _EMAIL_GRUPO.values():
         _npl_atendente = _filtro_grupo
-        _npl_escopo = f"Carteira de {_filtro_grupo}"
-    elif email in _EMAIL_GRUPO:
-        _npl_atendente = _EMAIL_GRUPO[email]
-        _npl_escopo = f"Sua carteira ({_npl_atendente})"
+        _npl_escopo = (
+            f"Sua carteira ({_filtro_grupo})"
+            if email in _EMAIL_GRUPO
+            else f"Carteira de {_filtro_grupo}"
+        )
     else:
+        # _filtro_grupo == "Todos" (ou estado inicial) — visao global
         _npl_atendente = None
         _npl_escopo = "Carteira inChurch"
 
@@ -650,11 +658,15 @@ def _render_atividades(store, clientes, role):
         #   Admin em 'Lote do dia':        mostra só 'No Lote' (o atendente
         #                                  selecionado já contextualiza)
         #   Admin em 'Todos os clientes':  mostra só 'No Total'
-        _mostrar_lote = (email in _EMAIL_GRUPO) or (
+        # Atendente logada: agora cai em _mostrar_total porque o filtro Grupo
+        # ("Todos" ou nome dela) decide o escopo. _mostrar_lote so persiste
+        # pra admin em modo 'Lote do dia' (visualizacao de outra atendente).
+        _mostrar_lote = (
             role == "admin" and _modo_admin == "Lote do dia" and _atendente_sel
         )
         _mostrar_total = (
-            role == "admin" and _modo_admin == "Todos os clientes"
+            (role == "admin" and _modo_admin == "Todos os clientes")
+            or (email in _EMAIL_GRUPO)
         )
 
         # Mix de fontes:
@@ -722,6 +734,21 @@ def _render_atividades(store, clientes, role):
             # strict_hoje=True — placar honesto do DIA, sem inflar com limbo
             # de pagamentos de 3 dias atrás detectados pelo overlay.
             total_inad_n, total_reg_n, total_reg_v, total_parc_n, total_parc_v = _agg(_total_cs, strict_hoje=True)
+
+            # Atendente logada: REG/PARC restringe ao LOTE (merito do trabalho
+            # do dia). Em "Todos" usa uniao dos lotes (Ana + Priscila ~160);
+            # no proprio grupo usa so o lote dela (80). INAD continua vindo
+            # do _total_cs (carteira filtrada).
+            if email in _EMAIL_GRUPO:
+                if _fg == "Todos":
+                    _reg_parc_ids = fetch_ids_em_qualquer_lote_hoje()
+                else:
+                    _reg_parc_ids = ids_hoje
+                _reg_parc_cs = [c for c in clientes_full if c.get("id") in _reg_parc_ids]
+                # strict_hoje=False — cliente em lote conta mesmo se overlay
+                # detectou pagamento de ontem (BQ nao viu, lote nao gera fila falsa)
+                _, total_reg_n, total_reg_v, total_parc_n, total_parc_v = _agg(_reg_parc_cs, strict_hoje=False)
+
             # Carteira TOTAL filtrada — SEM filtro de tipo. Considera o
             # filtro Grupo (Sem especialista / atendente específico / Todos)
             # e Situação, mas inclui qualquer tipo de cobrança.
@@ -946,11 +973,24 @@ def _render_atividades(store, clientes, role):
         not c.get("_grupo") or c.get("_grupo") in ("—", "", "nan", "NaN")
         for c in clientes
     )
+    # Opcoes do dropdown Grupo:
+    #   - Atendente: ['Todos', proprio grupo dela]. "Todos" agrega visao geral,
+    #     proprio grupo filtra na carteira individual. Nao expoe nome de outra
+    #     atendente nem "Sem especialista" (confidencialidade).
+    #   - Admin: todas as opcoes (Todos + todos os grupos + Sem especialista
+    #     se houver clientes orfaos), comportamento atual.
+    if email in _EMAIL_GRUPO:
+        _grupos_options = ["Todos", _EMAIL_GRUPO[email]]
+    else:
+        _grupos_options = (
+            ["Todos"] + grupos_disp
+            + (["Sem especialista"] if _tem_sem_grupo else [])
+        )
     fa, fb, fc = st.columns([1.3, 1.3, 2])
     with fa:
         st.selectbox(
             "Grupo",
-            ["Todos"] + grupos_disp + (["Sem especialista"] if _tem_sem_grupo else []),
+            _grupos_options,
             key="atv_filtro_grupo",
         )
     with fb:
