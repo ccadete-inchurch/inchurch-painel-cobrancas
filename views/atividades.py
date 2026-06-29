@@ -105,7 +105,7 @@ def _motivo(bucket, acoes, c) -> tuple:
     dias_lig_atend = get_painel_dias_lig(cid)             # atendida (concluída)
     dias_lig_tent  = get_painel_dias_lig_tentada(cid)     # qualquer tentativa
     dias_msg = get_painel_dias_msg(cid)
-    streak_lig = get_streak_cooldown_dias(cid)            # cooldown 7d (3 falhas em série)
+    streak_lig = get_streak_cooldown_dias(cid)            # cooldown 7d (2 falhas em série)
 
     acordo_dias = c.get("dias_atraso") or 0
     tem_acordo  = bool(c.get("_tem_acordo")) and acordo_dias >= 7
@@ -129,12 +129,12 @@ def _motivo(bucket, acoes, c) -> tuple:
         if acoes_hj.get("atend"):
             return f"{prefixo_ac} · ligação realizada hoje · ligação prioritária", "blue"
 
-        # Cooldown 7d (3 falhas) tem prioridade sobre "tentou hoje" — é a
+        # Cooldown 7d (2 falhas) tem prioridade sobre "tentou hoje" — é a
         # info mais útil pra atendente (ela precisa SABER que esse cliente
         # já está bloqueado). Senão, ao tentar hoje, o badge perdia o
         # contexto do cooldown e virava só "não atendeu ligação hoje".
         if streak_lig is not None and streak_lig > 0:
-            return f"{prefixo_ac} · não atendeu as últimas 3 ligações · ligação prioritária", "purple"
+            return f"{prefixo_ac} · não atendeu as últimas 2 ligações · ligação prioritária", "purple"
 
         if acoes_hj.get("lig"):
             return f"{prefixo_ac} · não atendeu ligação hoje · ligação prioritária", "purple"
@@ -156,11 +156,11 @@ def _motivo(bucket, acoes, c) -> tuple:
     if acoes_hj.get("atend"):
         return "Ligação atendida hoje", "blue"
 
-    # Cooldown 7d (3 falhas) prevalece sobre "tentou hoje" — atendente
+    # Cooldown 7d (2 falhas) prevalece sobre "tentou hoje" — atendente
     # precisa saber que o cliente já está bloqueado, mesmo se ela
     # insistiu hoje. Mesma lógica do acordo (acima).
     if bucket == "ligacao" and streak_lig is not None and streak_lig > 0:
-        return "Não atendeu as últimas 3 ligações · Ligação", "purple"
+        return "Não atendeu as últimas 2 ligações · Ligação", "purple"
 
     if acoes_hj.get("lig"):
         return "Não atendeu ligação hoje", "purple"
@@ -177,7 +177,7 @@ def _motivo(bucket, acoes, c) -> tuple:
 
     if bucket == "ligacao":
         if streak_lig is not None and streak_lig > 0:
-            return "Não atendeu as últimas 3 ligações · Ligação", "purple"
+            return "Não atendeu as últimas 2 ligações · Ligação", "purple"
         if tentou_sem_atender:
             return f"Não atendeu ligação há {dias_lig_tent}d · Ligação", "purple"
         if dias_lig_atend is not None:
@@ -1174,7 +1174,7 @@ def _render_atividades(store, clientes, role):
                     return "concluida"
                 if acoes_hj.get("lig"):
                     return "tentar_novamente"
-                # Cooldown 7d ativo (3 falhas anteriores) — acordo não tem
+                # Cooldown 7d ativo (2 falhas anteriores) — acordo não tem
                 # alternativa, mas a atendente vê visualmente que o cliente
                 # tá em "tentar novamente" em vez de urgente.
                 if streak_lig is not None and streak_lig > 0:
@@ -1186,7 +1186,7 @@ def _render_atividades(store, clientes, role):
                 if acoes_hj.get("lig"):
                     return "tentar_novamente"
             if bucket == "ligacao":
-                # Cooldown 7d ativo (3 falhas anteriores, ativou após cron) —
+                # Cooldown 7d ativo (2 falhas anteriores, ativou após cron) —
                 # mesmo tratamento do acordo: vai pra TENTAR NOVAMENTE.
                 if streak_lig is not None and streak_lig > 0:
                     return "tentar_novamente"

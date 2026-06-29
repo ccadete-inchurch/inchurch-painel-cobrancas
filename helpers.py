@@ -78,7 +78,7 @@ def get_painel_acoes_hoje(cliente_id: str) -> dict:
 
 
 def get_streak_cooldown_dias(cliente_id: str):
-    """Dias restantes de cooldown 7d por 3 tentativas falhadas consecutivas (lig sem atend).
+    """Dias restantes de cooldown 7d por 2 tentativas falhadas consecutivas (lig sem atend).
     Retorna None se cooldown não está ativo. Bloqueia só ligação — mensagem segue regra normal."""
     import streamlit as st
     return st.session_state.get("_streak_cooldown_dias", {}).get(str(cliente_id))

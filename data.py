@@ -2266,7 +2266,7 @@ def load_cooldowns_from_painel():
       _painel_dias_lig[id]            → dias desde dt_ligacao_atendida — cooldown 5d só conta atendida
       _painel_dias_lig_tentada[id]    → dias desde dt_ligacao_feita — qualquer tentativa (badge)
       _painel_acoes_hoje[id]          → {"msg": bool, "lig": bool, "atend": bool} do dia atual
-      _streak_cooldown_dias[id]       → dias restantes de cooldown 7d por 3 tentativas falhadas
+      _streak_cooldown_dias[id]       → dias restantes de cooldown 7d por 2 tentativas falhadas
                                          consecutivas (None se cooldown não está ativo)
     """
     st.session_state.setdefault("_painel_dias_msg", {})
@@ -2345,7 +2345,7 @@ def load_cooldowns_from_painel():
     st.session_state["_painel_dias_lig_tentada"] = dias_lig_tentada
     st.session_state["_painel_acoes_hoje"]       = acoes_hoje
 
-    # 3-strikes cooldown: 3 tentativas falhadas consecutivas (lig_feita=TRUE,
+    # 2-strikes cooldown: 2 tentativas falhadas consecutivas (lig_feita=TRUE,
     # lig_atendida=FALSE) → bloqueia ligação por 7 dias a partir da última tentativa.
     # Janela de busca: 14 dias (cobre o cooldown + algum histórico).
     streak_cooldown = {}
@@ -2368,9 +2368,9 @@ def load_cooldowns_from_painel():
                 id_sacado_sac,
                 MAX(data_tarefa) AS ultima_tentativa
             FROM tentativas
-            WHERE rn <= 3
+            WHERE rn <= 2
             GROUP BY id_sacado_sac
-            HAVING COUNT(*) >= 3
+            HAVING COUNT(*) >= 2
                AND COUNTIF(ligacao_atendida) = 0
         """).to_dataframe()
 
@@ -3305,7 +3305,7 @@ def recomendar_acao(cliente) -> list[str]:
     dias_lig      = get_painel_dias_lig(cid)          # ligação atendida (cooldown 5d)
     dias_lig_tent = get_painel_dias_lig_tentada(cid)  # qualquer tentativa de lig
     dias_msg      = get_painel_dias_msg(cid)          # mensagem enviada (cooldown 3d)
-    streak_lig    = get_streak_cooldown_dias(cid)     # 3 tentativas falhadas → cooldown 7d (só lig)
+    streak_lig    = get_streak_cooldown_dias(cid)     # 2 tentativas falhadas → cooldown 7d (só lig)
 
     cooldown_lig_ok = (dias_lig is None or dias_lig >= 5) and (streak_lig is None or streak_lig <= 0)
     cooldown_msg_ok = dias_msg is None or dias_msg >= 3
