@@ -245,10 +245,11 @@ def _any_atendente_engaged(cid, except_uid=None) -> bool:
 
 def get_effective_status(cid) -> str:
     """Status visível na tela. Regra:
-    - Promise/negotiating: do histórico unificado (admin = união,
-      atendente = próprio). Decisão pessoal vence.
-    - Contacted: se o BOT agiu OU outra ATENDENTE marcou algo (qualquer
-      status != pending) — reflete que o time tocou no cliente.
+    - Status INTENCIONAIS (promise/negotiating/telefone_errado/igreja_fechada):
+      escolha manual da atendente sempre vence. Sao status que carregam
+      informacao especifica que o bot nao consegue inferir.
+    - Contacted: se o BOT agiu OU outra ATENDENTE marcou algo — reflete
+      que o time tocou no cliente.
     - Pending: ninguém tocou.
 
     Pra atendente, 'contacted' agora também inclui clientes que a colega
@@ -257,7 +258,12 @@ def get_effective_status(cid) -> str:
     """
     h = get_hist_unificado(cid)
     manual_st = h.get("status", "")
-    if manual_st in ("promise", "negotiating"):
+    # Status intencionais: escolha da atendente vence o auto-update por bot.
+    # promise/negotiating: decisao pessoal sobre o estado da negociacao.
+    # telefone_errado/igreja_fechada: marcacao de impossibilidade de contato
+    # — se o bot agiu antes (ex: bot mandou msg que nao foi respondida),
+    # ainda assim o status real deve prevalecer.
+    if manual_st in ("promise", "negotiating", "telefone_errado", "igreja_fechada"):
         return manual_st
     import streamlit as st
     from auth import current_role, current_uid
