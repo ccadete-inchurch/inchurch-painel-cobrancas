@@ -90,7 +90,7 @@ import streamlit as st
 from google.cloud import bigquery
 
 from auth import get_store, current_nome
-from helpers import calc_dias, parse_date_br, get_hist, fmt_tel, fmt_tel_lista, hoje_lote, hoje_brt
+from helpers import calc_dias, parse_date_br, get_hist, fmt_tel, fmt_tel_lista, hoje_lote, hoje_brt, dias_uteis_entre
 
 
 # ── Feriados nacionais ────────────────────────────────────────────────────────
@@ -2381,7 +2381,11 @@ def load_cooldowns_from_painel():
                 continue
             try:
                 ultima_d = ultima if isinstance(ultima, date) else pd.to_datetime(ultima).date()
-                dias_desde = (hoje_brt_dt - ultima_d).days
+                # Conta dias UTEIS (seg-sex, sem feriados) — alinha com o
+                # ciclo de geracao do lote (segunda a sexta sem feriados).
+                # Cooldown de 7 dias uteis = ~1.5 semana de calendario, mais
+                # justo que 7 corridos (que so dava 5 dias uteis efetivos).
+                dias_desde = dias_uteis_entre(ultima_d, hoje_brt_dt)
                 restante = 7 - dias_desde
                 if restante > 0:
                     streak_cooldown[cid] = restante

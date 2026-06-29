@@ -78,7 +78,8 @@ def get_painel_acoes_hoje(cliente_id: str) -> dict:
 
 
 def get_streak_cooldown_dias(cliente_id: str):
-    """Dias restantes de cooldown 7d por 2 tentativas falhadas consecutivas (lig sem atend).
+    """Dias UTEIS restantes de cooldown (7 dias uteis) por 2 tentativas falhadas
+    consecutivas (lig sem atend). Conta seg-sex sem feriados nacionais.
     Retorna None se cooldown não está ativo. Bloqueia só ligação — mensagem segue regra normal."""
     import streamlit as st
     return st.session_state.get("_streak_cooldown_dias", {}).get(str(cliente_id))
@@ -107,6 +108,26 @@ def parse_date_br(s):
         return date(int(p[2]), int(p[1]), int(p[0]))
     except Exception:
         return None
+
+
+def dias_uteis_entre(d_inicio, d_fim) -> int:
+    """Conta dias uteis (seg-sex, excluindo feriados nacionais) entre 2 datas.
+    Exclui o dia inicial (d_inicio), inclui o dia final (d_fim).
+    Retorna 0 se d_inicio >= d_fim.
+
+    Usado pelo cooldown 'Tentar Novamente' (7 dias uteis apos 2 falhas) —
+    semantica de 'dias operacionais de oportunidade' alinhada com o ciclo
+    do lote (gerado so de segunda a sexta, sem feriados).
+    """
+    if d_inicio >= d_fim:
+        return 0
+    count = 0
+    d = d_inicio + timedelta(days=1)  # exclui o dia inicial
+    while d <= d_fim:
+        if d.weekday() < 5 and not eh_feriado(d):  # 0=Seg ... 4=Sex
+            count += 1
+        d += timedelta(days=1)
+    return count
 
 
 # ── HTML helpers ──────────────────────────────────────────────────────────────
