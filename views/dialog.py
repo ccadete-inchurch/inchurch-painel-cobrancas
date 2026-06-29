@@ -415,8 +415,13 @@ def dialog_editar(eid, from_fixados: bool = False):
     # aberto da seção Clientes Fixados (dashboard) — em outros lugares
     # (Atividades, Cliente, tabela Inadimplência) o botão não faz sentido
     # operacional porque a atendente não tá no contexto de gestão de fixados.
+    #
+    # "Salvar observações" so aparece quando o textarea de notes mudou
+    # vs o que esta salvo em h. Resto dos campos (status, datas, checkboxes)
+    # ja salvam automatico no auto-save block acima — botao seria redundante.
+    _notes_mudou = (not somente_leitura) and (notes != h.get("notes", ""))
     botoes = []
-    if not somente_leitura:
+    if _notes_mudou:
         botoes.append("salvar")
     if eh_fixado and from_fixados:
         botoes.append("concluir")
@@ -426,10 +431,10 @@ def dialog_editar(eid, from_fixados: bool = False):
     for col, acao in zip(cols, botoes):
         with col:
             if acao == "salvar":
-                # Botao primario verde (mesmo padrao Concluir fixado).
-                # Pra notes principalmente — campos simples ja foram
-                # auto-saved acima. Sem emoji por decisao UX.
-                if st.button("Salvar observações", width="stretch", type="primary"):
+                # Mesma cor de Fechar (secundario cinza) — botao so aparece
+                # quando ha mudanca em notes, entao nao precisa de destaque
+                # verde. Sem emoji por decisao UX.
+                if st.button("Salvar observações", width="stretch"):
                     from data import _EMAIL_GRUPO
                     payload = {
                         "status":      STATUS_OPTS[status_sel],
