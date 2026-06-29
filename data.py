@@ -2065,17 +2065,17 @@ def ensure_historico_table():
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_status_clientes_uid(uid: str) -> dict:
-    """Le o status (campo .status do historico_json) por cliente, pra um uid.
-
-    Usado pra filtrar quem nao deve cair no lote diario (status em
-    STATUS_SEM_CONTATO = {'telefone_errado', 'igreja_fechada'}).
+def fetch_meta_clientes_uid(uid: str) -> dict:
+    """Le metadata (status + tel_fixo) por cliente, pra um uid.
 
     Diferente de get_hist() que precisa de session_state populado,
     essa funcao consulta BQ direto — funciona tambem no cron headless.
 
-    Retorna {cliente_id_str: status_str}. So inclui clientes que tem
-    status definido (pular nulls/vazios).
+    Usado em 2 contextos:
+    - Filtrar lote diario (status em STATUS_SEM_CONTATO)
+    - Forcar bucket=ligacao pra clientes com tel_fixo=true
+
+    Retorna {cliente_id_str: {'status': str, 'tel_fixo': bool}}.
     """
     client = get_bq_client()
     if not client:
@@ -2083,7 +2083,8 @@ def fetch_status_clientes_uid(uid: str) -> dict:
     query = f"""
     SELECT
       cliente_id,
-      JSON_EXTRACT_SCALAR(historico_json, '$.status') AS status
+      JSON_EXTRACT_SCALAR(historico_json, '$.status') AS status,
+      JSON_EXTRACT_SCALAR(historico_json, '$.tel_fixo') AS tel_fixo
     FROM (
       SELECT cliente_id, historico_json,
              ROW_NUMBER() OVER (PARTITION BY cliente_id ORDER BY updated_at DESC) AS rn
@@ -2097,13 +2098,60 @@ def fetch_status_clientes_uid(uid: str) -> dict:
     )
     try:
         df = client.query(query, job_config=job_config).to_dataframe()
-        return {
-            str(r["cliente_id"]): r["status"]
-            for _, r in df.iterrows()
-            if r["status"]
-        }
+        out = {}
+        for _, r in df.iterrows():
+            cid = str(r["cliente_id"])
+            meta = {}
+            if r.get("status"):
+                meta["status"] = r["status"]
+            # JSON_EXTRACT_SCALAR retorna string ("true"/"false"/null)
+            if str(r.get("tel_fixo", "")).lower() == "true":
+                meta["tel_fixo"] = True
+            if meta:
+                out[cid] = meta
+        return out
     except Exception:
         return {}
+
+
+# Alias retrocompativel — antes da feature 'tel_fixo', a funcao retornava
+# so o status como string. Mantem chamadas antigas funcionando.
+def fetch_status_clientes_uid(uid: str) -> dict:
+    """Wrapper retrocompativel: retorna {cid: status_str}."""
+    meta = fetch_meta_clientes_uid(uid)
+    return {cid: m.get("status", "") for cid, m in meta.items() if m.get("status")}
+
+
+def registrar_acao_manual(cid: str, atendente: str, atendeu: bool) -> bool:
+    """Registra ligacao manual (telefone fixo) no painel_tarefas_diarias.
+
+    Atualiza:
+      - ligacao_feita    = TRUE (sempre — atendente tentou)
+      - ligacao_atendida = atendeu (TRUE se atendeu, FALSE se nao)
+
+    Pra cliente em telefone fixo, N8N nao detecta ligacao. Esta funcao
+    e' chamada pelos botoes 'Atendeu' / 'Nao atendeu' do dialog quando
+    cliente esta marcado com tel_fixo=true.
+
+    Retorna True se atualizou ao menos 1 linha, False caso contrario.
+    """
+    client = get_bq_client()
+    if not client:
+        return False
+    hoje = hoje_lote()
+    try:
+        job = client.query(f"""
+            UPDATE `{_TAREFAS_TABLE}`
+            SET ligacao_feita    = TRUE,
+                ligacao_atendida = {str(bool(atendeu)).upper()}
+            WHERE id_sacado_sac = '{cid}'
+              AND atendente     = '{atendente}'
+              AND data_tarefa   = '{hoje}'
+        """)
+        job.result()
+        return (job.num_dml_affected_rows or 0) > 0
+    except Exception:
+        return False
 
 
 def load_historico_from_bq():
@@ -2667,7 +2715,13 @@ def _selecionar_top_30_50(clientes: list, lote_atual_ids: set | None = None) -> 
         # Pula se já foi selecionado em LIG (sem cruzamento)
         if cid in ids_lig:
             continue
-        
+
+        # Pula clientes com tel_fixo=true — eles so devem cair em LIG
+        # (N8N nao detecta mensagem em telefone fixo). Se nao couberam no
+        # top 30 LIG, ficam fora do lote hoje, entram amanha.
+        if c.get("_tel_fixo"):
+            continue
+
         # Verifica elegibilidade para MSG
         acoes = recomendar_acao(c)
         if "mensagem" not in acoes:
@@ -2703,7 +2757,8 @@ def _selecionar_top_30_50(clientes: list, lote_atual_ids: set | None = None) -> 
         acoes = recomendar_acao(c)
         if "ligar" in acoes:
             inativos_pool_lig.append(cid)
-        if "mensagem" in acoes:
+        # Tel_fixo: nunca entra no pool de MSG fallback (N8N nao detecta)
+        if "mensagem" in acoes and not c.get("_tel_fixo"):
             inativos_pool_msg.append(cid)
 
     # Completar LIG até 30 com inativos cuja ligação não está em cooldown
@@ -2834,16 +2889,27 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
     # voltaria pro lote todo dia, gerando trabalho zero (atendente nao consegue
     # contatar). Atendente desmarca quando o problema for resolvido (telefone
     # consertado no SL ou igreja reabriu) — proximo cron pega de novo.
+    #
+    # E marca os clientes com tel_fixo=true atribuindo c['_tel_fixo']=True.
+    # Sera usado por _selecionar_top_30_50 pra forcar bucket=ligacao (cliente
+    # so atende em telefone fixo, N8N nao detecta msg WhatsApp).
     import hashlib
     from config import STATUS_SEM_CONTATO
     uid_atendente = hashlib.md5(email_logado.encode()).hexdigest()
-    status_por_cid = fetch_status_clientes_uid(uid_atendente)
-    grupo_clientes = [
-        c for c in clientes
-        if c.get("_grupo") == atendente
-        and not c.get("_regularizado_hoje")
-        and status_por_cid.get(str(c.get("id", ""))) not in STATUS_SEM_CONTATO
-    ]
+    meta_por_cid = fetch_meta_clientes_uid(uid_atendente)
+    grupo_clientes = []
+    for c in clientes:
+        if c.get("_grupo") != atendente:
+            continue
+        if c.get("_regularizado_hoje"):
+            continue
+        cid_str = str(c.get("id", ""))
+        meta = meta_por_cid.get(cid_str, {})
+        if meta.get("status") in STATUS_SEM_CONTATO:
+            continue
+        # Marca tel_fixo no dict do cliente — _selecionar_top_30_50 le
+        c["_tel_fixo"] = bool(meta.get("tel_fixo", False))
+        grupo_clientes.append(c)
     pares = selecionar_lote_com_quotas(grupo_clientes, lote_clientes=[])
     buckets = {cid: bucket for cid, bucket in pares}
 

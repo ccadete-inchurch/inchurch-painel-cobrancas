@@ -205,7 +205,7 @@ def dialog_editar(eid, from_fixados: bool = False):
         disabled=somente_leitura,
     )
 
-    d1, d2 = st.columns(2)
+    d1, d2, d3 = st.columns([2, 1.5, 1.5])
     with d1:
         last_contact = st.date_input(
             "Último Contato",
@@ -222,6 +222,18 @@ def dialog_editar(eid, from_fixados: bool = False):
                 label_visibility="collapsed",
                 disabled=somente_leitura,
             )
+    with d3:
+        # Caracteristica do canal de contato (independente do status de cobranca).
+        # Quando marcado, lote forca bucket=ligacao (sem msg) e botoes
+        # 'Atendeu' / 'Nao atendeu' aparecem abaixo pra registro manual da
+        # ligacao (N8N nao detecta atividade em telefone fixo).
+        tel_fixo = st.checkbox(
+            "Telefone fixo",
+            value=bool(h.get("tel_fixo", False)),
+            disabled=somente_leitura,
+            help="Cliente so atende em telefone fixo (sem WhatsApp). "
+                 "Forca o lote a colocar em LIGACAO e habilita botoes manuais.",
+        )
 
     promise_date = None
     if STATUS_OPTS[status_sel] == "promise":
@@ -232,6 +244,83 @@ def dialog_editar(eid, from_fixados: bool = False):
         )
 
     notes = st.text_area("Observações", value=h.get("notes", ""), placeholder="Ex: Cliente pediu prazo até sexta...", height=100, disabled=somente_leitura)
+
+    # Botoes manuais de registro de ligacao (so aparecem quando tel_fixo=true).
+    # N8N nao detecta atividade em telefone fixo, atendente registra aqui.
+    # 'Atendeu' usa estilo primary verde (igual Concluir fixado).
+    # 'Nao atendeu' vermelho como badge inadimplente — CSS abaixo.
+    if tel_fixo and not somente_leitura:
+        st.markdown(
+            '<div style="font-size:12px;font-weight:700;color:#8b94a5;'
+            'letter-spacing:1.2px;text-transform:uppercase;margin:10px 0 4px 0">'
+            'Registrar ligação manualmente</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown("""
+        <style>
+        /* Vermelho inadimplente no botao 'Nao atendeu' — usa o segundo
+           botao secundario dentro do row 'fixo-buttons' (marcador acima). */
+        div[role="dialog"] div[data-testid="stElementContainer"]:has(div[data-fixo-marker])
+            + div[data-testid="stHorizontalBlock"]
+            div[data-testid="stColumn"]:nth-of-type(2) button {
+            background-color: #ff5555 !important;
+            border-color: #ff5555 !important;
+            color: #ffffff !important;
+        }
+        div[role="dialog"] div[data-testid="stElementContainer"]:has(div[data-fixo-marker])
+            + div[data-testid="stHorizontalBlock"]
+            div[data-testid="stColumn"]:nth-of-type(2) button:hover {
+            background-color: #d94040 !important;
+            border-color: #d94040 !important;
+        }
+        </style>
+        <div data-fixo-marker></div>
+        """, unsafe_allow_html=True)
+        b1, b2 = st.columns(2)
+        with b1:
+            if st.button("✅ Atendeu", width="stretch", type="primary", key="btn_fixo_atendeu"):
+                from data import _EMAIL_GRUPO, registrar_acao_manual
+                # Persiste tel_fixo (caso atendente nao tenha clicado Salvar antes)
+                payload = {
+                    "status":      STATUS_OPTS[status_sel],
+                    "lastContact": last_contact.strftime("%d/%m/%Y"),
+                    "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
+                    "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
+                    "notes":       notes,
+                    "tel_fixo":    True,
+                }
+                if current_email() in _EMAIL_GRUPO:
+                    payload["atendente"] = current_nome()
+                save_hist(eid, payload)
+                # Registra ligacao atendida no painel_tarefas_diarias
+                _atendente_nome = _EMAIL_GRUPO.get(current_email()) or payload.get("atendente", "")
+                ok = registrar_acao_manual(eid, _atendente_nome, atendeu=True)
+                if ok:
+                    st.toast("✅ Ligação atendida registrada", icon="✅")
+                else:
+                    st.toast("⚠️ Cliente não está no lote de hoje — só status foi salvo", icon="⚠️")
+                st.rerun()
+        with b2:
+            if st.button("📞 Não atendeu", width="stretch", key="btn_fixo_naoatendeu"):
+                from data import _EMAIL_GRUPO, registrar_acao_manual
+                payload = {
+                    "status":      STATUS_OPTS[status_sel],
+                    "lastContact": last_contact.strftime("%d/%m/%Y"),
+                    "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
+                    "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
+                    "notes":       notes,
+                    "tel_fixo":    True,
+                }
+                if current_email() in _EMAIL_GRUPO:
+                    payload["atendente"] = current_nome()
+                save_hist(eid, payload)
+                _atendente_nome = _EMAIL_GRUPO.get(current_email()) or payload.get("atendente", "")
+                ok = registrar_acao_manual(eid, _atendente_nome, atendeu=False)
+                if ok:
+                    st.toast("📞 Tentativa registrada (não atendeu)", icon="📞")
+                else:
+                    st.toast("⚠️ Cliente não está no lote de hoje — só status foi salvo", icon="⚠️")
+                st.rerun()
     # Linha "Editado por" só faz sentido em modo edição
     if not somente_leitura:
         st.markdown(f'<div style="font-size:12px;color:#8b94a5;margin-top:6px;font-weight:500">Editado por: <span style="color:#e8eaf0;font-weight:700">{current_nome()}</span></div>', unsafe_allow_html=True)
@@ -275,6 +364,7 @@ def dialog_editar(eid, from_fixados: bool = False):
                         "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
                         "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
                         "notes":       notes,
+                        "tel_fixo":    bool(tel_fixo),
                     }
                     if current_email() in _EMAIL_GRUPO:
                         payload["atendente"] = current_nome()

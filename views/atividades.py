@@ -211,6 +211,15 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     _regularizado = bool(c.get("_regularizado_hoje")) or bool(c.get("_regularizado_antes_hoje"))
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
     acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if _eh_acordo and not _regularizado else ""
+    # Badge "TELEFONE FIXO" — cliente marcado pela atendente como so atende
+    # em telefone fixo. N8N nao detecta atividade automatica; atendente usa
+    # botoes manuais (Atendeu / Nao atendeu) no dialog pra registrar.
+    _eh_tel_fixo  = bool(c.get("_tel_fixo"))
+    tel_fixo_badge = (
+        '<span style="background:rgba(95,163,255,.18);color:#5fa3ff;'
+        'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
+        'margin-left:6px;vertical-align:middle">TELEFONE FIXO</span>'
+    ) if _eh_tel_fixo and not _regularizado else ""
     # Badge de pagamento parcial — cliente pagou algum boleto hoje mas ainda
     # tem vencidas. Aumentado pra ficar mais evidente (era 10px, agora 13px
     # com padding maior e borda sólida). É info crítica pra atendente —
@@ -285,7 +294,7 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
         f'{c["nome"]}'
         f'<div style="font-size:11px;color:#9ca3af;font-weight:400;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
         f'<span>{c.get("cnpj","—")} · ID {c.get("id","—")}</span>'
-        f'{inativo_badge}{acordo_badge}{parcial_badge}'
+        f'{inativo_badge}{acordo_badge}{tel_fixo_badge}{parcial_badge}'
         f'</div>'
         f'</div>'
         f'<div style="text-align:right;flex-shrink:0">'
@@ -1227,6 +1236,15 @@ def _render_atividades(store, clientes, role):
         for item in fila:
             s, a, c, h = item
             bucket = buckets_hoje.get(c["id"]) if isinstance(buckets_hoje, dict) else None
+            # Live override pra tel_fixo: se cliente marcado pela atendente,
+            # forca coluna LIGACAO mesmo que o lote tenha gerado bucket=mensagem
+            # (caso a marcacao seja posterior ao cron 08:15). Cliente nunca
+            # deve cair em MSG quando tem so telefone fixo (N8N nao detecta).
+            _tel_fixo = bool((h or {}).get("tel_fixo"))
+            if _tel_fixo:
+                bucket = "ligacao"
+                # Injeta no cliente pra _render_card poder ler e mostrar badge
+                c["_tel_fixo"] = True
             acoes_hj = get_painel_acoes_hoje(c["id"])
             eh_acordo = bool(c.get("_tem_acordo")) and (c.get("dias_atraso") or 0) >= 7
             _streak = get_streak_cooldown_dias(c["id"])
