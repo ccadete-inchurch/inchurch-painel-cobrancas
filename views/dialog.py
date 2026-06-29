@@ -256,7 +256,7 @@ def dialog_editar(eid, from_fixados: bool = False):
     # Botoes manuais de registro de ligacao — APARECEM LOGO ABAIXO DO
     # CHECKBOX (visualmente agrupados) so quando tel_fixo=true. N8N
     # nao detecta atividade em telefone fixo, atendente registra aqui.
-    # Salvar/Cancelar continuam no rodape (acoes finais separadas).
+    # Sem emojis nos botoes ou no header (decisao UX).
     if tel_fixo and not somente_leitura:
         # CSS pra deixar o 'Nao atendeu' vermelho — marcador acima do row
         # de colunas pra escopar a regra so a esses 2 botoes.
@@ -281,7 +281,7 @@ def dialog_editar(eid, from_fixados: bool = False):
              padding:10px 14px 4px;margin:6px 0 4px 0">
             <div style="font-size:11px;color:#5fa3ff;font-weight:700;
                  letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">
-                📞 Registrar ligação manual
+                Registrar ligação manual
             </div>
             <div style="font-size:11px;color:#8b94a5;margin-bottom:8px;
                  line-height:1.4">
@@ -292,30 +292,32 @@ def dialog_editar(eid, from_fixados: bool = False):
         """, unsafe_allow_html=True)
         b1, b2 = st.columns(2)
         with b1:
-            if st.button("✅ Atendeu", width="stretch", type="primary", key="btn_fixo_atendeu"):
+            if st.button("Atendeu", width="stretch", type="primary", key="btn_fixo_atendeu"):
                 from data import _EMAIL_GRUPO, registrar_acao_manual
-                # Persiste tel_fixo (caso atendente nao tenha clicado Salvar antes)
+                # Persiste tudo no historico — tel_fixo + status atual.
+                # Notes usa h.get pq textarea ainda nao foi renderizado
+                # nesse ponto. Auto-save abaixo cuida do notes nos
+                # casos de mudanca apos esse botao.
                 payload = {
                     "status":      STATUS_OPTS[status_sel],
                     "lastContact": last_contact.strftime("%d/%m/%Y"),
                     "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
-                    "promiseDate": "",  # promise_date nao foi definido ainda nesse ponto
-                    "notes":       h.get("notes", ""),  # mantem notes atual
+                    "promiseDate": "",
+                    "notes":       h.get("notes", ""),
                     "tel_fixo":    True,
                 }
                 if current_email() in _EMAIL_GRUPO:
                     payload["atendente"] = current_nome()
                 save_hist(eid, payload)
-                # Registra ligacao atendida no painel_tarefas_diarias
                 _atendente_nome = _EMAIL_GRUPO.get(current_email()) or payload.get("atendente", "")
                 ok = registrar_acao_manual(eid, _atendente_nome, atendeu=True)
                 if ok:
-                    st.toast("✅ Ligação atendida registrada", icon="✅")
+                    st.toast("Ligação atendida registrada")
                 else:
-                    st.toast("⚠️ Cliente não está no lote de hoje — só status foi salvo", icon="⚠️")
+                    st.toast("Cliente não está no lote de hoje — só status foi salvo")
                 st.rerun()
         with b2:
-            if st.button("📞 Não atendeu", width="stretch", key="btn_fixo_naoatendeu"):
+            if st.button("Não atendeu", width="stretch", key="btn_fixo_naoatendeu"):
                 from data import _EMAIL_GRUPO, registrar_acao_manual
                 payload = {
                     "status":      STATUS_OPTS[status_sel],
@@ -331,9 +333,9 @@ def dialog_editar(eid, from_fixados: bool = False):
                 _atendente_nome = _EMAIL_GRUPO.get(current_email()) or payload.get("atendente", "")
                 ok = registrar_acao_manual(eid, _atendente_nome, atendeu=False)
                 if ok:
-                    st.toast("📞 Tentativa registrada (não atendeu)", icon="📞")
+                    st.toast("Tentativa registrada (não atendeu)")
                 else:
-                    st.toast("⚠️ Cliente não está no lote de hoje — só status foi salvo", icon="⚠️")
+                    st.toast("Cliente não está no lote de hoje — só status foi salvo")
                 st.rerun()
 
     promise_date = None
@@ -345,6 +347,51 @@ def dialog_editar(eid, from_fixados: bool = False):
         )
 
     notes = st.text_area("Observações", value=h.get("notes", ""), placeholder="Ex: Cliente pediu prazo até sexta...", height=100, disabled=somente_leitura)
+
+    # ── AUTO-SAVE dos campos simples ──────────────────────────────────────
+    # Status, datas e checkboxes salvam automaticamente quando atendente
+    # interage. Notes (textarea) so salva via botao Salvar pra evitar
+    # write em BQ a cada keystroke. Cada rerun verifica se algum campo
+    # nao-notes mudou em relacao a h e persiste a mudanca.
+    #
+    # Resposta direta a duvida: 'se atendente marca Telefone fixo e fecha
+    # sem clicar Atendeu/Nao atendeu, o flag SE PERDIA antes — agora salva
+    # imediato no rerun que dispara quando o checkbox e clicado.'
+    if not somente_leitura:
+        _curr_simples = (
+            STATUS_OPTS[status_sel],
+            last_contact.strftime("%d/%m/%Y") if last_contact else "",
+            retorno.strftime("%d/%m/%Y") if retorno else "",
+            promise_date.strftime("%d/%m/%Y") if promise_date else "",
+            bool(tel_fixo),
+        )
+        _orig_simples = (
+            h.get("status", "pending"),
+            h.get("lastContact", ""),
+            h.get("retorno", ""),
+            h.get("promiseDate", ""),
+            bool(h.get("tel_fixo", False)),
+        )
+        if _curr_simples != _orig_simples:
+            from data import _EMAIL_GRUPO as _EG
+            _autosave_payload = {
+                "status":      _curr_simples[0],
+                "lastContact": _curr_simples[1],
+                "retorno":     _curr_simples[2],
+                "promiseDate": _curr_simples[3],
+                "tel_fixo":    _curr_simples[4],
+                # Mantem notes atual (do widget) — se atendente digitou
+                # algo, preserva mesmo nao sendo o trigger do save
+                "notes":       notes,
+            }
+            if current_email() in _EG:
+                _autosave_payload["atendente"] = current_nome()
+            save_hist(eid, _autosave_payload)
+            # Toast silencioso (so 1 linha, sem emoji) so pra atendente
+            # ter certeza que salvou. Pode ser removido se considerar
+            # poluicao visual.
+            st.toast("Alterações salvas")
+
     # Linha "Editado por" só faz sentido em modo edição
     if not somente_leitura:
         st.markdown(f'<div style="font-size:12px;color:#8b94a5;margin-top:6px;font-weight:500">Editado por: <span style="color:#e8eaf0;font-weight:700">{current_nome()}</span></div>', unsafe_allow_html=True)
@@ -379,11 +426,13 @@ def dialog_editar(eid, from_fixados: bool = False):
     for col, acao in zip(cols, botoes):
         with col:
             if acao == "salvar":
-                if st.button("💾 Salvar alterações", width="stretch"):
-                    new = STATUS_OPTS[status_sel]
+                # Botao primario verde (mesmo padrao Concluir fixado).
+                # Pra notes principalmente — campos simples ja foram
+                # auto-saved acima. Sem emoji por decisao UX.
+                if st.button("Salvar observações", width="stretch", type="primary"):
                     from data import _EMAIL_GRUPO
                     payload = {
-                        "status":      new,
+                        "status":      STATUS_OPTS[status_sel],
                         "lastContact": last_contact.strftime("%d/%m/%Y"),
                         "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
                         "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
@@ -393,16 +442,16 @@ def dialog_editar(eid, from_fixados: bool = False):
                     if current_email() in _EMAIL_GRUPO:
                         payload["atendente"] = current_nome()
                     save_hist(eid, payload)
-                    st.toast(f"✅ {cliente['nome']} salvo!", icon="✅")
+                    st.toast(f"{cliente['nome']} salvo")
                     st.rerun()
             elif acao == "concluir":
                 if st.button("Concluir fixado", width="stretch", type="primary",
                              help="Apaga promessa/retorno; status 'promise' → 'contacted'"):
                     from data import concluir_pendencia
                     concluir_pendencia(eid)
-                    st.toast(f"{cliente['nome']} concluído", icon="✅")
+                    st.toast(f"{cliente['nome']} concluído")
                     st.rerun()
             elif acao == "cancelar":
-                rotulo = "✕ Fechar" if somente_leitura else "✕ Cancelar"
+                rotulo = "Fechar"
                 if st.button(rotulo, width="stretch"):
                     st.rerun()
