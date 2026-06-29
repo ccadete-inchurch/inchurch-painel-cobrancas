@@ -100,8 +100,12 @@ def dialog_editar(eid, from_fixados: bool = False):
 
     # Admin vê o registro como está salvo no histórico das atendentes
     # (modo read-only). Atendente vê o próprio histórico (modo edição).
+    # Admin pode ativar "Visualizar como atendente" na sidebar pra testar
+    # a UX (interagir com checkboxes/botoes). Edicoes salvam no proprio
+    # historico do admin, nao das atendentes.
     role = current_role()
-    somente_leitura = role == "admin"
+    _admin_test_mode = bool(st.session_state.get("_admin_view_as_atendente", False))
+    somente_leitura = role == "admin" and not _admin_test_mode
     h = get_hist_unificado(eid) if somente_leitura else get_hist(eid)
     if somente_leitura:
         # Texto puro em azul — sem retângulo de fundo (econômico em espaço
@@ -109,6 +113,20 @@ def dialog_editar(eid, from_fixados: bool = False):
         st.markdown(
             '<div style="color:#5fa3ff;font-size:13px;font-weight:500;'
             'margin:0 0 10px 0">👁 Modo visualização</div>',
+            unsafe_allow_html=True,
+        )
+    elif role == "admin" and _admin_test_mode:
+        # Admin em modo teste — banner amarelo de alerta. Avisa que
+        # edicoes vao pro historico do admin, nao das atendentes.
+        st.markdown(
+            '<div style="background:rgba(245,158,11,.12);border:1px solid '
+            'rgba(245,158,11,.35);color:#f59e0b;font-size:12px;font-weight:600;'
+            'padding:8px 12px;border-radius:6px;margin:0 0 10px 0">'
+            '🧪 <strong>MODO TESTE</strong> · Voce esta vendo o dialog como '
+            'uma atendente. Mudancas salvam no historico do admin, nao das '
+            'atendentes. Desative em "Teste" no sidebar pra voltar ao modo '
+            'visualizacao.'
+            '</div>',
             unsafe_allow_html=True,
         )
 
