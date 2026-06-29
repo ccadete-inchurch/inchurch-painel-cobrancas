@@ -278,26 +278,41 @@ def dialog_editar(eid, from_fixados: bool = False):
         </style>
         <div data-fixo-marker style="background:rgba(95,163,255,.08);
              border:1px solid rgba(95,163,255,.25);border-radius:8px;
-             padding:10px 14px 4px;margin:6px 0 4px 0">
+             padding:8px 14px 6px;margin:6px 0 4px 0">
             <div style="font-size:11px;color:#5fa3ff;font-weight:700;
-                 letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">
+                 letter-spacing:1px;text-transform:uppercase">
                 Registrar ligação manual
-            </div>
-            <div style="font-size:11px;color:#8b94a5;margin-bottom:8px;
-                 line-height:1.4">
-                N8N não detecta ligação em telefone fixo. Clique no botão
-                correspondente pra registrar no lote do dia.
             </div>
         </div>
         """, unsafe_allow_html=True)
+        def _atualiza_session_acao_local(cid: str, atendeu: bool):
+            """Atualiza session_state pra que o card mova de coluna
+            instantaneamente (sem esperar load_cooldowns_from_painel
+            rodar daqui ~80s). Reflete a mesma chave que aquela funcao
+            popula a partir do BQ:
+              - _painel_acoes_hoje[cid] = {msg, lig, atend}
+              - _painel_ultimo_contato_dias[cid] = 0
+              - _painel_dias_lig_tentada[cid] = 0
+              - _painel_dias_lig[cid] = 0  (so se atendeu)
+            """
+            cid_str = str(cid)
+            st.session_state.setdefault("_painel_acoes_hoje", {})
+            st.session_state.setdefault("_painel_ultimo_contato_dias", {})
+            st.session_state.setdefault("_painel_dias_lig", {})
+            st.session_state.setdefault("_painel_dias_lig_tentada", {})
+            _prev = dict(st.session_state["_painel_acoes_hoje"].get(cid_str, {}))
+            _prev["lig"] = True
+            _prev["atend"] = bool(atendeu)
+            st.session_state["_painel_acoes_hoje"][cid_str] = _prev
+            st.session_state["_painel_ultimo_contato_dias"][cid_str] = 0
+            st.session_state["_painel_dias_lig_tentada"][cid_str] = 0
+            if atendeu:
+                st.session_state["_painel_dias_lig"][cid_str] = 0
+
         b1, b2 = st.columns(2)
         with b1:
             if st.button("Atendeu", width="stretch", type="primary", key="btn_fixo_atendeu"):
                 from data import _EMAIL_GRUPO, registrar_acao_manual
-                # Persiste tudo no historico — tel_fixo + status atual.
-                # Notes usa h.get pq textarea ainda nao foi renderizado
-                # nesse ponto. Auto-save abaixo cuida do notes nos
-                # casos de mudanca apos esse botao.
                 payload = {
                     "status":      STATUS_OPTS[status_sel],
                     "lastContact": last_contact.strftime("%d/%m/%Y"),
@@ -312,6 +327,9 @@ def dialog_editar(eid, from_fixados: bool = False):
                 _atendente_nome = _EMAIL_GRUPO.get(current_email()) or payload.get("atendente", "")
                 ok = registrar_acao_manual(eid, _atendente_nome, atendeu=True)
                 if ok:
+                    # Reflete ja' no session_state pra card mover instantaneamente
+                    # pra coluna CONCLUIDA (sem esperar refresh dos cooldowns).
+                    _atualiza_session_acao_local(eid, atendeu=True)
                     st.toast("Ligação atendida registrada")
                 else:
                     st.toast("Cliente não está no lote de hoje — só status foi salvo")
@@ -333,6 +351,9 @@ def dialog_editar(eid, from_fixados: bool = False):
                 _atendente_nome = _EMAIL_GRUPO.get(current_email()) or payload.get("atendente", "")
                 ok = registrar_acao_manual(eid, _atendente_nome, atendeu=False)
                 if ok:
+                    # Card pula pra TENTAR NOVAMENTE instantaneamente
+                    # (lig=TRUE, atend=FALSE → _canal retorna tentar_novamente).
+                    _atualiza_session_acao_local(eid, atendeu=False)
                     st.toast("Tentativa registrada (não atendeu)")
                 else:
                     st.toast("Cliente não está no lote de hoje — só status foi salvo")
@@ -437,7 +458,7 @@ def dialog_editar(eid, from_fixados: bool = False):
                 # Mesma cor de Fechar (secundario cinza) — botao so aparece
                 # quando ha mudanca em notes, entao nao precisa de destaque
                 # verde. Sem emoji por decisao UX.
-                if st.button("Salvar observações", width="stretch"):
+                if st.button("Salvar alterações", width="stretch"):
                     from data import _EMAIL_GRUPO
                     payload = {
                         "status":      STATUS_OPTS[status_sel],
