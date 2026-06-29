@@ -3,7 +3,7 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
-from config import SORT_MAP, STATUS_FILTER_MAP, PAGE_SIZE
+from config import SORT_MAP, STATUS_FILTER_MAP, STATUS_LABELS, PAGE_SIZE
 from auth import get_store, current_role
 from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
 from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_esta_semana, concluir_pendencia
@@ -580,13 +580,14 @@ def _render_dashboard(store, clientes, role):
     with tb:
         # CSV exporta a base FILTRADA atual (consistente com o que aparece na tela)
         if not df.empty:
-            sl   = {"pending": "Sem contato", "contacted": "Contactado", "promise": "Prometeu pagar", "negotiating": "Negociando"}
+            # Usa STATUS_LABELS direto pra reutilizar a fonte canonica
+            # (inclui automaticamente 'Telefone errado' e 'Igreja fechada')
             rows = []
             for _, c in df.iterrows():
                 rows.append([
                     c.get("_grupo", "") or "", c["nome"], c.get("cnpj", ""), c["valor"],
                     c.get("parcelas", ""), c.get("vencimento", ""), c.get("dias_atraso", ""),
-                    sl.get(c.get("_status", "pending"), ""), c.get("_lastContact", ""), c.get("_notes", ""),
+                    STATUS_LABELS.get(c.get("_status", "pending"), ""), c.get("_lastContact", ""), c.get("_notes", ""),
                     "Sim" if c.get("_tem_acordo") else "Não",
                 ])
             df_exp = pd.DataFrame(rows, columns=["Grupo","Nome","CNPJ","Saldo","Competências","Vencimento","Dias Atraso","Status","Último Contato","Observações","Acordo"])
@@ -602,7 +603,14 @@ def _render_dashboard(store, clientes, role):
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
     # ── Filtros ───────────────────────────────────────────────────────────────
-    pill_status = st.pills("Status", ["Todos", "Sem contato", "Contactado", "Prometeu pagar", "Negociando"], default="Todos", key="fpills")
+    # Le opcoes de STATUS_FILTER_MAP (config.py) pra que 'Telefone errado'
+    # e 'Igreja fechada' apareçam automaticamente quando forem adicionados la.
+    pill_status = st.pills(
+        "Status",
+        ["Todos"] + list(STATUS_FILTER_MAP.keys()),
+        default="Todos",
+        key="fpills",
+    )
 
     # 'nan' (string) cai aqui quando _grupo veio de pandas com NaN convertido
     # via str() em algum ponto do pipeline. Trata junto com None, '—' e ''
