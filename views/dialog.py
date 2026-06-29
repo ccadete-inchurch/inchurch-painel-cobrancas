@@ -350,46 +350,49 @@ def dialog_editar(eid, from_fixados: bool = False):
 
     # ── AUTO-SAVE dos campos simples ──────────────────────────────────────
     # Status, datas e checkboxes salvam automaticamente quando atendente
-    # interage. Notes (textarea) so salva via botao Salvar pra evitar
-    # write em BQ a cada keystroke. Cada rerun verifica se algum campo
-    # nao-notes mudou em relacao a h e persiste a mudanca.
+    # MUDA o valor (vs o EXPECTED DEFAULT que o widget renderiza ao abrir).
+    # Notes (textarea) so salva via botao Salvar.
     #
-    # Resposta direta a duvida: 'se atendente marca Telefone fixo e fecha
-    # sem clicar Atendeu/Nao atendeu, o flag SE PERDIA antes — agora salva
-    # imediato no rerun que dispara quando o checkbox e clicado.'
+    # Por que comparar com EXPECTED em vez de h: o widget de data defaulta
+    # pra HOJE quando h.lastContact e' vazio. Sem essa normalizacao, abrir
+    # o dialog ja disparava auto-save (curr=hoje != orig="") e a card
+    # mudava de posicao no kanban por mudanca de score.
     if not somente_leitura:
-        _curr_simples = (
-            STATUS_OPTS[status_sel],
-            last_contact.strftime("%d/%m/%Y") if last_contact else "",
-            retorno.strftime("%d/%m/%Y") if retorno else "",
-            promise_date.strftime("%d/%m/%Y") if promise_date else "",
-            bool(tel_fixo),
+        _today_str = date.today().strftime("%d/%m/%Y")
+        # Valor que o widget renderizou ao abrir (o que h gera por default).
+        # Se h tem o campo, usa h. Senao, usa o default do widget (hoje
+        # pra datas, vazio pra strings, False pra checkboxes).
+        _expected_last_contact = h.get("lastContact") or _today_str
+        _expected_retorno = h.get("retorno") or ""  # se h vazio, widget=None → ""
+        _expected_promise = h.get("promiseDate") or ""
+        _expected_tel_fixo = bool(h.get("tel_fixo", False))
+        _expected_status = h.get("status", "pending")
+
+        _curr_last_contact = last_contact.strftime("%d/%m/%Y") if last_contact else ""
+        _curr_retorno = retorno.strftime("%d/%m/%Y") if retorno else ""
+        _curr_promise = promise_date.strftime("%d/%m/%Y") if promise_date else ""
+        _curr_status = STATUS_OPTS[status_sel]
+
+        _mudou = (
+            _curr_status != _expected_status
+            or _curr_last_contact != _expected_last_contact
+            or _curr_retorno != _expected_retorno
+            or _curr_promise != _expected_promise
+            or bool(tel_fixo) != _expected_tel_fixo
         )
-        _orig_simples = (
-            h.get("status", "pending"),
-            h.get("lastContact", ""),
-            h.get("retorno", ""),
-            h.get("promiseDate", ""),
-            bool(h.get("tel_fixo", False)),
-        )
-        if _curr_simples != _orig_simples:
+        if _mudou:
             from data import _EMAIL_GRUPO as _EG
             _autosave_payload = {
-                "status":      _curr_simples[0],
-                "lastContact": _curr_simples[1],
-                "retorno":     _curr_simples[2],
-                "promiseDate": _curr_simples[3],
-                "tel_fixo":    _curr_simples[4],
-                # Mantem notes atual (do widget) — se atendente digitou
-                # algo, preserva mesmo nao sendo o trigger do save
+                "status":      _curr_status,
+                "lastContact": _curr_last_contact,
+                "retorno":     _curr_retorno,
+                "promiseDate": _curr_promise,
+                "tel_fixo":    bool(tel_fixo),
                 "notes":       notes,
             }
             if current_email() in _EG:
                 _autosave_payload["atendente"] = current_nome()
             save_hist(eid, _autosave_payload)
-            # Toast silencioso (so 1 linha, sem emoji) so pra atendente
-            # ter certeza que salvou. Pode ser removido se considerar
-            # poluicao visual.
             st.toast("Alterações salvas")
 
     # Linha "Editado por" só faz sentido em modo edição
