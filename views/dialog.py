@@ -253,31 +253,15 @@ def dialog_editar(eid, from_fixados: bool = False):
                  "Forca o lote a colocar em LIGACAO e habilita botoes manuais.",
         )
 
-    promise_date = None
-    if STATUS_OPTS[status_sel] == "promise":
-        promise_date = st.date_input(
-            "Data que prometeu pagar",
-            value=datetime.strptime(h["promiseDate"], "%d/%m/%Y").date() if h.get("promiseDate") else date.today(),
-            disabled=somente_leitura,
-        )
-
-    notes = st.text_area("Observações", value=h.get("notes", ""), placeholder="Ex: Cliente pediu prazo até sexta...", height=100, disabled=somente_leitura)
-
-    # Botoes manuais de registro de ligacao (so aparecem quando tel_fixo=true).
-    # N8N nao detecta atividade em telefone fixo, atendente registra aqui.
-    # 'Atendeu' usa estilo primary verde (igual Concluir fixado).
-    # 'Nao atendeu' vermelho como badge inadimplente — CSS abaixo.
+    # Botoes manuais de registro de ligacao — APARECEM LOGO ABAIXO DO
+    # CHECKBOX (visualmente agrupados) so quando tel_fixo=true. N8N
+    # nao detecta atividade em telefone fixo, atendente registra aqui.
+    # Salvar/Cancelar continuam no rodape (acoes finais separadas).
     if tel_fixo and not somente_leitura:
-        st.markdown(
-            '<div style="font-size:12px;font-weight:700;color:#8b94a5;'
-            'letter-spacing:1.2px;text-transform:uppercase;margin:10px 0 4px 0">'
-            'Registrar ligação manualmente</div>',
-            unsafe_allow_html=True,
-        )
+        # CSS pra deixar o 'Nao atendeu' vermelho — marcador acima do row
+        # de colunas pra escopar a regra so a esses 2 botoes.
         st.markdown("""
         <style>
-        /* Vermelho inadimplente no botao 'Nao atendeu' — usa o segundo
-           botao secundario dentro do row 'fixo-buttons' (marcador acima). */
         div[role="dialog"] div[data-testid="stElementContainer"]:has(div[data-fixo-marker])
             + div[data-testid="stHorizontalBlock"]
             div[data-testid="stColumn"]:nth-of-type(2) button {
@@ -292,7 +276,19 @@ def dialog_editar(eid, from_fixados: bool = False):
             border-color: #d94040 !important;
         }
         </style>
-        <div data-fixo-marker></div>
+        <div data-fixo-marker style="background:rgba(95,163,255,.08);
+             border:1px solid rgba(95,163,255,.25);border-radius:8px;
+             padding:10px 14px 4px;margin:6px 0 4px 0">
+            <div style="font-size:11px;color:#5fa3ff;font-weight:700;
+                 letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">
+                📞 Registrar ligação manual
+            </div>
+            <div style="font-size:11px;color:#8b94a5;margin-bottom:8px;
+                 line-height:1.4">
+                N8N não detecta ligação em telefone fixo. Clique no botão
+                correspondente pra registrar no lote do dia.
+            </div>
+        </div>
         """, unsafe_allow_html=True)
         b1, b2 = st.columns(2)
         with b1:
@@ -303,8 +299,8 @@ def dialog_editar(eid, from_fixados: bool = False):
                     "status":      STATUS_OPTS[status_sel],
                     "lastContact": last_contact.strftime("%d/%m/%Y"),
                     "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
-                    "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
-                    "notes":       notes,
+                    "promiseDate": "",  # promise_date nao foi definido ainda nesse ponto
+                    "notes":       h.get("notes", ""),  # mantem notes atual
                     "tel_fixo":    True,
                 }
                 if current_email() in _EMAIL_GRUPO:
@@ -325,8 +321,8 @@ def dialog_editar(eid, from_fixados: bool = False):
                     "status":      STATUS_OPTS[status_sel],
                     "lastContact": last_contact.strftime("%d/%m/%Y"),
                     "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
-                    "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
-                    "notes":       notes,
+                    "promiseDate": "",
+                    "notes":       h.get("notes", ""),
                     "tel_fixo":    True,
                 }
                 if current_email() in _EMAIL_GRUPO:
@@ -339,6 +335,16 @@ def dialog_editar(eid, from_fixados: bool = False):
                 else:
                     st.toast("⚠️ Cliente não está no lote de hoje — só status foi salvo", icon="⚠️")
                 st.rerun()
+
+    promise_date = None
+    if STATUS_OPTS[status_sel] == "promise":
+        promise_date = st.date_input(
+            "Data que prometeu pagar",
+            value=datetime.strptime(h["promiseDate"], "%d/%m/%Y").date() if h.get("promiseDate") else date.today(),
+            disabled=somente_leitura,
+        )
+
+    notes = st.text_area("Observações", value=h.get("notes", ""), placeholder="Ex: Cliente pediu prazo até sexta...", height=100, disabled=somente_leitura)
     # Linha "Editado por" só faz sentido em modo edição
     if not somente_leitura:
         st.markdown(f'<div style="font-size:12px;color:#8b94a5;margin-top:6px;font-weight:500">Editado por: <span style="color:#e8eaf0;font-weight:700">{current_nome()}</span></div>', unsafe_allow_html=True)
