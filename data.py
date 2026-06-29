@@ -2064,6 +2064,48 @@ def ensure_historico_table():
         pass
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_status_clientes_uid(uid: str) -> dict:
+    """Le o status (campo .status do historico_json) por cliente, pra um uid.
+
+    Usado pra filtrar quem nao deve cair no lote diario (status em
+    STATUS_SEM_CONTATO = {'telefone_errado', 'igreja_fechada'}).
+
+    Diferente de get_hist() que precisa de session_state populado,
+    essa funcao consulta BQ direto — funciona tambem no cron headless.
+
+    Retorna {cliente_id_str: status_str}. So inclui clientes que tem
+    status definido (pular nulls/vazios).
+    """
+    client = get_bq_client()
+    if not client:
+        return {}
+    query = f"""
+    SELECT
+      cliente_id,
+      JSON_EXTRACT_SCALAR(historico_json, '$.status') AS status
+    FROM (
+      SELECT cliente_id, historico_json,
+             ROW_NUMBER() OVER (PARTITION BY cliente_id ORDER BY updated_at DESC) AS rn
+      FROM `{_HIST_TABLE}`
+      WHERE uid = @uid
+    )
+    WHERE rn = 1
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("uid", "STRING", uid)]
+    )
+    try:
+        df = client.query(query, job_config=job_config).to_dataframe()
+        return {
+            str(r["cliente_id"]): r["status"]
+            for _, r in df.iterrows()
+            if r["status"]
+        }
+    except Exception:
+        return {}
+
+
 def load_historico_from_bq():
     """Carrega historico do BQ para o session_state.
 
@@ -2786,10 +2828,21 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
     # Exclui clientes já regularizados (pago via API hoje OU últimos 3 dias).
     # Sem essa filtragem, cliente que pagou sex aparecia no lote da seg porque
     # BQ ainda não tinha replicado a liquidação (compensação D+1/D+2).
+    #
+    # Tambem exclui clientes marcados como 'telefone_errado' ou 'igreja_fechada'
+    # pela atendente (STATUS_SEM_CONTATO). Sem isso, cliente com telefone errado
+    # voltaria pro lote todo dia, gerando trabalho zero (atendente nao consegue
+    # contatar). Atendente desmarca quando o problema for resolvido (telefone
+    # consertado no SL ou igreja reabriu) — proximo cron pega de novo.
+    import hashlib
+    from config import STATUS_SEM_CONTATO
+    uid_atendente = hashlib.md5(email_logado.encode()).hexdigest()
+    status_por_cid = fetch_status_clientes_uid(uid_atendente)
     grupo_clientes = [
         c for c in clientes
         if c.get("_grupo") == atendente
         and not c.get("_regularizado_hoje")
+        and status_por_cid.get(str(c.get("id", ""))) not in STATUS_SEM_CONTATO
     ]
     pares = selecionar_lote_com_quotas(grupo_clientes, lote_clientes=[])
     buckets = {cid: bucket for cid, bucket in pares}

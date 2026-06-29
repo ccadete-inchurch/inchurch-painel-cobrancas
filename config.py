@@ -18,30 +18,43 @@ SORT_MAP = {
 
 # ── Status ────────────────────────────────────────────────────────────────────
 STATUS_LABELS = {
-    "pending":     "Sem contato",
-    "contacted":   "Contactado",
-    "promise":     "Prometeu pagar",
-    "negotiating": "Negociando",
+    "pending":          "Sem contato",
+    "contacted":        "Contactado",
+    "promise":          "Prometeu pagar",
+    "negotiating":      "Negociando",
+    "telefone_errado":  "Telefone errado",
+    "igreja_fechada":   "Igreja fechada",
 }
 STATUS_COLORS = {
-    "pending":     "#ef4444",
-    "contacted":   "#f59e0b",
-    "promise":     "#f97316",
-    "negotiating": "#5fa3ff",
+    "pending":          "#ef4444",
+    "contacted":        "#f59e0b",
+    "promise":          "#f97316",
+    "negotiating":      "#5fa3ff",
+    "telefone_errado":  "#9ca3af",  # cinza neutro — sem urgência operacional
+    "igreja_fechada":   "#6b7280",  # cinza mais escuro — encerramento definitivo
 }
+# Status que IMPEDEM o cliente de cair no lote do dia (atendente nao consegue
+# contatar). Cliente continua aparecendo nas outras telas, so e' excluido
+# da geracao do lote operacional e do kanban de hoje.
+STATUS_SEM_CONTATO = {"telefone_errado", "igreja_fechada"}
+
 # Chave de exibição (com emoji) → chave interna  (usado no dialog de edição)
 STATUS_OPTS = {
-    "Sem contato":    "pending",
-    "Contactado":     "contacted",
-    "Prometeu pagar": "promise",
-    "Negociando":     "negotiating",
+    "Sem contato":      "pending",
+    "Contactado":       "contacted",
+    "Prometeu pagar":   "promise",
+    "Negociando":       "negotiating",
+    "Telefone errado":  "telefone_errado",
+    "Igreja fechada":   "igreja_fechada",
 }
 # Rótulo da pill → chave interna  (usado no filtro do dashboard)
 STATUS_FILTER_MAP = {
-    "Sem contato":    "pending",
-    "Contactado":     "contacted",
-    "Prometeu pagar": "promise",
-    "Negociando":     "negotiating",
+    "Sem contato":      "pending",
+    "Contactado":       "contacted",
+    "Prometeu pagar":   "promise",
+    "Negociando":       "negotiating",
+    "Telefone errado":  "telefone_errado",
+    "Igreja fechada":   "igreja_fechada",
 }
 
 # ── Logo ──────────────────────────────────────────────────────────────────────

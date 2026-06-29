@@ -1122,6 +1122,17 @@ def _render_atividades(store, clientes, role):
             fila.append((calcular_score(c, h), recomendar_acao(c), c, h))
         fila.sort(key=lambda x: x[0], reverse=True)
 
+        # Filtro live: clientes marcados como 'telefone_errado' ou
+        # 'igreja_fechada' somem do kanban imediatamente (sem esperar o
+        # proximo cron). Continuam aparecendo em outras telas (Inadimplencia,
+        # Pagamentos, Cliente). Atendente desmarca via dialog quando
+        # problema resolver.
+        from config import STATUS_SEM_CONTATO
+        fila = [
+            (s, a, c, h) for s, a, c, h in fila
+            if (h or {}).get("status") not in STATUS_SEM_CONTATO
+        ]
+
         # ── Aplica filtros (lê do session_state, preserva entre runs) ─────────
         if filtro_grupo == "Sem especialista":
             # Cliente sem grupo: None, '', '—' ou 'nan' (string)
