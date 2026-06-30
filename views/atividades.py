@@ -1086,7 +1086,15 @@ def _render_atividades(store, clientes, role):
                 "Total" if not _eh_filtrado else "Filtrado",
             )
 
-        meta_msg, meta_lig, meta_atend = 50, 30, 15
+        # Metas dependem do contexto:
+        # - Atendente logada / admin em 'Lote do dia + X' / admin filtrado por
+        #   grupo especifico: 1 lote (80 clientes) → 50 msg + 30 lig + 15 atend
+        # - Admin em 'Todos os clientes' SEM filtro: 2 lotes (Ana + Priscila,
+        #   ~160 clientes) → metas dobradas → 100 msg + 60 lig + 30 atend
+        if label_m == "Total":
+            meta_msg, meta_lig, meta_atend = 100, 60, 30
+        else:
+            meta_msg, meta_lig, meta_atend = 50, 30, 15
         n_msg, n_lig, n_atend = dados_m.get("mensagens", 0), dados_m.get("ligacoes", 0), dados_m.get("atendidas", 0)
 
         # Nome do especialista removido daqui por feedback — não agrega valor,
