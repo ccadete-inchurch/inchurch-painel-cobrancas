@@ -223,7 +223,7 @@ def dialog_editar(eid, from_fixados: bool = False):
         disabled=somente_leitura,
     )
 
-    d1, d2, d3 = st.columns([2, 1.5, 1.5])
+    d1, d2, d3 = st.columns(3)
     with d1:
         last_contact = st.date_input(
             "Último Contato",
@@ -253,111 +253,23 @@ def dialog_editar(eid, from_fixados: bool = False):
                  "Forca o lote a colocar em LIGACAO e habilita botoes manuais.",
         )
 
-    # Botoes manuais de registro de ligacao — APARECEM LOGO ABAIXO DO
-    # CHECKBOX (visualmente agrupados) so quando tel_fixo=true. N8N
-    # nao detecta atividade em telefone fixo, atendente registra aqui.
-    # Sem emojis nos botoes ou no header (decisao UX).
+    # CSS pra 'Nao atendeu' vermelho — coluna marcada com data-naoatend.
+    # Botoes Atendeu/Nao atendeu agora estao no rodape do dialog,
+    # nao mais numa box no meio (reduz poluicao visual).
     if tel_fixo and not somente_leitura:
-        # CSS pra deixar o 'Nao atendeu' vermelho — marcador acima do row
-        # de colunas pra escopar a regra so a esses 2 botoes.
         st.markdown("""
         <style>
-        div[role="dialog"] div[data-testid="stElementContainer"]:has(div[data-fixo-marker])
-            + div[data-testid="stHorizontalBlock"]
-            div[data-testid="stColumn"]:nth-of-type(2) button {
+        div[role="dialog"] div[data-testid="stColumn"]:has(div[data-naoatend]) button {
             background-color: #ff5555 !important;
             border-color: #ff5555 !important;
             color: #ffffff !important;
         }
-        div[role="dialog"] div[data-testid="stElementContainer"]:has(div[data-fixo-marker])
-            + div[data-testid="stHorizontalBlock"]
-            div[data-testid="stColumn"]:nth-of-type(2) button:hover {
+        div[role="dialog"] div[data-testid="stColumn"]:has(div[data-naoatend]) button:hover {
             background-color: #d94040 !important;
             border-color: #d94040 !important;
         }
         </style>
-        <div data-fixo-marker style="background:rgba(95,163,255,.08);
-             border:1px solid rgba(95,163,255,.25);border-radius:8px;
-             padding:8px 14px 6px;margin:6px 0 4px 0">
-            <div style="font-size:11px;color:#5fa3ff;font-weight:700;
-                 letter-spacing:1px;text-transform:uppercase">
-                Registrar ligação manual
-            </div>
-        </div>
         """, unsafe_allow_html=True)
-        def _atualiza_session_acao_local(cid: str, atendeu: bool):
-            """Atualiza session_state pra que o card mova de coluna
-            instantaneamente (sem esperar load_cooldowns_from_painel
-            rodar daqui ~80s). Reflete a mesma chave que aquela funcao
-            popula a partir do BQ:
-              - _painel_acoes_hoje[cid] = {msg, lig, atend}
-              - _painel_ultimo_contato_dias[cid] = 0
-              - _painel_dias_lig_tentada[cid] = 0
-              - _painel_dias_lig[cid] = 0  (so se atendeu)
-            """
-            cid_str = str(cid)
-            st.session_state.setdefault("_painel_acoes_hoje", {})
-            st.session_state.setdefault("_painel_ultimo_contato_dias", {})
-            st.session_state.setdefault("_painel_dias_lig", {})
-            st.session_state.setdefault("_painel_dias_lig_tentada", {})
-            _prev = dict(st.session_state["_painel_acoes_hoje"].get(cid_str, {}))
-            _prev["lig"] = True
-            _prev["atend"] = bool(atendeu)
-            st.session_state["_painel_acoes_hoje"][cid_str] = _prev
-            st.session_state["_painel_ultimo_contato_dias"][cid_str] = 0
-            st.session_state["_painel_dias_lig_tentada"][cid_str] = 0
-            if atendeu:
-                st.session_state["_painel_dias_lig"][cid_str] = 0
-
-        b1, b2 = st.columns(2)
-        with b1:
-            if st.button("Atendeu", width="stretch", type="primary", key="btn_fixo_atendeu"):
-                from data import _EMAIL_GRUPO, registrar_acao_manual
-                payload = {
-                    "status":      STATUS_OPTS[status_sel],
-                    "lastContact": last_contact.strftime("%d/%m/%Y"),
-                    "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
-                    "promiseDate": "",
-                    "notes":       h.get("notes", ""),
-                    "tel_fixo":    True,
-                }
-                if current_email() in _EMAIL_GRUPO:
-                    payload["atendente"] = current_nome()
-                save_hist(eid, payload)
-                _atendente_nome = _EMAIL_GRUPO.get(current_email()) or payload.get("atendente", "")
-                ok = registrar_acao_manual(eid, _atendente_nome, atendeu=True)
-                if ok:
-                    # Reflete ja' no session_state pra card mover instantaneamente
-                    # pra coluna CONCLUIDA (sem esperar refresh dos cooldowns).
-                    _atualiza_session_acao_local(eid, atendeu=True)
-                    st.toast("Ligação atendida registrada")
-                else:
-                    st.toast("Cliente não está no lote de hoje — só status foi salvo")
-                st.rerun()
-        with b2:
-            if st.button("Não atendeu", width="stretch", key="btn_fixo_naoatendeu"):
-                from data import _EMAIL_GRUPO, registrar_acao_manual
-                payload = {
-                    "status":      STATUS_OPTS[status_sel],
-                    "lastContact": last_contact.strftime("%d/%m/%Y"),
-                    "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
-                    "promiseDate": "",
-                    "notes":       h.get("notes", ""),
-                    "tel_fixo":    True,
-                }
-                if current_email() in _EMAIL_GRUPO:
-                    payload["atendente"] = current_nome()
-                save_hist(eid, payload)
-                _atendente_nome = _EMAIL_GRUPO.get(current_email()) or payload.get("atendente", "")
-                ok = registrar_acao_manual(eid, _atendente_nome, atendeu=False)
-                if ok:
-                    # Card pula pra TENTAR NOVAMENTE instantaneamente
-                    # (lig=TRUE, atend=FALSE → _canal retorna tentar_novamente).
-                    _atualiza_session_acao_local(eid, atendeu=False)
-                    st.toast("Tentativa registrada (não atendeu)")
-                else:
-                    st.toast("Cliente não está no lote de hoje — só status foi salvo")
-                st.rerun()
 
     promise_date = None
     if STATUS_OPTS[status_sel] == "promise":
@@ -369,25 +281,24 @@ def dialog_editar(eid, from_fixados: bool = False):
 
     notes = st.text_area("Observações", value=h.get("notes", ""), placeholder="Ex: Cliente pediu prazo até sexta...", height=100, disabled=somente_leitura)
 
-    # ── AUTO-SAVE dos campos simples ──────────────────────────────────────
-    # Status, datas e checkboxes salvam automaticamente quando atendente
-    # MUDA o valor (vs o EXPECTED DEFAULT que o widget renderiza ao abrir).
-    # Notes (textarea) so salva via botao Salvar.
+    # ── AUTO-SAVE de TODOS os campos (incluindo notes) ───────────────────
+    # Status, datas, checkboxes e notes salvam automaticamente quando
+    # atendente MUDA o valor (vs o EXPECTED DEFAULT que o widget renderiza
+    # ao abrir). Notes salva no blur do textarea (Streamlit rerun apos
+    # perder foco) — nao a cada keystroke.
     #
     # Por que comparar com EXPECTED em vez de h: o widget de data defaulta
     # pra HOJE quando h.lastContact e' vazio. Sem essa normalizacao, abrir
-    # o dialog ja disparava auto-save (curr=hoje != orig="") e a card
+    # o dialog ja disparava auto-save (curr=hoje != orig="") e o card
     # mudava de posicao no kanban por mudanca de score.
     if not somente_leitura:
         _today_str = date.today().strftime("%d/%m/%Y")
-        # Valor que o widget renderizou ao abrir (o que h gera por default).
-        # Se h tem o campo, usa h. Senao, usa o default do widget (hoje
-        # pra datas, vazio pra strings, False pra checkboxes).
         _expected_last_contact = h.get("lastContact") or _today_str
-        _expected_retorno = h.get("retorno") or ""  # se h vazio, widget=None → ""
+        _expected_retorno = h.get("retorno") or ""
         _expected_promise = h.get("promiseDate") or ""
         _expected_tel_fixo = bool(h.get("tel_fixo", False))
         _expected_status = h.get("status", "pending")
+        _expected_notes = h.get("notes", "")
 
         _curr_last_contact = last_contact.strftime("%d/%m/%Y") if last_contact else ""
         _curr_retorno = retorno.strftime("%d/%m/%Y") if retorno else ""
@@ -400,6 +311,7 @@ def dialog_editar(eid, from_fixados: bool = False):
             or _curr_retorno != _expected_retorno
             or _curr_promise != _expected_promise
             or bool(tel_fixo) != _expected_tel_fixo
+            or notes != _expected_notes
         )
         if _mudou:
             from data import _EMAIL_GRUPO as _EG
@@ -434,53 +346,89 @@ def dialog_editar(eid, from_fixados: bool = False):
         d = parse_date_br(h["retorno"])
         eh_fixado = bool(d and d <= hoje)
 
-    # Monta lista de botões dinamicamente baseado em role + se é fixado +
-    # origem da chamada. "Concluir fixado" só aparece quando o dialog foi
-    # aberto da seção Clientes Fixados (dashboard) — em outros lugares
-    # (Atividades, Cliente, tabela Inadimplência) o botão não faz sentido
-    # operacional porque a atendente não tá no contexto de gestão de fixados.
-    #
-    # "Salvar observações" so aparece quando o textarea de notes mudou
-    # vs o que esta salvo em h. Resto dos campos (status, datas, checkboxes)
-    # ja salvam automatico no auto-save block acima — botao seria redundante.
-    _notes_mudou = (not somente_leitura) and (notes != h.get("notes", ""))
+    # Botoes do rodape — minimalistas. Salvar/Fechar foram removidos:
+    # - Salvar: auto-save acima cuida de tudo (incluindo notes)
+    # - Fechar: usar o X nativo do dialog (top-right) — redundancia
+    # Atendeu / Nao atendeu so aparecem quando tel_fixo=true (registro
+    # manual da ligacao no painel_tarefas_diarias).
+    # Concluir fixado so quando vier de Clientes Fixados (dashboard).
+    def _atualiza_session_acao_local(cid: str, atendeu: bool):
+        """Atualiza session_state pra card mover de coluna instantaneamente
+        (sem esperar load_cooldowns_from_painel rodar daqui ~80s)."""
+        cid_str = str(cid)
+        st.session_state.setdefault("_painel_acoes_hoje", {})
+        st.session_state.setdefault("_painel_ultimo_contato_dias", {})
+        st.session_state.setdefault("_painel_dias_lig", {})
+        st.session_state.setdefault("_painel_dias_lig_tentada", {})
+        _prev = dict(st.session_state["_painel_acoes_hoje"].get(cid_str, {}))
+        _prev["lig"] = True
+        _prev["atend"] = bool(atendeu)
+        st.session_state["_painel_acoes_hoje"][cid_str] = _prev
+        st.session_state["_painel_ultimo_contato_dias"][cid_str] = 0
+        st.session_state["_painel_dias_lig_tentada"][cid_str] = 0
+        if atendeu:
+            st.session_state["_painel_dias_lig"][cid_str] = 0
+
     botoes = []
-    if _notes_mudou:
-        botoes.append("salvar")
+    if tel_fixo and not somente_leitura:
+        botoes.extend(["atendeu", "naoatendeu"])
     if eh_fixado and from_fixados:
         botoes.append("concluir")
-    botoes.append("cancelar")
 
-    cols = st.columns(len(botoes))
-    for col, acao in zip(cols, botoes):
-        with col:
-            if acao == "salvar":
-                # Mesma cor de Fechar (secundario cinza) — botao so aparece
-                # quando ha mudanca em notes, entao nao precisa de destaque
-                # verde. Sem emoji por decisao UX.
-                if st.button("Salvar alterações", width="stretch"):
-                    from data import _EMAIL_GRUPO
-                    payload = {
-                        "status":      STATUS_OPTS[status_sel],
-                        "lastContact": last_contact.strftime("%d/%m/%Y"),
-                        "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
-                        "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
-                        "notes":       notes,
-                        "tel_fixo":    bool(tel_fixo),
-                    }
-                    if current_email() in _EMAIL_GRUPO:
-                        payload["atendente"] = current_nome()
-                    save_hist(eid, payload)
-                    st.toast(f"{cliente['nome']} salvo")
-                    st.rerun()
-            elif acao == "concluir":
-                if st.button("Concluir fixado", width="stretch", type="primary",
-                             help="Apaga promessa/retorno; status 'promise' → 'contacted'"):
-                    from data import concluir_pendencia
-                    concluir_pendencia(eid)
-                    st.toast(f"{cliente['nome']} concluído")
-                    st.rerun()
-            elif acao == "cancelar":
-                rotulo = "Fechar"
-                if st.button(rotulo, width="stretch"):
-                    st.rerun()
+    if botoes:
+        cols = st.columns(len(botoes))
+        for col, acao in zip(cols, botoes):
+            with col:
+                if acao == "atendeu":
+                    if st.button("Atendeu", width="stretch", type="primary", key="btn_fixo_atendeu"):
+                        from data import _EMAIL_GRUPO, registrar_acao_manual
+                        payload = {
+                            "status":      STATUS_OPTS[status_sel],
+                            "lastContact": last_contact.strftime("%d/%m/%Y"),
+                            "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
+                            "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
+                            "notes":       notes,
+                            "tel_fixo":    True,
+                        }
+                        if current_email() in _EMAIL_GRUPO:
+                            payload["atendente"] = current_nome()
+                        save_hist(eid, payload)
+                        _atendente_nome = _EMAIL_GRUPO.get(current_email()) or payload.get("atendente", "")
+                        ok = registrar_acao_manual(eid, _atendente_nome, atendeu=True)
+                        if ok:
+                            _atualiza_session_acao_local(eid, atendeu=True)
+                            st.toast("Ligação atendida registrada")
+                        else:
+                            st.toast("Cliente não está no lote de hoje — só status foi salvo")
+                        st.rerun()
+                elif acao == "naoatendeu":
+                    # Marcador pra CSS vermelho da coluna
+                    st.markdown('<div data-naoatend></div>', unsafe_allow_html=True)
+                    if st.button("Não atendeu", width="stretch", key="btn_fixo_naoatendeu"):
+                        from data import _EMAIL_GRUPO, registrar_acao_manual
+                        payload = {
+                            "status":      STATUS_OPTS[status_sel],
+                            "lastContact": last_contact.strftime("%d/%m/%Y"),
+                            "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
+                            "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
+                            "notes":       notes,
+                            "tel_fixo":    True,
+                        }
+                        if current_email() in _EMAIL_GRUPO:
+                            payload["atendente"] = current_nome()
+                        save_hist(eid, payload)
+                        _atendente_nome = _EMAIL_GRUPO.get(current_email()) or payload.get("atendente", "")
+                        ok = registrar_acao_manual(eid, _atendente_nome, atendeu=False)
+                        if ok:
+                            _atualiza_session_acao_local(eid, atendeu=False)
+                            st.toast("Tentativa registrada (não atendeu)")
+                        else:
+                            st.toast("Cliente não está no lote de hoje — só status foi salvo")
+                        st.rerun()
+                elif acao == "concluir":
+                    if st.button("Concluir fixado", width="stretch", type="primary",
+                                 help="Apaga promessa/retorno; status 'promise' → 'contacted'"):
+                        from data import concluir_pendencia
+                        concluir_pendencia(eid)
+                        st.toast(f"{cliente['nome']} concluído")
+                        st.rerun()
