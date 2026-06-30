@@ -1240,11 +1240,16 @@ def _render_atividades(store, clientes, role):
             # forca coluna LIGACAO mesmo que o lote tenha gerado bucket=mensagem
             # (caso a marcacao seja posterior ao cron 08:15). Cliente nunca
             # deve cair em MSG quando tem so telefone fixo (N8N nao detecta).
+            #
+            # IMPORTANTE: c['_tel_fixo'] e' SEMPRE setado (True ou False) pra
+            # evitar vazamento de estado entre renders. Se atendente desmarca
+            # o checkbox, h.tel_fixo vira False — sem essa atribuicao explicita,
+            # c['_tel_fixo'] continuaria True da render anterior e o badge
+            # 'TELEFONE FIXO' ficaria preso no card.
             _tel_fixo = bool((h or {}).get("tel_fixo"))
+            c["_tel_fixo"] = _tel_fixo
             if _tel_fixo:
                 bucket = "ligacao"
-                # Injeta no cliente pra _render_card poder ler e mostrar badge
-                c["_tel_fixo"] = True
             acoes_hj = get_painel_acoes_hoje(c["id"])
             eh_acordo = bool(c.get("_tem_acordo")) and (c.get("dias_atraso") or 0) >= 7
             _streak = get_streak_cooldown_dias(c["id"])

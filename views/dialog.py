@@ -249,16 +249,24 @@ def dialog_editar(eid, from_fixados: bool = False):
             "Telefone fixo",
             value=bool(h.get("tel_fixo", False)),
             disabled=somente_leitura,
-            help="Cliente so atende em telefone fixo (sem WhatsApp). "
-                 "Forca o lote a colocar em LIGACAO e habilita botoes manuais.",
+            help="Cliente só atende em telefone fixo (sem WhatsApp). "
+                 "Força o lote a colocar em LIGAÇÃO e habilita botões "
+                 "manuais (Atendeu / Não atendeu) no rodapé.",
         )
 
     # CSS pra 'Nao atendeu' vermelho — coluna marcada com data-naoatend.
     # Botoes Atendeu/Nao atendeu agora estao no rodape do dialog,
     # nao mais numa box no meio (reduz poluicao visual).
+    # IMPORTANTE: tambem esconde o stElementContainer do marker (que tem
+    # padding/margin e desalinha o botao 'Nao atendeu' verticalmente
+    # em relacao ao 'Atendeu' da coluna ao lado).
     if tel_fixo and not somente_leitura:
         st.markdown("""
         <style>
+        /* Esconde o wrapper do marker pra nao tomar espaco vertical */
+        div[role="dialog"] div[data-testid="stElementContainer"]:has(div[data-naoatend]) {
+            display: none !important;
+        }
         div[role="dialog"] div[data-testid="stColumn"]:has(div[data-naoatend]) button {
             background-color: #ff5555 !important;
             border-color: #ff5555 !important;
