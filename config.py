@@ -38,10 +38,12 @@ STATUS_COLORS = {
 # da geracao do lote operacional e do kanban de hoje.
 STATUS_SEM_CONTATO = {"telefone_errado", "igreja_fechada"}
 
-# Chave de exibição (com emoji) → chave interna  (usado no dialog de edição)
+# Chave de exibição → chave interna (usado no dropdown de edição do dialog).
+# Apenas DECISOES INTENCIONAIS da atendente. 'Sem contato' (pending) e
+# 'Contactado' (contacted) sao derivados AUTOMATICAMENTE por
+# get_effective_status com base em atividade do bot/painel — nao aparecem
+# como opcoes pra evitar confusao (atendente nao precisa selecionar manual).
 STATUS_OPTS = {
-    "Sem contato":      "pending",
-    "Contactado":       "contacted",
     "Prometeu pagar":   "promise",
     "Negociando":       "negotiating",
     "Telefone errado":  "telefone_errado",

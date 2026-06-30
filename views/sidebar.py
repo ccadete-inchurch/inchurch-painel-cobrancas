@@ -68,26 +68,6 @@ def render_sidebar():
     if current_role() == "admin":
         nav_item("Especialista",   "especialista")
 
-    # Modo Atendente (só admin) — permite testar a UX que as atendentes
-    # tem nos dialogs. Quando ativo, somente_leitura vira False mesmo
-    # pra admin e ele pode interagir com checkboxes/botoes do dialog.
-    # Util pra validar fluxo de telefone fixo, status etc.
-    if current_role() == "admin":
-        st.sidebar.markdown(
-            '<div style="padding:10px 20px 4px">'
-            '<div style="font-size:10px;color:#374151;text-transform:uppercase;'
-            'letter-spacing:1.5px;font-weight:700">Teste</div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        st.sidebar.checkbox(
-            "👁 Visualizar como atendente",
-            key="_admin_view_as_atendente",
-            help="Permite admin interagir com dialogs como uma atendente "
-                 "(testar checkbox 'Telefone fixo', botoes etc). Edicoes "
-                 "salvam no historico do admin, nao das atendentes.",
-        )
-
     # Spacer pra não esconder último nav atrás do botão Sair (fixed bottom)
     st.sidebar.markdown('<div style="height:70px"></div>', unsafe_allow_html=True)
 

@@ -100,12 +100,8 @@ def dialog_editar(eid, from_fixados: bool = False):
 
     # Admin vê o registro como está salvo no histórico das atendentes
     # (modo read-only). Atendente vê o próprio histórico (modo edição).
-    # Admin pode ativar "Visualizar como atendente" na sidebar pra testar
-    # a UX (interagir com checkboxes/botoes). Edicoes salvam no proprio
-    # historico do admin, nao das atendentes.
     role = current_role()
-    _admin_test_mode = bool(st.session_state.get("_admin_view_as_atendente", False))
-    somente_leitura = role == "admin" and not _admin_test_mode
+    somente_leitura = role == "admin"
     h = get_hist_unificado(eid) if somente_leitura else get_hist(eid)
     if somente_leitura:
         # Texto puro em azul — sem retângulo de fundo (econômico em espaço
@@ -113,20 +109,6 @@ def dialog_editar(eid, from_fixados: bool = False):
         st.markdown(
             '<div style="color:#5fa3ff;font-size:13px;font-weight:500;'
             'margin:0 0 10px 0">👁 Modo visualização</div>',
-            unsafe_allow_html=True,
-        )
-    elif role == "admin" and _admin_test_mode:
-        # Admin em modo teste — banner amarelo de alerta. Avisa que
-        # edicoes vao pro historico do admin, nao das atendentes.
-        st.markdown(
-            '<div style="background:rgba(245,158,11,.12);border:1px solid '
-            'rgba(245,158,11,.35);color:#f59e0b;font-size:12px;font-weight:600;'
-            'padding:8px 12px;border-radius:6px;margin:0 0 10px 0">'
-            '🧪 <strong>MODO TESTE</strong> · Voce esta vendo o dialog como '
-            'uma atendente. Mudancas salvam no historico do admin, nao das '
-            'atendentes. Desative em "Teste" no sidebar pra voltar ao modo '
-            'visualizacao.'
-            '</div>',
             unsafe_allow_html=True,
         )
 
@@ -215,12 +197,26 @@ def dialog_editar(eid, from_fixados: bool = False):
 
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    # Campos (desabilitados se admin — modo só leitura)
+    # Campos (desabilitados se admin — modo só leitura).
+    # Dropdown de status: so DECISOES INTENCIONAIS (promise, negotiating,
+    # telefone_errado, igreja_fechada). Os automaticos (pending / contacted)
+    # ficam fora do dropdown — placeholder mostra que esta no modo automatico.
+    _status_atual = h.get("status", "")
+    _status_values = list(STATUS_OPTS.values())
+    if _status_atual in _status_values:
+        _status_index = _status_values.index(_status_atual)
+    else:
+        # pending / contacted / vazio → placeholder, nada selecionado
+        _status_index = None
     status_sel = st.selectbox(
         "Status de Cobrança",
         list(STATUS_OPTS.keys()),
-        index=list(STATUS_OPTS.values()).index(h.get("status", "pending")),
+        index=_status_index,
+        placeholder="Automático — Sem contato / Contactado conforme bot",
         disabled=somente_leitura,
+        help="Selecione apenas para registrar uma decisão manual sua. "
+             "Caso contrário, o sistema decide entre 'Sem contato' "
+             "(default) e 'Contactado' (após qualquer atividade do bot).",
     )
 
     # vertical_alignment='bottom' faz Streamlit empurrar o conteudo de cada
@@ -285,8 +281,10 @@ def dialog_editar(eid, from_fixados: bool = False):
         </style>
         """, unsafe_allow_html=True)
 
+    # Promise date so aparece se 'Prometeu pagar' selecionado no dropdown.
+    # status_sel pode ser None (modo automatico) — protege contra KeyError.
     promise_date = None
-    if STATUS_OPTS[status_sel] == "promise":
+    if status_sel and STATUS_OPTS[status_sel] == "promise":
         promise_date = st.date_input(
             "Data que prometeu pagar",
             value=datetime.strptime(h["promiseDate"], "%d/%m/%Y").date() if h.get("promiseDate") else date.today(),
@@ -311,13 +309,18 @@ def dialog_editar(eid, from_fixados: bool = False):
         _expected_retorno = h.get("retorno") or ""
         _expected_promise = h.get("promiseDate") or ""
         _expected_tel_fixo = bool(h.get("tel_fixo", False))
-        _expected_status = h.get("status", "pending")
+        # Status 'pending' e '' sao equivalentes (ambos = automatico).
+        # Normaliza pra evitar auto-save falso no abrir dialog.
+        _expected_status_raw = h.get("status", "")
+        _expected_status = "" if _expected_status_raw in ("pending", "") else _expected_status_raw
         _expected_notes = h.get("notes", "")
 
         _curr_last_contact = last_contact.strftime("%d/%m/%Y") if last_contact else ""
         _curr_retorno = retorno.strftime("%d/%m/%Y") if retorno else ""
         _curr_promise = promise_date.strftime("%d/%m/%Y") if promise_date else ""
-        _curr_status = STATUS_OPTS[status_sel]
+        # Se nada selecionado no dropdown → mantem status atual (vazio = automatico).
+        # Se atendente selecionou opcao intencional → usa o valor mapeado.
+        _curr_status = STATUS_OPTS[status_sel] if status_sel else ""
 
         _mudou = (
             _curr_status != _expected_status
@@ -330,6 +333,8 @@ def dialog_editar(eid, from_fixados: bool = False):
         if _mudou:
             from data import _EMAIL_GRUPO as _EG
             _autosave_payload = {
+                # Salvar '' (vazio) em vez de 'pending' quando atendente
+                # nao tem decisao manual — fica claro que e' automatico.
                 "status":      _curr_status,
                 "lastContact": _curr_last_contact,
                 "retorno":     _curr_retorno,
@@ -397,7 +402,7 @@ def dialog_editar(eid, from_fixados: bool = False):
                     if st.button("Atendeu", width="stretch", type="primary", key="btn_fixo_atendeu"):
                         from data import _EMAIL_GRUPO, registrar_acao_manual
                         payload = {
-                            "status":      STATUS_OPTS[status_sel],
+                            "status":      STATUS_OPTS[status_sel] if status_sel else h.get("status", ""),
                             "lastContact": last_contact.strftime("%d/%m/%Y"),
                             "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
                             "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
@@ -421,7 +426,7 @@ def dialog_editar(eid, from_fixados: bool = False):
                     if st.button("Não atendeu", width="stretch", key="btn_fixo_naoatendeu"):
                         from data import _EMAIL_GRUPO, registrar_acao_manual
                         payload = {
-                            "status":      STATUS_OPTS[status_sel],
+                            "status":      STATUS_OPTS[status_sel] if status_sel else h.get("status", ""),
                             "lastContact": last_contact.strftime("%d/%m/%Y"),
                             "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
                             "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
