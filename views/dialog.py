@@ -212,13 +212,8 @@ def dialog_editar(eid, from_fixados: bool = False):
         "Status de Cobrança",
         list(STATUS_OPTS.keys()),
         index=_status_index,
-        placeholder="Sem contato (padrão)",
+        placeholder="Selecione apenas para selecionar uma decisão manual sua",
         disabled=somente_leitura,
-        help="Selecione apenas para registrar uma decisão manual sua: "
-             "Contactado, Prometeu pagar, Negociando, Telefone errado ou "
-             "Igreja fechada. Sem seleção, 'Sem contato' permanece como "
-             "estado padrão (atualiza para 'Contactado' automaticamente "
-             "se você interagir pelo WhatsApp/painel).",
     )
 
     # vertical_alignment='bottom' faz Streamlit empurrar o conteudo de cada
