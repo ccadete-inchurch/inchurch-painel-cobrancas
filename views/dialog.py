@@ -212,7 +212,7 @@ def dialog_editar(eid, from_fixados: bool = False):
         "Status de Cobrança",
         list(STATUS_OPTS.keys()),
         index=_status_index,
-        placeholder="Selecione apenas para selecionar uma decisão manual sua",
+        placeholder="Apenas para decisões manuais",
         disabled=somente_leitura,
     )
 
