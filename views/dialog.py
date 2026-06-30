@@ -223,7 +223,12 @@ def dialog_editar(eid, from_fixados: bool = False):
         disabled=somente_leitura,
     )
 
-    d1, d2, d3 = st.columns(3)
+    # vertical_alignment='bottom' faz Streamlit empurrar o conteudo de cada
+    # coluna pro RODAPE da linha. Resultado: o date picker de Ultimo Contato
+    # (d1) e o date picker de Data de retorno (d2, quando aparece) ficam
+    # alinhados na mesma altura — o "label" / "checkbox" acima fica empurrado
+    # pro topo da coluna.
+    d1, d2, d3 = st.columns(3, vertical_alignment="bottom")
     with d1:
         last_contact = st.date_input(
             "Último Contato",
@@ -232,6 +237,14 @@ def dialog_editar(eid, from_fixados: bool = False):
         )
     with d2:
         tem_retorno = st.checkbox("Agendar retorno", value=bool(h.get("retorno")), disabled=somente_leitura)
+        retorno = None
+        if tem_retorno:
+            retorno = st.date_input(
+                "Data de retorno",
+                value=datetime.strptime(h["retorno"], "%d/%m/%Y").date() if h.get("retorno") else date.today(),
+                label_visibility="collapsed",
+                disabled=somente_leitura,
+            )
     with d3:
         # Caracteristica do canal de contato (independente do status de cobranca).
         # Quando marcado, lote forca bucket=ligacao (sem msg) e botoes
@@ -246,21 +259,6 @@ def dialog_editar(eid, from_fixados: bool = False):
                  "manuais (Atendeu / Não atendeu) no rodapé.",
         )
 
-    # Data de retorno aparece em LINHA SEPARADA quando checkbox marcado.
-    # Antes ficava dentro de d2 (logo abaixo do checkbox), desalinhando
-    # com o date picker de Último Contato em d1. Agora vai em uma linha
-    # abaixo, visualmente abaixo da posicao de 'Agendar retorno' (coluna
-    # do meio), mantendo o alinhamento da linha superior limpo.
-    retorno = None
-    if tem_retorno:
-        _r_left, _r_mid, _r_right = st.columns(3)
-        with _r_mid:
-            retorno = st.date_input(
-                "Data de retorno",
-                value=datetime.strptime(h["retorno"], "%d/%m/%Y").date() if h.get("retorno") else date.today(),
-                label_visibility="collapsed",
-                disabled=somente_leitura,
-            )
 
     # CSS pra 'Nao atendeu' vermelho — coluna marcada com data-naoatend.
     # Botoes Atendeu/Nao atendeu agora estao no rodape do dialog,
