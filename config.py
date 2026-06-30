@@ -39,12 +39,12 @@ STATUS_COLORS = {
 STATUS_SEM_CONTATO = {"telefone_errado", "igreja_fechada"}
 
 # Chave de exibição → chave interna (usado no dropdown de edição do dialog).
-# Inclui 'Contactado' porque a atendente pode ter feito contato fora dos
-# canais detectados pelo N8N (ligacao em fixo, presencial etc) — quer
-# marcar manualmente. Mas NAO inclui 'Sem contato' — atendente nunca
-# precisa marcar isso (e' o estado default automatico).
+# Apenas DECISOES INTENCIONAIS da atendente. 'Sem contato' (pending) e
+# 'Contactado' (contacted) sao gerenciados EXCLUSIVAMENTE pela funcao
+# get_effective_status (helpers.py) com base em atividade do N8N/painel —
+# nao aparecem como opcoes pra evitar conflito com a logica automatica
+# (atendente nao deve poder anular ou contradizer o estado real).
 STATUS_OPTS = {
-    "Contactado":       "contacted",
     "Prometeu pagar":   "promise",
     "Negociando":       "negotiating",
     "Telefone errado":  "telefone_errado",
