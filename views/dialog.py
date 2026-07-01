@@ -208,12 +208,26 @@ def dialog_editar(eid, from_fixados: bool = False):
     else:
         # pending / contacted / vazio → placeholder, nada selecionado
         _status_index = None
+    # X nativo do selectbox (limpar selecao) so aparece quando 'placeholder'
+    # e' passado. Restringimos ele SO pros casos onde 'limpar' faz sentido:
+    #   - telefone_errado → problema resolvido no SL
+    #   - igreja_fechada  → igreja reabriu
+    #   - vazio/pending/contacted → estado automatico
+    # Para promise/negotiating, o fluxo correto e' 'Concluir fixado' (em
+    # Inadimplencia > Fixados), que tambem apaga promiseDate/retorno.
+    # Se atendente clicasse X aqui pra promise, o status limparia mas
+    # promiseDate ficaria orfao — cliente continuaria como fixado.
+    _permite_limpar = _status_atual not in ("promise", "negotiating")
+    _selectbox_kwargs = {
+        "index": _status_index,
+        "disabled": somente_leitura,
+    }
+    if _permite_limpar:
+        _selectbox_kwargs["placeholder"] = "Apenas para decisões manuais"
     status_sel = st.selectbox(
         "Status de Cobrança",
         list(STATUS_OPTS.keys()),
-        index=_status_index,
-        placeholder="Apenas para decisões manuais",
-        disabled=somente_leitura,
+        **_selectbox_kwargs,
     )
 
     # vertical_alignment='bottom' faz Streamlit empurrar o conteudo de cada
