@@ -212,7 +212,7 @@ def dialog_editar(eid, from_fixados: bool = False):
         "Status de Cobrança",
         list(STATUS_OPTS.keys()),
         index=_status_index,
-        placeholder="Painel detecta. Marque promessa, negociação ou exceção",
+        placeholder="Apenas para decisões manuais",
         disabled=somente_leitura,
     )
 
