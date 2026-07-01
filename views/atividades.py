@@ -815,9 +815,13 @@ def _render_atividades(store, clientes, role):
             _parc_v_fmt = fmt_moeda_plain(parc_v)
 
             def _linha(ico, count, palavra, valor_fmt, cor_valor):
+                # white-space:nowrap: sem quebra entre 'R$' e '9.275,75' quando
+                # o container ficar estreito. Antes o valor quebrava em 2 linhas
+                # nos cards do lote (screenshot do 30/06).
                 _direita = (
                     f'<span style="margin-left:auto;font-size:20px;font-weight:800;'
-                    f'color:{cor_valor};font-variant-numeric:tabular-nums">{valor_fmt}</span>'
+                    f'color:{cor_valor};font-variant-numeric:tabular-nums;'
+                    f'white-space:nowrap">{valor_fmt}</span>'
                 ) if valor_fmt else ""
                 return (
                     f'<div style="display:flex;align-items:center;gap:8px">'

@@ -3470,7 +3470,8 @@ def calcular_pendencias(clientes):
     # Admin vê fixados das duas atendentes (união); cada atendente vê só
     # os próprios. Decidido via _hist_pra_pendencias.
     # Retorna tupla (cliente, hist, tipo, mensagem, dias_atraso) ordenada por
-    # dias_atraso DESC pra priorizar visualmente os mais antigos.
+    # dias_atraso ASC pra mostrar os compromissos mais recentes primeiro
+    # (atendente prioriza o que acabou de vencer; cauda antiga fica no fim).
     pendencias = []
     hoje       = date.today()
     for c in clientes:
@@ -3488,7 +3489,7 @@ def calcular_pendencias(clientes):
                 dias = (hoje - dt).days
                 pendencias.append((c, h, "retorno", f"Retorno para {h['retorno']}", dias))
                 continue
-    pendencias.sort(key=lambda x: x[4], reverse=True)
+    pendencias.sort(key=lambda x: x[4])
     return pendencias
 
 
