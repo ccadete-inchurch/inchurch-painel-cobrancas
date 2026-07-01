@@ -366,7 +366,23 @@ def _render_dashboard(store, clientes, role):
         </style>
         """, unsafe_allow_html=True)
 
-        # Header — título + badge da contagem + filtro de atendente (admin)
+        # Leio o filtro direto do session_state ANTES de renderizar o badge —
+        # senao o numero em vermelho mostraria o total (Ana+Priscila) enquanto
+        # os cards ja estao filtrados. Streamlit persiste a selecao do
+        # selectbox via 'key=fix_filtro_atendente' entre reruns.
+        if role == "admin":
+            filtro_atend = st.session_state.get("fix_filtro_atendente", "Todos")
+        else:
+            filtro_atend = "Todos"
+
+        # Aplica filtro AGORA — badge e cards usam a mesma lista filtrada
+        if filtro_atend != "Todos":
+            pendencias = [
+                p for p in pendencias
+                if filtro_atend in (p[1].get("_atendentes_origem") or [])
+            ]
+
+        # Header — título + badge da contagem (ja filtrada) + selectbox admin
         hcol, fcol = st.columns([3.4, 1.2])
         with hcol:
             st.markdown(
@@ -380,23 +396,15 @@ def _render_dashboard(store, clientes, role):
                 f'</div>',
                 unsafe_allow_html=True,
             )
-        filtro_atend = "Todos"
         with fcol:
             if role == "admin":
                 from data import _EMAIL_GRUPO as _EG
-                filtro_atend = st.selectbox(
+                st.selectbox(
                     "Grupo",
                     ["Todos"] + list(_EG.values()),
                     key="fix_filtro_atendente",
                     label_visibility="collapsed",
                 )
-
-        # Aplica filtro de atendente nas pendências
-        if filtro_atend != "Todos":
-            pendencias = [
-                p for p in pendencias
-                if filtro_atend in (p[1].get("_atendentes_origem") or [])
-            ]
 
         if not pendencias:
             st.markdown(
