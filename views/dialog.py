@@ -230,41 +230,48 @@ def dialog_editar(eid, from_fixados: bool = False):
         **_selectbox_kwargs,
     )
 
-    # vertical_alignment='bottom' faz Streamlit empurrar o conteudo de cada
-    # coluna pro RODAPE da linha. Resultado: o date picker de Ultimo Contato
-    # (d1) e o date picker de Data de retorno (d2, quando aparece) ficam
-    # alinhados na mesma altura — o "label" / "checkbox" acima fica empurrado
-    # pro topo da coluna.
-    d1, d2, d3 = st.columns(3, vertical_alignment="bottom")
+    # Linha 1: Ultimo Contato + Agendar retorno (2 colunas, alinhamento bottom
+    # pra date pickers ficarem na mesma altura). Keys explicitas por eid pra
+    # evitar reset de estado quando dialog re-renderiza no auto-save.
+    d1, d2 = st.columns(2, vertical_alignment="bottom")
     with d1:
         last_contact = st.date_input(
             "Último Contato",
             value=datetime.strptime(h["lastContact"], "%d/%m/%Y").date() if h.get("lastContact") else date.today(),
             disabled=somente_leitura,
+            key=f"dlg_lc_{eid}",
         )
     with d2:
-        tem_retorno = st.checkbox("Agendar retorno", value=bool(h.get("retorno")), disabled=somente_leitura)
+        tem_retorno = st.checkbox(
+            "Agendar retorno",
+            value=bool(h.get("retorno")),
+            disabled=somente_leitura,
+            key=f"dlg_chkret_{eid}",
+        )
         retorno = None
         if tem_retorno:
             retorno = st.date_input(
                 "Data de retorno",
                 value=datetime.strptime(h["retorno"], "%d/%m/%Y").date() if h.get("retorno") else date.today(),
-                label_visibility="collapsed",
                 disabled=somente_leitura,
+                key=f"dlg_ret_{eid}",
             )
-    with d3:
-        # Caracteristica do canal de contato (independente do status de cobranca).
-        # Quando marcado, lote forca bucket=ligacao (sem msg) e botoes
-        # 'Atendeu' / 'Nao atendeu' aparecem abaixo pra registro manual da
-        # ligacao (N8N nao detecta atividade em telefone fixo).
-        tel_fixo = st.checkbox(
-            "Telefone fixo",
-            value=bool(h.get("tel_fixo", False)),
-            disabled=somente_leitura,
-            help="Cliente só atende em telefone fixo (sem WhatsApp). "
-                 "Força o lote a colocar em LIGAÇÃO e habilita botões "
-                 "manuais (Atendeu / Não atendeu) no rodapé.",
-        )
+
+    # Linha 2: Telefone fixo (linha separada — checkbox curto nao precisa de
+    # coluna, evita layout squeeze na linha das datas)
+    # Caracteristica do canal de contato (independente do status de cobranca).
+    # Quando marcado, lote forca bucket=ligacao (sem msg) e botoes
+    # 'Atendeu' / 'Nao atendeu' aparecem abaixo pra registro manual da
+    # ligacao (N8N nao detecta atividade em telefone fixo).
+    tel_fixo = st.checkbox(
+        "Telefone fixo",
+        value=bool(h.get("tel_fixo", False)),
+        disabled=somente_leitura,
+        key=f"dlg_telfixo_{eid}",
+        help="Cliente só atende em telefone fixo (sem WhatsApp). "
+             "Força o lote a colocar em LIGAÇÃO e habilita botões "
+             "manuais (Atendeu / Não atendeu) no rodapé.",
+    )
 
 
     # CSS pra 'Nao atendeu' vermelho — coluna marcada com data-naoatend.
