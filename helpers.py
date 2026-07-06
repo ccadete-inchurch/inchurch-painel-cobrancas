@@ -127,8 +127,18 @@ def formatar_telefone(tel: str) -> str:
         n = digits[2:]
         return f"+44 {n[:4]} {n[4:7]} {n[7:]}"
 
-    # EUA/Canada (1 + 10 digitos) — precisa de '+' ou parenteses no original
-    if (tem_mais or tem_parenteses_eua) and digits.startswith("1") and len(digits) == 11:
+    # EUA/Canada (1 + 10 digitos)
+    # Detecta em 3 cenarios:
+    # 1. '+' explicito no original
+    # 2. Parenteses tipico '1(...)'
+    # 3. HEURISTICA: 11 digitos comecando com '1' onde o 3o digito NAO e' 9.
+    #    Justificativa: movel BR SEMPRE tem 9 no 3o digito (nono digito
+    #    obrigatorio desde 2016). Se nao tem 9 ali, nao pode ser movel BR
+    #    valido — provavel US (1 + area + numero).
+    parece_eua_heuristica = (
+        digits.startswith("1") and len(digits) == 11 and digits[2] != "9"
+    )
+    if (tem_mais or tem_parenteses_eua or parece_eua_heuristica) and digits.startswith("1") and len(digits) == 11:
         n = digits[1:]
         return f"+1 {n[:3]} {n[3:6]}-{n[6:]}"
 
@@ -185,8 +195,14 @@ def telefone_wa_link(tel: str) -> str:
     # UK (44 + 10 = 12; BR 44 tem 11)
     if digits.startswith("44") and len(digits) == 12:
         return digits
-    # EUA/Canada
-    if (tem_mais or tem_parenteses_eua) and digits.startswith("1") and len(digits) == 11:
+    # EUA/Canada — 3 sinais possiveis:
+    # 1. '+' explicito
+    # 2. Parenteses '1(...)'
+    # 3. Heuristica: 11 digitos comecando com 1 SEM 9 no 3o digito
+    parece_eua_heuristica = (
+        digits.startswith("1") and len(digits) == 11 and digits[2] != "9"
+    )
+    if (tem_mais or tem_parenteses_eua or parece_eua_heuristica) and digits.startswith("1") and len(digits) == 11:
         return digits
 
     # BR com DDI 55 (12 ou 13 digitos) — mantem
