@@ -126,6 +126,15 @@ def formatar_telefone(tel: str) -> str:
     if digits.startswith("44") and len(digits) == 12:
         n = digits[2:]
         return f"+44 {n[:4]} {n[4:7]} {n[7:]}"
+    # Japao (81 + 10 = 12 total; BR DDD 81 tem 11)
+    if digits.startswith("81") and len(digits) == 12:
+        n = digits[2:]
+        return f"+81 {n[:2]} {n[2:6]}-{n[6:]}"
+
+    # Cadastro BR antigo com '0' na frente (formato pre-portabilidade):
+    # 0XXXXXXXXXX (12 digitos comecando com 0). Remove o 0 e formata como BR.
+    if digits.startswith("0") and len(digits) == 12:
+        digits = digits[1:]  # remove o 0 inicial
 
     # EUA/Canada (1 + 10 digitos)
     # Detecta em 3 cenarios:
@@ -195,6 +204,12 @@ def telefone_wa_link(tel: str) -> str:
     # UK (44 + 10 = 12; BR 44 tem 11)
     if digits.startswith("44") and len(digits) == 12:
         return digits
+    # Japao (81 + 10 = 12; BR 81 tem 11)
+    if digits.startswith("81") and len(digits) == 12:
+        return digits
+    # BR antigo com '0' na frente (12 digitos) — remove 0 e prefixa 55
+    if digits.startswith("0") and len(digits) == 12:
+        return "55" + digits[1:]
     # EUA/Canada — 3 sinais possiveis:
     # 1. '+' explicito
     # 2. Parenteses '1(...)'
