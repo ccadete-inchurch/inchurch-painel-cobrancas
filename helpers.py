@@ -50,50 +50,70 @@ def fmt_tel_lista(valor) -> list[str]:
 
 
 def formatar_telefone(tel: str) -> str:
-    """Formata telefone pra exibicao. Detecta BR vs internacional.
+    """Formata telefone pra exibicao. Detecta BR vs internacional (Portugal,
+    Italia, Argentina, EUA/Canada).
 
-    Regra: se o input original tem '+', assume que ja tem DDI explicito.
-    Se ao remover o + começa com 55 (BR), formata como BR. Senao, mantem
-    como internacional (nao presume BR).
-
-    Se sem '+', olha tamanho:
-    - 12 ou 13 digitos comecando com 55: BR (remove 55, formata)
-    - 10 ou 11 digitos: BR sem DDI (formata direto)
-    - Outros tamanhos: internacional (prefixa +)
+    Ordem de deteccao (mais especifico -> mais generico):
+    1. Portugal (351 + 9 digitos = 12 total)
+    2. Italia (39 + 9 ou 10 digitos = 11-12 total)
+    3. Argentina (54 + 10 digitos = 12 total) — diferencia de BR DDD 54
+       (que teria 11 digitos)
+    4. EUA/Canada com '+' explicito ou parenteses no original
+    5. BR com DDI 55 (12 ou 13 digitos comecando com 55)
+    6. BR sem DDI (10 ou 11 digitos)
+    7. Fallback: numero raw com + na frente
 
     Exemplos:
-      +5531992368305  -> (31) 99236-8305    (BR com +55)
-      5512996383840   -> (12) 99638-3840    (BR com 55 sem +)
-      31992368305     -> (31) 99236-8305    (BR sem DDI)
-      3132345678      -> (31) 3234-5678     (BR fixo)
-      +19789732206    -> +1 97 8973-2206    (EUA - + explicito, nao BR)
-      +351912345678   -> +351 91234-5678    (Portugal)
+      +5531992368305  -> (31) 99236-8305     (BR com +55)
+      5512996383840   -> (12) 99638-3840     (BR com 55 sem +)
+      31992368305     -> (31) 99236-8305     (BR sem DDI)
+      3132345678      -> (31) 3234-5678      (BR fixo)
+      351917797169    -> +351 917 797 169    (Portugal)
+      541160501954    -> +54 11 6050-1954    (Argentina)
+      393663448118    -> +39 366 344 8118    (Italia)
+      +19789732206    -> +1 978 973-2206     (EUA — precisa + ou parenteses)
+      1(470)661-1101  -> +1 470 661-1101     (EUA — parenteses ja indicam)
     """
     import re as _re
     if not tel:
         return "—"
     tel_str = str(tel).strip()
     tem_mais = tel_str.startswith("+")
+    # EUA/Canada tipicamente vem com parenteses no original: 1(470)661-1101
+    tem_parenteses_eua = tel_str.startswith("1(") or tel_str.startswith("1 (")
     digits = _re.sub(r"\D", "", tel_str)
     if not digits:
         return tel_str
 
-    # Se + explicito e NAO comeca com 55 -> internacional (nao presume BR)
-    if tem_mais and not digits.startswith("55"):
-        # EUA/Canada (1 + 10 digitos)
-        if digits.startswith("1") and len(digits) == 11:
-            return f"+1 {digits[1:3]} {digits[3:7]}-{digits[7:]}"
-        # Portugal (351 + 9 digitos)
-        if digits.startswith("351") and len(digits) == 12:
-            return f"+351 {digits[3:8]}-{digits[8:]}"
-        # Fallback internacional generico
-        return f"+{digits}"
+    # 1. Portugal (351 + 9 digitos)
+    if digits.startswith("351") and len(digits) == 12:
+        n = digits[3:]
+        return f"+351 {n[:3]} {n[3:6]} {n[6:]}"
 
-    # BR com DDI (55 + 10 ou 11 digitos = 12 ou 13 total)
+    # 2. Italia (39 + 9 ou 10 digitos)
+    if digits.startswith("39") and len(digits) in (11, 12):
+        n = digits[2:]
+        if len(n) == 10:
+            return f"+39 {n[:3]} {n[3:6]} {n[6:]}"
+        # 9 digitos italianos
+        return f"+39 {n[:3]} {n[3:6]} {n[6:]}"
+
+    # 3. Argentina (54 + 10 digitos = 12 total)
+    # BR DDD 54 (Caxias do Sul) tem 11 digitos, entao 12 e' Argentina
+    if digits.startswith("54") and len(digits) == 12:
+        n = digits[2:]  # 10 digitos: area + numero
+        return f"+54 {n[:2]} {n[2:6]}-{n[6:]}"
+
+    # 4. EUA/Canada (1 + 10 digitos) — precisa de '+' ou parenteses
+    if (tem_mais or tem_parenteses_eua) and digits.startswith("1") and len(digits) == 11:
+        n = digits[1:]  # 10 digitos: area + prefix + line
+        return f"+1 {n[:3]} {n[3:6]}-{n[6:]}"
+
+    # 5. BR com DDI 55 (12 ou 13 digitos)
     if digits.startswith("55") and len(digits) in (12, 13):
-        digits = digits[2:]
+        digits = digits[2:]  # remove 55
 
-    # BR sem DDI (10 = fixo, 11 = movel com 9)
+    # 6. BR sem DDI (10 = fixo, 11 = movel com 9)
     if len(digits) in (10, 11):
         ddd = digits[:2]
         resto = digits[2:]
@@ -101,22 +121,45 @@ def formatar_telefone(tel: str) -> str:
             return f"({ddd}) {resto[:5]}-{resto[5:]}"
         return f"({ddd}) {resto[:4]}-{resto[4:]}"  # fixo: XXXX-XXXX
 
-    # Nao encaixa em nenhum padrao BR — mantem como internacional
+    # 7. Fallback: numero raw
     return f"+{digits}"
 
 
 def telefone_wa_link(tel: str) -> str:
-    """Retorna so os digitos com DDI (formato wa.me). Assume BR se sem
-    codigo pais (10-11 digitos). Retorna string vazia se invalido."""
+    """Retorna so os digitos com DDI (formato wa.me). Detecta internacional
+    (Portugal 351, Italia 39, Argentina 54 com 12d, EUA/Canada 1) e mantem
+    o codigo pais. BR sem DDI (10-11 digitos) recebe prefixo 55.
+
+    Retorna string vazia se invalido.
+    """
     import re as _re
     if not tel:
         return ""
-    digits = _re.sub(r"\D", "", str(tel))
+    tel_str = str(tel).strip()
+    tem_mais = tel_str.startswith("+")
+    tem_parenteses_eua = tel_str.startswith("1(") or tel_str.startswith("1 (")
+    digits = _re.sub(r"\D", "", tel_str)
     if not digits:
         return ""
-    # BR sem 55 (10 ou 11 digitos) → prefixa 55
+
+    # Internacionais explicitos — mantem digits como estao
+    if digits.startswith("351") and len(digits) == 12:
+        return digits  # Portugal
+    if digits.startswith("39") and len(digits) in (11, 12):
+        return digits  # Italia
+    if digits.startswith("54") and len(digits) == 12:
+        return digits  # Argentina (12 digitos - BR 54 tem 11)
+    if (tem_mais or tem_parenteses_eua) and digits.startswith("1") and len(digits) == 11:
+        return digits  # EUA/Canada
+
+    # BR com DDI 55 (12 ou 13 digitos) — mantem
+    if digits.startswith("55") and len(digits) in (12, 13):
+        return digits
+
+    # BR sem DDI (10 ou 11 digitos) — prefixa 55
     if len(digits) in (10, 11):
         return "55" + digits
+
     return digits
 
 
