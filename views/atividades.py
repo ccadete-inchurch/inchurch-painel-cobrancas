@@ -4,7 +4,7 @@ import streamlit as st
 
 import time as _time
 
-from helpers import get_hist, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias
+from helpers import get_hist, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link
 from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, fetch_carteira_count, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
@@ -65,18 +65,43 @@ _ICON_GROUP = (
 
 
 def _tels_html(c) -> str:
-    """Renderiza telefones do cliente: primeiro destacado e os demais inline
-    em fonte menor — tudo selecionável e copiável (sem depender de tooltip)."""
+    """Renderiza telefones do cliente:
+    - Primeiro telefone: formatado bonito + link clicavel para WhatsApp
+    - Demais telefones: inline em fonte menor, formatados
+    - Detecta BR vs internacional automaticamente (formatar_telefone)
+    """
     tels = c.get("telefones") or []
     if not tels:
-        return c.get("telefone", "—") or "—"
+        _fallback = c.get("telefone", "")
+        if not _fallback:
+            return "—"
+        tels = [_fallback]
+
+    def _wa_link(tel: str, display: str) -> str:
+        wa_num = telefone_wa_link(tel)
+        if not wa_num:
+            return display
+        return (
+            f'<a href="https://wa.me/{wa_num}" target="_blank" '
+            f'style="color:inherit;text-decoration:none;border-bottom:1px dashed rgba(45,211,111,.5);'
+            f'transition:color .15s" '
+            f'onmouseover="this.style.color=\'#2dd36f\'" '
+            f'onmouseout="this.style.color=\'inherit\'">{display}</a>'
+        )
+
+    primeiro_fmt = formatar_telefone(tels[0])
+    primeiro_link = _wa_link(tels[0], primeiro_fmt)
+
     if len(tels) == 1:
-        return tels[0]
-    extras_txt = " · ".join(tels[1:])
+        return primeiro_link
+
+    extras_html = " · ".join(
+        _wa_link(t, formatar_telefone(t)) for t in tels[1:]
+    )
     return (
-        f'{tels[0]} '
+        f'{primeiro_link} '
         f'<span style="color:#6b7280;font-size:10px;font-weight:500">'
-        f'· {extras_txt}</span>'
+        f'· {extras_html}</span>'
     )
 
 
