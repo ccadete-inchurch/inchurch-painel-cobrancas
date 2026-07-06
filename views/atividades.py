@@ -57,6 +57,20 @@ _ICON_PHONE = (
     '<path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>'
     '</svg>'
 )
+# Icone WhatsApp (mesmo SVG usado no card Fixados). Vira o link clicavel
+# do lado do numero — atendente clica no icone, nao no numero em si.
+_ICON_WHATSAPP = (
+    '<svg width="12" height="12" viewBox="0 0 24 24" fill="#6b7280" '
+    'style="flex-shrink:0;vertical-align:middle;transition:fill .15s">'
+    '<path d="M17.5 14.4c-.3-.1-1.7-.8-2-.9-.3-.1-.5-.1-.7.1-.2.3-.7.9-.9 '
+    '1.1-.2.2-.3.2-.6.1-1.8-.9-3-1.6-4.2-3.6-.3-.5.3-.5.9-1.6.1-.2.1-.4 '
+    '0-.5-.1-.1-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 '
+    '1-1 2.5s1 2.9 1.2 3.1c.1.2 2 3.1 4.9 4.3 1.8.8 2.5.9 3.4.7.5-.1 '
+    '1.7-.7 1.9-1.4.2-.7.2-1.3.2-1.4-.2-.1-.4-.2-.7-.2zM12 22c-1.7 '
+    '0-3.3-.5-4.7-1.3L3 22l1.3-4.4C3.5 16.2 3 14.7 3 13c0-5 4-9 9-9s9 4 '
+    '9 9-4 9-9 9z"/>'
+    '</svg>'
+)
 _ICON_GROUP = (
     '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" style="flex-shrink:0;vertical-align:middle">'
     '<path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>'
@@ -66,9 +80,9 @@ _ICON_GROUP = (
 
 def _tels_html(c) -> str:
     """Renderiza telefones do cliente:
-    - Primeiro telefone: formatado bonito + link clicavel para WhatsApp
-    - Demais telefones: inline em fonte menor, formatados
-    - Detecta BR vs internacional automaticamente (formatar_telefone)
+    - Numero formatado bonito (nao clicavel) — atendente pode selecionar/copiar
+    - Icone WhatsApp DO LADO do numero (esse sim clicavel → wa.me)
+    - Multiplos telefones: primeiro destacado + icone; demais inline com icone menor
     """
     tels = c.get("telefones") or []
     if not tels:
@@ -77,29 +91,30 @@ def _tels_html(c) -> str:
             return "—"
         tels = [_fallback]
 
-    def _wa_link(tel: str, display: str) -> str:
+    def _wa_icon(tel: str) -> str:
+        """Icone WhatsApp clicavel do lado do numero. Vazio se numero invalido."""
         wa_num = telefone_wa_link(tel)
         if not wa_num:
-            return display
+            return ""
         return (
             f'<a href="https://wa.me/{wa_num}" target="_blank" '
-            f'style="color:inherit;text-decoration:none;border-bottom:1px dashed rgba(45,211,111,.5);'
-            f'transition:color .15s" '
-            f'onmouseover="this.style.color=\'#2dd36f\'" '
-            f'onmouseout="this.style.color=\'inherit\'">{display}</a>'
+            f'style="text-decoration:none;margin-left:4px;display:inline-flex" '
+            f'onmouseover="this.querySelector(\'svg\').setAttribute(\'fill\',\'#25d366\')" '
+            f'onmouseout="this.querySelector(\'svg\').setAttribute(\'fill\',\'#6b7280\')">'
+            f'{_ICON_WHATSAPP}</a>'
         )
 
     primeiro_fmt = formatar_telefone(tels[0])
-    primeiro_link = _wa_link(tels[0], primeiro_fmt)
+    primeiro_html = f'{primeiro_fmt}{_wa_icon(tels[0])}'
 
     if len(tels) == 1:
-        return primeiro_link
+        return primeiro_html
 
     extras_html = " · ".join(
-        _wa_link(t, formatar_telefone(t)) for t in tels[1:]
+        f'{formatar_telefone(t)}{_wa_icon(t)}' for t in tels[1:]
     )
     return (
-        f'{primeiro_link} '
+        f'{primeiro_html} '
         f'<span style="color:#6b7280;font-size:10px;font-weight:500">'
         f'· {extras_html}</span>'
     )
