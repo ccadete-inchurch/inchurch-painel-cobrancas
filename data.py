@@ -1909,6 +1909,77 @@ def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.D
 
 
 @st.cache_data(ttl=1800)
+def fetch_eventos_regularizacao() -> set:
+    """Retorna set de (id_sacado_sac, data_dd_mm_aaaa) — eventos de
+    REGULARIZAÇÃO detectados via analise direta de liquidações.
+
+    Critério per-pagamento: para cada pagamento em atraso (cid, data_pag),
+    verifica se APOS esse pagamento o cliente ainda tinha algum outro
+    boleto vencido em aberto. Se nao tinha, esse pagamento REGULARIZOU
+    o cliente naquela data.
+
+    Vantagem sobre "cliente nao esta na carteira hoje" (metodo antigo):
+    - Cada pagamento fica classificado no SEU CONTEXTO temporal
+    - Cliente que regularizou em maio + reincidiu em julho conta como
+      REG em maio (correto — foi regularizacao legitima), NAO parcial
+    - Cliente que pagou parcial em maio + completou em julho conta como
+      PARCIAL em maio + REG em julho (nao 2x reg)
+
+    Vantagem sobre metodo baseado em snapshot:
+    - Nao depende de snapshot ter sido populado consistentemente
+    - Sem gaps de fim de semana / feriado / falhas do cron
+    - Definicao per-evento pura (nao per-dia agregado)
+
+    Usado por:
+    - views/historico.py (tela Pagamentos)
+    - views/especialista.py (ranking por atendente)
+    """
+    client = get_bq_client()
+    if not client:
+        return set()
+    try:
+        df = client.query("""
+            WITH pagamentos_atraso AS (
+                SELECT
+                    CAST(id_sacado_sac AS STRING) AS cid,
+                    DATE(dt_liquidacao_recb) AS data_pag
+                FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+                WHERE fl_status_recb = '1'
+                  AND dt_liquidacao_recb > dt_vencimento_recb
+                GROUP BY id_sacado_sac, data_pag
+            ),
+            classificado AS (
+                SELECT
+                    p.cid,
+                    p.data_pag,
+                    -- Ha OUTRO boleto do cliente em aberto APOS o pagamento?
+                    (
+                      SELECT COUNT(*)
+                      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
+                      LEFT JOIN `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` l
+                        ON c.id_recebimento_recb = l.id_recebimento_recb
+                      WHERE CAST(c.id_sacado_sac AS STRING) = p.cid
+                        AND c.comp_st_conta_cont IN ('1.2.1', '1.2.2')
+                        AND DATE(c.dt_vencimento_recb) <= p.data_pag
+                        AND (l.dt_liquidacao_recb IS NULL
+                             OR DATE(l.dt_liquidacao_recb) > p.data_pag)
+                    ) AS boletos_em_aberto_pos
+                FROM pagamentos_atraso p
+            )
+            SELECT
+                cid AS id,
+                FORMAT_DATE('%d/%m/%Y', data_pag) AS data
+            FROM classificado
+            WHERE boletos_em_aberto_pos = 0
+        """).to_dataframe()
+        if df.empty:
+            return set()
+        return {(str(r["id"]), str(r["data"])) for _, r in df.iterrows()}
+    except Exception:
+        return set()
+
+
+@st.cache_data(ttl=1800)
 def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
     """Pagamentos com atraso no período, agrupados POR CLIENTE+DIA, com:
       - atendente_credito: HÍBRIDO em ordem de prioridade:

@@ -7,6 +7,7 @@ from helpers import fmt_moeda_plain, get_effective_atendente, hoje_lote
 from data import (
     fetch_ids_em_qualquer_lote_hoje,
     fetch_cobrancas_liquidacao,
+    fetch_eventos_regularizacao,
 )
 
 
@@ -210,15 +211,35 @@ def _render_historico(store):
     }
 
     if not df.empty:
+        # Eventos historicos de regularizacao via analise direta de liquidacoes.
+        # Pra cada pagamento (cid, data_pag), verifica se apos esse pagamento
+        # sobrou algum boleto vencido em aberto. Sem sobra = regularizacao.
+        #
+        # Preserva o evento no seu contexto temporal: cliente que regularizou
+        # em maio + reincidiu em julho conta como REG em maio (nao vira parcial
+        # retroativamente). Cliente que pagou parcial em maio + completou em
+        # julho conta como PARCIAL em maio + REG em julho (nao ambos como REG).
+        #
+        # Fallback pra pagamentos dos ultimos 3 dias: BQ pode nao ter replicado
+        # ainda, entao usa overlay (ids_reg_hoje_all) como source of truth.
+        eventos_reg = fetch_eventos_regularizacao()
+        from datetime import datetime as _dt_c, date as _dc
+
         def _eh_reg(r):
             _rid = str(r.get("id") or "")
-            # 2 fontes simples:
-            # 1) Overlay marcou regularizado (janela 3d — não amarra a hoje_str)
-            # 2) Cliente fora da carteira atual (sem saldo)
-            return (
-                _rid in ids_reg_hoje_all
-                or _rid not in _clientes_lookup
-            )
+            _data_pag = str(r.get("data") or "")
+            if (_rid, _data_pag) in eventos_reg:
+                return True
+            # Fallback pra pagamentos recentes (ultimos 3d) — BQ ainda pode
+            # nao ter replicado, overlay via API SL preenche a lacuna
+            try:
+                d_pag = _dt_c.strptime(_data_pag, "%d/%m/%Y").date()
+                if (_dc.today() - d_pag).days <= 3:
+                    return _rid in ids_reg_hoje_all
+            except Exception:
+                pass
+            return False
+
         df_reg_periodo = df[df.apply(_eh_reg, axis=1)]
         n_reg = int(df_reg_periodo["id"].astype(str).nunique()) if not df_reg_periodo.empty else 0
         v_reg = float(df_reg_periodo["valor"].sum()) if not df_reg_periodo.empty else 0.0

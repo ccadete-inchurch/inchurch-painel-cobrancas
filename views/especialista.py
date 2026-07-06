@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from auth import current_role
-from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_por_especialista
+from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_por_especialista, fetch_eventos_regularizacao
 from helpers import fmt_moeda_plain, hoje_brt
 
 
@@ -206,6 +206,46 @@ def _render_especialista(store, clientes, role):
             [df_reg, pd.DataFrame(overlay_rows)],
             ignore_index=True,
         )
+
+    # Override das flags eh_regularizacao / eh_parcial baseado em EVENTOS
+    # historicos (analise direta de liquidacoes). O criterio anterior
+    # "cliente NAO esta na carteira hoje" (i.cid IS NULL da SQL) era buggy:
+    # reclassificava retroativamente pagamentos passados baseado no estado
+    # atual. Exemplos do bug:
+    # - Cliente regularizou em maio + reincidiu em julho: aparecia como
+    #   PARCIAL em maio (errado — foi reg legitima)
+    # - Cliente pagou parcial em maio + completou em julho: aparecia como
+    #   REG em maio (errado — foi parcial em maio, reg em julho)
+    #
+    # Novo criterio per-pagamento: existe outro boleto vencido em aberto
+    # apos essa data? Se nao → regularizou. Preserva o contexto temporal.
+    #
+    # Fallback pra pagamentos dos ultimos 3d (BQ pode ainda nao ter
+    # replicado): mantem eh_regularizacao original (que veio do overlay).
+    if not df_reg.empty:
+        eventos_reg = fetch_eventos_regularizacao()
+        from datetime import date as _dc
+
+        def _classifica_evento(row):
+            _cid = str(row.get("id") or "")
+            _dt = row.get("data_dt")
+            if _dt is None or pd.isna(_dt):
+                return row.get("eh_regularizacao", False)
+            _dstr = _dt.strftime("%d/%m/%Y") if hasattr(_dt, "strftime") else str(_dt)
+            if (_cid, _dstr) in eventos_reg:
+                return True
+            # Fallback: pagamentos recentes (ultimos 3d) — BQ nao replicou,
+            # respeita a classificacao vinda do overlay (_regularizado_hoje)
+            try:
+                dt_date = _dt.date() if hasattr(_dt, "date") else _dt
+                if (_dc.today() - dt_date).days <= 3:
+                    return bool(row.get("eh_regularizacao", False))
+            except Exception:
+                pass
+            return False
+
+        df_reg["eh_regularizacao"] = df_reg.apply(_classifica_evento, axis=1)
+        df_reg["eh_parcial"] = ~df_reg["eh_regularizacao"]
 
     with fp2:
         especialistas_disp = sorted(
