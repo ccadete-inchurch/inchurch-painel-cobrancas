@@ -2507,8 +2507,11 @@ def load_cooldowns_from_painel():
     st.session_state["_painel_acoes_hoje"]       = acoes_hoje
 
     # 2-strikes cooldown: 2 tentativas falhadas consecutivas (lig_feita=TRUE,
-    # lig_atendida=FALSE) → bloqueia ligação por 7 dias a partir da última tentativa.
-    # Janela de busca: 14 dias (cobre o cooldown + algum histórico).
+    # lig_atendida=FALSE) → bloqueia ligação por 7 dias uteis a partir da última tentativa.
+    # Sem janela temporal — 2 falhas antigas com cooldown vencido são filtradas
+    # naturalmente pelo restante <= 0 abaixo. Remover a janela evita falso reset
+    # quando falhas ficam espaçadas por mais de 14 dias (ex: cliente cai no lote
+    # esporadicamente).
     streak_cooldown = {}
     try:
         df_streak = client.query(f"""
@@ -2522,8 +2525,7 @@ def load_cooldowns_from_painel():
                         ORDER BY data_tarefa DESC
                     ) AS rn
                 FROM `{_TAREFAS_TABLE}`
-                WHERE data_tarefa >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 14 DAY)
-                  AND ligacao_feita = TRUE
+                WHERE ligacao_feita = TRUE
             )
             SELECT
                 id_sacado_sac,
