@@ -303,6 +303,7 @@ def dias_uteis_entre(d_inicio, d_fim) -> int:
     """
     if d_inicio >= d_fim:
         return 0
+    from data import eh_feriado
     count = 0
     d = d_inicio + timedelta(days=1)  # exclui o dia inicial
     while d <= d_fim:
