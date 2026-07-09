@@ -24,6 +24,7 @@ STATUS_LABELS = {
     "negotiating":      "Negociando",
     "telefone_errado":  "Telefone errado",
     "igreja_fechada":   "Igreja fechada",
+    "nao_cobrar":       "Não cobrar",
 }
 STATUS_COLORS = {
     "pending":          "#ef4444",
@@ -32,11 +33,12 @@ STATUS_COLORS = {
     "negotiating":      "#5fa3ff",
     "telefone_errado":  "#9ca3af",  # cinza neutro — sem urgência operacional
     "igreja_fechada":   "#6b7280",  # cinza mais escuro — encerramento definitivo
+    "nao_cobrar":       "#4b5563",  # cinza escuro — bloqueio administrativo
 }
 # Status que IMPEDEM o cliente de cair no lote do dia (atendente nao consegue
 # contatar). Cliente continua aparecendo nas outras telas, so e' excluido
 # da geracao do lote operacional e do kanban de hoje.
-STATUS_SEM_CONTATO = {"telefone_errado", "igreja_fechada"}
+STATUS_SEM_CONTATO = {"telefone_errado", "igreja_fechada", "nao_cobrar"}
 
 # Chave de exibição → chave interna (usado no dropdown de edição do dialog).
 # Apenas DECISOES INTENCIONAIS da atendente. 'Sem contato' (pending) e
@@ -49,6 +51,7 @@ STATUS_OPTS = {
     "Negociando":       "negotiating",
     "Telefone errado":  "telefone_errado",
     "Igreja fechada":   "igreja_fechada",
+    "Não cobrar":       "nao_cobrar",
 }
 # Rótulo da pill → chave interna  (usado no filtro do dashboard)
 STATUS_FILTER_MAP = {
@@ -58,6 +61,7 @@ STATUS_FILTER_MAP = {
     "Negociando":       "negotiating",
     "Telefone errado":  "telefone_errado",
     "Igreja fechada":   "igreja_fechada",
+    "Não cobrar":       "nao_cobrar",
 }
 
 # ── Logo ──────────────────────────────────────────────────────────────────────
