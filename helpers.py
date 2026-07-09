@@ -443,10 +443,10 @@ def get_effective_status(cid) -> str:
     manual_st = h.get("status", "")
     # Status intencionais: escolha da atendente vence o auto-update por bot.
     # promise/negotiating: decisao pessoal sobre o estado da negociacao.
-    # telefone_errado/igreja_fechada: marcacao de impossibilidade de contato
-    # — se o bot agiu antes (ex: bot mandou msg que nao foi respondida),
-    # ainda assim o status real deve prevalecer.
-    if manual_st in ("promise", "negotiating", "telefone_errado", "igreja_fechada"):
+    # telefone_errado/igreja_fechada/nao_cobrar: marcacao de impossibilidade
+    # ou bloqueio de contato — se o bot agiu antes (ex: bot mandou msg que
+    # nao foi respondida), ainda assim o status real deve prevalecer.
+    if manual_st in ("promise", "negotiating", "telefone_errado", "igreja_fechada", "nao_cobrar"):
         return manual_st
     import streamlit as st
     from auth import current_role, current_uid
