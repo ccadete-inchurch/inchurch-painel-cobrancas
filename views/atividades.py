@@ -4,7 +4,7 @@ import streamlit as st
 
 import time as _time
 
-from helpers import get_hist, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link
+from helpers import get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link
 from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, fetch_carteira_count, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
@@ -1177,9 +1177,14 @@ def _render_atividades(store, clientes, role):
         st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
 
         # ── Monta fila ────────────────────────────────────────────────────────
+        # get_hist_unificado: atendente ve o proprio; admin ve uniao das
+        # atendentes (Ana + Priscila). Sem isso, admin nao veria os status
+        # SEM_CONTATO marcados pelas atendentes (cache do proprio uid vazio)
+        # e cards com "Nao cobrar"/"Telefone errado"/"Igreja fechada"
+        # continuariam aparecendo pra ele.
         fila = []
         for c in clientes:
-            h = get_hist(c["id"])
+            h = get_hist_unificado(c["id"])
             fila.append((calcular_score(c, h), recomendar_acao(c), c, h))
         fila.sort(key=lambda x: x[0], reverse=True)
 
