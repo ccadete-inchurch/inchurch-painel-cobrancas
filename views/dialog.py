@@ -383,7 +383,6 @@ def dialog_editar(eid, from_fixados: bool = False):
     # Detecta se cliente está fixado (promise vencida OU retorno vencido)
     # pra exibir o botão Concluir junto com Salvar/Cancelar.
     from datetime import date as _d
-    from helpers import parse_date_br
     hoje = _d.today()
     eh_fixado = False
     if h.get("status") == "promise" and h.get("promiseDate"):
