@@ -266,6 +266,7 @@ def dialog_editar(eid, from_fixados: bool = False):
                 "Data de retorno",
                 value=datetime.strptime(h["retorno"], "%d/%m/%Y").date() if h.get("retorno") else date.today(),
                 disabled=somente_leitura,
+                format="DD/MM/YYYY",
                 key=f"dlg_ret_{eid}",
             )
 
@@ -319,6 +320,7 @@ def dialog_editar(eid, from_fixados: bool = False):
             "Data que prometeu pagar",
             value=datetime.strptime(h["promiseDate"], "%d/%m/%Y").date() if h.get("promiseDate") else date.today(),
             disabled=somente_leitura,
+            format="DD/MM/YYYY",
         )
 
     notes = st.text_area("Observações", value=h.get("notes", ""), placeholder="Ex: Cliente pediu prazo até sexta...", height=100, disabled=somente_leitura)
