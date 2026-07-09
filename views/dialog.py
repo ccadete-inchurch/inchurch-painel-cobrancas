@@ -3,7 +3,7 @@ import streamlit as st
 
 from config import STATUS_OPTS
 from auth import get_store, current_nome, current_email, current_role
-from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html
+from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html, get_effective_lastContact, parse_date_br
 
 
 @st.dialog("Editar Registro", width="large")
@@ -235,12 +235,24 @@ def dialog_editar(eid, from_fixados: bool = False):
     # evitar reset de estado quando dialog re-renderiza no auto-save.
     d1, d2 = st.columns(2, vertical_alignment="bottom")
     with d1:
-        last_contact = st.date_input(
+        # Ultimo Contato: exibicao read-only da data efetiva (bot + manual, o mais
+        # recente entre os dois). Antes era editavel, mas nao alterava cooldown do
+        # lote (fonte de confusao). Se cliente nunca foi contatado, valor=None
+        # deixa o campo vazio (evita fake "hoje" que aparecia antes).
+        _lc_efetivo_str = get_effective_lastContact(eid)
+        _lc_efetivo_date = parse_date_br(_lc_efetivo_str) if _lc_efetivo_str else None
+        st.date_input(
             "Último Contato",
-            value=datetime.strptime(h["lastContact"], "%d/%m/%Y").date() if h.get("lastContact") else date.today(),
-            disabled=somente_leitura,
+            value=_lc_efetivo_date,
+            disabled=True,
+            format="DD/MM/YYYY",
             key=f"dlg_lc_{eid}",
         )
+        # last_contact preserva o valor manual antigo do historico (ou None se
+        # nunca teve). Usado abaixo pra manter o payload de salvamento intacto
+        # sem sobrescrever o manual com o efetivo do bot.
+        _lc_manual_str = h.get("lastContact") or ""
+        last_contact = parse_date_br(_lc_manual_str) if _lc_manual_str else None
     with d2:
         tem_retorno = st.checkbox(
             "Agendar retorno",
@@ -317,13 +329,11 @@ def dialog_editar(eid, from_fixados: bool = False):
     # ao abrir). Notes salva no blur do textarea (Streamlit rerun apos
     # perder foco) — nao a cada keystroke.
     #
-    # Por que comparar com EXPECTED em vez de h: o widget de data defaulta
-    # pra HOJE quando h.lastContact e' vazio. Sem essa normalizacao, abrir
-    # o dialog ja disparava auto-save (curr=hoje != orig="") e o card
-    # mudava de posicao no kanban por mudanca de score.
+    # lastContact virou readonly (widget nao editavel, so exibe efetivo).
+    # last_contact aqui reflete o manual antigo (h.get) — nunca diverge do
+    # expected, entao nunca dispara auto-save por lastContact.
     if not somente_leitura:
-        _today_str = date.today().strftime("%d/%m/%Y")
-        _expected_last_contact = h.get("lastContact") or _today_str
+        _expected_last_contact = h.get("lastContact") or ""
         _expected_retorno = h.get("retorno") or ""
         _expected_promise = h.get("promiseDate") or ""
         _expected_tel_fixo = bool(h.get("tel_fixo", False))
@@ -421,7 +431,7 @@ def dialog_editar(eid, from_fixados: bool = False):
                         from data import _EMAIL_GRUPO, registrar_acao_manual
                         payload = {
                             "status":      STATUS_OPTS[status_sel] if status_sel else h.get("status", ""),
-                            "lastContact": last_contact.strftime("%d/%m/%Y"),
+                            "lastContact": last_contact.strftime("%d/%m/%Y") if last_contact else "",
                             "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
                             "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
                             "notes":       notes,
@@ -445,7 +455,7 @@ def dialog_editar(eid, from_fixados: bool = False):
                         from data import _EMAIL_GRUPO, registrar_acao_manual
                         payload = {
                             "status":      STATUS_OPTS[status_sel] if status_sel else h.get("status", ""),
-                            "lastContact": last_contact.strftime("%d/%m/%Y"),
+                            "lastContact": last_contact.strftime("%d/%m/%Y") if last_contact else "",
                             "retorno":     retorno.strftime("%d/%m/%Y") if retorno else "",
                             "promiseDate": promise_date.strftime("%d/%m/%Y") if promise_date else "",
                             "notes":       notes,
