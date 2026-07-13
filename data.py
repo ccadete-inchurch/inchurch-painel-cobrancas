@@ -481,21 +481,23 @@ def fetch_ids_nao_cobrar_api() -> set:
 
 
 def aplicar_grupo_nao_cobrar_no_store():
-    """Marca c['_grupo_nao_cobrar']=True nos clientes do grupo SL 'NÃO
-    COBRAR!' e espelha o set em session_state pra get_effective_status
-    (helpers.py) enxergar sem precisar varrer store['clientes'].
-    Overlay real-time — roda a cada render, fetch é cacheado (TTL 1h)."""
+    """Marca/desmarca c['_grupo_nao_cobrar'] nos clientes conforme presença
+    atual no grupo SL 'NÃO COBRAR!', e espelha o set em session_state pra
+    get_effective_status (helpers.py) enxergar sem precisar varrer
+    store['clientes']. Overlay real-time — roda a cada render, fetch é
+    cacheado (TTL 1h). Seta True OU False explicitamente (nunca só True):
+    store['clientes'] só é reconstruído do zero 1x/dia (reprocessamento do
+    BQ), então se não desmarcar aqui, um cliente que saiu do grupo ficaria
+    preso como 'não cobrar' até o próximo reprocessamento, mesmo depois do
+    cache da API expirar."""
     try:
         ids = fetch_ids_nao_cobrar_api()
     except Exception:
         return
     st.session_state["_grupo_nao_cobrar_ids"] = ids
-    if not ids:
-        return
     store = get_store()
     for c in store["clientes"]:
-        if str(c.get("id") or "") in ids:
-            c["_grupo_nao_cobrar"] = True
+        c["_grupo_nao_cobrar"] = str(c.get("id") or "") in ids
 
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
