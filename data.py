@@ -438,6 +438,66 @@ def aplicar_pagamentos_hoje_no_store():
     # em views/historico.py — BQ + overlay com dedup limpo, sem persistência.
 
 
+# ── Grupo 'Não cobrar' via API Superlógica ────────────────────────────────────
+# BQ (Splgc.splgc-grupo) só replica os grupos Ana/Priscila — o pipeline de
+# ETL filtra por nome (grupos_desejados = ["Ana Carolina", "Priscila
+# Oliveira"]) antes de carregar a tabela. O grupo id=55 'NÃO COBRAR!' nunca
+# chega no BQ. Buscamos direto da API (endpoint /clientes, mesmo usado pelo
+# pipeline) pra excluir esses clientes da fila de cobrança automaticamente,
+# sem depender de marcação manual da atendente.
+_GRUPO_ID_NAO_COBRAR = "55"
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_ids_nao_cobrar_api() -> set:
+    """Pagina /clientes (comDadosDoGrupo=1) e retorna o set de id_sacado_sac
+    de quem está no grupo SL id=55 ('NÃO COBRAR!'). Cache 1h — grupo muda raro.
+    """
+    ids = set()
+    pagina = 1
+    while True:
+        status, body, _ = _superlogica_get("/clientes", {
+            "apenasColunasPrincipais": 1,
+            "comDadosDoGrupo": 1,
+            "status": 2,
+            "itensPorPagina": 200,
+            "pagina": pagina,
+        })
+        if status != 200 or not isinstance(body, list) or not body:
+            break
+        for item in body:
+            for g in (item.get("sacado_grupo") or []):
+                if str(g.get("id_grupo_grp")) == _GRUPO_ID_NAO_COBRAR:
+                    cid = str(item.get("id_sacado_sac") or "")
+                    if cid:
+                        ids.add(cid)
+                    break
+        if len(body) < 200:
+            break
+        pagina += 1
+        if pagina > 50:  # ~10k clientes, limite de segurança (jamais alcançado)
+            break
+    return ids
+
+
+def aplicar_grupo_nao_cobrar_no_store():
+    """Marca c['_grupo_nao_cobrar']=True nos clientes do grupo SL 'NÃO
+    COBRAR!' e espelha o set em session_state pra get_effective_status
+    (helpers.py) enxergar sem precisar varrer store['clientes'].
+    Overlay real-time — roda a cada render, fetch é cacheado (TTL 1h)."""
+    try:
+        ids = fetch_ids_nao_cobrar_api()
+    except Exception:
+        return
+    st.session_state["_grupo_nao_cobrar_ids"] = ids
+    if not ids:
+        return
+    store = get_store()
+    for c in store["clientes"]:
+        if str(c.get("id") or "") in ids:
+            c["_grupo_nao_cobrar"] = True
+
+
 # ── BigQuery ──────────────────────────────────────────────────────────────────
 
 _BQ_PROJECT    = "business-intelligence-467516"
@@ -2977,6 +3037,8 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
             continue
         if c.get("_regularizado_hoje"):
             continue
+        if c.get("_grupo_nao_cobrar"):
+            continue
         cid_str = str(c.get("id", ""))
         meta = meta_por_cid.get(cid_str, {})
         if meta.get("status") in STATUS_SEM_CONTATO:
@@ -3491,6 +3553,12 @@ def recomendar_acao(cliente) -> list[str]:
     Clientes com 15d+ sem contato ≥3d são elegíveis, mas podem cair em MSG se score for menor.
     """
     from helpers import get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_streak_cooldown_dias
+
+    # Grupo SL 'NÃO COBRAR!' (id=55) — bloqueio administrativo vindo direto
+    # da Superlógica. Sempre vence, antes de qualquer outra regra (acordo
+    # inclusive) — igreja marcada assim não deve ser contatada.
+    if cliente.get("_grupo_nao_cobrar"):
+        return []
 
     cobracas = [c for c in cliente.get("_cobracas", []) if (c.get("dias_atraso") or 0) > 0]
     if cobracas:

@@ -426,11 +426,23 @@ def _any_atendente_engaged(cid, except_uid=None) -> bool:
     return False
 
 
+def is_grupo_nao_cobrar(cid) -> bool:
+    """True se o cliente está no grupo SL id=55 'NÃO COBRAR!' (via API
+    Superlógica — não existe no BQ). Populado por aplicar_grupo_nao_cobrar_no_store
+    (data.py) em session_state['_grupo_nao_cobrar_ids']."""
+    import streamlit as st
+    return str(cid) in st.session_state.get("_grupo_nao_cobrar_ids", set())
+
+
 def get_effective_status(cid) -> str:
     """Status visível na tela. Regra:
     - Status INTENCIONAIS (promise/negotiating/telefone_errado/igreja_fechada):
       escolha manual da atendente sempre vence. Sao status que carregam
       informacao especifica que o bot nao consegue inferir.
+    - Grupo SL 'NÃO COBRAR!': bloqueio administrativo vindo direto da API —
+      vence sobre contacted/pending (bot ja pode ter agido antes do cliente
+      entrar nesse grupo), mas nao sobre uma decisao manual mais especifica
+      (ex: atendente marcou 'promise' por algum motivo).
     - Contacted: se o BOT agiu OU outra ATENDENTE marcou algo — reflete
       que o time tocou no cliente.
     - Pending: ninguém tocou.
@@ -448,6 +460,8 @@ def get_effective_status(cid) -> str:
     # nao foi respondida), ainda assim o status real deve prevalecer.
     if manual_st in ("promise", "negotiating", "telefone_errado", "igreja_fechada", "nao_cobrar"):
         return manual_st
+    if is_grupo_nao_cobrar(cid):
+        return "nao_cobrar"
     import streamlit as st
     from auth import current_role, current_uid
     cid_str = str(cid)

@@ -9,7 +9,7 @@ st.set_page_config(
 
 from config import CSS
 from auth import is_logged, current_role
-from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq, load_cooldowns_from_painel, load_ultimo_contato_painel, load_atendente_atual_painel, load_grupo_atendente_map, aplicar_pagamentos_hoje_no_store, precisa_processar_bq
+from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq, load_cooldowns_from_painel, load_ultimo_contato_painel, load_atendente_atual_painel, load_grupo_atendente_map, aplicar_pagamentos_hoje_no_store, aplicar_grupo_nao_cobrar_no_store, precisa_processar_bq
 from views import (
     render_sidebar, render_header, tela_login, tela_importar,
     _render_dashboard, _render_historico, _render_cliente, _render_proximas,
@@ -130,6 +130,10 @@ def main():
     # Overlay real-time de pagamentos do dia via API Superlógica.
     # Roda a cada render — fetch é cacheado (TTL 5min), apply é O(n) idempotente.
     aplicar_pagamentos_hoje_no_store()
+
+    # Overlay do grupo SL 'NÃO COBRAR!' (id=55) — não existe no BQ, só na API.
+    # Roda a cada render — fetch é cacheado (TTL 1h), apply é O(n) idempotente.
+    aplicar_grupo_nao_cobrar_no_store()
 
     tela = st.session_state.get("tela", "principal")
     if not store["clientes"] or tela == "importar":
