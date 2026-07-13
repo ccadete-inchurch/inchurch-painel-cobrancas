@@ -242,6 +242,14 @@ def _motivo(bucket, acoes, c) -> tuple:
 
 def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     cor           = _score_cor(score)
+    # Link clicavel pro cadastro do sacado no Superlogica — atendente clica
+    # e vai direto pra pagina do cliente la, sem precisar buscar pelo ID.
+    _sl_id  = c.get("id")
+    _sl_tag = (
+        f'<a href="https://inchurch.superlogica.net/clients/financeiro/sacados/id/{_sl_id}?status=2" '
+        f'target="_blank" style="color:inherit;text-decoration:underline dotted;text-underline-offset:2px" '
+        f'title="Abrir no Superlógica">ID {_sl_id}</a>'
+    ) if _sl_id else "ID —"
     # Opacity reduzida = card visualmente secundário (ex: admin 'Todos os
     # clientes' vê tudo, mas quem não está em lote fica esmaecido).
     _op_style     = f'opacity:{opacity};' if opacity < 1.0 else ''
@@ -305,7 +313,7 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
             f'<div style="font-weight:700;font-size:17px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
             f'{c["nome"]}'
             f'<div style="font-size:11px;color:#9ca3af;font-weight:400;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
-            f'<span>{c.get("cnpj","—")} · ID {c.get("id","—")}</span>'
+            f'<span>{c.get("cnpj","—")} · {_sl_tag}</span>'
             f'{inativo_badge}'
             f'</div>'
             f'</div>'
@@ -333,7 +341,7 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
         f'<div style="font-weight:700;font-size:17px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
         f'{c["nome"]}'
         f'<div style="font-size:11px;color:#9ca3af;font-weight:400;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
-        f'<span>{c.get("cnpj","—")} · ID {c.get("id","—")}</span>'
+        f'<span>{c.get("cnpj","—")} · {_sl_tag}</span>'
         f'{inativo_badge}{acordo_badge}{tel_fixo_badge}{parcial_badge}'
         f'</div>'
         f'</div>'
