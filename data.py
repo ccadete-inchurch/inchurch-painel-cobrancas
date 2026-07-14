@@ -2988,7 +2988,12 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
                     buckets[cid] = "mensagem" if pd.notna(row.get("dt_entrou_coluna_msg")) else "ligacao"
                 return buckets
         except Exception:
-            pass
+            # Falha ao checar se já existe lote hoje — NÃO prossegue pra gerar
+            # um lote novo às cegas (risco real: duplicar o lote do dia caso já
+            # exista mas essa query tenha falhado por contenção/timeout
+            # passageiro). Fail-closed: retorna vazio, próxima tentativa
+            # (rerun/relogin) refaz a checagem do zero.
+            return {}
 
     # Vamos GERAR novo lote. Garante que store['clientes'] não está stale —
     # cache pode ter sido populado em sessão anterior antes do pipeline
