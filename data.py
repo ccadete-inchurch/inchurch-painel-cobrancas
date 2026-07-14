@@ -3269,6 +3269,35 @@ def fetch_ids_em_qualquer_lote_hoje() -> set:
         return set()
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_buckets_hoje_todos() -> dict:
+    """{id_sacado_sac: 'mensagem'|'ligacao'} pra TODOS os clientes com linha
+    hoje, de qualquer atendente. Usado pelo card de Total em 'Todos os
+    clientes' pra contar cada cliente só na tarefa dele do dia (mesma regra
+    já aplicada no contador por atendente desde maio/2026) — sem isso, um
+    cliente de tarefa ligação que também mandou mensagem contava nos dois
+    totais ao mesmo tempo. Cache curto (2min), mesmo padrão de
+    fetch_ids_em_qualquer_lote_hoje.
+    """
+    client = get_bq_client()
+    if not client:
+        return {}
+    try:
+        df = client.query(f"""
+            SELECT id_sacado_sac, dt_entrou_coluna_msg
+            FROM `{_TAREFAS_TABLE}`
+            WHERE data_tarefa = '{hoje_lote()}'
+        """).to_dataframe()
+        if df.empty:
+            return {}
+        return {
+            str(r["id_sacado_sac"]): ("mensagem" if pd.notna(r.get("dt_entrou_coluna_msg")) else "ligacao")
+            for _, r in df.iterrows()
+        }
+    except Exception:
+        return {}
+
+
 def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
     """Atualiza bools na tabela de tarefas com base no status n8n do dia.
     Usa um único MERGE em vez de 80 UPDATEs individuais.
@@ -3376,16 +3405,19 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
         concluida_post = _dentro_da_janela(ts_concluida_best, dt_entrada)
 
         msg_env   = interacao_post
-        # 'ligacao_pendente'/'tentar_novamente' só vira ligacao_feita=TRUE se a
-        # tarefa do cliente HOJE já era ligação — se a tarefa era mensagem, foi
-        # a atendente mandando WhatsApp mesmo (N8N só lê e classifica a
-        # conversa depois), ninguém tentou ligar de verdade.
-        lig_feit  = concluida_post or (
-            interacao_post
-            and st_n8n in ("ligacao_pendente", "tentar_novamente")
-            and bucket_lote.get(cid) == "ligacao"
+        # ligacao_feita/ligacao_atendida só valem se a tarefa do cliente HOJE
+        # já é ligação — se a tarefa é mensagem, foi a atendente mandando
+        # WhatsApp mesmo (N8N só lê e classifica a conversa depois), ninguém
+        # tentou/atendeu ligação de verdade. Isso vale tanto pra 'concluida'
+        # (frase "além da ligação") quanto pra 'ligacao_pendente'/
+        # 'tentar_novamente' (frase "vou te ligar em instantes") — os dois
+        # caminhos que geram lig_feit/lig_atend.
+        _eh_tarefa_ligacao = bucket_lote.get(cid) == "ligacao"
+        lig_feit  = _eh_tarefa_ligacao and (
+            concluida_post
+            or (interacao_post and st_n8n in ("ligacao_pendente", "tentar_novamente"))
         )
-        lig_atend = concluida_post
+        lig_atend = _eh_tarefa_ligacao and concluida_post
 
         if msg_env or lig_feit or lig_atend:
             rows.append((c["id"], msg_env, lig_feit, lig_atend))
