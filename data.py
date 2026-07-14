@@ -2301,6 +2301,43 @@ def registrar_acao_manual(cid: str, atendente: str, atendeu: bool) -> bool:
         return False
 
 
+def corrigir_bucket_tel_fixo(cid: str, atendente: str) -> bool:
+    """Corrige o bucket da linha de hoje no painel_tarefas_diarias pra
+    'ligacao' quando a atendente marca 'Telefone fixo' NUM CLIENTE QUE JÁ
+    ESTAVA no lote de hoje como bucket='mensagem' (gerado às 08:15, antes
+    da marcação).
+
+    Por quê: registrar_acao_manual (botão Atendeu/Não atendeu) já grava
+    ligacao_feita=TRUE corretamente, mas se a linha continuar com
+    dt_entrou_coluna_msg preenchido (bucket='mensagem'), essa ligação real
+    não é contada em lugar nenhum — _metricas_lote_painel exige bucket E
+    bool baterem (bucket='ligacao' E ligacao_feita=true). Sem essa correção
+    a atendente fazia o trabalho e ele sumia das métricas (nem mensagem,
+    nem ligação).
+
+    Não faz nada se não houver lote hoje pra esse cliente, ou se o bucket
+    já for 'ligacao' (dt_entrou_coluna_msg IS NULL).
+    """
+    client = get_bq_client()
+    if not client:
+        return False
+    hoje = hoje_lote()
+    try:
+        job = client.query(f"""
+            UPDATE `{_TAREFAS_TABLE}`
+            SET dt_entrou_coluna_ligacao = dt_entrou_coluna_msg,
+                dt_entrou_coluna_msg     = NULL
+            WHERE id_sacado_sac = '{cid}'
+              AND atendente     = '{atendente}'
+              AND data_tarefa   = '{hoje}'
+              AND dt_entrou_coluna_msg IS NOT NULL
+        """)
+        job.result()
+        return (job.num_dml_affected_rows or 0) > 0
+    except Exception:
+        return False
+
+
 def load_historico_from_bq():
     """Carrega historico do BQ para o session_state.
 

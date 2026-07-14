@@ -375,6 +375,16 @@ def dialog_editar(eid, from_fixados: bool = False):
             if current_email() in _EG:
                 _autosave_payload["atendente"] = current_nome()
             save_hist(eid, _autosave_payload)
+            # Telefone fixo virou True agora: se esse cliente já está no lote
+            # de hoje como bucket='mensagem' (gerado antes dessa marcação),
+            # corrige pra 'ligacao' na hora — senão a ligação real feita via
+            # Atendeu/Não atendeu não conta em lugar nenhum nas métricas
+            # (bucket diz mensagem, bools dizem ligação, nada bate).
+            if bool(tel_fixo) and not _expected_tel_fixo:
+                from data import corrigir_bucket_tel_fixo
+                _atd_nome = cliente.get("_grupo") or ""
+                if _atd_nome:
+                    corrigir_bucket_tel_fixo(eid, _atd_nome)
             st.toast("Alterações salvas")
 
     # Linha "Editado por" só faz sentido em modo edição
