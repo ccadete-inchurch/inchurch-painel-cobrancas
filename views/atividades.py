@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_buckets_hoje_todos, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, fetch_carteira_count, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, fetch_carteira_count, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -1133,12 +1133,8 @@ def _render_atividades(store, clientes, role):
             _eh_filtrado = (
                 filtro_grupo != "Todos" or filtro_inativo != "Todos"
             )
-            # Bucket de cada cliente com atividade hoje (qualquer atendente) —
-            # sem isso, cliente de tarefa ligação que também mandou mensagem
-            # contava nos dois totais (Mensagens E Ligações) ao mesmo tempo.
-            _buckets_todos = fetch_buckets_hoje_todos()
             dados_m, label_m = (
-                _metricas_lote_painel(_ids_filtrados if _eh_filtrado else None, _buckets_todos),
+                _metricas_lote_painel(_ids_filtrados if _eh_filtrado else None),
                 "Total" if not _eh_filtrado else "Filtrado",
             )
 
