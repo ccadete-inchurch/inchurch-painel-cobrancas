@@ -1388,6 +1388,13 @@ def _render_atividades(store, clientes, role):
                 else:
                     for idx, (score, acoes, c, h) in enumerate(itens):
                         bk = buckets_hoje.get(c["id"]) if isinstance(buckets_hoje, dict) else None
+                        # Reaplica o mesmo override de tel_fixo usado pra decidir
+                        # o canal/coluna (linha ~1317) — sem isso, cliente tel_fixo
+                        # cai certo em TENTAR NOVAMENTE mas o badge do _motivo usa
+                        # o bucket original (ex: 'mensagem'), mostrando badge de
+                        # Mensagem numa coluna que só existe pra fluxo de ligação.
+                        if c.get("_tel_fixo"):
+                            bk = "ligacao"
                         # Admin em 'Todos os clientes': cards FORA de qualquer
                         # lote ficam com opacidade reduzida (visualmente
                         # secundários — não estão sendo trabalhados hoje).
