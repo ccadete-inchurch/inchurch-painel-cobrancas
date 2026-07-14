@@ -3300,7 +3300,8 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
     try:
         df_lote = client.query(f"""
             SELECT id_sacado_sac,
-                   COALESCE(dt_entrou_coluna_msg, dt_entrou_coluna_ligacao) AS dt_entrada
+                   COALESCE(dt_entrou_coluna_msg, dt_entrou_coluna_ligacao) AS dt_entrada,
+                   dt_entrou_coluna_msg
             FROM `{_TAREFAS_TABLE}`
             WHERE atendente   = '{atendente}'
               AND data_tarefa = '{hoje}'
@@ -3310,6 +3311,15 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
     if df_lote.empty:
         return
     dt_lote = {str(row["id_sacado_sac"]): row["dt_entrada"] for _, row in df_lote.iterrows()}
+    # Bucket do dia por cliente — vincula o status 'ligacao_pendente' do N8N
+    # à tarefa REAL do cliente hoje. Sem isso, um cliente de tarefa MENSAGEM
+    # que recebe esse status do bot também marca ligacao_feita=TRUE, o que
+    # contamina o streak de '2 falhas → cooldown 7d' (que não filtra por
+    # bucket) com tentativas que nunca foram ligação de verdade.
+    bucket_lote = {
+        str(row["id_sacado_sac"]): ("mensagem" if pd.notna(row.get("dt_entrou_coluna_msg")) else "ligacao")
+        for _, row in df_lote.iterrows()
+    }
 
     # Cutoff superior: meia-noite BRT do dia seguinte ao lote (= fim do dia operacional)
     _BRT_TZ = timezone(timedelta(hours=-3))
@@ -3366,7 +3376,15 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
         concluida_post = _dentro_da_janela(ts_concluida_best, dt_entrada)
 
         msg_env   = interacao_post
-        lig_feit  = concluida_post or (interacao_post and st_n8n in ("ligacao_pendente", "tentar_novamente"))
+        # 'ligacao_pendente'/'tentar_novamente' só vira ligacao_feita=TRUE se a
+        # tarefa do cliente HOJE já era ligação — se a tarefa era mensagem, foi
+        # a atendente mandando WhatsApp mesmo (N8N só lê e classifica a
+        # conversa depois), ninguém tentou ligar de verdade.
+        lig_feit  = concluida_post or (
+            interacao_post
+            and st_n8n in ("ligacao_pendente", "tentar_novamente")
+            and bucket_lote.get(cid) == "ligacao"
+        )
         lig_atend = concluida_post
 
         if msg_env or lig_feit or lig_atend:
