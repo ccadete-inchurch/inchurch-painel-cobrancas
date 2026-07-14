@@ -448,35 +448,49 @@ def aplicar_pagamentos_hoje_no_store():
 _GRUPO_ID_NAO_COBRAR = "55"
 
 
+def _fetch_pagina_clientes_sl(pagina: int) -> list:
+    """Busca 1 página de /clientes (comDadosDoGrupo=1). Retorna [] em erro/fim
+    dos dados — página além do fim vem HTTP 200 com lista vazia (testado
+    manualmente), então é seguro pedir páginas além do necessário em paralelo."""
+    status, body, _ = _superlogica_get("/clientes", {
+        "apenasColunasPrincipais": 1,
+        "comDadosDoGrupo": 1,
+        "status": 2,
+        "itensPorPagina": 200,
+        "pagina": pagina,
+    })
+    if status != 200 or not isinstance(body, list):
+        return []
+    return body
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_ids_nao_cobrar_api() -> set:
     """Pagina /clientes (comDadosDoGrupo=1) e retorna o set de id_sacado_sac
     de quem está no grupo SL id=55 ('NÃO COBRAR!'). Cache 1h — grupo muda raro.
+
+    Paginação em PARALELO (16 threads) — cada request individual desse
+    endpoint leva ~9s (lentidão do lado da Superlógica, não é rate limit;
+    testado manualmente), então sequencial (~31 páginas p/ ~6k clientes)
+    levava 1-5min e travava o carregamento do painel. Paralelo cai pra
+    ~25-30s. Intervalo fixo (1-40 páginas, ~8k clientes de folga) em vez de
+    parar dinamicamente no primeiro "fim dos dados" — página vazia é
+    barata/rápida, e isso permite disparar tudo de uma vez sem coordenação
+    entre threads pra saber quando parar.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     ids = set()
-    pagina = 1
-    while True:
-        status, body, _ = _superlogica_get("/clientes", {
-            "apenasColunasPrincipais": 1,
-            "comDadosDoGrupo": 1,
-            "status": 2,
-            "itensPorPagina": 200,
-            "pagina": pagina,
-        })
-        if status != 200 or not isinstance(body, list) or not body:
-            break
-        for item in body:
-            for g in (item.get("sacado_grupo") or []):
-                if str(g.get("id_grupo_grp")) == _GRUPO_ID_NAO_COBRAR:
-                    cid = str(item.get("id_sacado_sac") or "")
-                    if cid:
-                        ids.add(cid)
-                    break
-        if len(body) < 200:
-            break
-        pagina += 1
-        if pagina > 50:  # ~10k clientes, limite de segurança (jamais alcançado)
-            break
+    with ThreadPoolExecutor(max_workers=16) as ex:
+        futures = [ex.submit(_fetch_pagina_clientes_sl, p) for p in range(1, 41)]
+        for fut in as_completed(futures):
+            for item in fut.result():
+                for g in (item.get("sacado_grupo") or []):
+                    if str(g.get("id_grupo_grp")) == _GRUPO_ID_NAO_COBRAR:
+                        cid = str(item.get("id_sacado_sac") or "")
+                        if cid:
+                            ids.add(cid)
+                        break
     return ids
 
 
