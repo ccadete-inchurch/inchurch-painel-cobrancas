@@ -1293,7 +1293,6 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
     today_str = hoje_brt()
     today_dt  = date.fromisoformat(today_str)
     ref_str   = (today_dt - timedelta(days=30)).isoformat()
-    ref7_str  = (today_dt - timedelta(days=7)).isoformat()
 
     # ── Filtro de atendente (via splgc-grupo) ─────────────────────────────
     contacts_cte = ""
@@ -1408,21 +1407,13 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
         COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) BETWEEN 1 AND 30 AND (status = '0' OR liq >= DATE('{ref_str}')) AND ja_pagou = 1, cid, NULL)) AS d30_n,
         COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) >= 90 AND (status = '0' OR liq >= DATE('{ref_str}')) AND ja_pagou = 1, cid, NULL)) AS d90_n
       FROM cobrs
-    ),
-    ref7 AS (
-      SELECT
-        COUNT(DISTINCT IF(venc < DATE('{ref7_str}') AND (status = '0' OR liq >= DATE('{ref7_str}')) AND ja_pagou = 1, cid, NULL)) AS total_n,
-        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref7_str}'), venc, DAY) BETWEEN 1 AND 30 AND (status = '0' OR liq >= DATE('{ref7_str}')) AND ja_pagou = 1, cid, NULL)) AS d30_n,
-        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref7_str}'), venc, DAY) >= 90 AND (status = '0' OR liq >= DATE('{ref7_str}')) AND ja_pagou = 1, cid, NULL)) AS d90_n
-      FROM cobrs
     )
     SELECT
       c.n AS carteira,
       h.total_n, h.d30_n, h.d90_n,
       h.total_r, h.d30_r, h.d90_r,
-      r.total_n AS r_total_n, r.d30_n AS r_d30_n, r.d90_n AS r_d90_n,
-      r7.total_n AS r7_total_n, r7.d30_n AS r7_d30_n, r7.d90_n AS r7_d90_n
-    FROM carteira c, hoje h, ref r, ref7 r7
+      r.total_n AS r_total_n, r.d30_n AS r_d30_n, r.d90_n AS r_d90_n
+    FROM carteira c, hoje h, ref r
     """
     try:
         df = client.query(query).to_dataframe()
@@ -1452,20 +1443,11 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
         "r_total_n":   int(r["r_total_n"]),
         "r_d30_n":     int(r["r_d30_n"]),
         "r_d90_n":     int(r["r_d90_n"]),
-        # D-7 reference (WoW — semana vs semana). Serve pra card mostrar
-        # tendencia recente ao lado do MoM.
-        "r7_total_n":  int(r["r7_total_n"]),
-        "r7_d30_n":    int(r["r7_d30_n"]),
-        "r7_d90_n":    int(r["r7_d90_n"]),
         # Delta MoM com base no BQ snapshot. Caso queira "delta live", recalcule
         # em atividades.py usando (overlay.total_n - r_total_n) / carteira.
         "delta_total": (float(r["total_n"]) - float(r["r_total_n"])) / carteira * 100,
         "delta_d30":   (float(r["d30_n"])   - float(r["r_d30_n"]))   / carteira * 100,
         "delta_d90":   (float(r["d90_n"])   - float(r["r_d90_n"]))   / carteira * 100,
-        # Delta WoW (7d)
-        "delta_total_7d": (float(r["total_n"]) - float(r["r7_total_n"])) / carteira * 100,
-        "delta_d30_7d":   (float(r["d30_n"])   - float(r["r7_d30_n"]))   / carteira * 100,
-        "delta_d90_7d":   (float(r["d90_n"])   - float(r["r7_d90_n"]))   / carteira * 100,
     }
 
 
@@ -1855,28 +1837,7 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
              AND (desat IS NULL OR desat > venc), valor, 0)) AS d90_emitido_ref,
       SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 120 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
              AND (desat IS NULL OR desat > venc)
-             AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS d90_aberto_ref,
-
-      -- D-7 REF: Total TTM [D-372, D-7]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 372 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)
-             AND (desat IS NULL OR desat > venc), valor, 0)) AS total_emitido_ref7,
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 372 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)
-             AND (desat IS NULL OR desat > venc)
-             AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)), valor, 0)) AS total_aberto_ref7,
-
-      -- D-7 REF: 30d [D-37, D-7]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 37 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)
-             AND (desat IS NULL OR desat > venc), valor, 0)) AS d30_emitido_ref7,
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 37 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)
-             AND (desat IS NULL OR desat > venc)
-             AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)), valor, 0)) AS d30_aberto_ref7,
-
-      -- D-7 REF: 90d [D-97, D-7]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 97 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)
-             AND (desat IS NULL OR desat > venc), valor, 0)) AS d90_emitido_ref7,
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 97 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)
-             AND (desat IS NULL OR desat > venc)
-             AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)), valor, 0)) AS d90_aberto_ref7
+             AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS d90_aberto_ref
     FROM boletos
     """
     try:
@@ -1899,9 +1860,6 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
     total_pct_ref  = _pct(r["total_aberto_ref"],  r["total_emitido_ref"])
     d30_pct_ref    = _pct(r["d30_aberto_ref"],    r["d30_emitido_ref"])
     d90_pct_ref    = _pct(r["d90_aberto_ref"],    r["d90_emitido_ref"])
-    total_pct_ref7 = _pct(r["total_aberto_ref7"], r["total_emitido_ref7"])
-    d30_pct_ref7   = _pct(r["d30_aberto_ref7"],   r["d30_emitido_ref7"])
-    d90_pct_ref7   = _pct(r["d90_aberto_ref7"],   r["d90_emitido_ref7"])
 
     return {
         # Total (12 meses TTM)
@@ -1909,19 +1867,16 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
         "total_aberto":     float(r["total_aberto_hoje"] or 0),
         "total_emitido":    float(r["total_emitido_hoje"] or 0),
         "delta_total_pp":   total_pct_hoje - total_pct_ref,
-        "delta_total_7d_pp": total_pct_hoje - total_pct_ref7,
         # 30d (janela rolante)
         "d30_pct":          d30_pct_hoje,
         "d30_aberto":       float(r["d30_aberto_hoje"] or 0),
         "d30_emitido":      float(r["d30_emitido_hoje"] or 0),
         "delta_d30_pp":     d30_pct_hoje - d30_pct_ref,
-        "delta_d30_7d_pp":  d30_pct_hoje - d30_pct_ref7,
         # 90d (janela rolante)
         "d90_pct":          d90_pct_hoje,
         "d90_aberto":       float(r["d90_aberto_hoje"] or 0),
         "d90_emitido":      float(r["d90_emitido_hoje"] or 0),
         "delta_d90_pp":     d90_pct_hoje - d90_pct_ref,
-        "delta_d90_7d_pp":  d90_pct_hoje - d90_pct_ref7,
     }
 
 

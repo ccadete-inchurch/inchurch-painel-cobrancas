@@ -567,9 +567,6 @@ def _render_atividades(store, clientes, role):
             "delta_total": (_today["total_n"] - _npl["r_total_n"]) / _carteira * 100,
             "delta_d30":   (_today["d30_n"]   - _npl["r_d30_n"])   / _carteira * 100,
             "delta_d90":   (_today["d90_n"]   - _npl["r_d90_n"])   / _carteira * 100,
-            "delta_total_7d": (_today["total_n"] - _npl["r7_total_n"]) / _carteira * 100,
-            "delta_d30_7d":   (_today["d30_n"]   - _npl["r7_d30_n"])   / _carteira * 100,
-            "delta_d90_7d":   (_today["d90_n"]   - _npl["r7_d90_n"])   / _carteira * 100,
         }
         def _delta_html(v: float) -> str:
             if abs(v) < 0.005:
@@ -585,34 +582,8 @@ def _render_atividades(store, clientes, role):
             s = f"{v:,.2f}"
             return s.replace(",", "X").replace(".", ",").replace("X", ".")
 
-        def _delta_html_com_label(v: float, sufixo: str) -> str:
-            if abs(v) < 0.005:
-                return (f'<span style="color:#9ca3af;font-size:12px">'
-                        f'— 0,00 p.p. {sufixo}</span>')
-            arrow, color = ("▼", "#22c55e") if v < 0 else ("▲", "#fb7185")
-            val = f"{abs(v):.2f}".replace(".", ",")
-            return (
-                f'<span style="color:{color};font-size:12px;font-weight:600">'
-                f'{arrow} {val} p.p. {sufixo}</span>'
-            )
-
-        def _card(label: str, pct: float, delta: float, rs: float,
-                  delta_7d: float | None = None) -> str:
+        def _card(label: str, pct: float, delta: float, rs: float) -> str:
             pct_str = f"{pct:.2f}".replace(".", ",")
-            # Se tiver delta_7d, mostra os 2 (30d + 7d) em fonte menor logo
-            # abaixo do %. Senao mantem so o de 30d ao lado do numero grande.
-            if delta_7d is not None:
-                deltas_bloco = (
-                    f'<div style="display:flex;gap:12px;margin-top:6px;'
-                    f'flex-wrap:wrap">'
-                    f'{_delta_html_com_label(delta,    "(30d)")}'
-                    f'{_delta_html_com_label(delta_7d, "(7d)")}'
-                    f'</div>'
-                )
-                delta_inline = ''
-            else:
-                deltas_bloco = ''
-                delta_inline = _delta_html(delta)
             return (
                 '<div style="flex:1;background:#181c26;'
                 'border:1px solid #2a2f42;border-radius:10px;'
@@ -623,10 +594,9 @@ def _render_atividades(store, clientes, role):
                 f'<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px">'
                 f'<span style="font-size:28px;font-weight:800;color:#e8eaf0;'
                 f'letter-spacing:-0.8px;line-height:1">{pct_str}%</span>'
-                f'{delta_inline}'
+                f'{_delta_html(delta)}'
                 f'</div>'
-                f'{deltas_bloco}'
-                f'<div style="font-size:12px;color:#6b7280;margin-top:4px">'
+                f'<div style="font-size:12px;color:#6b7280">'
                 f'R$ {_fmt_rs(rs)} em aberto</div>'
                 '</div>'
             )
@@ -640,9 +610,9 @@ def _render_atividades(store, clientes, role):
         )
         _cards_cliente = (
             '<div style="display:flex;gap:14px;margin-bottom:6px">'
-            + _card("Inadimplência total",            _npl["total_pct"], _npl["delta_total"], _npl["total_r"], _npl.get("delta_total_7d"))
-            + _card("Inadimplência até 30 dias",      _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"],   _npl.get("delta_d30_7d"))
-            + _card("Inadimplência 90 dias ou mais",  _npl["d90_pct"],   _npl["delta_d90"],   _npl["d90_r"],   _npl.get("delta_d90_7d"))
+            + _card("Inadimplência total",            _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
+            + _card("Inadimplência até 30 dias",      _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
+            + _card("Inadimplência 90 dias ou mais",  _npl["d90_pct"],   _npl["delta_d90"],   _npl["d90_r"])
             + '</div>'
         )
         _npl_html_parts.append(_label_cliente + _cards_cliente)
@@ -667,14 +637,12 @@ def _render_atividades(store, clientes, role):
                     _rolling["d30_pct"],
                     _rolling["delta_d30_pp"],
                     _rolling["d30_aberto"],
-                    _rolling.get("delta_d30_7d_pp"),
                 )
                 + _card(
                     "Inadimplência trimestral",
                     _rolling["d90_pct"],
                     _rolling["delta_d90_pp"],
                     _rolling["d90_aberto"],
-                    _rolling.get("delta_d90_7d_pp"),
                 )
                 + '</div>'
             )
