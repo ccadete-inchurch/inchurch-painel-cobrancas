@@ -667,12 +667,14 @@ def _render_atividades(store, clientes, role):
                     _rolling["d30_pct"],
                     _rolling["delta_d30_pp"],
                     _rolling["d30_aberto"],
+                    _rolling.get("delta_d30_7d_pp"),
                 )
                 + _card(
                     "Inadimplência trimestral",
                     _rolling["d90_pct"],
                     _rolling["delta_d90_pp"],
                     _rolling["d90_aberto"],
+                    _rolling.get("delta_d90_7d_pp"),
                 )
                 + '</div>'
             )

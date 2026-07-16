@@ -1855,7 +1855,28 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
              AND (desat IS NULL OR desat > venc), valor, 0)) AS d90_emitido_ref,
       SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 120 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
              AND (desat IS NULL OR desat > venc)
-             AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS d90_aberto_ref
+             AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS d90_aberto_ref,
+
+      -- D-7 REF: Total TTM [D-372, D-7]
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 372 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)
+             AND (desat IS NULL OR desat > venc), valor, 0)) AS total_emitido_ref7,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 372 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)
+             AND (desat IS NULL OR desat > venc)
+             AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)), valor, 0)) AS total_aberto_ref7,
+
+      -- D-7 REF: 30d [D-37, D-7]
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 37 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)
+             AND (desat IS NULL OR desat > venc), valor, 0)) AS d30_emitido_ref7,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 37 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)
+             AND (desat IS NULL OR desat > venc)
+             AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)), valor, 0)) AS d30_aberto_ref7,
+
+      -- D-7 REF: 90d [D-97, D-7]
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 97 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)
+             AND (desat IS NULL OR desat > venc), valor, 0)) AS d90_emitido_ref7,
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 97 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)
+             AND (desat IS NULL OR desat > venc)
+             AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 7 DAY)), valor, 0)) AS d90_aberto_ref7
     FROM boletos
     """
     try:
@@ -1878,6 +1899,9 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
     total_pct_ref  = _pct(r["total_aberto_ref"],  r["total_emitido_ref"])
     d30_pct_ref    = _pct(r["d30_aberto_ref"],    r["d30_emitido_ref"])
     d90_pct_ref    = _pct(r["d90_aberto_ref"],    r["d90_emitido_ref"])
+    total_pct_ref7 = _pct(r["total_aberto_ref7"], r["total_emitido_ref7"])
+    d30_pct_ref7   = _pct(r["d30_aberto_ref7"],   r["d30_emitido_ref7"])
+    d90_pct_ref7   = _pct(r["d90_aberto_ref7"],   r["d90_emitido_ref7"])
 
     return {
         # Total (12 meses TTM)
@@ -1885,16 +1909,19 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
         "total_aberto":     float(r["total_aberto_hoje"] or 0),
         "total_emitido":    float(r["total_emitido_hoje"] or 0),
         "delta_total_pp":   total_pct_hoje - total_pct_ref,
+        "delta_total_7d_pp": total_pct_hoje - total_pct_ref7,
         # 30d (janela rolante)
         "d30_pct":          d30_pct_hoje,
         "d30_aberto":       float(r["d30_aberto_hoje"] or 0),
         "d30_emitido":      float(r["d30_emitido_hoje"] or 0),
         "delta_d30_pp":     d30_pct_hoje - d30_pct_ref,
+        "delta_d30_7d_pp":  d30_pct_hoje - d30_pct_ref7,
         # 90d (janela rolante)
         "d90_pct":          d90_pct_hoje,
         "d90_aberto":       float(r["d90_aberto_hoje"] or 0),
         "d90_emitido":      float(r["d90_emitido_hoje"] or 0),
         "delta_d90_pp":     d90_pct_hoje - d90_pct_ref,
+        "delta_d90_7d_pp":  d90_pct_hoje - d90_pct_ref7,
     }
 
 
