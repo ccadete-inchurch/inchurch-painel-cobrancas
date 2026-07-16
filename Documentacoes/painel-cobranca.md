@@ -18,6 +18,14 @@ App Streamlit de gestão operacional de inadimplência: organiza a carteira, pri
 **Hospedagem:** Streamlit Cloud (deploy contínuo via push no `main` do repositório GitHub `ccadete-inchurch/inchurch-painel-cobrancas`).
 **Localização local do projeto:** `c:\Users\inChurch--1343\OneDrive\Desktop\painel-inadimplencia`
 
+> **⚠ Nota importante sobre o N8N**
+>
+> As mensagens de cobrança são enviadas **pelas próprias atendentes (Ana Carolina e Priscila)** através do WhatsApp Business — não há bot enviando mensagens em nome delas.
+>
+> O **N8N atua apenas como observador**: monitora as conversas do WhatsApp, classifica cada evento (mensagem enviada, ligação atendida, cliente respondeu, etc.) usando palavras-chave/padrões, e grava no Postgres. O painel lê esses eventos e propaga pro BigQuery via `atualizar_tarefas_bq`.
+>
+> Sempre que a documentação menciona "detectado pelo N8N", significa "observado a partir da conversa real que a atendente teve no WhatsApp".
+
 ---
 
 ## Visão Estratégica
@@ -28,7 +36,7 @@ App Streamlit de gestão operacional de inadimplência: organiza a carteira, pri
 |---|---|---|---|---|
 | BigQuery (Splgc) | Cobranças em aberto, liquidações, grupos, clientes | 1. Carregar carteira e calcular atraso | Painel de inadimplência com priorização | Atendentes |
 | BigQuery (painel_*) | Histórico manual, tarefas diárias, snapshots | 2. Enriquecer com status manual e cooldown | Estado de contato consolidado | Gestores |
-| Postgres n8n | Últimas mensagens/interações WhatsApp | 3. Aplicar overlay de eventos recentes do bot | Sinal de contato quase em tempo real | Admin / BI |
+| Postgres n8n | Últimas mensagens/interações WhatsApp | 3. Aplicar overlay de eventos recentes detectados no WhatsApp | Sinal de contato quase em tempo real | Admin / BI |
 | Superlógica API | Pagamentos do dia (não refletidos ainda no BQ) | 4. Marcar `_regularizado_hoje` na sessão | Overlay de regularizações | — |
 | Google OAuth | Identidade e perfil do usuário | 5. Gerar lote diário (30 lig + 50 msg) | Lote diário auditável no BQ | — |
 | GitHub Actions | Trigger do cron 08:15 BRT | 6. Persistir histórico, snapshot, tarefas | Base histórica para BI | — |
@@ -142,7 +150,7 @@ Gargalo: dependência da atualização diária do Splgc (~04:00 BRT)
 2. Vê 80 cards priorizados por score (30 LIG + 50 MSG)
 3. Para cada card:
    - Ligação: liga → clica dialog → marca resultado (Atendeu / Não atendeu / Prometeu / Negociando)
-   - Mensagem: bot já cuida (marca automaticamente via N8N)
+   - Mensagem: atendente envia pelo WhatsApp pessoal; N8N detecta o envio e marca automaticamente no painel
 4. Cards com resultado somem/movem entre colunas (Urgente / Ligar / Msg / Concluído / Tentar Novamente)
 5. Card fica em cooldown após ação → volta ao lote nos próximos dias respeitando as regras
 ```
@@ -152,10 +160,10 @@ Gargalo: dependência da atualização diária do Splgc (~04:00 BRT)
 | Campo | Editável | Efeito |
 |---|---|---|
 | Status | Sim | Muda coluna no kanban; se `nao_cobrar`/`telefone_errado`/`igreja_fechada`, sai do lote |
-| Último Contato | **Não** (readonly) | Mostra data efetiva (max entre manual e bot) |
+| Último Contato | **Não** (readonly) | Mostra data efetiva (max entre manual e evento detectado pelo N8N) |
 | Agendar Retorno | Sim | Data futura → cliente vira "Fixado" |
 | Prometeu Pagar | Sim | Fixa cliente até data prometida |
-| Telefone Fixo (checkbox) | Sim | Bot não detecta; força bucket=ligação; libera botões Atendeu/Não atendeu |
+| Telefone Fixo (checkbox) | Sim | N8N não detecta ligação em fixo (só WhatsApp); força bucket=ligação; libera botões Atendeu/Não atendeu pra marcação manual |
 | Observações | Sim | Texto livre pra contexto (auto-save) |
 
 ### O que acontece após cada ação
@@ -482,22 +490,26 @@ Cliente que pagou uma dívida antiga e reincidiu com nova dívida pode ter statu
 
 | Tabela | Chave | Uso |
 |---|---|---|
-| `painel_tarefas_diarias` | (id_sacado_sac, atendente, data_tarefa) | Fonte de verdade do lote — bucket, timestamps, marcações do bot |
+| `painel_tarefas_diarias` | (id_sacado_sac, atendente, data_tarefa) | Fonte de verdade do lote — bucket, timestamps, marcações detectadas pelo N8N |
 | `painel_historico` | (uid, cliente_id) | Histórico manual (status, retorno, promise, notes, tel_fixo) |
 | `cobrancas_snapshot_diario` | (data_snapshot, id_sacado_sac) | Snapshot diário pra métricas de variação |
 
 **Postgres n8n (`n8nfinchatbot_historico_msgs`)**
 
-Histórico de mensagens WhatsApp do bot. Consumido por `load_mensagens_from_bq` (nome legado — na verdade lê do Postgres). Usado pra:
-- Detectar status atualizado pelo bot
+Histórico de mensagens WhatsApp trocadas entre as atendentes (Ana e Priscila) e os clientes. **As atendentes enviam as mensagens pessoalmente pelo WhatsApp — o N8N não envia nada, ele apenas monitora as conversas.** Um workflow do N8N escuta os eventos do WhatsApp Business API e classifica cada interação em categorias operacionais (mensagem enviada, ligação pendente, ligação atendida, tentar novamente, concluída).
+
+Consumido por `load_mensagens_from_bq` (nome legado — na verdade lê do Postgres). Usado pra:
+- Detectar status atualizado a partir da conversa real
 - Popular `dt_mensagem_enviada`, `dt_ligacao_feita`, `dt_ligacao_atendida` via `atualizar_tarefas_bq`
+
+**Classificação depende de palavras-chave e padrões** definidos no fluxo N8N. Se cliente responder algo fora do padrão (gíria, áudio, emoji só), o N8N pode não classificar corretamente.
 
 ### Status válidos
 
 | Chave | Rótulo UI | Fonte | Efeito no lote |
 |---|---|---|---|
 | `pending` | Sem contato | Automático (sem histórico) | Elegível normal |
-| `contacted` | Contactado | Automático (bot agiu) | Elegível normal |
+| `contacted` | Contactado | Automático (atendente interagiu — detectado pelo N8N) | Elegível normal |
 | `promise` | Prometeu pagar | Manual | Elegível normal (mas fixado até promiseDate) |
 | `negotiating` | Negociando | Manual | Elegível normal |
 | `telefone_errado` | Telefone errado | Manual | **Excluído** do lote e kanban |
@@ -541,18 +553,18 @@ Cliente cai em exatamente um bucket por dia. Bucket é congelado no INSERT — n
 
 **Status:** Aceito
 
-**Contexto:** O bot do n8n captura mensagens do WhatsApp em tempo real. Se dependêssemos só do BQ, atendente ficaria minutos/horas sem ver a atividade recente. Por outro lado, painel_tarefas_diarias no BQ é a fonte de verdade auditável do lote.
+**Contexto:** O N8N monitora o WhatsApp das atendentes e grava cada mensagem/interação no Postgres em tempo quase real. Se dependêssemos só do BQ, atendente ficaria minutos/horas sem ver a atividade recente (Splgc → BQ replica ~04:00 BRT do dia seguinte). Por outro lado, `painel_tarefas_diarias` no BQ é a fonte de verdade auditável do lote.
 
-**Decisão:** Postgres do n8n é lido a cada 50s (fragment) pra atualizar `_msg_status`. Estado consolidado (bucket, timestamps de ação, cooldowns) é sempre gravado e lido do BQ. `atualizar_tarefas_bq` propaga status do n8n → painel_tarefas_diarias.
+**Decisão:** Postgres do n8n é lido a cada 50s (fragment) pra atualizar `_msg_status`. Estado consolidado (bucket, timestamps de ação, cooldowns) é sempre gravado e lido do BQ. `atualizar_tarefas_bq` propaga o status detectado pelo N8N → `painel_tarefas_diarias`.
 
 **Consequências**
-- Positivo: atendente vê ações do bot quase em tempo real; auditoria fica no BQ
+- Positivo: atendente vê o que ela mesma acabou de fazer refletido no painel em ~1 minuto; auditoria fica no BQ
 - Negativo: duas fontes → regra de precedência precisa estar clara (implementada em `get_effective_status`)
 - Trade-off aceito: complexidade adicional em troca de responsividade
 
 **Alternativas descartadas**
 - Tudo no n8n/Postgres: sem histórico persistente pra BI
-- Tudo no BQ: painel lento pra refletir ações do bot
+- Tudo no BQ: painel lento pra refletir o que atendente acabou de fazer no WhatsApp
 
 ---
 
@@ -612,7 +624,7 @@ Cliente cai em exatamente um bucket por dia. Bucket é congelado no INSERT — n
 **Status:** Aceito
 
 **Contexto:** Alguns clientes não devem receber cobrança:
-- Telefone errado no cadastro (bot não consegue contatar)
+- Telefone errado no cadastro (atendente não consegue contatar pelo WhatsApp)
 - Igreja encerrada (não faz sentido cobrar)
 - Bloqueio administrativo (acordo externo, jurídico, congelamento)
 
@@ -706,7 +718,7 @@ Fonte primária: `https://brasilapi.com.br/api/feriados/v1/{ano}` (inclui móvei
 | `dt_entrou_coluna_ligacao` | TIMESTAMP | Não-null se bucket=ligacao |
 | `dt_entrou_coluna_msg` | TIMESTAMP | Não-null se bucket=mensagem |
 | `mensagem_enviada` | BOOL | Bot enviou msg |
-| `ligacao_feita` | BOOL | Alguém tentou ligar (bot ou manual) |
+| `ligacao_feita` | BOOL | Atendente tentou ligar (detectado pelo N8N ou marcado manualmente no dialog) |
 | `ligacao_atendida` | BOOL | Cliente atendeu |
 | `dt_mensagem_enviada` | TIMESTAMP | Momento da msg |
 | `dt_ligacao_feita` | TIMESTAMP | Momento da tentativa |
