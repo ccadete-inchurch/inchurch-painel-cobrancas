@@ -174,7 +174,7 @@ Gargalo: dependência da atualização diária do Splgc (~04:00 BRT)
 | Alterar status no dialog | Auto-save → `save_hist` → BQ + session_state |
 | Clicar "Atendeu" (tel fixo) | `registrar_acao_manual` → UPDATE em `painel_tarefas_diarias` |
 | Marcar como "Não cobrar" | Cliente some do kanban imediatamente + fora do lote no próximo cron |
-| Atualizar (Inadimplência) | `processar_dados_bigquery` refetch + regrava `cache_dados.json` |
+| F5 na página / reabrir sessão | Recarrega cache do BQ (`processar_dados_bigquery`) e regrava `cache_dados.json` |
 | Refresh de 80s (fragment) | `load_cooldowns_from_painel` + `load_mensagens_from_bq` (não bloqueia UI) |
 | Logout | Sessão encerrada, dados sensíveis removidos |
 
@@ -182,7 +182,7 @@ Gargalo: dependência da atualização diária do Splgc (~04:00 BRT)
 
 | Sintoma | Causa provável | Solução |
 |---|---|---|
-| Carteira vazia | Cache corrupto ou credenciais BQ | Clicar Atualizar; verificar `secrets.toml` |
+| Carteira vazia | Cache corrupto ou credenciais BQ | F5 na página pra forçar reload; se persistir, admin verifica `secrets.toml` |
 | Login não avança | Conta sem autorização | Adicionar email em `secrets.authorized_emails` |
 | Histórico não reflete ação recente | Cache do session_state | F5 na página (aguarda 80s ou reload manual) |
 | Cliente aparece indevidamente no lote | Bug de filtro ou cooldown | Verificar `nao_cobrar`/streak/`_regularizado_hoje` |
