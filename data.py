@@ -1293,6 +1293,7 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
     today_str = hoje_brt()
     today_dt  = date.fromisoformat(today_str)
     ref_str   = (today_dt - timedelta(days=30)).isoformat()
+    ref7_str  = (today_dt - timedelta(days=7)).isoformat()
 
     # ── Filtro de atendente (via splgc-grupo) ─────────────────────────────
     contacts_cte = ""
@@ -1407,13 +1408,21 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
         COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) BETWEEN 1 AND 30 AND (status = '0' OR liq >= DATE('{ref_str}')) AND ja_pagou = 1, cid, NULL)) AS d30_n,
         COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) >= 90 AND (status = '0' OR liq >= DATE('{ref_str}')) AND ja_pagou = 1, cid, NULL)) AS d90_n
       FROM cobrs
+    ),
+    ref7 AS (
+      SELECT
+        COUNT(DISTINCT IF(venc < DATE('{ref7_str}') AND (status = '0' OR liq >= DATE('{ref7_str}')) AND ja_pagou = 1, cid, NULL)) AS total_n,
+        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref7_str}'), venc, DAY) BETWEEN 1 AND 30 AND (status = '0' OR liq >= DATE('{ref7_str}')) AND ja_pagou = 1, cid, NULL)) AS d30_n,
+        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref7_str}'), venc, DAY) >= 90 AND (status = '0' OR liq >= DATE('{ref7_str}')) AND ja_pagou = 1, cid, NULL)) AS d90_n
+      FROM cobrs
     )
     SELECT
       c.n AS carteira,
       h.total_n, h.d30_n, h.d90_n,
       h.total_r, h.d30_r, h.d90_r,
-      r.total_n AS r_total_n, r.d30_n AS r_d30_n, r.d90_n AS r_d90_n
-    FROM carteira c, hoje h, ref r
+      r.total_n AS r_total_n, r.d30_n AS r_d30_n, r.d90_n AS r_d90_n,
+      r7.total_n AS r7_total_n, r7.d30_n AS r7_d30_n, r7.d90_n AS r7_d90_n
+    FROM carteira c, hoje h, ref r, ref7 r7
     """
     try:
         df = client.query(query).to_dataframe()
@@ -1443,11 +1452,20 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
         "r_total_n":   int(r["r_total_n"]),
         "r_d30_n":     int(r["r_d30_n"]),
         "r_d90_n":     int(r["r_d90_n"]),
+        # D-7 reference (WoW — semana vs semana). Serve pra card mostrar
+        # tendencia recente ao lado do MoM.
+        "r7_total_n":  int(r["r7_total_n"]),
+        "r7_d30_n":    int(r["r7_d30_n"]),
+        "r7_d90_n":    int(r["r7_d90_n"]),
         # Delta MoM com base no BQ snapshot. Caso queira "delta live", recalcule
         # em atividades.py usando (overlay.total_n - r_total_n) / carteira.
         "delta_total": (float(r["total_n"]) - float(r["r_total_n"])) / carteira * 100,
         "delta_d30":   (float(r["d30_n"])   - float(r["r_d30_n"]))   / carteira * 100,
         "delta_d90":   (float(r["d90_n"])   - float(r["r_d90_n"]))   / carteira * 100,
+        # Delta WoW (7d)
+        "delta_total_7d": (float(r["total_n"]) - float(r["r7_total_n"])) / carteira * 100,
+        "delta_d30_7d":   (float(r["d30_n"])   - float(r["r7_d30_n"]))   / carteira * 100,
+        "delta_d90_7d":   (float(r["d90_n"])   - float(r["r7_d90_n"]))   / carteira * 100,
     }
 
 
