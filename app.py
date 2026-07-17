@@ -42,6 +42,45 @@ def tela_principal():
 
 
 def main():
+    # Popup OAuth callback: processa o código e fecha o popup
+    _code  = st.query_params.get("code")
+    _state = st.query_params.get("state", "")
+    if _code and isinstance(_state, str) and _state.startswith("popup_"):
+        nonce = _state[len("popup_"):]
+        try:
+            from views.login import _exchange_code, _decode_id_token
+            g   = st.secrets["google"]
+            tok = _exchange_code(_code, g["client_id"], g["client_secret"], g["redirect_uri"])
+            if "id_token" in tok:
+                info  = _decode_id_token(tok["id_token"])
+                email = info.get("email", "")
+                nome  = info.get("name", email)
+                from data import set_pending_oauth
+                set_pending_oauth(nonce, email, nome)
+        except Exception:
+            pass
+        # Limpa a query string — sinal pro button iframe (que poll a location
+        # do popup) que o processamento terminou. Sem isso, ele tinha que
+        # adivinhar quando fechar e podia matar o popup antes do set_pending_oauth.
+        st.query_params.clear()
+        # Tela "Login realizado" no popup. Auto-close vem do lado do BOTÃO,
+        # que detecta a URL ter limpado e fecha 500ms depois.
+        st.markdown("""
+        <style>
+        header{display:none!important}
+        [data-testid="stToolbar"]{display:none!important}
+        .stApp{background:#181c26!important}
+        </style>
+        <div style="position:fixed;inset:0;background:#181c26;display:flex;flex-direction:column;
+                    align-items:center;justify-content:center;text-align:center;gap:10px;
+                    font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#e8eaf0">
+            <div style="font-size:52px;color:#7cc243;line-height:1">✓</div>
+            <div style="font-size:18px;font-weight:700;margin:4px 0 0">Login realizado!</div>
+            <div style="font-size:13px;color:#6b7280">Fechando automaticamente...</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
     render_sidebar()
 
     if not is_logged():

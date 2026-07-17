@@ -3,6 +3,9 @@ import time
 from datetime import datetime, date, time as _dt_time, timezone, timedelta
 from pathlib import Path
 
+# ── OAuth popup: armazenamento temporário compartilhado entre sessões ─────────
+_pending_oauth: dict = {}
+
 # ── Presença online: dict em memória compartilhado entre sessões ──────────────
 # email → {"ts": timestamp_da_ultima_atividade, "nome": "Nome do Usuário"}
 # Cada sessão ativa pinga a cada 30s; consideramos online quem pingou nos
@@ -66,6 +69,20 @@ def precisa_processar_bq(store: dict) -> bool:
             return True
 
     return False
+
+def set_pending_oauth(nonce: str, email: str, nome: str) -> None:
+    cutoff = time.time() - 120
+    for k in list(_pending_oauth):
+        if _pending_oauth[k]["ts"] < cutoff:
+            del _pending_oauth[k]
+    _pending_oauth[nonce] = {"email": email, "nome": nome, "ts": time.time()}
+
+def get_pending_oauth(nonce: str) -> dict | None:
+    entry = _pending_oauth.get(nonce)
+    if entry and (time.time() - entry["ts"]) < 60:
+        del _pending_oauth[nonce]
+        return entry
+    return None
 
 import pandas as pd
 import requests
