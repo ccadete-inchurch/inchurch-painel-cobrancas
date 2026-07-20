@@ -1085,6 +1085,16 @@ def _render_atividades(store, clientes, role):
         
         def _metricas_lote_painel(ids_lote=None, buckets_map=None):
             acoes = st.session_state.get("_painel_acoes_hoje", {})
+            # Mapa cid -> _regularizado (hoje ou antes de hoje). Cliente regularizado
+            # conta como tarefa cumprida do bucket dele, mesmo que atendente NAO
+            # tenha feito acao (nem N8N tenha detectado nada). Ex: cliente pagou
+            # sozinho apos ver boleto no email — do ponto de vista do lote, tarefa
+            # daquele slot foi resolvida.
+            _reg_ids = {
+                str(c.get("id") or ""): True
+                for c in (store.get("clientes") or [])
+                if c.get("_regularizado_hoje") or c.get("_regularizado_antes_hoje")
+            }
             buckets_norm = None
             if buckets_map is not None:
                 # BQ pode devolver id_sacado_sac como int; painel usa chave string.
@@ -1094,10 +1104,24 @@ def _render_atividades(store, clientes, role):
             else:
                 items = [(str(cid), acoes.get(str(cid), {})) for cid in ids_lote]
             if buckets_norm is not None:
-                msg = sum(1 for cid, a in items if a.get("msg") and buckets_norm.get(cid) == "mensagem")
-                lig = sum(1 for cid, a in items if a.get("lig") and buckets_norm.get(cid) in ("ligacao",))
-                atd = sum(1 for cid, a in items if a.get("atend") and buckets_norm.get(cid) in ("ligacao",))
+                # Msg = enviou msg OU regularizou (bucket=mensagem)
+                msg = sum(
+                    1 for cid, a in items
+                    if buckets_norm.get(cid) == "mensagem" and (a.get("msg") or _reg_ids.get(cid))
+                )
+                # Lig = tentou ligar OU regularizou (bucket=ligacao)
+                lig = sum(
+                    1 for cid, a in items
+                    if buckets_norm.get(cid) == "ligacao" and (a.get("lig") or _reg_ids.get(cid))
+                )
+                # Atendida = atendeu OU regularizou (bucket=ligacao)
+                atd = sum(
+                    1 for cid, a in items
+                    if buckets_norm.get(cid) == "ligacao" and (a.get("atend") or _reg_ids.get(cid))
+                )
             else:
+                # Sem bucket: soma flat, regularizado nao entra (sem forma de saber
+                # qual bucket ele deveria alimentar). Cenario raro — admin 'Todos'.
                 msg = sum(1 for _, a in items if a.get("msg"))
                 lig = sum(1 for _, a in items if a.get("lig"))
                 atd = sum(1 for _, a in items if a.get("atend"))
