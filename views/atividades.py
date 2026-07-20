@@ -262,9 +262,11 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     # Badge "TELEFONE FIXO" — cliente marcado pela atendente como so atende
     # em telefone fixo. N8N nao detecta atividade automatica; atendente usa
     # botoes manuais (Atendeu / Nao atendeu) no dialog pra registrar.
+    # Rosa solido pra destaque forte — atendente PRECISA saber pra nao esperar
+    # sinal do N8N (que nao vem) e usar os botoes manuais no dialog.
     _eh_tel_fixo  = bool(c.get("_tel_fixo"))
     tel_fixo_badge = (
-        '<span style="background:rgba(95,163,255,.18);color:#5fa3ff;'
+        '<span style="background:#ec4899;color:#fff;'
         'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
         'margin-left:6px;vertical-align:middle">TELEFONE FIXO</span>'
     ) if _eh_tel_fixo and not _regularizado else ""
