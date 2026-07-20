@@ -609,62 +609,89 @@ _LOTE_MAX_INAT_LIG = 10
 _LOTE_MAX_INAT_MSG = 15
 
 
+# Instance connection name (formato PROJETO:REGIAO:INSTANCIA). Cloud SQL Auth
+# Proxy faz tunel SSL autenticado via IAM ate essa instancia — nao precisa
+# de allowlist de IPs no Cloud SQL, so a service account com role
+# roles/cloudsql.client. Pra rotacionar host/regiao, ajustar aqui + secrets.
+_CLOUDSQL_INSTANCE = "business-intelligence-467516:us-central1:bi-db"
+
+
+@st.cache_resource
+def _get_cloudsql_connector():
+    """Connector do Cloud SQL — cacheado como resource (1 instancia por app).
+    Reusa conexoes internas ate _connector.close() ser chamado (nao chamamos).
+    Usa a service account de gcp_service_account (ja no secrets pra BQ).
+    """
+    from google.cloud.sql.connector import Connector
+    from google.oauth2 import service_account
+    creds = service_account.Credentials.from_service_account_info(
+        dict(st.secrets["gcp_service_account"]),
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+    return Connector(credentials=creds)
+
+
 @st.cache_resource
 def get_pg_n8n_conn():
-    """Conexão direta ao Postgres do N8N. Substitui o BQ Data Transfer (atrasado 30min).
-    Caching pelo Streamlit pode reter conexão morta após timeout do servidor —
-    use _pg_n8n_conn_alive() pra garantir conn viva (faz health check e reconecta).
+    """Conexão ao Postgres do N8N via Cloud SQL Auth Proxy.
+
+    Antes: psycopg2.connect(host="34.56.87.143") — requeria allowlist de IPs
+    no Cloud SQL (0.0.0.0/0 ou faixa fixa). Streamlit Cloud usa IPs dinamicos,
+    entao ou abria pro mundo ou quebrava.
+
+    Agora: cloud-sql-python-connector faz tunel SSL autenticado via IAM.
+    Autorizacao via role Cloud SQL Client na service account. Cloud SQL nao
+    precisa ter Public IP habilitado nem allowlist — mais seguro e sem
+    manutencao de firewall.
     """
-    try:
-        import psycopg2
-    except ImportError:
-        st.error("psycopg2 não instalado — rode `pip install psycopg2-binary`")
-        return None
     if "n8n_postgres" not in st.secrets:
         st.warning("Configuração [n8n_postgres] ausente em secrets.toml")
         return None
+    if "gcp_service_account" not in st.secrets:
+        st.warning("gcp_service_account ausente em secrets.toml — Cloud SQL Auth Proxy precisa dela")
+        return None
     s = st.secrets["n8n_postgres"]
-    sslmode = s.get("sslmode", "require")
-    last_err = None
-    for mode in (sslmode, "prefer", "disable"):
-        try:
-            conn = psycopg2.connect(
-                host=s["host"], port=int(s.get("port", 5432)),
-                dbname=s["database"], user=s["user"], password=s["password"],
-                sslmode=mode, connect_timeout=10,
-                application_name="painel-inadimplencia",
-            )
-            conn.set_session(readonly=True, autocommit=True)
-            return conn
-        except Exception as e:
-            last_err = e
-    st.error(f"Falha ao conectar Postgres N8N: {last_err}")
-    return None
+    try:
+        connector = _get_cloudsql_connector()
+        conn = connector.connect(
+            _CLOUDSQL_INSTANCE,
+            "pg8000",
+            user=s["user"],
+            password=s["password"],
+            db=s["database"],
+        )
+        conn.autocommit = True
+        return conn
+    except Exception as e:
+        st.error(f"Falha ao conectar Postgres N8N via Auth Proxy: {e}")
+        return None
 
 
 def _pg_n8n_conn_alive():
     """Retorna conn PG garantidamente viva. Faz health check (SELECT 1) e, se
-    a cached conn estiver morta (psycopg2.InterfaceError/OperationalError ou
-    conn.closed != 0), limpa o cache e tenta reconectar uma vez.
+    a cached conn estiver morta, limpa o cache e tenta reconectar uma vez.
 
     Use sempre que for usar a conn pra evitar 'connection already closed'
-    quando Streamlit segura conn idle por muito tempo."""
-    try:
-        import psycopg2
-    except ImportError:
-        return None
+    quando Streamlit segura conn idle por muito tempo.
 
+    Agnostico ao driver: pega qualquer Exception no health check (pg8000 e
+    psycopg2 lancam classes diferentes). Se falhar, invalida cache e reabre."""
     conn = get_pg_n8n_conn()
     if conn is None:
         return None
 
     try:
-        if getattr(conn, "closed", 0) != 0:
-            raise psycopg2.InterfaceError("conn closed")
-        with conn.cursor() as _cur:
-            _cur.execute("SELECT 1")
+        # pg8000: conn.closed é bool; psycopg2: int. Ambos truthy quando fechada.
+        if getattr(conn, "closed", False):
+            raise RuntimeError("conn closed")
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT 1")
+            cur.fetchone()
+        finally:
+            cur.close()
         return conn
-    except (psycopg2.InterfaceError, psycopg2.OperationalError, AttributeError):
+    except Exception:
         try:
             get_pg_n8n_conn.clear()
         except Exception:
