@@ -196,18 +196,13 @@ def tela_login():
                     st.session_state["oauth_state"] = _secrets.token_hex(16)
                 state = st.session_state["oauth_state"]
                 auth_url = _build_auth_url(g["client_id"], g["redirect_uri"], state=state)
-                # Link target="_top" — sai do iframe do Streamlit e redireciona
-                # a janela top-level. Sem isso, o link abria dentro do iframe do
-                # componente, e o Google recusa ser carregado em iframe (X-Frame-
-                # Options: DENY), devolvendo 403 no accountchooser.
-                # Google devolve pra propria pagina do painel com ?code=Y&state=X
-                # e _handle_google_callback (chamado no inicio de tela_login) processa.
-                # Hover em CSS (:hover) em vez de onmouseover/onmouseout inline —
-                # inline handlers causam React error #231 no Streamlit e podem
-                # bloquear o click.
-                st.markdown(f"""
+                # CSS em bloco separado — st.markdown com <style> junto do <a>
+                # faz o Streamlit isolar em iframe sandboxed (que bloqueia
+                # target=_top). Separando: <style> vai num st.markdown, <a>
+                # vai em outro. Streamlit consolida no DOM principal.
+                st.markdown("""
                 <style>
-                .oauth-google-btn {{
+                .oauth-google-btn {
                     width:100%;padding:13px 16px;border-radius:10px;
                     background:#1e2333;border:1px solid #2a2f42;
                     color:#e8eaf0;font-size:14px;font-weight:500;cursor:pointer;
@@ -215,16 +210,20 @@ def tela_login():
                     font-family:-apple-system,BlinkMacSystemFont,sans-serif;
                     box-sizing:border-box;text-decoration:none;
                     transition:background .15s,border-color .15s;
-                }}
-                .oauth-google-btn:hover {{
+                }
+                .oauth-google-btn:hover {
                     background:#252b3b !important;
                     border-color:#3d4460 !important;
-                }}
+                }
                 </style>
-                <a href="{auth_url}" target="_top" class="oauth-google-btn">
-                    {_GOOGLE_ICON} Continuar com Google
-                </a>
                 """, unsafe_allow_html=True)
+                # Link em st.markdown separado, sem <style>. target='_top'
+                # navega a janela principal, saindo de qualquer iframe.
+                st.markdown(
+                    f'<a href="{auth_url}" target="_top" class="oauth-google-btn">'
+                    f'{_GOOGLE_ICON} Continuar com Google</a>',
+                    unsafe_allow_html=True,
+                )
             except Exception:
                 pass
 
