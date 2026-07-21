@@ -202,16 +202,26 @@ def tela_login():
                 # Options: DENY), devolvendo 403 no accountchooser.
                 # Google devolve pra propria pagina do painel com ?code=Y&state=X
                 # e _handle_google_callback (chamado no inicio de tela_login) processa.
+                # Hover em CSS (:hover) em vez de onmouseover/onmouseout inline —
+                # inline handlers causam React error #231 no Streamlit e podem
+                # bloquear o click.
                 st.markdown(f"""
-                <a href="{auth_url}" target="_top" style="
+                <style>
+                .oauth-google-btn {{
                     width:100%;padding:13px 16px;border-radius:10px;
                     background:#1e2333;border:1px solid #2a2f42;
                     color:#e8eaf0;font-size:14px;font-weight:500;cursor:pointer;
                     display:flex;align-items:center;justify-content:center;gap:10px;
-                    font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box;
-                    text-decoration:none;transition:background .15s,border-color .15s"
-                    onmouseover="this.style.background='#252b3b';this.style.borderColor='#3d4460'"
-                    onmouseout="this.style.background='#1e2333';this.style.borderColor='#2a2f42'">
+                    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+                    box-sizing:border-box;text-decoration:none;
+                    transition:background .15s,border-color .15s;
+                }}
+                .oauth-google-btn:hover {{
+                    background:#252b3b !important;
+                    border-color:#3d4460 !important;
+                }}
+                </style>
+                <a href="{auth_url}" target="_top" class="oauth-google-btn">
                     {_GOOGLE_ICON} Continuar com Google
                 </a>
                 """, unsafe_allow_html=True)
