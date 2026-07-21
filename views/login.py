@@ -196,11 +196,14 @@ def tela_login():
                     st.session_state["oauth_state"] = _secrets.token_hex(16)
                 state = st.session_state["oauth_state"]
                 auth_url = _build_auth_url(g["client_id"], g["redirect_uri"], state=state)
-                # Link target="_self" — redirect direto na mesma aba (sem popup).
+                # Link target="_top" — sai do iframe do Streamlit e redireciona
+                # a janela top-level. Sem isso, o link abria dentro do iframe do
+                # componente, e o Google recusa ser carregado em iframe (X-Frame-
+                # Options: DENY), devolvendo 403 no accountchooser.
                 # Google devolve pra propria pagina do painel com ?code=Y&state=X
                 # e _handle_google_callback (chamado no inicio de tela_login) processa.
                 st.markdown(f"""
-                <a href="{auth_url}" target="_self" style="
+                <a href="{auth_url}" target="_top" style="
                     width:100%;padding:13px 16px;border-radius:10px;
                     background:#1e2333;border:1px solid #2a2f42;
                     color:#e8eaf0;font-size:14px;font-weight:500;cursor:pointer;
