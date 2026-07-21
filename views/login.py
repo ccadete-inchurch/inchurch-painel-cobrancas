@@ -116,17 +116,17 @@ def tela_login():
     <style>
     /* Estilo do botao 'Continuar com Google' — replica popup antigo.
        Aplica em stAppViewContainer (funciona no Streamlit 1.59). */
-    /* Container do botao (stButton/stElementContainer) ocupa toda a largura
-       da coluna. Sem isso, wrappers internos do Streamlit reduzem a largura
-       efetiva do botao. */
+    /* Container do botao — centraliza no meio da coluna e limita a largura
+       max pra nao virar barra gigante em telas 4K/ultrawide. */
     div[data-testid="stAppViewContainer"] div[data-testid="stButton"],
-    div[data-testid="stAppViewContainer"] .stButton,
-    div[data-testid="stAppViewContainer"] .stElementContainer:has(.stButton) {{
-        width:100% !important;
-        max-width:none !important;
+    div[data-testid="stAppViewContainer"] .stButton {{
+        max-width:360px !important;
+        margin-left:auto !important;
+        margin-right:auto !important;
     }}
     div[data-testid="stAppViewContainer"] .stButton > button {{
         width:100% !important;
+        max-width:360px !important;
         min-height:48px !important;
         padding:12px 24px !important;
         border-radius:10px !important;
@@ -166,7 +166,14 @@ def tela_login():
     }}
     /* RESET: sidebar NAO deve ser afetada pelas regras acima (evita
        flash de estilo durante rerun apos logout). */
+    section[data-testid="stSidebar"] div[data-testid="stButton"],
+    section[data-testid="stSidebar"] .stButton {{
+        max-width:none !important;
+        margin-left:0 !important;
+        margin-right:0 !important;
+    }}
     section[data-testid="stSidebar"] .stButton > button {{
+        max-width:none !important;
         min-height:auto !important;
         padding:10px 16px !important;
         font-size:13px !important;
@@ -201,7 +208,7 @@ def tela_login():
         </div>
         """, unsafe_allow_html=True)
 
-        _, btn_col, _ = st.columns([0.10, 1, 0.10])
+        _, btn_col, _ = st.columns([0.18, 1, 0.18])
         with btn_col:
             # Se Google autenticou mas email nao esta em [usuarios] do secrets:
             # avisa e oferece trocar de conta (st.logout limpa a sessao Google).
