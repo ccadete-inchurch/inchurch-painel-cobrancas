@@ -122,21 +122,21 @@ def tela_login():
     div[data-testid="stMain"] div[data-testid="stButton"] > button,
     div[data-testid="stMain"] .stButton > button {{
         width:100% !important;
-        padding:13px 16px !important;
+        min-height:52px !important;
+        padding:14px 20px !important;
         border-radius:10px !important;
         background:#1e2333 !important;
         border:1px solid #2a2f42 !important;
         color:#e8eaf0 !important;
-        font-size:14px !important;
+        font-size:15px !important;
         font-weight:500 !important;
         display:flex !important;
         align-items:center !important;
         justify-content:center !important;
-        gap:10px !important;
+        gap:12px !important;
         font-family:-apple-system,BlinkMacSystemFont,sans-serif !important;
         transition:background .15s,border-color .15s !important;
         box-shadow:none !important;
-        min-height:auto !important;
         line-height:1.2 !important;
     }}
     div[data-testid="stMain"] div[data-testid="stButton"] > button:hover,
@@ -146,18 +146,18 @@ def tela_login():
         transform:none !important;
         box-shadow:none !important;
     }}
-    /* Icone Google antes do texto — mesma dimensao do SVG original (18x18) */
+    /* Icone Google antes do texto — usa content:url() que renderiza a imagem
+       como elemento inline (mais robusto que background-image em botoes do
+       Streamlit, onde estrutura DOM interna pode esconder pseudo-elementos). */
     div[data-testid="stMain"] div[data-testid="stButton"] > button::before,
     div[data-testid="stMain"] .stButton > button::before {{
-        content: "";
-        display: inline-block;
-        width: 18px;
-        height: 18px;
-        background-image: url("data:image/svg+xml;base64,{_svg_b64}");
-        background-size: contain;
-        background-repeat: no-repeat;
-        background-position: center;
-        flex-shrink: 0;
+        content: url("data:image/svg+xml;base64,{_svg_b64}") !important;
+        display: inline-block !important;
+        width: 18px !important;
+        height: 18px !important;
+        flex-shrink: 0 !important;
+        vertical-align: middle !important;
+        order: -1 !important;
     }}
     /* Streamlit as vezes envolve o label do botao em <div> — garante que
        nao adicione margin/padding que quebrem o alinhamento com icone */

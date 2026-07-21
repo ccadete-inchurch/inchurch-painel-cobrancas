@@ -266,7 +266,8 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     # sinal do N8N (que nao vem) e usar os botoes manuais no dialog.
     _eh_tel_fixo  = bool(c.get("_tel_fixo"))
     tel_fixo_badge = (
-        '<span style="background:#ec4899;color:#fff;'
+        '<span style="background:rgba(236,72,153,.18);color:#ec4899;'
+        'border:1px solid rgba(236,72,153,.4);'
         'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
         'margin-left:6px;vertical-align:middle">TELEFONE FIXO</span>'
     ) if _eh_tel_fixo and not _regularizado else ""
