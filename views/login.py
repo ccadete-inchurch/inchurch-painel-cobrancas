@@ -116,24 +116,34 @@ def tela_login():
     <style>
     /* Estilo do botao 'Continuar com Google' — replica popup antigo.
        Aplica em stAppViewContainer (funciona no Streamlit 1.59). */
+    /* Container do botao (stButton/stElementContainer) ocupa toda a largura
+       da coluna. Sem isso, wrappers internos do Streamlit reduzem a largura
+       efetiva do botao. */
+    div[data-testid="stAppViewContainer"] div[data-testid="stButton"],
+    div[data-testid="stAppViewContainer"] .stButton,
+    div[data-testid="stAppViewContainer"] .stElementContainer:has(.stButton) {{
+        width:100% !important;
+        max-width:none !important;
+    }}
     div[data-testid="stAppViewContainer"] .stButton > button {{
         width:100% !important;
-        min-height:52px !important;
-        padding:14px 20px !important;
+        min-height:48px !important;
+        padding:12px 24px !important;
         border-radius:10px !important;
         background:#1e2333 !important;
         border:1px solid #2a2f42 !important;
         color:#e8eaf0 !important;
-        font-size:15px !important;
+        font-size:14px !important;
         font-weight:500 !important;
         display:flex !important;
         align-items:center !important;
         justify-content:center !important;
-        gap:12px !important;
+        gap:10px !important;
         font-family:-apple-system,BlinkMacSystemFont,sans-serif !important;
         transition:background .15s,border-color .15s !important;
         box-shadow:none !important;
-        line-height:1.2 !important;
+        line-height:1.4 !important;
+        letter-spacing:normal !important;
     }}
     div[data-testid="stAppViewContainer"] .stButton > button:hover {{
         background:#252b3b !important;
@@ -191,7 +201,7 @@ def tela_login():
         </div>
         """, unsafe_allow_html=True)
 
-        _, btn_col, _ = st.columns([0.18, 1, 0.18])
+        _, btn_col, _ = st.columns([0.10, 1, 0.10])
         with btn_col:
             # Se Google autenticou mas email nao esta em [usuarios] do secrets:
             # avisa e oferece trocar de conta (st.logout limpa a sessao Google).
