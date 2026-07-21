@@ -114,24 +114,40 @@ def tela_login():
     _svg_b64 = _b64.b64encode(_svg_bytes).decode("ascii")
     st.markdown(f"""
     <style>
-    .stButton > button[kind="secondary"],
-    .stButton > button[data-testid="stBaseButton-secondary"],
-    div[data-testid="stButton"] > button {{
-        width:100% !important;padding:13px 16px !important;border-radius:10px !important;
-        background:#1e2333 !important;border:1px solid #2a2f42 !important;
-        color:#e8eaf0 !important;font-size:14px !important;font-weight:500 !important;
-        display:flex !important;align-items:center !important;justify-content:center !important;
+    /* Reproduz o botao 'Continuar com Google' do popup antigo.
+       Seletores mais especificos que o CSS global do config.py (que aplica
+       .stButton>button generico). Usa [data-testid="stAppViewContainer"]
+       como ancestor pra vencer especificidade. */
+    div[data-testid="stAppViewContainer"] div[data-testid="stButton"] > button,
+    div[data-testid="stAppViewContainer"] .stButton > button {{
+        width:100% !important;
+        padding:13px 16px !important;
+        border-radius:10px !important;
+        background:#1e2333 !important;
+        border:1px solid #2a2f42 !important;
+        color:#e8eaf0 !important;
+        font-size:14px !important;
+        font-weight:500 !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
         gap:10px !important;
         font-family:-apple-system,BlinkMacSystemFont,sans-serif !important;
         transition:background .15s,border-color .15s !important;
+        box-shadow:none !important;
+        min-height:auto !important;
+        line-height:1.2 !important;
     }}
-    .stButton > button:hover,
-    div[data-testid="stButton"] > button:hover {{
+    div[data-testid="stAppViewContainer"] div[data-testid="stButton"] > button:hover,
+    div[data-testid="stAppViewContainer"] .stButton > button:hover {{
         background:#252b3b !important;
         border-color:#3d4460 !important;
+        transform:none !important;
+        box-shadow:none !important;
     }}
-    /* Icone Google antes do texto do botao */
-    div[data-testid="stButton"] > button::before {{
+    /* Icone Google antes do texto — mesma dimensao do SVG original (18x18) */
+    div[data-testid="stAppViewContainer"] div[data-testid="stButton"] > button::before,
+    div[data-testid="stAppViewContainer"] .stButton > button::before {{
         content: "";
         display: inline-block;
         width: 18px;
@@ -141,6 +157,15 @@ def tela_login():
         background-repeat: no-repeat;
         background-position: center;
         flex-shrink: 0;
+    }}
+    /* Streamlit as vezes envolve o label do botao em <div> — garante que
+       nao adicione margin/padding que quebrem o alinhamento com icone */
+    div[data-testid="stAppViewContainer"] div[data-testid="stButton"] > button p,
+    div[data-testid="stAppViewContainer"] div[data-testid="stButton"] > button div {{
+        margin:0 !important;
+        padding:0 !important;
+        font-size:14px !important;
+        font-weight:500 !important;
     }}
     </style>
     """, unsafe_allow_html=True)
