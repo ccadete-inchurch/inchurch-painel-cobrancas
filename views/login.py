@@ -6,6 +6,7 @@ from datetime import datetime
 
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 from config import LOGO_SRC
 from auth import login_google
@@ -51,26 +52,13 @@ def _decode_id_token(token: str) -> dict:
 
 
 def _handle_google_callback():
-    """Processa o retorno do Google OAuth. Fluxo redirect direto (sem popup):
-    a propria pagina do painel eh redirecionada pro Google e volta com
-    ?code=X&state=Y. Sem popup, sem polling, sem tabela BQ intermediaria."""
     code = st.query_params.get("code")
     if not code:
-        return
-    state = st.query_params.get("state", "")
-    expected_state = st.session_state.get("oauth_state", "")
-    # CSRF: valida state se tiver um esperado na sessao. Se nao tiver (sessao
-    # nova apos o redirect), aceita — usuario que veio de tela vazia pra tela
-    # com code fresh eh o fluxo normal apos redirect.
-    if expected_state and state != expected_state:
-        st.query_params.clear()
-        st.error("Erro de segurança no login (state invalido). Tente novamente.")
         return
     try:
         g = st.secrets["google"]
         data = _exchange_code(code, g["client_id"], g["client_secret"], g["redirect_uri"])
         st.query_params.clear()
-        st.session_state.pop("oauth_state", None)
         if "id_token" not in data:
             st.error("Erro ao autenticar com Google.")
             return
@@ -84,6 +72,14 @@ def _handle_google_callback():
     except Exception as e:
         st.query_params.clear()
         st.error(f"Erro no login Google: {e}")
+
+
+@st.fragment(run_every=1)
+def _poll_google_oauth(nonce: str):
+    from data import get_pending_oauth
+    result = get_pending_oauth(nonce)
+    if result and login_google(result["email"], result["nome"]):
+        st.rerun()
 
 
 def tela_login():
@@ -183,29 +179,74 @@ def tela_login():
         with btn_col:
             try:
                 g = st.secrets["google"]
-                # State CSRF: gera 1x por sessao, guarda pra validar no callback.
-                # Se ja existe, reusa (usuario pode ter clicado antes e voltado
-                # sem completar OAuth).
-                if "oauth_state" not in st.session_state:
-                    st.session_state["oauth_state"] = _secrets.token_hex(16)
-                state = st.session_state["oauth_state"]
-                auth_url = _build_auth_url(g["client_id"], g["redirect_uri"], state=state)
-                # Link target="_self" — redirect direto na mesma aba (sem popup).
-                # Google devolve pra propria pagina do painel com ?code=Y&state=X
-                # e _handle_google_callback (chamado no inicio de tela_login) processa.
-                st.markdown(f"""
-                <a href="{auth_url}" target="_self" style="
+                if "oauth_nonce" not in st.session_state:
+                    st.session_state["oauth_nonce"] = _secrets.token_hex(16)
+                nonce    = st.session_state["oauth_nonce"]
+                auth_url = _build_auth_url(g["client_id"], g["redirect_uri"], state=f"popup_{nonce}")
+                components.html(f"""
+                <html><body style="margin:0;padding:0;background:transparent">
+                <script>
+                var _U = '{auth_url}';
+                var _popupRef = null;
+                var _checkTimer = null;
+                // Fecha o popup de fora — o iframe do botão tem a ref do
+                // window.open e poll a location dele. Detecta TRANSIÇÃO:
+                //   fase 'esperando': popup ainda no Google (cross-origin)
+                //   fase 'voltou':    URL tem ?code= (Streamlit começou a carregar)
+                //   fase 'pronto':    URL foi limpa por st.query_params.clear()
+                //                     (Streamlit terminou de processar o login)
+                // Fechar só na fase 'pronto' garante que set_pending_oauth
+                // já gravou — main app polling captura em <1s e loga.
+                function _go() {{
+                    var w=480,h=560,x=Math.round(screen.width/2-240),y=Math.round(screen.height/2-280);
+                    _popupRef = window.open(_U,'_google_oauth','width='+w+',height='+h+',left='+x+',top='+y+',scrollbars=yes');
+                    if (_checkTimer) clearInterval(_checkTimer);
+                    var _fase = 'esperando';
+                    var _ticks = 0;
+                    _checkTimer = setInterval(function() {{
+                        _ticks++;
+                        if (!_popupRef || _popupRef.closed) {{
+                            clearInterval(_checkTimer);
+                            return;
+                        }}
+                        try {{
+                            var s = _popupRef.location.search;
+                            var temCode = s.indexOf('code=') !== -1;
+                            if (_fase === 'esperando' && temCode) {{
+                                _fase = 'voltou';
+                            }} else if (_fase === 'voltou' && !temCode) {{
+                                // URL limpa → Streamlit processou → fecha
+                                _fase = 'pronto';
+                                clearInterval(_checkTimer);
+                                setTimeout(function() {{
+                                    try {{ _popupRef.close(); }} catch(e) {{}}
+                                }}, 500);
+                            }}
+                        }} catch(e) {{
+                            // Cross-origin (no Google) — segue polling
+                        }}
+                        // Fallback: se 'voltou' há mais de 8s sem 'pronto',
+                        // fecha mesmo assim — pode ter dado erro no processamento.
+                        if (_fase === 'voltou' && _ticks > 40) {{
+                            clearInterval(_checkTimer);
+                            try {{ _popupRef.close(); }} catch(e) {{}}
+                        }}
+                    }}, 200);
+                }}
+                </script>
+                <button onclick="_go()" style="
                     width:100%;padding:13px 16px;border-radius:10px;
                     background:#1e2333;border:1px solid #2a2f42;
                     color:#e8eaf0;font-size:14px;font-weight:500;cursor:pointer;
                     display:flex;align-items:center;justify-content:center;gap:10px;
                     font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box;
-                    text-decoration:none;transition:background .15s,border-color .15s"
-                    onmouseover="this.style.background='#252b3b';this.style.borderColor='#3d4460'"
-                    onmouseout="this.style.background='#1e2333';this.style.borderColor='#2a2f42'">
+                " onmouseover="this.style.background='#252b3b';this.style.borderColor='#3d4460'"
+                   onmouseout="this.style.background='#1e2333';this.style.borderColor='#2a2f42'">
                     {_GOOGLE_ICON} Continuar com Google
-                </a>
-                """, unsafe_allow_html=True)
+                </button>
+                </body></html>
+                """, height=56)
+                _poll_google_oauth(nonce)
             except Exception:
                 pass
 
