@@ -26,18 +26,16 @@ _GOOGLE_ICON = (
 def _build_auth_url(client_id: str, redirect_uri: str, state: str = "normal") -> str:
     # prompt='select_account consent' — forca Google a SEMPRE mostrar seletor
     # de conta + tela de consentimento. Sem isso, Google pula direto pra conta
-    # padrao do browser; se essa conta nao esta em test users (Testing mode),
-    # recusa com 403 sem dar chance de escolher outra.
-    # hd='inchurch.com.br' — dica pra restringir a contas do dominio inChurch.
-    # Se browser tem conta @gmail pessoal como padrao, Google mostra seletor
-    # pra escolher uma @inchurch.com.br em vez de recusar direto.
+    # padrao do browser e pode recusar com 403 se essa conta nao estiver em
+    # test users. Com seletor, user escolhe manualmente qual conta usar.
+    # (removido hd='inchurch.com.br' — bloqueava browser sem sessao ativa
+    # de conta @inchurch.com.br mesmo antes de mostrar o seletor.)
     return _AUTH_URL + "?" + urllib.parse.urlencode({
         "client_id":     client_id,
         "redirect_uri":  redirect_uri,
         "response_type": "code",
         "scope":         "openid email profile",
         "prompt":        "select_account consent",
-        "hd":            "inchurch.com.br",
         "state":         state,
     })
 
