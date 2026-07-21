@@ -116,10 +116,11 @@ def tela_login():
     <style>
     /* Reproduz o botao 'Continuar com Google' do popup antigo.
        Seletores mais especificos que o CSS global do config.py (que aplica
-       .stButton>button generico). Usa [data-testid="stAppViewContainer"]
-       como ancestor pra vencer especificidade. */
-    div[data-testid="stAppViewContainer"] div[data-testid="stButton"] > button,
-    div[data-testid="stAppViewContainer"] .stButton > button {{
+       .stButton>button generico). Usa [data-testid="stMain"] como ancestor —
+       exclui sidebar (evita flash de estilo nos botoes da sidebar durante o
+       rerun apos logout) e ganha especificidade sobre o CSS global. */
+    div[data-testid="stMain"] div[data-testid="stButton"] > button,
+    div[data-testid="stMain"] .stButton > button {{
         width:100% !important;
         padding:13px 16px !important;
         border-radius:10px !important;
@@ -138,16 +139,16 @@ def tela_login():
         min-height:auto !important;
         line-height:1.2 !important;
     }}
-    div[data-testid="stAppViewContainer"] div[data-testid="stButton"] > button:hover,
-    div[data-testid="stAppViewContainer"] .stButton > button:hover {{
+    div[data-testid="stMain"] div[data-testid="stButton"] > button:hover,
+    div[data-testid="stMain"] .stButton > button:hover {{
         background:#252b3b !important;
         border-color:#3d4460 !important;
         transform:none !important;
         box-shadow:none !important;
     }}
     /* Icone Google antes do texto — mesma dimensao do SVG original (18x18) */
-    div[data-testid="stAppViewContainer"] div[data-testid="stButton"] > button::before,
-    div[data-testid="stAppViewContainer"] .stButton > button::before {{
+    div[data-testid="stMain"] div[data-testid="stButton"] > button::before,
+    div[data-testid="stMain"] .stButton > button::before {{
         content: "";
         display: inline-block;
         width: 18px;
@@ -160,8 +161,8 @@ def tela_login():
     }}
     /* Streamlit as vezes envolve o label do botao em <div> — garante que
        nao adicione margin/padding que quebrem o alinhamento com icone */
-    div[data-testid="stAppViewContainer"] div[data-testid="stButton"] > button p,
-    div[data-testid="stAppViewContainer"] div[data-testid="stButton"] > button div {{
+    div[data-testid="stMain"] div[data-testid="stButton"] > button p,
+    div[data-testid="stMain"] div[data-testid="stButton"] > button div {{
         margin:0 !important;
         padding:0 !important;
         font-size:14px !important;
