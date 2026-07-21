@@ -3,13 +3,14 @@ import time
 from datetime import datetime, date, time as _dt_time, timezone, timedelta
 from pathlib import Path
 
-# ── OAuth popup: dict em memoria compartilhado entre sessoes ──────────────────
+# ── OAuth popup: dict em memoria + fallback painel_historico ──────────────────
 # nonce → {"email": email, "nome": nome, "ts": timestamp_do_set}
-# Popup grava depois de trocar code por id_token; poll do main app le em <=1s.
-# TTL 60s no get. Streamlit Cloud reinicia = dict zerado, login falha e user
-# tenta de novo — aceitavel na pratica pra evitar dependencia de storage
-# externo.
+# Popup grava em memoria E em painel_historico (linha especial com
+# uid='__oauth_pending'). Main app le da memoria primeiro; se nao achar
+# (Streamlit reiniciou), tenta painel_historico.
+# Sem tabela nova — reusa painel_historico que ja existe. TTL 60s efetivo.
 _pending_oauth: dict = {}
+_OAUTH_UID = "__oauth_pending"
 
 # ── Presença online: dict em memória compartilhado entre sessões ──────────────
 # email → {"ts": timestamp_da_ultima_atividade, "nome": "Nome do Usuário"}
@@ -76,24 +77,76 @@ def precisa_processar_bq(store: dict) -> bool:
     return False
 
 def set_pending_oauth(nonce: str, email: str, nome: str) -> None:
-    """Grava o pending OAuth em memoria. Popup chama depois de trocar code
-    por id_token; poll do main app le em <=1s. Housekeeping passivo: limpa
-    entradas velhas (>120s) antes de gravar."""
+    """Grava o pending OAuth em memoria + painel_historico. Popup chama depois
+    de trocar code por id_token; poll do main app le em <=1s. Housekeeping
+    passivo: limpa entradas velhas (>120s) antes de gravar."""
     cutoff = time.time() - 120
     for k in list(_pending_oauth):
         if _pending_oauth[k]["ts"] < cutoff:
             del _pending_oauth[k]
-    _pending_oauth[nonce] = {"email": email, "nome": nome or email, "ts": time.time()}
+    entry = {"email": email, "nome": nome or email, "ts": time.time()}
+    _pending_oauth[nonce] = entry
+
+    # Fallback: grava tambem em painel_historico (linha uid=__oauth_pending)
+    # pra sobreviver a reinicio do Streamlit Cloud entre popup e poll do main.
+    # Reusa tabela existente — sem criar tabela nova.
+    try:
+        _client = get_bq_client()
+        if _client:
+            payload = {"email": entry["email"], "nome": entry["nome"], "ts": entry["ts"]}
+            _client.insert_rows_json(_HIST_TABLE, [{
+                "uid":            _OAUTH_UID,
+                "cliente_id":     nonce,
+                "historico_json": json.dumps(payload),
+                "updated_at":     datetime.now(timezone.utc).isoformat(),
+            }])
+    except Exception:
+        pass
 
 
 def get_pending_oauth(nonce: str) -> dict | None:
-    """Le o pending OAuth (se existir e nao tiver expirado). Sempre limpa a
-    entrada depois de ler. TTL 60s."""
+    """Le o pending OAuth. Tenta memoria primeiro (<1ms); se nao achar,
+    tenta painel_historico (~200ms). TTL 60s. Sempre limpa depois de ler."""
+    # Memoria primeiro
     entry = _pending_oauth.get(nonce)
     if entry and (time.time() - entry["ts"]) < 60:
         del _pending_oauth[nonce]
         return entry
-    return None
+
+    # Fallback: painel_historico (se Streamlit reiniciou e zerou memoria)
+    try:
+        _client = get_bq_client()
+        if not _client:
+            return None
+        nonce_safe = str(nonce).replace("'", "''")
+        df = _client.query(f"""
+            SELECT historico_json
+            FROM `{_HIST_TABLE}`
+            WHERE uid = '{_OAUTH_UID}'
+              AND cliente_id = '{nonce_safe}'
+              AND updated_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 SECOND)
+            ORDER BY updated_at DESC
+            LIMIT 1
+        """).to_dataframe()
+    except Exception:
+        return None
+    if df.empty:
+        return None
+    try:
+        payload = json.loads(df.iloc[0]["historico_json"])
+    except Exception:
+        return None
+    # Housekeeping: apaga a entrada usada + tudo com >120s.
+    try:
+        _client.query(f"""
+            DELETE FROM `{_HIST_TABLE}`
+            WHERE uid = '{_OAUTH_UID}'
+              AND (cliente_id = '{nonce_safe}'
+                   OR updated_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 120 SECOND))
+        """).result()
+    except Exception:
+        pass
+    return {"email": payload.get("email"), "nome": payload.get("nome"), "ts": payload.get("ts")}
 
 
 import pandas as pd
