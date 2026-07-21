@@ -114,13 +114,9 @@ def tela_login():
     _svg_b64 = _b64.b64encode(_svg_bytes).decode("ascii")
     st.markdown(f"""
     <style>
-    /* Reproduz o botao 'Continuar com Google' do popup antigo.
-       Seletores mais especificos que o CSS global do config.py (que aplica
-       .stButton>button generico). Usa [data-testid="stMain"] como ancestor —
-       exclui sidebar (evita flash de estilo nos botoes da sidebar durante o
-       rerun apos logout) e ganha especificidade sobre o CSS global. */
-    div[data-testid="stMain"] div[data-testid="stButton"] > button,
-    div[data-testid="stMain"] .stButton > button {{
+    /* Estilo do botao 'Continuar com Google' — replica popup antigo.
+       Aplica em stAppViewContainer (funciona no Streamlit 1.59). */
+    div[data-testid="stAppViewContainer"] .stButton > button {{
         width:100% !important;
         min-height:52px !important;
         padding:14px 20px !important;
@@ -139,34 +135,41 @@ def tela_login():
         box-shadow:none !important;
         line-height:1.2 !important;
     }}
-    div[data-testid="stMain"] div[data-testid="stButton"] > button:hover,
-    div[data-testid="stMain"] .stButton > button:hover {{
+    div[data-testid="stAppViewContainer"] .stButton > button:hover {{
         background:#252b3b !important;
         border-color:#3d4460 !important;
         transform:none !important;
         box-shadow:none !important;
     }}
-    /* Icone Google antes do texto — usa content:url() que renderiza a imagem
-       como elemento inline (mais robusto que background-image em botoes do
-       Streamlit, onde estrutura DOM interna pode esconder pseudo-elementos). */
-    div[data-testid="stMain"] div[data-testid="stButton"] > button::before,
-    div[data-testid="stMain"] .stButton > button::before {{
-        content: url("data:image/svg+xml;base64,{_svg_b64}") !important;
+    /* Icone SVG do Google via ::before — replica o icone do popup antigo */
+    div[data-testid="stAppViewContainer"] .stButton > button::before {{
+        content: "" !important;
         display: inline-block !important;
         width: 18px !important;
         height: 18px !important;
+        background-image: url("data:image/svg+xml;base64,{_svg_b64}") !important;
+        background-size: contain !important;
+        background-repeat: no-repeat !important;
+        background-position: center !important;
         flex-shrink: 0 !important;
-        vertical-align: middle !important;
         order: -1 !important;
     }}
-    /* Streamlit as vezes envolve o label do botao em <div> — garante que
-       nao adicione margin/padding que quebrem o alinhamento com icone */
-    div[data-testid="stMain"] div[data-testid="stButton"] > button p,
-    div[data-testid="stMain"] div[data-testid="stButton"] > button div {{
-        margin:0 !important;
-        padding:0 !important;
-        font-size:14px !important;
+    /* RESET: sidebar NAO deve ser afetada pelas regras acima (evita
+       flash de estilo durante rerun apos logout). */
+    section[data-testid="stSidebar"] .stButton > button {{
+        min-height:auto !important;
+        padding:10px 16px !important;
+        font-size:13px !important;
         font-weight:500 !important;
+        border-radius:8px !important;
+        gap:0 !important;
+    }}
+    section[data-testid="stSidebar"] .stButton > button::before {{
+        content: none !important;
+        display: none !important;
+        background-image: none !important;
+        width: 0 !important;
+        height: 0 !important;
     }}
     </style>
     """, unsafe_allow_html=True)
