@@ -3,7 +3,7 @@ import streamlit as st
 
 
 def _usuarios_do_secrets():
-    """Carrega usuários do st.secrets se disponível, senão usa credenciais de dev."""
+    """Carrega usuários autorizados de [usuarios] do secrets.toml."""
     try:
         usuarios_secrets = st.secrets.get("usuarios", {})
         if usuarios_secrets:
@@ -41,23 +41,56 @@ def get_store():
     return st.session_state["store"]
 
 
-def login_google(email: str, nome: str) -> bool:
-    """Permite apenas emails cadastrados em [usuarios] no secrets.toml."""
-    email_lower = email.lower()
+def _lookup_usuario_por_email(email: str):
+    """Retorna (uid, dict_usuario) se o email estiver em [usuarios] do secrets,
+    ou (None, None) caso contrario. Case-insensitive."""
+    email_lower = (email or "").lower()
     for uid, u in get_store()["usuarios"].items():
         if u["email"].lower() == email_lower:
-            st.session_state.update({
-                "user_uid":   uid,
-                "user_nome":  u["nome"],
-                "user_role":  u["role"],
-                "user_email": email_lower,
-            })
-            return True
-    return False
+            return uid, u
+    return None, None
 
 
-def is_logged():     return "user_uid" in st.session_state
-def current_uid():   return st.session_state.get("user_uid",   "")
-def current_nome():  return st.session_state.get("user_nome",  "")
-def current_role():  return st.session_state.get("user_role",  "atendente")
-def current_email(): return st.session_state.get("user_email", "")
+def is_logged() -> bool:
+    """Autenticado pelo Google (via st.login) E autorizado no secrets.toml."""
+    try:
+        if not st.user.is_logged_in:
+            return False
+    except Exception:
+        return False
+    email = getattr(st.user, "email", "") or ""
+    uid, _ = _lookup_usuario_por_email(email)
+    return uid is not None
+
+
+def current_email() -> str:
+    try:
+        return (getattr(st.user, "email", "") or "").lower()
+    except Exception:
+        return ""
+
+
+def current_uid() -> str:
+    email = current_email()
+    uid, _ = _lookup_usuario_por_email(email)
+    return uid or ""
+
+
+def current_nome() -> str:
+    """Nome preferencial do secrets (que a atendente escolheu como rotulo);
+    fallback pro nome que o Google retornou; ultimo fallback pro email."""
+    email = current_email()
+    _, u = _lookup_usuario_por_email(email)
+    if u:
+        return u["nome"]
+    try:
+        return getattr(st.user, "name", "") or email
+    except Exception:
+        return email
+
+
+def current_role() -> str:
+    """Role vem do secrets.toml [usuarios] — admin ou atendente."""
+    email = current_email()
+    _, u = _lookup_usuario_por_email(email)
+    return (u["role"] if u else "atendente")

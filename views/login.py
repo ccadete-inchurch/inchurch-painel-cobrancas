@@ -1,18 +1,9 @@
-import base64
-import json
-import secrets as _secrets
-import urllib.parse
 from datetime import datetime
 
-import requests
 import streamlit as st
-import streamlit.components.v1 as components
 
 from config import LOGO_SRC
-from auth import login_google
 
-_AUTH_URL  = "https://accounts.google.com/o/oauth2/auth"
-_TOKEN_URL = "https://oauth2.googleapis.com/token"
 
 _GOOGLE_ICON = (
     '<svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">'
@@ -24,66 +15,23 @@ _GOOGLE_ICON = (
 )
 
 
-def _build_auth_url(client_id: str, redirect_uri: str, state: str = "normal") -> str:
-    return _AUTH_URL + "?" + urllib.parse.urlencode({
-        "client_id":     client_id,
-        "redirect_uri":  redirect_uri,
-        "response_type": "code",
-        "scope":         "openid email profile",
-        "prompt":        "select_account",
-        "state":         state,
-    })
-
-
-def _exchange_code(code: str, client_id: str, client_secret: str, redirect_uri: str) -> dict:
-    return requests.post(_TOKEN_URL, data={
-        "code":          code,
-        "client_id":     client_id,
-        "client_secret": client_secret,
-        "redirect_uri":  redirect_uri,
-        "grant_type":    "authorization_code",
-    }, timeout=10).json()
-
-
-def _decode_id_token(token: str) -> dict:
-    payload = token.split(".")[1]
-    payload += "=" * (-len(payload) % 4)
-    return json.loads(base64.urlsafe_b64decode(payload))
-
-
-def _handle_google_callback():
-    code = st.query_params.get("code")
-    if not code:
-        return
-    try:
-        g = st.secrets["google"]
-        data = _exchange_code(code, g["client_id"], g["client_secret"], g["redirect_uri"])
-        st.query_params.clear()
-        if "id_token" not in data:
-            st.error("Erro ao autenticar com Google.")
-            return
-        info  = _decode_id_token(data["id_token"])
-        email = info.get("email", "")
-        nome  = info.get("name", email)
-        if login_google(email, nome):
-            st.rerun()
-        else:
-            st.error(f"Acesso não autorizado para {email}.")
-    except Exception as e:
-        st.query_params.clear()
-        st.error(f"Erro no login Google: {e}")
-
-
-@st.fragment(run_every=1)
-def _poll_google_oauth(nonce: str):
-    from data import get_pending_oauth
-    result = get_pending_oauth(nonce)
-    if result and login_google(result["email"], result["nome"]):
-        st.rerun()
-
-
 def tela_login():
-    _handle_google_callback()
+    """Tela de login usando st.login('google') — API oficial do Streamlit
+    (>=1.42). Fluxo: usuario clica botao -> Streamlit redireciona pro Google
+    -> Google devolve -> Streamlit valida e popula st.user. Sem popup, sem
+    polling, sem tabela intermediaria.
+
+    Autorizacao: apenas emails cadastrados em [usuarios] do secrets.toml
+    conseguem passar do login (checagem em auth.is_logged)."""
+
+    # Se ja esta autenticado no Google mas nao autorizado, mostra mensagem
+    # e opcao de trocar de conta. Preserva o caso onde o Google devolveu
+    # email valido mas o painel nao aceita esse email.
+    try:
+        _google_ok = bool(st.user.is_logged_in)
+    except Exception:
+        _google_ok = False
+    _email_google = getattr(st.user, "email", "") if _google_ok else ""
 
     # ── CSS global + painel esquerdo fixo ─────────────────────────────────────
     _logo_html = (
@@ -158,6 +106,45 @@ def tela_login():
     </div>
     """, unsafe_allow_html=True)
 
+    # ── CSS do botao Google — replica o visual do popup antigo
+    # Icone SVG do Google injetado via ::before (background-image data URI).
+    # Sem isso, botao ficaria so texto sem simbolo colorido. ─────────────────
+    _svg_bytes = _GOOGLE_ICON.encode("utf-8")
+    import base64 as _b64
+    _svg_b64 = _b64.b64encode(_svg_bytes).decode("ascii")
+    st.markdown(f"""
+    <style>
+    .stButton > button[kind="secondary"],
+    .stButton > button[data-testid="stBaseButton-secondary"],
+    div[data-testid="stButton"] > button {{
+        width:100% !important;padding:13px 16px !important;border-radius:10px !important;
+        background:#1e2333 !important;border:1px solid #2a2f42 !important;
+        color:#e8eaf0 !important;font-size:14px !important;font-weight:500 !important;
+        display:flex !important;align-items:center !important;justify-content:center !important;
+        gap:10px !important;
+        font-family:-apple-system,BlinkMacSystemFont,sans-serif !important;
+        transition:background .15s,border-color .15s !important;
+    }}
+    .stButton > button:hover,
+    div[data-testid="stButton"] > button:hover {{
+        background:#252b3b !important;
+        border-color:#3d4460 !important;
+    }}
+    /* Icone Google antes do texto do botao */
+    div[data-testid="stButton"] > button::before {{
+        content: "";
+        display: inline-block;
+        width: 18px;
+        height: 18px;
+        background-image: url("data:image/svg+xml;base64,{_svg_b64}");
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        flex-shrink: 0;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
     # ── Lado direito: área de login ────────────────────────────────────────────
     _, right = st.columns(2)
     with right:
@@ -177,76 +164,25 @@ def tela_login():
 
         _, btn_col, _ = st.columns([0.18, 1, 0.18])
         with btn_col:
-            try:
-                g = st.secrets["google"]
-                if "oauth_nonce" not in st.session_state:
-                    st.session_state["oauth_nonce"] = _secrets.token_hex(16)
-                nonce    = st.session_state["oauth_nonce"]
-                auth_url = _build_auth_url(g["client_id"], g["redirect_uri"], state=f"popup_{nonce}")
-                components.html(f"""
-                <html><body style="margin:0;padding:0;background:transparent">
-                <script>
-                var _U = '{auth_url}';
-                var _popupRef = null;
-                var _checkTimer = null;
-                // Fecha o popup de fora — o iframe do botão tem a ref do
-                // window.open e poll a location dele. Detecta TRANSIÇÃO:
-                //   fase 'esperando': popup ainda no Google (cross-origin)
-                //   fase 'voltou':    URL tem ?code= (Streamlit começou a carregar)
-                //   fase 'pronto':    URL foi limpa por st.query_params.clear()
-                //                     (Streamlit terminou de processar o login)
-                // Fechar só na fase 'pronto' garante que set_pending_oauth
-                // já gravou — main app polling captura em <1s e loga.
-                function _go() {{
-                    var w=480,h=560,x=Math.round(screen.width/2-240),y=Math.round(screen.height/2-280);
-                    _popupRef = window.open(_U,'_google_oauth','width='+w+',height='+h+',left='+x+',top='+y+',scrollbars=yes');
-                    if (_checkTimer) clearInterval(_checkTimer);
-                    var _fase = 'esperando';
-                    var _ticks = 0;
-                    _checkTimer = setInterval(function() {{
-                        _ticks++;
-                        if (!_popupRef || _popupRef.closed) {{
-                            clearInterval(_checkTimer);
-                            return;
-                        }}
-                        try {{
-                            var s = _popupRef.location.search;
-                            var temCode = s.indexOf('code=') !== -1;
-                            if (_fase === 'esperando' && temCode) {{
-                                _fase = 'voltou';
-                            }} else if (_fase === 'voltou' && !temCode) {{
-                                // URL limpa → Streamlit processou → fecha
-                                _fase = 'pronto';
-                                clearInterval(_checkTimer);
-                                setTimeout(function() {{
-                                    try {{ _popupRef.close(); }} catch(e) {{}}
-                                }}, 500);
-                            }}
-                        }} catch(e) {{
-                            // Cross-origin (no Google) — segue polling
-                        }}
-                        // Fallback: se 'voltou' há mais de 8s sem 'pronto',
-                        // fecha mesmo assim — pode ter dado erro no processamento.
-                        if (_fase === 'voltou' && _ticks > 40) {{
-                            clearInterval(_checkTimer);
-                            try {{ _popupRef.close(); }} catch(e) {{}}
-                        }}
-                    }}, 200);
-                }}
-                </script>
-                <button onclick="_go()" style="
-                    width:100%;padding:13px 16px;border-radius:10px;
-                    background:#1e2333;border:1px solid #2a2f42;
-                    color:#e8eaf0;font-size:14px;font-weight:500;cursor:pointer;
-                    display:flex;align-items:center;justify-content:center;gap:10px;
-                    font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box;
-                " onmouseover="this.style.background='#252b3b';this.style.borderColor='#3d4460'"
-                   onmouseout="this.style.background='#1e2333';this.style.borderColor='#2a2f42'">
-                    {_GOOGLE_ICON} Continuar com Google
-                </button>
-                </body></html>
-                """, height=56)
-                _poll_google_oauth(nonce)
-            except Exception:
-                pass
-
+            # Se Google autenticou mas email nao esta em [usuarios] do secrets:
+            # avisa e oferece trocar de conta (st.logout limpa a sessao Google).
+            if _google_ok and _email_google:
+                st.markdown(
+                    f'<div style="padding:0 48px 12px 36px;color:#fb7185;'
+                    f'font-size:14px;line-height:1.5">'
+                    f'Acesso não autorizado para <b>{_email_google}</b>.<br>'
+                    f'Faça login com outra conta @inchurch.com.br.'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                if st.button("Trocar de conta", key="btn_logout_and_retry"):
+                    st.logout()
+            else:
+                # Caso normal — nao autenticado ainda. Botao dispara st.login.
+                # Sem icon=... pra deixar o SVG do Google injetado via CSS
+                # ::before ser o unico simbolo do botao.
+                if st.button(
+                    "Continuar com Google",
+                    key="btn_google_login",
+                ):
+                    st.login("google")
