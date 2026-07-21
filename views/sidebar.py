@@ -76,4 +76,7 @@ def render_sidebar():
         # subsequente faça fresh load do BQ + cache, sem heranças.
         for k in list(st.session_state.keys()):
             st.session_state.pop(k, None)
-        st.rerun()
+        # st.logout() invalida o cookie do OAuth (st.user) e redireciona
+        # pra /. Sem isso, so limpar session_state mantinha o user
+        # autenticado pelo Google (cookie ativo) e o painel logava de novo.
+        st.logout()

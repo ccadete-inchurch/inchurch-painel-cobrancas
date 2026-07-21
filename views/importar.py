@@ -18,7 +18,10 @@ def tela_importar():
         if st.button("Sair"):
             for k in ["user_uid", "user_nome", "user_role", "tela"]:
                 st.session_state.pop(k, None)
-            st.rerun()
+            # st.logout() invalida o cookie do OAuth (st.user) — sem isso
+            # o usuario continua autenticado no Google e volta a logar no
+            # proximo rerun.
+            st.logout()
 
     st.markdown("### 📥 Importar Dados")
     st.markdown("#### 🔄 Carregar do BigQuery")
