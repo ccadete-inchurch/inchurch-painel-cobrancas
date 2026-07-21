@@ -3,12 +3,6 @@ import time
 from datetime import datetime, date, time as _dt_time, timezone, timedelta
 from pathlib import Path
 
-# ── OAuth popup: armazenamento em BigQuery (sobrevive a reinicio do processo) ─
-# Antes era dict em memoria. Streamlit Cloud reinicia = dict zerado = login
-# falhava intermitentemente (popup fechava, poll nao achava nada). BQ como
-# storage compartilhado resolve. TTL 60s da entrada, cleanup passivo no set.
-_OAUTH_TABLE_FULL = "business-intelligence-467516.inadimplencia_painel_cobrancas.oauth_pending"
-
 # ── Presença online: dict em memória compartilhado entre sessões ──────────────
 # email → {"ts": timestamp_da_ultima_atividade, "nome": "Nome do Usuário"}
 # Cada sessão ativa pinga a cada 30s; consideramos online quem pingou nos
@@ -72,75 +66,6 @@ def precisa_processar_bq(store: dict) -> bool:
             return True
 
     return False
-
-def _ensure_oauth_table(client) -> None:
-    """Cria a tabela oauth_pending se nao existir. Idempotente."""
-    from google.cloud import bigquery as _bq
-    schema = [
-        _bq.SchemaField("nonce",   "STRING", mode="REQUIRED"),
-        _bq.SchemaField("email",   "STRING", mode="REQUIRED"),
-        _bq.SchemaField("nome",    "STRING", mode="NULLABLE"),
-        _bq.SchemaField("created", "TIMESTAMP", mode="REQUIRED"),
-    ]
-    try:
-        table = _bq.Table(_OAUTH_TABLE_FULL, schema=schema)
-        client.create_table(table, exists_ok=True)
-    except Exception:
-        pass
-
-
-def set_pending_oauth(nonce: str, email: str, nome: str) -> None:
-    """Grava o pending OAuth no BQ. Popup chama depois de trocar code por
-    id_token; poll do main app le em <=1s. TTL efetivo eh 60s (get filtra)."""
-    client = get_bq_client()
-    if not client:
-        return
-    _ensure_oauth_table(client)
-    now_iso = datetime.now(timezone.utc).isoformat()
-    try:
-        client.insert_rows_json(_OAUTH_TABLE_FULL, [{
-            "nonce":   nonce,
-            "email":   email,
-            "nome":    nome or email,
-            "created": now_iso,
-        }])
-    except Exception:
-        pass
-
-
-def get_pending_oauth(nonce: str) -> dict | None:
-    """Le o pending OAuth do BQ (se existir e nao tiver expirado). Sempre
-    limpa a entrada depois de ler + entradas velhas (>120s) — housekeeping
-    passivo dispensa cron dedicado."""
-    client = get_bq_client()
-    if not client:
-        return None
-    nonce_safe = str(nonce).replace("'", "''")
-    try:
-        # DELETE + RETURNING nao existe em BQ; entao 1 SELECT + 1 DELETE.
-        # 60s de janela pra pegar; qualquer coisa mais velha eh lixo.
-        df = client.query(f"""
-            SELECT email, nome, UNIX_SECONDS(created) AS created_s
-            FROM `{_OAUTH_TABLE_FULL}`
-            WHERE nonce = '{nonce_safe}'
-              AND created >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 SECOND)
-            LIMIT 1
-        """).to_dataframe()
-    except Exception:
-        return None
-    if df.empty:
-        return None
-    row = df.iloc[0]
-    # Housekeeping: apaga a entrada usada + tudo com mais de 120s (folga).
-    try:
-        client.query(f"""
-            DELETE FROM `{_OAUTH_TABLE_FULL}`
-            WHERE nonce = '{nonce_safe}'
-               OR created < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 120 SECOND)
-        """).result()
-    except Exception:
-        pass
-    return {"email": row["email"], "nome": row["nome"]}
 
 import pandas as pd
 import requests
