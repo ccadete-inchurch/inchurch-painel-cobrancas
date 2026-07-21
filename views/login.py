@@ -43,6 +43,9 @@ def tela_login():
     <style>
     html,body{{background:#0f1117!important}}
     .stApp{{background:#0f1117!important}}
+    /* Esconde sidebar imediatamente na tela de login (antes era feito no
+       render_sidebar, agora render_sidebar so eh chamado apos login). */
+    section[data-testid="stSidebar"]{{display:none!important}}
     header,[data-testid="stToolbar"],[data-testid="stDecoration"],
     [data-testid="stStatusWidget"]{{display:none!important}}
     [data-testid="stAppViewBlockContainer"],.main .block-container{{
@@ -116,17 +119,21 @@ def tela_login():
     <style>
     /* Estilo do botao 'Continuar com Google' — replica popup antigo.
        Aplica em stAppViewContainer (funciona no Streamlit 1.59). */
-    /* Container do botao — centraliza no meio da coluna e limita a largura
-       max pra nao virar barra gigante em telas 4K/ultrawide. */
+    /* Container do botao — alinhado com o texto acima (padding-left:36px,
+       padding-right:48px do wrapper do texto). Botao com max-width 360px
+       centralizado dentro dessa faixa alinhada com o texto. */
     div[data-testid="stAppViewContainer"] div[data-testid="stButton"],
     div[data-testid="stAppViewContainer"] .stButton {{
-        max-width:360px !important;
-        margin-left:auto !important;
-        margin-right:auto !important;
+        padding-left:36px !important;
+        padding-right:48px !important;
+        margin-left:0 !important;
+        margin-right:0 !important;
     }}
     div[data-testid="stAppViewContainer"] .stButton > button {{
         width:100% !important;
         max-width:360px !important;
+        margin-left:0 !important;
+        margin-right:auto !important;
         min-height:48px !important;
         padding:12px 24px !important;
         border-radius:10px !important;
@@ -164,11 +171,14 @@ def tela_login():
         flex-shrink: 0 !important;
         order: -1 !important;
     }}
-    /* RESET: sidebar NAO deve ser afetada pelas regras acima (evita
-       flash de estilo durante rerun apos logout). */
+    /* RESET: sidebar NAO deve ser afetada pelas regras acima. Como agora
+       render_sidebar so eh chamado apos login, a sidebar nao aparece na
+       tela de login e o CSS abaixo so serve como seguranca (caso Streamlit
+       cache pagina antiga durante rerun). */
     section[data-testid="stSidebar"] div[data-testid="stButton"],
     section[data-testid="stSidebar"] .stButton {{
-        max-width:none !important;
+        padding-left:0 !important;
+        padding-right:0 !important;
         margin-left:0 !important;
         margin-right:0 !important;
     }}
@@ -208,27 +218,29 @@ def tela_login():
         </div>
         """, unsafe_allow_html=True)
 
-        _, btn_col, _ = st.columns([0.18, 1, 0.18])
-        with btn_col:
-            # Se Google autenticou mas email nao esta em [usuarios] do secrets:
-            # avisa e oferece trocar de conta (st.logout limpa a sessao Google).
-            if _google_ok and _email_google:
-                st.markdown(
-                    f'<div style="padding:0 48px 12px 36px;color:#fb7185;'
-                    f'font-size:14px;line-height:1.5">'
-                    f'Acesso não autorizado para <b>{_email_google}</b>.<br>'
-                    f'Faça login com outra conta @inchurch.com.br.'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-                if st.button("Trocar de conta", key="btn_logout_and_retry"):
-                    st.logout()
-            else:
-                # Caso normal — nao autenticado ainda. Botao dispara st.login.
-                # Sem icon=... pra deixar o SVG do Google injetado via CSS
-                # ::before ser o unico simbolo do botao.
-                if st.button(
-                    "Continuar com Google",
-                    key="btn_google_login",
-                ):
-                    st.login("google")
+        # Botao com mesmo padding lateral do texto (48px direita, 36px esquerda)
+        # pra ficar centralizado no eixo horizontal do texto acima.
+        # Wrapper com data-login-btn eh usado pelo CSS pra aplicar padding.
+        st.markdown('<div data-login-btn></div>', unsafe_allow_html=True)
+        # Se Google autenticou mas email nao esta em [usuarios] do secrets:
+        # avisa e oferece trocar de conta (st.logout limpa a sessao Google).
+        if _google_ok and _email_google:
+            st.markdown(
+                f'<div style="padding:0 48px 12px 36px;color:#fb7185;'
+                f'font-size:14px;line-height:1.5">'
+                f'Acesso não autorizado para <b>{_email_google}</b>.<br>'
+                f'Faça login com outra conta @inchurch.com.br.'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Trocar de conta", key="btn_logout_and_retry"):
+                st.logout()
+        else:
+            # Caso normal — nao autenticado ainda. Botao dispara st.login.
+            # Sem icon=... pra deixar o SVG do Google injetado via CSS
+            # ::before ser o unico simbolo do botao.
+            if st.button(
+                "Continuar com Google",
+                key="btn_google_login",
+            ):
+                st.login("google")

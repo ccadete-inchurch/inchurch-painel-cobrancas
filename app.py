@@ -42,11 +42,16 @@ def tela_principal():
 
 
 def main():
-    render_sidebar()
-
+    # Checa login ANTES de renderizar sidebar. Sem isso, ao clicar 'Sair da conta'
+    # a sidebar (com botoes de nav) renderiza brevemente durante o rerun apos
+    # logout, causando flash de estilo (o CSS do login pega temporariamente os
+    # botoes da sidebar). Chamando render_sidebar so quando logado, sidebar nunca
+    # aparece na tela de login.
     if not is_logged():
         tela_login()
         return
+
+    render_sidebar()
 
     store = get_store()
 
