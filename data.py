@@ -2430,19 +2430,20 @@ def load_mensagens_from_bq():
     cur = conn.cursor()
 
     # Janela de 3 dias. fromme=true ignora respostas do cliente (saudações etc).
-    # Iteracao linha por linha com fetchone + try/except: pg8000 (driver
-    # atual do Cloud SQL Auth Proxy) e' mais rigoroso com encoding UTF-8 que
-    # psycopg2. Mensagens do WhatsApp as vezes tem bytes invalidos (\\x00,
-    # \\xfb, etc.) que quebram fetchall inteiro. Iterando por linha, msgs
-    # bugadas sao puladas em vez de derrubar toda a leitura.
+    # message eh castado pra BYTEA no SELECT (bytes brutos) — sem isso, pg8000
+    # decodifica como UTF-8 no fetch e crasha em bytes invalidos (\\x00,
+    # \\xfb, etc). No Python, decodificamos com errors='replace' — bytes
+    # ruins viram \\ufffd mas o resto da mensagem eh preservado. Zero linhas
+    # perdidas, nenhuma acao da atendente e' ignorada.
     try:
         cur.execute(f"""
-            SELECT telefone, message, created_at
+            SELECT telefone, message::bytea AS message_bytes, created_at
             FROM {table}
             WHERE created_at >= NOW() - INTERVAL '3 days'
               AND LOWER(fromme::text) = 'true'
             ORDER BY created_at ASC
         """)
+        rows = cur.fetchall()
     except Exception as e:
         try:
             conn.rollback()
@@ -2456,25 +2457,22 @@ def load_mensagens_from_bq():
     concluida_ts      = {}
     ultimo_contato_ts = {}
 
-    # Le linha por linha com tratamento de erro. Se uma msg individual tem
-    # bytes invalidos UTF-8 (pg8000 e' rigoroso), pula essa linha em vez de
-    # derrubar todo o loop. Safety limit evita loop infinito se cursor entrar
-    # em estado inconsistente.
-    def _iter_rows_safe(cursor, max_rows=100000):
-        for _ in range(max_rows):
-            try:
-                row = cursor.fetchone()
-            except Exception:
-                continue  # pula linha com bytes invalidos, continua no cursor
-            if row is None:
-                return
-            yield row
-
-    for tel_raw, msg_raw, ts in _iter_rows_safe(cur):
+    for tel_raw, msg_bytes, ts in rows:
         chave = _norm(str(tel_raw or ""))
         if not chave:
             continue
-        msg = str(msg_raw or "").lower()
+        # msg_bytes vem como bytes (BYTEA no PG). Decodifica UTF-8 com
+        # errors='replace' — bytes invalidos viram U+FFFD (?) mas o resto
+        # da mensagem eh preservado. Padroes _MSG_* sao ASCII/portugues
+        # comum, entao um byte ruim no meio nao impede o match nas
+        # palavras-chave que a atendente usou.
+        if msg_bytes is None:
+            msg = ""
+        elif isinstance(msg_bytes, (bytes, bytearray)):
+            msg = bytes(msg_bytes).decode("utf-8", errors="replace").lower()
+        else:
+            # Fallback: se driver ja decodificou como str (ex: memoryview)
+            msg = str(msg_bytes).lower()
 
         # Ignora mensagens de IA/saudação automática — não viram ação real.
         if any(p in msg for p in _MSG_IA_IGNORAR):
