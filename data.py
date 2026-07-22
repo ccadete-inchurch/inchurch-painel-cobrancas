@@ -2430,6 +2430,11 @@ def load_mensagens_from_bq():
     cur = conn.cursor()
 
     # Janela de 3 dias. fromme=true ignora respostas do cliente (saudações etc).
+    # Iteracao linha por linha com fetchone + try/except: pg8000 (driver
+    # atual do Cloud SQL Auth Proxy) e' mais rigoroso com encoding UTF-8 que
+    # psycopg2. Mensagens do WhatsApp as vezes tem bytes invalidos (\\x00,
+    # \\xfb, etc.) que quebram fetchall inteiro. Iterando por linha, msgs
+    # bugadas sao puladas em vez de derrubar toda a leitura.
     try:
         cur.execute(f"""
             SELECT telefone, message, created_at
@@ -2438,7 +2443,6 @@ def load_mensagens_from_bq():
               AND LOWER(fromme::text) = 'true'
             ORDER BY created_at ASC
         """)
-        rows = cur.fetchall()
     except Exception as e:
         try:
             conn.rollback()
@@ -2452,7 +2456,21 @@ def load_mensagens_from_bq():
     concluida_ts      = {}
     ultimo_contato_ts = {}
 
-    for tel_raw, msg_raw, ts in rows:
+    # Le linha por linha com tratamento de erro. Se uma msg individual tem
+    # bytes invalidos UTF-8 (pg8000 e' rigoroso), pula essa linha em vez de
+    # derrubar todo o loop. Safety limit evita loop infinito se cursor entrar
+    # em estado inconsistente.
+    def _iter_rows_safe(cursor, max_rows=100000):
+        for _ in range(max_rows):
+            try:
+                row = cursor.fetchone()
+            except Exception:
+                continue  # pula linha com bytes invalidos, continua no cursor
+            if row is None:
+                return
+            yield row
+
+    for tel_raw, msg_raw, ts in _iter_rows_safe(cur):
         chave = _norm(str(tel_raw or ""))
         if not chave:
             continue
