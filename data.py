@@ -2430,14 +2430,17 @@ def load_mensagens_from_bq():
     cur = conn.cursor()
 
     # Janela de 3 dias. fromme=true ignora respostas do cliente (saudações etc).
-    # message eh castado pra BYTEA no SELECT (bytes brutos) — sem isso, pg8000
-    # decodifica como UTF-8 no fetch e crasha em bytes invalidos (\\x00,
-    # \\xfb, etc). No Python, decodificamos com errors='replace' — bytes
-    # ruins viram \\ufffd mas o resto da mensagem eh preservado. Zero linhas
-    # perdidas, nenhuma acao da atendente e' ignorada.
+    # TODAS as colunas string sao castadas pra BYTEA no SELECT (bytes brutos).
+    # Sem isso, pg8000 decodifica como UTF-8 no fetch e crasha em bytes
+    # invalidos (\\x00, \\xfb, \\x9e, etc) — que aparecem em qualquer campo
+    # texto do WhatsApp (telefone, message, ...). No Python, decodificamos
+    # com errors='replace' — bytes ruins viram \\ufffd (?) mas o resto eh
+    # preservado. Zero linhas perdidas, nenhuma acao da atendente ignorada.
     try:
         cur.execute(f"""
-            SELECT telefone, message::bytea AS message_bytes, created_at
+            SELECT telefone::bytea    AS tel_bytes,
+                   message::bytea     AS msg_bytes,
+                   created_at
             FROM {table}
             WHERE created_at >= NOW() - INTERVAL '3 days'
               AND LOWER(fromme::text) = 'true'
@@ -2457,22 +2460,20 @@ def load_mensagens_from_bq():
     concluida_ts      = {}
     ultimo_contato_ts = {}
 
+    def _bytes_to_str(b):
+        """Decodifica bytes vindos de BYTEA como UTF-8 com errors='replace'."""
+        if b is None:
+            return ""
+        if isinstance(b, (bytes, bytearray, memoryview)):
+            return bytes(b).decode("utf-8", errors="replace")
+        return str(b)
+
     for tel_raw, msg_bytes, ts in rows:
-        chave = _norm(str(tel_raw or ""))
+        # Ambos telefone e message vem como bytes agora (BYTEA no SELECT).
+        chave = _norm(_bytes_to_str(tel_raw))
         if not chave:
             continue
-        # msg_bytes vem como bytes (BYTEA no PG). Decodifica UTF-8 com
-        # errors='replace' — bytes invalidos viram U+FFFD (?) mas o resto
-        # da mensagem eh preservado. Padroes _MSG_* sao ASCII/portugues
-        # comum, entao um byte ruim no meio nao impede o match nas
-        # palavras-chave que a atendente usou.
-        if msg_bytes is None:
-            msg = ""
-        elif isinstance(msg_bytes, (bytes, bytearray)):
-            msg = bytes(msg_bytes).decode("utf-8", errors="replace").lower()
-        else:
-            # Fallback: se driver ja decodificou como str (ex: memoryview)
-            msg = str(msg_bytes).lower()
+        msg = _bytes_to_str(msg_bytes).lower()
 
         # Ignora mensagens de IA/saudação automática — não viram ação real.
         if any(p in msg for p in _MSG_IA_IGNORAR):
@@ -2527,14 +2528,15 @@ def load_mensagens_from_bq():
     )
     try:
         cur.execute(f"""
-            SELECT telefone, MAX(created_at) AS ultimo_contato
+            SELECT telefone::bytea AS tel_bytes, MAX(created_at) AS ultimo_contato
             FROM {table}
             WHERE LOWER(fromme::text) = 'true'
               AND {ia_filter_sql}
             GROUP BY telefone
         """)
         for tel_raw, ts in cur.fetchall():
-            chave = _norm(str(tel_raw or ""))
+            # tel_raw vem como bytes (BYTEA). Decodifica com errors=replace.
+            chave = _norm(_bytes_to_str(tel_raw))
             if not chave or ts is None:
                 continue
             dias = _dias_calendario_brt(ts)
