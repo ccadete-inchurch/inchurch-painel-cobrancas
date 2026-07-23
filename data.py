@@ -586,6 +586,18 @@ def get_pg_n8n_conn():
             db=s["database"],
         )
         conn.autocommit = True
+        # Forca bytea_output = 'hex' na sessao. pg8000 usa bytes.fromhex()
+        # internamente pra decodificar bytea; se o PG estiver configurado com
+        # 'escape' (formato octal \\ooo), o fromhex crasha com
+        # 'non-hexadecimal number found'. Setar 'hex' garante que o pg8000
+        # receba string sempre no formato \\xNN (chars 0-9 a-f) que ele
+        # sabe processar.
+        try:
+            cur = conn.cursor()
+            cur.execute("SET bytea_output = 'hex'")
+            cur.close()
+        except Exception:
+            pass
         return conn
     except Exception as e:
         st.error(f"Falha ao conectar Postgres N8N via Auth Proxy: {e}")
@@ -666,7 +678,15 @@ def fetch_cobrancas_competencia():
         c.id_recebimento_recb                                             AS id_recebimento,
         MAX(c.st_nome_sac)                                                AS nome,
         MAX(c.st_cgc_sac)                                                 AS cnpj,
-        MAX(COALESCE(NULLIF(cli.st_fax_sac, ''), c.st_telefone_sac))     AS telefone,
+        MAX(CASE
+            WHEN NULLIF(cli.st_fax_sac, '') IS NULL
+                THEN c.st_telefone_sac                                        -- so tem telefone
+            WHEN NULLIF(c.st_telefone_sac, '') IS NULL
+                THEN cli.st_fax_sac                                            -- so tem fax
+            WHEN cli.st_fax_sac = c.st_telefone_sac
+                THEN cli.st_fax_sac                                            -- iguais, um so
+            ELSE CONCAT(cli.st_fax_sac, ';', c.st_telefone_sac)                -- ambos diferentes, concatena
+        END)                                                              AS telefone,
         SUM(c.comp_valor)                                                 AS valor,
         FORMAT_TIMESTAMP('%Y-%m-%d', MAX(c.dt_vencimento_recb))          AS vencimento,
         MAX(c.fl_status_recb)                                             AS status,
@@ -834,7 +854,15 @@ def fetch_proximas_cobracas(days: int = 30) -> pd.DataFrame:
         c.id_sacado_sac                                      AS codigo,
         MAX(c.st_nome_sac)                                        AS nome,
         MAX(c.st_cgc_sac)                                         AS cnpj,
-        MAX(COALESCE(NULLIF(cli.st_fax_sac, ''), c.st_telefone_sac)) AS telefone,
+        MAX(CASE
+            WHEN NULLIF(cli.st_fax_sac, '') IS NULL
+                THEN c.st_telefone_sac
+            WHEN NULLIF(c.st_telefone_sac, '') IS NULL
+                THEN cli.st_fax_sac
+            WHEN cli.st_fax_sac = c.st_telefone_sac
+                THEN cli.st_fax_sac
+            ELSE CONCAT(cli.st_fax_sac, ';', c.st_telefone_sac)
+        END)                                                       AS telefone,
         MAX(c.comp_valor)                                      AS valor,
         FORMAT_TIMESTAMP('%Y-%m-%d', MAX(c.dt_vencimento_recb))   AS vencimento,
         MAX(u.nm_grupo)                                           AS grupo,
@@ -3179,7 +3207,15 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
                     c.id_sacado_sac AS id,
                     MAX(c.st_nome_sac) AS nome,
                     MAX(c.st_cgc_sac)  AS cnpj,
-                    MAX(COALESCE(NULLIF(cli.st_fax_sac, ''), c.st_telefone_sac)) AS telefone,
+                    MAX(CASE
+                        WHEN NULLIF(cli.st_fax_sac, '') IS NULL
+                            THEN c.st_telefone_sac
+                        WHEN NULLIF(c.st_telefone_sac, '') IS NULL
+                            THEN cli.st_fax_sac
+                        WHEN cli.st_fax_sac = c.st_telefone_sac
+                            THEN cli.st_fax_sac
+                        ELSE CONCAT(cli.st_fax_sac, ';', c.st_telefone_sac)
+                    END) AS telefone,
                     MAX(u.nm_grupo) AS grupo,
                     MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
                 FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c

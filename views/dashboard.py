@@ -111,6 +111,7 @@ def _render_dashboard(store, clientes, role):
         df["_lastContact"] = df["id"].apply(get_effective_lastContact)
         df["_atendente"]   = df["id"].apply(get_effective_atendente)
         df["_notes"]       = df["id"].apply(lambda i: get_hist(i).get("notes", ""))
+        df["_tel_fixo"]    = df["id"].apply(lambda i: bool(get_hist(i).get("tel_fixo")))
         from data import calcular_score
         df["_score"]       = df.apply(lambda r: calcular_score(r.to_dict(), get_hist(r["id"])), axis=1)
         df["_score_pct"]   = df["_score"].rank(pct=True, method="max").fillna(0)
@@ -529,6 +530,13 @@ def _render_dashboard(store, clientes, role):
                         'font-weight:700;padding:2px 6px;border-radius:4px;'
                         'flex-shrink:0;margin-left:4px">INATIVO</span>'
                     )
+                if _h.get("tel_fixo"):
+                    tags_inline += (
+                        '<span style="background:rgba(236,72,153,.18);color:#ec4899;'
+                        'border:1px solid rgba(236,72,153,.4);'
+                        'font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;'
+                        'flex-shrink:0;margin-left:4px">TELEFONE FIXO</span>'
+                    )
                 # Layout flex pra nome (com ellipsis) + tags à direita
                 nome_row = (
                     f'<div style="display:flex;align-items:center;gap:6px">'
@@ -728,6 +736,7 @@ def _render_dashboard(store, clientes, role):
                 '<span class="tag-nova-cob">+ Nova cobrança</span>' if row.get("_nova_cobranca") else "",
                 '<span style="background:#4f7cff;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">ACORDO</span>'  if row.get("_tem_acordo") else "",
                 '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("_inativo")    else "",
+                '<span style="background:rgba(236,72,153,.18);color:#ec4899;border:1px solid rgba(236,72,153,.4);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">TELEFONE FIXO</span>' if row.get("_tel_fixo") else "",
             ])
             obs_icon  = ' <span style="color:#5fa3ff;font-size:12px;font-weight:700">●</span>' if str(row["_notes"] or "") else ""
             row_bl    = "border-left:4px solid rgba(239,68,68,.6);" if is_top else ""
