@@ -207,6 +207,15 @@ def telefone_wa_link(tel: str) -> str:
     # Japao (81 + 10 = 12; BR 81 tem 11)
     if digits.startswith("81") and len(digits) == 12:
         return digits
+    # Suica (41 + 9 = 11; BR 41 tem 11 tb, mas movel BR obriga 3o dig = 9)
+    if digits.startswith("41") and len(digits) == 11 and digits[2] != "9":
+        return digits
+    # Belgica (32 + 9 = 11; BR 32 tem 11 tb, movel BR obriga 3o dig = 9)
+    if digits.startswith("32") and len(digits) == 11 and digits[2] != "9":
+        return digits
+    # Mexico (52 + 10 = 12 padrao; 52 nao e' DDD BR, entao 11 dig tb assume MX)
+    if digits.startswith("52") and len(digits) in (11, 12):
+        return digits
     # BR antigo com '0' na frente (12 digitos) — remove 0 e prefixa 55
     if digits.startswith("0") and len(digits) == 12:
         return "55" + digits[1:]
