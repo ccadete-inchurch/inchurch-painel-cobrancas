@@ -5,7 +5,7 @@ import streamlit as st
 
 from config import SORT_MAP, STATUS_FILTER_MAP, STATUS_LABELS, PAGE_SIZE
 from auth import get_store, current_role
-from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br
+from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br, telefone_wa_link, formatar_telefone
 from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_esta_semana, concluir_pendencia
 import re as _re_tel
 
@@ -443,41 +443,39 @@ def _render_dashboard(store, clientes, role):
                 cor_atraso = "#ef4444" if dias_atraso >= 7 else "#8b94a5"
                 sufixo = "hoje" if dias_atraso == 0 else f"há {dias_atraso}d"
 
-                # Telefones do cliente com ícones clicáveis (tel: + wa.me).
-                # WhatsApp aparece pra QUALQUER fixado — atendente pode
-                # precisar contatar por ambos os canais independente do tipo.
+                # Telefones do cliente: 1 icone WhatsApp por numero, cada um
+                # linkando pro proprio wa.me. Se telefone_wa_link nao valida
+                # (cadastro incompleto), o icone WA daquele numero e' omitido.
                 tels = c.get("telefones") or ([c.get("telefone")] if c.get("telefone") else [])
                 tels = [t for t in tels if t]
                 if not tels:
                     tel_html = ""
                 else:
+                    def _wa_por_tel(t: str) -> str:
+                        wa_num = telefone_wa_link(t)
+                        if not wa_num:
+                            return ""
+                        return (
+                            f'<a href="https://wa.me/{wa_num}" target="_blank" '
+                            f'style="text-decoration:none;margin-right:3px;vertical-align:middle">'
+                            f'{_ICON_FIX_WHATSAPP}</a>'
+                        )
                     if len(tels) == 1:
-                        tels_text = tels[0]
+                        conteudo = f'{_wa_por_tel(tels[0])}{formatar_telefone(tels[0])}'
                     else:
-                        extras = " · ".join(tels[1:])
-                        tels_text = (
-                            f'{tels[0]} '
+                        primeiro = f'{_wa_por_tel(tels[0])}{formatar_telefone(tels[0])}'
+                        extras = " · ".join(
+                            f'{_wa_por_tel(t)}{formatar_telefone(t)}' for t in tels[1:]
+                        )
+                        conteudo = (
+                            f'{primeiro} '
                             f'<span style="color:#6b7280;font-size:10px;font-weight:500">'
                             f'· {extras}</span>'
                         )
-                    digits = _tel_only_digits(tels[0])
-                    if digits:
-                        tel_link = (
-                            f'<a href="tel:+{digits}" style="text-decoration:none">'
-                            f'{_ICON_FIX_PHONE}</a>'
-                        )
-                        wa_link = (
-                            f'<a href="https://wa.me/{digits}" target="_blank" '
-                            f'style="text-decoration:none;margin-left:4px">'
-                            f'{_ICON_FIX_WHATSAPP}</a>'
-                        )
-                    else:
-                        tel_link = _ICON_FIX_PHONE
-                        wa_link  = _ICON_FIX_WHATSAPP
                     tel_html = (
                         f'<div style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:12px">'
-                        f'{tel_link}{wa_link}'
-                        f'<span style="color:#9ca3af;margin-left:2px">{tels_text}</span>'
+                        f'{_ICON_FIX_PHONE}'
+                        f'<span style="color:#9ca3af;margin-left:2px">{conteudo}</span>'
                         f'</div>'
                     )
 
