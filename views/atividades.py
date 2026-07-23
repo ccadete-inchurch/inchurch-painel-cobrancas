@@ -80,10 +80,10 @@ _ICON_GROUP = (
 
 def _tels_html(c) -> str:
     """Renderiza telefones do cliente:
-    - Icone WhatsApp ANTES do numero (clicavel, aponta pro primeiro tel)
+    - UM icone WhatsApp por telefone (cada um linka pro proprio numero)
     - Numeros formatados bonito, separados por ' · '
     - Renderiza junto com _ICON_PHONE externo -> layout final:
-        📞 💬 (15) 10367-6389 · (12) 99638-3840
+        📞 💬 (15) 10367-6389 · 💬 (12) 99638-3840
     """
     tels = c.get("telefones") or []
     if not tels:
@@ -92,32 +92,34 @@ def _tels_html(c) -> str:
             return "—"
         tels = [_fallback]
 
-    # Icone WhatsApp clicavel — leva pro PRIMEIRO telefone
-    wa_num = telefone_wa_link(tels[0])
-    if wa_num:
-        wa_icon_html = (
+    def _wa_icon(t: str) -> str:
+        """Icone WA clicavel pro telefone t. Vazio se telefone_wa_link nao valida."""
+        wa_num = telefone_wa_link(t)
+        if not wa_num:
+            return ""
+        return (
             f'<a href="https://wa.me/{wa_num}" target="_blank" '
-            f'style="text-decoration:none;margin-right:6px;display:inline-flex;vertical-align:middle" '
+            f'style="text-decoration:none;margin-right:4px;display:inline-flex;vertical-align:middle" '
             f'onmouseover="this.querySelector(\'svg\').setAttribute(\'fill\',\'#25d366\')" '
             f'onmouseout="this.querySelector(\'svg\').setAttribute(\'fill\',\'#6b7280\')">'
             f'{_ICON_WHATSAPP}</a>'
         )
-    else:
-        wa_icon_html = ""
 
-    # Numeros formatados
+    # 1 telefone: icone + numero formatado
     if len(tels) == 1:
-        numeros_html = formatar_telefone(tels[0])
-    else:
-        primeiro_fmt = formatar_telefone(tels[0])
-        extras_txt = " · ".join(formatar_telefone(t) for t in tels[1:])
-        numeros_html = (
-            f'{primeiro_fmt} '
-            f'<span style="color:#6b7280;font-size:10px;font-weight:500">'
-            f'· {extras_txt}</span>'
-        )
+        return f'{_wa_icon(tels[0])}{formatar_telefone(tels[0])}'
 
-    return f'{wa_icon_html}{numeros_html}'
+    # 2+ telefones: primeiro em destaque, extras em cinza menor, cada um
+    # com seu proprio icone WA clicavel
+    primeiro = f'{_wa_icon(tels[0])}{formatar_telefone(tels[0])}'
+    extras = " · ".join(
+        f'{_wa_icon(t)}{formatar_telefone(t)}' for t in tels[1:]
+    )
+    return (
+        f'{primeiro} '
+        f'<span style="color:#6b7280;font-size:10px;font-weight:500">'
+        f'· {extras}</span>'
+    )
 
 
 def _motivo(bucket, acoes, c) -> tuple:
