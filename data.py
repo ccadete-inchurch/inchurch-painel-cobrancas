@@ -2458,16 +2458,19 @@ def load_mensagens_from_bq():
     cur = conn.cursor()
 
     # Janela de 3 dias. fromme=true ignora respostas do cliente (saudações etc).
-    # TODAS as colunas string sao castadas pra BYTEA no SELECT (bytes brutos).
-    # Sem isso, pg8000 decodifica como UTF-8 no fetch e crasha em bytes
-    # invalidos (\\x00, \\xfb, \\x9e, etc) — que aparecem em qualquer campo
-    # texto do WhatsApp (telefone, message, ...). No Python, decodificamos
-    # com errors='replace' — bytes ruins viram \\ufffd (?) mas o resto eh
-    # preservado. Zero linhas perdidas, nenhuma acao da atendente ignorada.
+    # Colunas text convertidas a BYTEA via convert_to(col, 'UTF8') — pega os
+    # bytes brutos UTF-8 sem passar por byteain (parse de bytea input).
+    # Antes usavamos col::bytea, que sob certos plans dispara byteain no
+    # server e crasha com 22P02 "invalid input syntax for type bytea" — o
+    # cast implicito text->bytea acaba serializando via TEXT e re-parseando,
+    # e strings comuns (com \\, \\x, etc) quebram o parse. convert_to eh o
+    # equivalente correto: bytes UTF-8 diretos, sem parse intermediario.
+    # No Python, decodificamos com errors='replace' — bytes ruins viram
+    # \\ufffd mas o resto eh preservado.
     try:
         cur.execute(f"""
-            SELECT telefone::bytea    AS tel_bytes,
-                   message::bytea     AS msg_bytes,
+            SELECT convert_to(telefone, 'UTF8') AS tel_bytes,
+                   convert_to(message,  'UTF8') AS msg_bytes,
                    created_at
             FROM {table}
             WHERE created_at >= NOW() - INTERVAL '3 days'
@@ -2556,7 +2559,7 @@ def load_mensagens_from_bq():
     )
     try:
         cur.execute(f"""
-            SELECT telefone::bytea AS tel_bytes, MAX(created_at) AS ultimo_contato
+            SELECT convert_to(telefone, 'UTF8') AS tel_bytes, MAX(created_at) AS ultimo_contato
             FROM {table}
             WHERE LOWER(fromme::text) = 'true'
               AND {ia_filter_sql}
