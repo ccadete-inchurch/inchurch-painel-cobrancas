@@ -92,6 +92,18 @@ def _tels_html(c) -> str:
             return "—"
         tels = [_fallback]
 
+    # Filtra numeros invalidos (cadastro so com DDI '55' ou lixo tipo
+    # 3-9 digitos). formatar_telefone agora retorna "" nesses casos —
+    # sem esse filtro, extras apareciam vazios entre os separadores ·
+    _pairs = []  # [(raw, formatado)] so os validos
+    for _t in tels:
+        if not _t: continue
+        _fmt = formatar_telefone(_t)
+        if _fmt and _fmt != "—":
+            _pairs.append((_t, _fmt))
+    if not _pairs:
+        return "—"
+
     def _wa_icon(t: str) -> str:
         """Icone WA clicavel pro telefone t. Vazio se telefone_wa_link nao valida."""
         wa_num = telefone_wa_link(t)
@@ -106,14 +118,16 @@ def _tels_html(c) -> str:
         )
 
     # 1 telefone: icone + numero formatado
-    if len(tels) == 1:
-        return f'{_wa_icon(tels[0])}{formatar_telefone(tels[0])}'
+    if len(_pairs) == 1:
+        _t0, _fmt0 = _pairs[0]
+        return f'{_wa_icon(_t0)}{_fmt0}'
 
     # 2+ telefones: primeiro em destaque, extras em cinza menor, cada um
     # com seu proprio icone WA clicavel
-    primeiro = f'{_wa_icon(tels[0])}{formatar_telefone(tels[0])}'
+    _t0, _fmt0 = _pairs[0]
+    primeiro = f'{_wa_icon(_t0)}{_fmt0}'
     extras = " · ".join(
-        f'{_wa_icon(t)}{formatar_telefone(t)}' for t in tels[1:]
+        f'{_wa_icon(_t)}{_fmt}' for _t, _fmt in _pairs[1:]
     )
     return (
         f'{primeiro} '

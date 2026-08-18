@@ -445,9 +445,16 @@ def _render_dashboard(store, clientes, role):
                 # Telefones do cliente: 1 icone WhatsApp por numero, cada um
                 # linkando pro proprio wa.me. Se telefone_wa_link nao valida
                 # (cadastro incompleto), o icone WA daquele numero e' omitido.
-                tels = c.get("telefones") or ([c.get("telefone")] if c.get("telefone") else [])
-                tels = [t for t in tels if t]
-                if not tels:
+                # Filtra numeros invalidos (formatar_telefone = "" pra cadastros
+                # so com DDI '55' ou lixo curto) pra evitar '+55' no card.
+                _raw_tels_fix = c.get("telefones") or ([c.get("telefone")] if c.get("telefone") else [])
+                _pairs_fix = []
+                for _t in _raw_tels_fix:
+                    if not _t: continue
+                    _fmt = formatar_telefone(_t)
+                    if _fmt and _fmt != "—":
+                        _pairs_fix.append((_t, _fmt))
+                if not _pairs_fix:
                     tel_html = ""
                 else:
                     def _wa_por_tel(t: str) -> str:
@@ -459,12 +466,13 @@ def _render_dashboard(store, clientes, role):
                             f'style="text-decoration:none;margin-right:3px;vertical-align:middle">'
                             f'{_ICON_FIX_WHATSAPP}</a>'
                         )
-                    if len(tels) == 1:
-                        conteudo = f'{_wa_por_tel(tels[0])}{formatar_telefone(tels[0])}'
+                    _t0, _fmt0 = _pairs_fix[0]
+                    if len(_pairs_fix) == 1:
+                        conteudo = f'{_wa_por_tel(_t0)}{_fmt0}'
                     else:
-                        primeiro = f'{_wa_por_tel(tels[0])}{formatar_telefone(tels[0])}'
+                        primeiro = f'{_wa_por_tel(_t0)}{_fmt0}'
                         extras = " · ".join(
-                            f'{_wa_por_tel(t)}{formatar_telefone(t)}' for t in tels[1:]
+                            f'{_wa_por_tel(_t)}{_fmt}' for _t, _fmt in _pairs_fix[1:]
                         )
                         conteudo = (
                             f'{primeiro} '
