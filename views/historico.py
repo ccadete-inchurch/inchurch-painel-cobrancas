@@ -90,62 +90,18 @@ def _render_historico(store):
         unsafe_allow_html=True,
     )
 
-    # [DEBUG TEMPORARIO] — diagnostica por que pagamentos de hoje nao aparecem.
-    # API SL retornou 0 — problema esta antes do overlay. Aprofundar.
-    try:
-        from data import (
-            fetch_pagamentos_hoje_api as _dbg_fetch,
-            _superlogica_session as _dbg_sess,
-            _superlogica_get as _dbg_get,
+    # Alerta se credenciais Superlogica ausentes: sem elas, a API SL nao e'
+    # consultada e pagamentos so aparecem quando o BQ replica (1-2d depois).
+    # Ja perdemos 3 clientes regularizados hoje por causa disso (ago/2026).
+    if "superlogica" not in st.secrets:
+        st.error(
+            "❌ **Overlay de pagamentos DESATIVADO** — credenciais do Superlógica não configuradas. "
+            "Pagamentos de hoje não aparecerão aqui, nem badges de regularização/parcial "
+            "nas telas Atividades e Inadimplência. O painel só verá o pagamento quando "
+            "o BQ replicar (1-2 dias depois).\n\n"
+            "**Como consertar:** Streamlit Cloud → Settings → Secrets, adicionar:\n"
+            "```toml\n[superlogica]\napp_token    = \"...\"\naccess_token = \"...\"\n```"
         )
-        from helpers import hoje_lote as _dbg_hoje
-        from datetime import date as _dbg_date, timedelta as _dbg_td
-
-        # 1) Session existe?
-        _dbg_s = _dbg_sess()
-        _dbg_msg_sess = "None (secret [superlogica] ausente ou erro)" if _dbg_s is None else "OK"
-
-        # 2) Tem secret [superlogica]?
-        _has_secret_sl = "superlogica" in st.secrets
-        _sl_keys = list(st.secrets.get("superlogica", {}).keys()) if _has_secret_sl else []
-
-        # 3) hoje_lote e janela
-        _dbg_hj = _dbg_date.fromisoformat(_dbg_hoje())
-        _dbg_ini = _dbg_hj - _dbg_td(days=2)
-
-        # 4) Chamada direta bypassando cache (pega status/erro)
-        _bypass_status, _bypass_body, _bypass_err = _dbg_get("/cobranca", {
-            "filtrarpor":     "liquidacao",
-            "dtInicio":       _dbg_ini.isoformat(),
-            "dtFim":          _dbg_hj.isoformat(),
-            "itensPorPagina": 5,  # pequeno so pra teste
-            "pagina":         1,
-        })
-        _bypass_n = len(_bypass_body) if isinstance(_bypass_body, list) else "n/a"
-
-        # 5) Chamada com cache (o que o overlay usa)
-        _dbg_api = _dbg_fetch()
-
-        # 6) Force clear e chamada nova
-        try:
-            _dbg_fetch.clear()
-            _dbg_api_fresh = _dbg_fetch()
-        except Exception as _ce:
-            _dbg_api_fresh = f"clear/refetch falhou: {_ce}"
-
-        st.warning(
-            f"🔍 DEBUG overlay v2:\n"
-            f"- st.secrets tem [superlogica]: {_has_secret_sl}\n"
-            f"- Keys do [superlogica]: {_sl_keys}\n"
-            f"- _superlogica_session(): {_dbg_msg_sess}\n"
-            f"- hoje_lote(): {_dbg_hj.isoformat()}  |  janela dt_inicio: {_dbg_ini.isoformat()}\n"
-            f"- Chamada direta BYPASS cache: status={_bypass_status}  n_itens={_bypass_n}  err={_bypass_err!r}\n"
-            f"- Chamada COM cache (o que overlay usa): {len(_dbg_api) if isinstance(_dbg_api, dict) else _dbg_api} clientes\n"
-            f"- Chamada apos cache.clear(): {len(_dbg_api_fresh) if isinstance(_dbg_api_fresh, dict) else _dbg_api_fresh}"
-        )
-    except Exception as _dbg_e:
-        import traceback
-        st.error(f"DEBUG falhou: {_dbg_e}\n{traceback.format_exc()[:500]}")
 
     # Rebuilda fresh do BQ + overlay a cada render — não usa mais
     # store["regularizados"] (que acumulava via cache file).
