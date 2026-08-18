@@ -37,7 +37,7 @@ _ICON_FIX_PERSON = (
     '</svg>'
 )
 _ICON_FIX_WHATSAPP = (
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="#25d366" '
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" '
     'style="flex-shrink:0;vertical-align:middle">'
     '<path d="M17.5 14.4c-.3-.1-1.7-.8-2-.9-.3-.1-.5-.1-.7.1-.2.3-.7.9-.9 '
     '1.1-.2.2-.3.2-.6.1-1.8-.9-3-1.6-4.2-3.6-.3-.5.3-.5.9-1.6.1-.2.1-.4 '
@@ -770,35 +770,28 @@ def _render_dashboard(store, clientes, role):
                     unsafe_allow_html=True,
                 )
             with rcols[5]:
-                # Telefones:
-                #   - Primeiro numero exibido com icone WhatsApp + numero
-                #   - Extras aparecem SO como icone WhatsApp clicavel
-                #     (economia de espaco na coluna, cada icone linka pro
-                #     wa.me do proprio numero)
-                # Icone maior (16px, verde WhatsApp) pra ficar clicavel
-                # facilmente e visualmente sinalizado como acao.
+                # Telefones: todos em lista vertical (um por linha), cada
+                # um com icone WhatsApp clicavel ao lado. Sem separadores
+                # visuais (·) — quebra de linha ja distingue itens.
                 tels = row.get("telefones") or ([row.get("telefone")] if row.get("telefone") else [])
                 tels = [t for t in tels if t]
                 if not tels:
                     tel_display = "—"
                 else:
-                    def _wa(t: str) -> str:
+                    def _wa_icon(t: str) -> str:
                         wa_num = telefone_wa_link(t)
                         if not wa_num:
                             return ""
                         return (
                             f'<a href="https://wa.me/{wa_num}" target="_blank" '
-                            f'title="WhatsApp {formatar_telefone(t)}" '
                             f'style="text-decoration:none;margin-right:6px;vertical-align:middle">'
                             f'{_ICON_FIX_WHATSAPP}</a>'
                         )
-                    primeiro = f'{_wa(tels[0])}{formatar_telefone(tels[0])}'
-                    if len(tels) == 1:
-                        tel_display = primeiro
-                    else:
-                        extras_icons = "".join(_wa(t) for t in tels[1:])
-                        tel_display = f'{primeiro} {extras_icons}'
-                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{tel_display}</div>', unsafe_allow_html=True)
+                    linhas = [
+                        f'{_wa_icon(t)}{formatar_telefone(t)}' for t in tels
+                    ]
+                    tel_display = "<br>".join(linhas)
+                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5;line-height:1.5">{tel_display}</div>', unsafe_allow_html=True)
             with rcols[6]:
                 _g_row = row.get("_grupo") or ""
                 _g_row_display = _g_row if _g_row and str(_g_row) not in ("nan", "NaN", "—") else "Sem especialista"
