@@ -137,6 +137,18 @@ section[data-testid="stSidebar"] .stButton>button:hover{
 button[kind="primary"]{background:#7cc243!important;color:#0f1117!important;border:none!important;font-weight:700!important}
 button[kind="primary"]:hover{background:#8fd44e!important}
 
+/* Sidebar nav ativa: override do primary global (verde solido) — na
+   sidebar queremos fundo verde translucido + texto verde (mesma
+   linguagem do hover, so que persistente). Sinaliza pagina atual sem
+   competir com CTAs primary de outras telas. */
+section[data-testid="stSidebar"] .stButton>button[kind="primary"]{
+  background:rgba(124,194,67,.12)!important;color:#7cc243!important;
+  border:none!important;font-weight:600!important
+}
+section[data-testid="stSidebar"] .stButton>button[kind="primary"]:hover{
+  background:rgba(124,194,67,.18)!important;color:#7cc243!important
+}
+
 /* ── Inputs ── */
 .stTextInput input,.stTextArea textarea{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
 .stTextInput input:focus,.stTextArea textarea:focus{border-color:#7cc243!important;box-shadow:0 0 0 2px rgba(124,194,67,.15)!important}

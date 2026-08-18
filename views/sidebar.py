@@ -50,12 +50,12 @@ def render_sidebar():
     """, unsafe_allow_html=True)
 
     def nav_item(label, key_page):
-        if page == key_page:
-            st.sidebar.markdown(
-                '<div style="height:1px;background:linear-gradient(90deg,#7cc243 60%,transparent);margin:4px 14px 0"></div>',
-                unsafe_allow_html=True,
-            )
-        if st.sidebar.button(label, key=f"nav_{key_page}", width="stretch"):
+        # Pagina ativa vira type="primary" — CSS override no config.py
+        # transforma isso em "hover fixo" (fundo verde translucido + texto
+        # verde), sem competir com CTAs primary sólidos das outras telas.
+        is_active = page == key_page
+        btn_type = "primary" if is_active else "secondary"
+        if st.sidebar.button(label, key=f"nav_{key_page}", width="stretch", type=btn_type):
             st.session_state["page"] = key_page
             st.rerun()
 
