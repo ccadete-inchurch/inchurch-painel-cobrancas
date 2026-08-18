@@ -44,9 +44,6 @@ def render_sidebar():
         {logo_sb}
         <div style="font-size:12px;color:#8b94a5;margin-top:6px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600">Painel de Cobrança</div>
     </div>
-    <div style="padding:6px 20px 8px">
-        <div style="font-size:10px;color:#374151;text-transform:uppercase;letter-spacing:1.5px;font-weight:700">Navegação</div>
-    </div>
     """, unsafe_allow_html=True)
 
     def nav_item(label, key_page):
@@ -71,7 +68,7 @@ def render_sidebar():
     # Spacer pra não esconder último nav atrás do botão Sair (fixed bottom)
     st.sidebar.markdown('<div style="height:70px"></div>', unsafe_allow_html=True)
 
-    if st.sidebar.button("Sair da conta", width="stretch"):
+    if st.sidebar.button("Sair", width="stretch"):
         # Limpa TODAS as chaves do session_state — garante que o login
         # subsequente faça fresh load do BQ + cache, sem heranças.
         for k in list(st.session_state.keys()):

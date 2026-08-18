@@ -37,7 +37,7 @@ _ICON_FIX_PERSON = (
     '</svg>'
 )
 _ICON_FIX_WHATSAPP = (
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" '
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="#25d366" '
     'style="flex-shrink:0;vertical-align:middle">'
     '<path d="M17.5 14.4c-.3-.1-1.7-.8-2-.9-.3-.1-.5-.1-.7.1-.2.3-.7.9-.9 '
     '1.1-.2.2-.3.2-.6.1-1.8-.9-3-1.6-4.2-3.6-.3-.5.3-.5.9-1.6.1-.2.1-.4 '
@@ -120,7 +120,9 @@ def _render_dashboard(store, clientes, role):
             b = busca.lower()
             mask = df.apply(lambda r: b in str(r.get("nome", "")).lower() or b in str(r.get("cnpj", "")).lower() or b in str(r.get("id", "")).lower(), axis=1)
             df = df[mask]
-        if filtro_status != "Todos":
+        if filtro_status == "Telefone fixo":
+            df = df[df["_tel_fixo"].fillna(False).astype(bool)] if "_tel_fixo" in df.columns else df.iloc[0:0]
+        elif filtro_status != "Todos":
             df = df[df["_status"] == STATUS_FILTER_MAP.get(filtro_status, "pending")]
         if filtro_atraso == "1-30 dias":
             df = df[df["dias_atraso"].apply(lambda d: d is not None and 1 <= d <= 30)]
@@ -590,11 +592,17 @@ def _render_dashboard(store, clientes, role):
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
     # ── Filtros ───────────────────────────────────────────────────────────────
-    # Le opcoes de STATUS_FILTER_MAP (config.py) pra que 'Telefone errado'
-    # e 'Igreja fechada' apareçam automaticamente quando forem adicionados la.
+    # Le opcoes de STATUS_FILTER_MAP (config.py) e injeta 'Telefone fixo'
+    # antes de 'Telefone errado' como filtro derivado (nao vem de _status,
+    # vem da flag _tel_fixo).
+    _pill_opts = list(STATUS_FILTER_MAP.keys())
+    if "Telefone errado" in _pill_opts:
+        _pill_opts.insert(_pill_opts.index("Telefone errado"), "Telefone fixo")
+    else:
+        _pill_opts.append("Telefone fixo")
     pill_status = st.pills(
         "Status",
-        ["Todos"] + list(STATUS_FILTER_MAP.keys()),
+        ["Todos"] + _pill_opts,
         default="Todos",
         key="fpills",
     )
@@ -762,10 +770,13 @@ def _render_dashboard(store, clientes, role):
                     unsafe_allow_html=True,
                 )
             with rcols[5]:
-                # Telefones: 1 icone WhatsApp por numero, cada um linkando
-                # pro proprio wa.me — mesmo padrao da tela Atividades e dos
-                # Fixados. Se telefone_wa_link nao valida (cadastro
-                # incompleto), o icone daquele numero e' omitido.
+                # Telefones:
+                #   - Primeiro numero exibido com icone WhatsApp + numero
+                #   - Extras aparecem SO como icone WhatsApp clicavel
+                #     (economia de espaco na coluna, cada icone linka pro
+                #     wa.me do proprio numero)
+                # Icone maior (16px, verde WhatsApp) pra ficar clicavel
+                # facilmente e visualmente sinalizado como acao.
                 tels = row.get("telefones") or ([row.get("telefone")] if row.get("telefone") else [])
                 tels = [t for t in tels if t]
                 if not tels:
@@ -777,19 +788,16 @@ def _render_dashboard(store, clientes, role):
                             return ""
                         return (
                             f'<a href="https://wa.me/{wa_num}" target="_blank" '
-                            f'style="text-decoration:none;margin-right:3px;vertical-align:middle">'
+                            f'title="WhatsApp {formatar_telefone(t)}" '
+                            f'style="text-decoration:none;margin-right:6px;vertical-align:middle">'
                             f'{_ICON_FIX_WHATSAPP}</a>'
                         )
+                    primeiro = f'{_wa(tels[0])}{formatar_telefone(tels[0])}'
                     if len(tels) == 1:
-                        tel_display = f'{_wa(tels[0])}{formatar_telefone(tels[0])}'
+                        tel_display = primeiro
                     else:
-                        primeiro = f'{_wa(tels[0])}{formatar_telefone(tels[0])}'
-                        extras = " · ".join(f'{_wa(t)}{formatar_telefone(t)}' for t in tels[1:])
-                        tel_display = (
-                            f'{primeiro} '
-                            f'<span style="color:#6b7280;font-size:11px;font-weight:500">'
-                            f'· {extras}</span>'
-                        )
+                        extras_icons = "".join(_wa(t) for t in tels[1:])
+                        tel_display = f'{primeiro} {extras_icons}'
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{tel_display}</div>', unsafe_allow_html=True)
             with rcols[6]:
                 _g_row = row.get("_grupo") or ""
