@@ -90,6 +90,36 @@ def _render_historico(store):
         unsafe_allow_html=True,
     )
 
+    # [DEBUG TEMPORARIO] — diagnostica por que pagamentos de hoje nao aparecem.
+    # Remover apos identificar causa raiz.
+    try:
+        from data import fetch_pagamentos_hoje_api as _dbg_fetch
+        _dbg_api = _dbg_fetch()
+        _dbg_api_hoje = {cid: info for cid, info in _dbg_api.items() if info.get("foi_hoje")}
+        _dbg_reg  = [c for c in store.get("clientes", []) if c.get("_regularizado_hoje")]
+        _dbg_parc = [c for c in store.get("clientes", []) if c.get("_pago_parcial_hoje")]
+        _dbg_ids_api_hoje = set(_dbg_api_hoje.keys())
+        _dbg_ids_store    = {str(c.get("id","")) for c in store.get("clientes", [])}
+        _dbg_pagos_no_store = _dbg_ids_api_hoje & _dbg_ids_store
+        _dbg_pagos_fora     = _dbg_ids_api_hoje - _dbg_ids_store
+        _dbg_ajustados_sem_flag = [
+            c for c in store.get("clientes", [])
+            if c.get("_cobracas_ajustadas") and not c.get("_regularizado_hoje")
+                                            and not c.get("_pago_parcial_hoje")
+        ]
+        st.warning(
+            f"🔍 DEBUG overlay:\n"
+            f"- API SL: {len(_dbg_api)} clientes pagos nos ult 3d ({len(_dbg_api_hoje)} c/ foi_hoje=True)\n"
+            f"- store[clientes]: {len(_dbg_ids_store)} inadimplentes atuais\n"
+            f"- Pagos hoje que ESTAO no store (deveria marcar): {len(_dbg_pagos_no_store)} → IDs: {sorted(list(_dbg_pagos_no_store))[:10]}\n"
+            f"- Pagos hoje que NAO estao no store (natural — cliente ja em-dia): {len(_dbg_pagos_fora)} → IDs: {sorted(list(_dbg_pagos_fora))[:10]}\n"
+            f"- Flag _regularizado_hoje setada: {len(_dbg_reg)} → IDs: {[str(c.get('id','')) for c in _dbg_reg[:10]]}\n"
+            f"- Flag _pago_parcial_hoje setada: {len(_dbg_parc)}\n"
+            f"- Ajustados SEM flag (ramo silencioso paid_ids nao match): {len(_dbg_ajustados_sem_flag)} → IDs: {[str(c.get('id','')) for c in _dbg_ajustados_sem_flag[:10]]}"
+        )
+    except Exception as _dbg_e:
+        st.error(f"DEBUG falhou: {_dbg_e}")
+
     # Rebuilda fresh do BQ + overlay a cada render — não usa mais
     # store["regularizados"] (que acumulava via cache file).
     with st.spinner("Carregando pagamentos..."):
