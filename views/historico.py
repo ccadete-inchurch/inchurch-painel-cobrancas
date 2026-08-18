@@ -91,34 +91,61 @@ def _render_historico(store):
     )
 
     # [DEBUG TEMPORARIO] — diagnostica por que pagamentos de hoje nao aparecem.
-    # Remover apos identificar causa raiz.
+    # API SL retornou 0 — problema esta antes do overlay. Aprofundar.
     try:
-        from data import fetch_pagamentos_hoje_api as _dbg_fetch
+        from data import (
+            fetch_pagamentos_hoje_api as _dbg_fetch,
+            _superlogica_session as _dbg_sess,
+            _superlogica_get as _dbg_get,
+        )
+        from helpers import hoje_lote as _dbg_hoje
+        from datetime import date as _dbg_date, timedelta as _dbg_td
+
+        # 1) Session existe?
+        _dbg_s = _dbg_sess()
+        _dbg_msg_sess = "None (secret [superlogica] ausente ou erro)" if _dbg_s is None else "OK"
+
+        # 2) Tem secret [superlogica]?
+        _has_secret_sl = "superlogica" in st.secrets
+        _sl_keys = list(st.secrets.get("superlogica", {}).keys()) if _has_secret_sl else []
+
+        # 3) hoje_lote e janela
+        _dbg_hj = _dbg_date.fromisoformat(_dbg_hoje())
+        _dbg_ini = _dbg_hj - _dbg_td(days=2)
+
+        # 4) Chamada direta bypassando cache (pega status/erro)
+        _bypass_status, _bypass_body, _bypass_err = _dbg_get("/cobranca", {
+            "filtrarpor":     "liquidacao",
+            "dtInicio":       _dbg_ini.isoformat(),
+            "dtFim":          _dbg_hj.isoformat(),
+            "itensPorPagina": 5,  # pequeno so pra teste
+            "pagina":         1,
+        })
+        _bypass_n = len(_bypass_body) if isinstance(_bypass_body, list) else "n/a"
+
+        # 5) Chamada com cache (o que o overlay usa)
         _dbg_api = _dbg_fetch()
-        _dbg_api_hoje = {cid: info for cid, info in _dbg_api.items() if info.get("foi_hoje")}
-        _dbg_reg  = [c for c in store.get("clientes", []) if c.get("_regularizado_hoje")]
-        _dbg_parc = [c for c in store.get("clientes", []) if c.get("_pago_parcial_hoje")]
-        _dbg_ids_api_hoje = set(_dbg_api_hoje.keys())
-        _dbg_ids_store    = {str(c.get("id","")) for c in store.get("clientes", [])}
-        _dbg_pagos_no_store = _dbg_ids_api_hoje & _dbg_ids_store
-        _dbg_pagos_fora     = _dbg_ids_api_hoje - _dbg_ids_store
-        _dbg_ajustados_sem_flag = [
-            c for c in store.get("clientes", [])
-            if c.get("_cobracas_ajustadas") and not c.get("_regularizado_hoje")
-                                            and not c.get("_pago_parcial_hoje")
-        ]
+
+        # 6) Force clear e chamada nova
+        try:
+            _dbg_fetch.clear()
+            _dbg_api_fresh = _dbg_fetch()
+        except Exception as _ce:
+            _dbg_api_fresh = f"clear/refetch falhou: {_ce}"
+
         st.warning(
-            f"🔍 DEBUG overlay:\n"
-            f"- API SL: {len(_dbg_api)} clientes pagos nos ult 3d ({len(_dbg_api_hoje)} c/ foi_hoje=True)\n"
-            f"- store[clientes]: {len(_dbg_ids_store)} inadimplentes atuais\n"
-            f"- Pagos hoje que ESTAO no store (deveria marcar): {len(_dbg_pagos_no_store)} → IDs: {sorted(list(_dbg_pagos_no_store))[:10]}\n"
-            f"- Pagos hoje que NAO estao no store (natural — cliente ja em-dia): {len(_dbg_pagos_fora)} → IDs: {sorted(list(_dbg_pagos_fora))[:10]}\n"
-            f"- Flag _regularizado_hoje setada: {len(_dbg_reg)} → IDs: {[str(c.get('id','')) for c in _dbg_reg[:10]]}\n"
-            f"- Flag _pago_parcial_hoje setada: {len(_dbg_parc)}\n"
-            f"- Ajustados SEM flag (ramo silencioso paid_ids nao match): {len(_dbg_ajustados_sem_flag)} → IDs: {[str(c.get('id','')) for c in _dbg_ajustados_sem_flag[:10]]}"
+            f"🔍 DEBUG overlay v2:\n"
+            f"- st.secrets tem [superlogica]: {_has_secret_sl}\n"
+            f"- Keys do [superlogica]: {_sl_keys}\n"
+            f"- _superlogica_session(): {_dbg_msg_sess}\n"
+            f"- hoje_lote(): {_dbg_hj.isoformat()}  |  janela dt_inicio: {_dbg_ini.isoformat()}\n"
+            f"- Chamada direta BYPASS cache: status={_bypass_status}  n_itens={_bypass_n}  err={_bypass_err!r}\n"
+            f"- Chamada COM cache (o que overlay usa): {len(_dbg_api) if isinstance(_dbg_api, dict) else _dbg_api} clientes\n"
+            f"- Chamada apos cache.clear(): {len(_dbg_api_fresh) if isinstance(_dbg_api_fresh, dict) else _dbg_api_fresh}"
         )
     except Exception as _dbg_e:
-        st.error(f"DEBUG falhou: {_dbg_e}")
+        import traceback
+        st.error(f"DEBUG falhou: {_dbg_e}\n{traceback.format_exc()[:500]}")
 
     # Rebuilda fresh do BQ + overlay a cada render — não usa mais
     # store["regularizados"] (que acumulava via cache file).
