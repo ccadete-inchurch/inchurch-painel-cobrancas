@@ -5,7 +5,7 @@ import streamlit as st
 
 from config import SORT_MAP, STATUS_FILTER_MAP, STATUS_LABELS, PAGE_SIZE
 from auth import get_store, current_role
-from helpers import get_hist, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br, telefone_wa_link, formatar_telefone
+from helpers import get_hist, get_hist_unificado, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br, telefone_wa_link, formatar_telefone
 from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_esta_semana, concluir_pendencia
 import re as _re_tel
 
@@ -135,7 +135,11 @@ def _render_dashboard(store, clientes, role):
         df["_lastContact"] = df["id"].apply(get_effective_lastContact)
         df["_atendente"]   = df["id"].apply(get_effective_atendente)
         df["_notes"]       = df["id"].apply(lambda i: get_hist(i).get("notes", ""))
-        df["_tel_fixo"]    = df["id"].apply(lambda i: bool(get_hist(i).get("tel_fixo")))
+        # get_hist_unificado une historicos das atendentes pro admin —
+        # get_hist (proprio uid) sempre voltava vazio pro admin e o badge
+        # 'TELEFONE FIXO' nunca aparecia mesmo em clientes que Ana ou
+        # Priscila marcaram.
+        df["_tel_fixo"]    = df["id"].apply(lambda i: bool(get_hist_unificado(i).get("tel_fixo")))
         from data import calcular_score
         df["_score"]       = df.apply(lambda r: calcular_score(r.to_dict(), get_hist(r["id"])), axis=1)
         df["_score_pct"]   = df["_score"].rank(pct=True, method="max").fillna(0)
@@ -837,11 +841,26 @@ def _render_dashboard(store, clientes, role):
                     if len(_pairs) == 1:
                         tel_display = primeiro
                     else:
-                        extras_txt = " · ".join(_fmt for _, _fmt in _pairs[1:])
+                        # Extras em fonte menor com icone WA (menor) clicavel
+                        # antes de cada numero. Sem o icone de telefone pra
+                        # nao ocupar muito espaco — o click no icone WA leva
+                        # ao chat direto.
+                        def _wa_mini(t: str) -> str:
+                            wa_num = telefone_wa_link(t)
+                            if not wa_num:
+                                return ""
+                            return (
+                                f'<a href="https://wa.me/{wa_num}" target="_blank" '
+                                f'style="text-decoration:none;margin-right:4px;vertical-align:middle">'
+                                f'{_ICON_FIX_WHATSAPP}</a>'
+                            )
+                        extras_html = " · ".join(
+                            f'{_wa_mini(_t)}{_fmt}' for _t, _fmt in _pairs[1:]
+                        )
                         tel_display = (
                             f'{primeiro} '
                             f'<span style="color:#6b7280;font-size:12px;font-weight:500">'
-                            f'· {extras_txt}</span>'
+                            f'· {extras_html}</span>'
                         )
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{tel_display}</div>', unsafe_allow_html=True)
             with rcols[6]:
