@@ -49,6 +49,30 @@ _ICON_FIX_WHATSAPP = (
     '</svg>'
 )
 
+# Ícones maiores para uso na TABELA principal (nao afeta cards Fixados).
+# Cinza discreto — cor de acao clicavel, sem competir visualmente com badges.
+_ICON_TBL_PHONE = (
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="#8b94a5" '
+    'style="flex-shrink:0;vertical-align:middle">'
+    '<path d="M6.62 10.79c1.44 2.83 3.76 5.15 6.59 6.59l2.2-2.2c.28-.28.67'
+    '-.36 1.02-.25 1.12.37 2.32.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1'
+    '-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25'
+    '.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>'
+    '</svg>'
+)
+_ICON_TBL_WHATSAPP = (
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="#8b94a5" '
+    'style="flex-shrink:0;vertical-align:middle">'
+    '<path d="M17.5 14.4c-.3-.1-1.7-.8-2-.9-.3-.1-.5-.1-.7.1-.2.3-.7.9-.9 '
+    '1.1-.2.2-.3.2-.6.1-1.8-.9-3-1.6-4.2-3.6-.3-.5.3-.5.9-1.6.1-.2.1-.4 '
+    '0-.5-.1-.1-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 '
+    '1-1 2.5s1 2.9 1.2 3.1c.1.2 2 3.1 4.9 4.3 1.8.8 2.5.9 3.4.7.5-.1 '
+    '1.7-.7 1.9-1.4.2-.7.2-1.3.2-1.4-.2-.1-.4-.2-.7-.2zM12 22c-1.7 '
+    '0-3.3-.5-4.7-1.3L3 22l1.3-4.4C3.5 16.2 3 14.7 3 13c0-5 4-9 9-9s9 4 '
+    '9 9-4 9-9 9z"/>'
+    '</svg>'
+)
+
 
 def _tel_only_digits(tel: str) -> str:
     """Normaliza telefone pra links tel:/wa.me. Adiciona DDI 55 se faltando."""
@@ -770,28 +794,48 @@ def _render_dashboard(store, clientes, role):
                     unsafe_allow_html=True,
                 )
             with rcols[5]:
-                # Telefones: todos em lista vertical (um por linha), cada
-                # um com icone WhatsApp clicavel ao lado. Sem separadores
-                # visuais (·) — quebra de linha ja distingue itens.
-                tels = row.get("telefones") or ([row.get("telefone")] if row.get("telefone") else [])
-                tels = [t for t in tels if t]
-                if not tels:
+                # Telefones: primeiro numero com icones (telefone + wa)
+                # em tamanho normal; extras aparecem inline em fonte
+                # menor separados por " · ". Filtra numeros invalidos
+                # (formatar_telefone retorna "" pra cadastros com <8 digs
+                # tipo "55" solto, evitando "+55" na exibicao).
+                _raw_tels = row.get("telefones") or ([row.get("telefone")] if row.get("telefone") else [])
+                _pairs = []  # [(raw, formatado)] apenas os validos
+                for _t in _raw_tels:
+                    if not _t: continue
+                    _fmt = formatar_telefone(_t)
+                    if _fmt and _fmt != "—":
+                        _pairs.append((_t, _fmt))
+                if not _pairs:
                     tel_display = "—"
                 else:
-                    def _wa_icon(t: str) -> str:
+                    def _icons(t: str) -> str:
                         wa_num = telefone_wa_link(t)
-                        if not wa_num:
-                            return ""
-                        return (
-                            f'<a href="https://wa.me/{wa_num}" target="_blank" '
-                            f'style="text-decoration:none;margin-right:6px;vertical-align:middle">'
-                            f'{_ICON_FIX_WHATSAPP}</a>'
+                        # Formata numero pra usar em tel: (so digitos)
+                        _digs = _tel_only_digits(t)
+                        _tel_link = (
+                            f'<a href="tel:+{_digs}" '
+                            f'style="text-decoration:none;margin-right:4px;vertical-align:middle">'
+                            f'{_ICON_TBL_PHONE}</a>' if _digs else ""
                         )
-                    linhas = [
-                        f'{_wa_icon(t)}{formatar_telefone(t)}' for t in tels
-                    ]
-                    tel_display = "<br>".join(linhas)
-                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5;line-height:1.5">{tel_display}</div>', unsafe_allow_html=True)
+                        _wa_link = (
+                            f'<a href="https://wa.me/{wa_num}" target="_blank" '
+                            f'style="text-decoration:none;margin-right:8px;vertical-align:middle">'
+                            f'{_ICON_TBL_WHATSAPP}</a>' if wa_num else ""
+                        )
+                        return f'{_tel_link}{_wa_link}'
+                    _t0, _fmt0 = _pairs[0]
+                    primeiro = f'{_icons(_t0)}{_fmt0}'
+                    if len(_pairs) == 1:
+                        tel_display = primeiro
+                    else:
+                        extras_txt = " · ".join(_fmt for _, _fmt in _pairs[1:])
+                        tel_display = (
+                            f'{primeiro} '
+                            f'<span style="color:#6b7280;font-size:12px;font-weight:500">'
+                            f'· {extras_txt}</span>'
+                        )
+                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{tel_display}</div>', unsafe_allow_html=True)
             with rcols[6]:
                 _g_row = row.get("_grupo") or ""
                 _g_row_display = _g_row if _g_row and str(_g_row) not in ("nan", "NaN", "—") else "Sem especialista"

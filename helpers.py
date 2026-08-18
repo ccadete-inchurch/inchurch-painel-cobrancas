@@ -89,6 +89,12 @@ def formatar_telefone(tel: str) -> str:
     digits = _re.sub(r"\D", "", tel_str)
     if not digits:
         return tel_str
+    # Cadastro incompleto: menos de 8 digitos NAO consegue ser um telefone
+    # real (fixo mais curto do mundo tem ~7-8). Antes caia no fallback
+    # 'return f"+{digits}"' e virava lixo tipo "+55" quando so o DDI era
+    # cadastrado. Marca como invalido pra ser filtrado na exibicao.
+    if len(digits) < 8:
+        return ""
 
     # ─── Codigos de 3 digitos (mais especificos primeiro) ─────────────
     if digits.startswith("351") and len(digits) == 12:  # Portugal
@@ -164,6 +170,11 @@ def formatar_telefone(tel: str) -> str:
         return f"({ddd}) {resto[:4]}-{resto[4:]}"  # fixo
 
     # ─── Fallback: numero raw com + ────────────────────────────────────
+    # Rejeita numeros suspeitos (< 10 digitos) — nao bateu nenhuma regra
+    # e nao tem digitos suficientes pra ser um telefone real (mesmo fixo
+    # BR precisa de DDD+8=10). Retorna vazio pra filtro na exibicao.
+    if len(digits) < 10:
+        return ""
     return f"+{digits}"
 
 
