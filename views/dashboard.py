@@ -367,45 +367,18 @@ def _render_dashboard(store, clientes, role):
         </style>
         """, unsafe_allow_html=True)
 
-        # Leio o filtro direto do session_state ANTES de renderizar o badge —
-        # senao o numero em vermelho mostraria o total (Ana+Priscila) enquanto
-        # os cards ja estao filtrados. Streamlit persiste a selecao do
-        # selectbox via 'key=fix_filtro_atendente' entre reruns.
-        if role == "admin":
-            filtro_atend = st.session_state.get("fix_filtro_atendente", "Todos")
-        else:
-            filtro_atend = "Todos"
-
-        # Aplica filtro AGORA — badge e cards usam a mesma lista filtrada
-        if filtro_atend != "Todos":
-            pendencias = [
-                p for p in pendencias
-                if filtro_atend in (p[1].get("_atendentes_origem") or [])
-            ]
-
-        # Header — título + badge da contagem (ja filtrada) + selectbox admin
-        hcol, fcol = st.columns([3.4, 1.2])
-        with hcol:
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">'
-                f'<span style="font-weight:800;font-size:24px;color:#e8eaf0;'
-                f'text-transform:uppercase;letter-spacing:1.5px;white-space:nowrap">'
-                f'Clientes Fixados</span>'
-                f'<span style="background:#ef4444;color:white;font-size:22px;padding:7px 18px;'
-                f'border-radius:20px;font-weight:800;letter-spacing:0.3px;line-height:1">'
-                f'{len(pendencias)}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-        with fcol:
-            if role == "admin":
-                from data import _EMAIL_GRUPO as _EG
-                st.selectbox(
-                    "Grupo",
-                    ["Todos"] + list(_EG.values()),
-                    key="fix_filtro_atendente",
-                    label_visibility="collapsed",
-                )
+        # Header — título + badge da contagem
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">'
+            f'<span style="font-weight:800;font-size:24px;color:#e8eaf0;'
+            f'text-transform:uppercase;letter-spacing:1.5px;white-space:nowrap">'
+            f'Clientes Fixados</span>'
+            f'<span style="background:#ef4444;color:white;font-size:22px;padding:7px 18px;'
+            f'border-radius:20px;font-weight:800;letter-spacing:0.3px;line-height:1">'
+            f'{len(pendencias)}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
         if not pendencias:
             st.markdown(
@@ -789,20 +762,34 @@ def _render_dashboard(store, clientes, role):
                     unsafe_allow_html=True,
                 )
             with rcols[5]:
-                # Telefones: primeiro destacado e os demais inline em fonte
-                # menor — selecionáveis/copiáveis (sem tooltip não-copiável).
-                tels = row.get("telefones") or []
+                # Telefones: 1 icone WhatsApp por numero, cada um linkando
+                # pro proprio wa.me — mesmo padrao da tela Atividades e dos
+                # Fixados. Se telefone_wa_link nao valida (cadastro
+                # incompleto), o icone daquele numero e' omitido.
+                tels = row.get("telefones") or ([row.get("telefone")] if row.get("telefone") else [])
+                tels = [t for t in tels if t]
                 if not tels:
-                    tel_display = row.get("telefone", "—") or "—"
-                elif len(tels) == 1:
-                    tel_display = tels[0]
+                    tel_display = "—"
                 else:
-                    extras_txt = " · ".join(tels[1:])
-                    tel_display = (
-                        f'{tels[0]} '
-                        f'<span style="color:#6b7280;font-size:11px;font-weight:500">'
-                        f'· {extras_txt}</span>'
-                    )
+                    def _wa(t: str) -> str:
+                        wa_num = telefone_wa_link(t)
+                        if not wa_num:
+                            return ""
+                        return (
+                            f'<a href="https://wa.me/{wa_num}" target="_blank" '
+                            f'style="text-decoration:none;margin-right:3px;vertical-align:middle">'
+                            f'{_ICON_FIX_WHATSAPP}</a>'
+                        )
+                    if len(tels) == 1:
+                        tel_display = f'{_wa(tels[0])}{formatar_telefone(tels[0])}'
+                    else:
+                        primeiro = f'{_wa(tels[0])}{formatar_telefone(tels[0])}'
+                        extras = " · ".join(f'{_wa(t)}{formatar_telefone(t)}' for t in tels[1:])
+                        tel_display = (
+                            f'{primeiro} '
+                            f'<span style="color:#6b7280;font-size:11px;font-weight:500">'
+                            f'· {extras}</span>'
+                        )
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{tel_display}</div>', unsafe_allow_html=True)
             with rcols[6]:
                 _g_row = row.get("_grupo") or ""
