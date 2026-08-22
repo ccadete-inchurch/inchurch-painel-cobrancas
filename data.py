@@ -171,7 +171,7 @@ def _superlogica_get(path: str, params: dict | None = None) -> tuple[int, dict |
     return 200, body, ""
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_pagamentos_hoje_api() -> dict:
     """Delta real-time: agrega cobranças liquidadas nos últimos 3 dias via API
     Superlógica, contornando o lag entre liquidação e crédito (compensação
