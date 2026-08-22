@@ -73,7 +73,7 @@ import streamlit as st
 from google.cloud import bigquery
 
 from auth import get_store, current_nome
-from helpers import calc_dias, parse_date_br, get_hist, fmt_tel, fmt_tel_lista, hoje_lote, hoje_brt, dias_uteis_entre
+from helpers import calc_dias, parse_date_br, get_hist, fmt_tel, fmt_tel_lista, hoje_lote, hoje_brt, dias_uteis_entre, carimbo_dia_cache
 
 
 # ── Feriados nacionais ────────────────────────────────────────────────────────
@@ -171,7 +171,7 @@ def _superlogica_get(path: str, params: dict | None = None) -> tuple[int, dict |
     return 200, body, ""
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def fetch_pagamentos_hoje_api() -> dict:
     """Delta real-time: agrega cobranças liquidadas nos últimos 3 dias via API
     Superlógica, contornando o lag entre liquidação e crédito (compensação
@@ -664,8 +664,8 @@ def get_bq_client():
         return None
 
 
-@st.cache_data(ttl=3600)
-def fetch_cobrancas_competencia():
+@st.cache_data(ttl=86400)
+def fetch_cobrancas_competencia(_dia: str | None = None):
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
@@ -733,9 +733,8 @@ def fetch_cobrancas_competencia():
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=3600)
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_evolucao_saldo_mensal(cliente_id: str) -> pd.DataFrame:
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_evolucao_saldo_mensal(cliente_id: str, _dia: str | None = None) -> pd.DataFrame:
     """Saldo devedor ao FIM DE CADA MÊS nos últimos 12 meses.
 
     Reconstrói o saldo a partir das tabelas de competência + liquidação:
@@ -844,8 +843,8 @@ def fetch_historico_atrasos(cliente_id: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=3600)
-def fetch_proximas_cobracas(days: int = 30) -> pd.DataFrame:
+@st.cache_data(ttl=86400)
+def fetch_proximas_cobracas(days: int = 30, _dia: str | None = None) -> pd.DataFrame:
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
@@ -891,8 +890,8 @@ def fetch_proximas_cobracas(days: int = 30) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=3600)
-def fetch_historico_meses_bulk() -> pd.DataFrame:
+@st.cache_data(ttl=86400)
+def fetch_historico_meses_bulk(_dia: str | None = None) -> pd.DataFrame:
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
@@ -1109,8 +1108,8 @@ def resetar_status_reincidentes(clientes_hoje: list) -> int:
     return n_resets
 
 
-@st.cache_data(ttl=3600)
-def fetch_snapshot_inicio_mes() -> set:
+@st.cache_data(ttl=86400)
+def fetch_snapshot_inicio_mes(_dia: str | None = None) -> set:
     """IDs dos clientes do PRIMEIRO snapshot do mês atual.
     Usado pra calcular NOVOS no mês: atuais − inicio = entraram no mês.
     """
@@ -1143,8 +1142,8 @@ def fetch_snapshot_inicio_mes() -> set:
         return set()
 
 
-@st.cache_data(ttl=3600)
-def fetch_inadimplentes_uniao_mes() -> set:
+@st.cache_data(ttl=86400)
+def fetch_inadimplentes_uniao_mes(_dia: str | None = None) -> set:
     """IDs DISTINTOS de clientes que estiveram inadimplentes em ALGUM dia
     do mês atual — UNIÃO de todos os snapshots desde 01/mês até hoje.
 
@@ -1169,8 +1168,8 @@ def fetch_inadimplentes_uniao_mes() -> set:
         return set()
 
 
-@st.cache_data(ttl=3600)
-def fetch_snapshot_inicio_semana() -> set:
+@st.cache_data(ttl=86400)
+def fetch_snapshot_inicio_semana(_dia: str | None = None) -> set:
     """IDs do snapshot no INÍCIO DA SEMANA ATUAL (segunda-feira), com cap
     no início do mês — baseline = MAX(seg da semana, dia 1 do mês).
 
@@ -1216,8 +1215,8 @@ def fetch_snapshot_inicio_semana() -> set:
         return set()
 
 
-@st.cache_data(ttl=3600)
-def fetch_inadimplentes_uniao_esta_semana() -> set:
+@st.cache_data(ttl=86400)
+def fetch_inadimplentes_uniao_esta_semana(_dia: str | None = None) -> set:
     """IDs DISTINTOS de clientes inadimplentes em ALGUM dia desta semana
     (segunda → hoje), capada no início do mês.
 
@@ -1245,8 +1244,8 @@ def fetch_inadimplentes_uniao_esta_semana() -> set:
         return set()
 
 
-@st.cache_data(ttl=3600)
-def fetch_snapshot_ontem() -> set:
+@st.cache_data(ttl=86400)
+def fetch_snapshot_ontem(_dia: str | None = None) -> set:
     """IDs do snapshot MAIS RECENTE disponível antes de hoje. Usado pra
     calcular novos/regularizados comparando com a referência mais próxima.
 
@@ -1288,8 +1287,8 @@ def fetch_snapshot_ontem() -> set:
         return set()
 
 
-@st.cache_data(ttl=3600)
-def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
+@st.cache_data(ttl=86400)
+def fetch_npl_metrics(atendente: str = None, situacao: str = "todos", _dia: str | None = None) -> dict:
     """Métricas NPL da carteira (Non-Performing Loans), com buckets exclusivos:
     - TOTAL: % clientes com qualquer cobrança vencida (atraso >= 1 dia)
     - 30d:   % com atraso ENTRE 1 e 30 dias (bucket recente)
@@ -1489,8 +1488,8 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos") -> dict:
     }
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_carteira_count(atendente: str = None, situacao: str = "todos") -> int:
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_carteira_count(atendente: str = None, situacao: str = "todos", _dia: str | None = None) -> int:
     """Total de clientes da carteira SEM filtro de tipo (1.2.1/1.2.2).
 
     Usado pelo card 'X CLIENTES' do indicador — diferente de _npl['carteira']
@@ -1558,8 +1557,8 @@ def fetch_carteira_count(atendente: str = None, situacao: str = "todos") -> int:
         return 0
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_clientes_com_pagamento_set() -> frozenset:
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_clientes_com_pagamento_set(_dia: str | None = None) -> frozenset:
     """Set frozenset de cids (string) que já pagaram pelo menos 1 boleto.
     Usado pelo filtro #4 do NPL — exclui clientes em onboarding sem pagamento prévio.
 
@@ -1695,8 +1694,8 @@ def compute_npl_today_overlay(
     }
 
 
-@st.cache_data(ttl=3600)
-def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
+@st.cache_data(ttl=86400)
+def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", _dia: str | None = None) -> dict:
     """Métricas NPL "por receita" — % por R$ com janela rolante.
 
     Espelha 100% a metodologia da Página 4 do outro dashboard:
@@ -1918,8 +1917,8 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos") -> dict:
     }
 
 
-@st.cache_data(ttl=3600)
-def fetch_regularizados_mes_atual() -> set:
+@st.cache_data(ttl=86400)
+def fetch_regularizados_mes_atual(_dia: str | None = None) -> set:
     """IDs distintos de clientes que pagaram pelo menos uma cobrança EM ATRASO
     no mês atual. Filtra dt_liquidacao_recb > dt_vencimento_recb pra capturar
     só os que estavam de fato em inadimplência quando quitaram.
@@ -2192,8 +2191,8 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataF
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=3600)
-def fetch_cobrancas_liquidacao():
+@st.cache_data(ttl=86400)
+def fetch_cobrancas_liquidacao(_dia: str | None = None):
     """Pagamentos com atraso (dt_liquidacao > dt_vencimento).
 
     Filtro intencional pra alinhar com o conceito da tela 'Pagamentos':
@@ -3542,9 +3541,10 @@ def processar_dados_bigquery():
     fetch_proximas_cobracas.clear()
     fetch_historico_meses_bulk.clear()
     store          = get_store()
-    df_competencia = fetch_cobrancas_competencia()
-    df_liquidacao  = fetch_cobrancas_liquidacao()
-    df_hist_meses  = fetch_historico_meses_bulk()
+    _dia = carimbo_dia_cache()
+    df_competencia = fetch_cobrancas_competencia(_dia=_dia)
+    df_liquidacao  = fetch_cobrancas_liquidacao(_dia=_dia)
+    df_hist_meses  = fetch_historico_meses_bulk(_dia=_dia)
     hist_meses = {}
     if not df_hist_meses.empty:
         for _, row in df_hist_meses.iterrows():

@@ -5,7 +5,7 @@ import streamlit as st
 
 from config import SORT_MAP, STATUS_FILTER_MAP, STATUS_LABELS, PAGE_SIZE
 from auth import get_store, current_role
-from helpers import get_hist, get_hist_unificado, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br, telefone_wa_link, formatar_telefone
+from helpers import get_hist, get_hist_unificado, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br, telefone_wa_link, formatar_telefone, carimbo_dia_cache
 from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_esta_semana, concluir_pendencia
 import re as _re_tel
 
@@ -204,7 +204,7 @@ def _render_dashboard(store, clientes, role):
     hoje       = date.today()
     mes_inicio = hoje.replace(day=1)
     ids_atuais = {str(c["id"]) for c in clientes}
-    ids_inicio = fetch_snapshot_inicio_mes()
+    ids_inicio = fetch_snapshot_inicio_mes(_dia=carimbo_dia_cache())
 
     # IDs que pagaram hoje via API Superlógica (overlay real-time). Lê do
     # store original — `clientes` aqui já tá filtrado, mas precisamos saber
@@ -225,7 +225,7 @@ def _render_dashboard(store, clientes, role):
         #   Permanente saiu:  novos 0,  reg +1  → saldo -1    ✓
         #   Estável:          novos 0,  reg 0   → saldo 0     ✓
         # Soma: saldo = |atuais| − |inicio| = delta real ✓
-        ids_uniao_mes = fetch_inadimplentes_uniao_mes()
+        ids_uniao_mes = fetch_inadimplentes_uniao_mes(_dia=carimbo_dia_cache())
         if ids_uniao_mes:
             novos_mes = len(ids_uniao_mes - ids_inicio)
             reg_mes   = len(ids_uniao_mes - ids_atuais)
@@ -245,7 +245,7 @@ def _render_dashboard(store, clientes, role):
         variacao_sub = f"desde {snapshot_dt}" if snapshot_dt and not snapshot_dt.startswith("01/") else "no mês"
     else:
         # Fallback heurístico — usado enquanto o snapshot não foi populado
-        ids_pagaram_em_atraso = fetch_regularizados_mes_atual()
+        ids_pagaram_em_atraso = fetch_regularizados_mes_atual(_dia=carimbo_dia_cache())
         reg_mes               = len(ids_pagaram_em_atraso - ids_atuais)
         # Mesmo edge case no fallback (dedup contra ids_pagaram_em_atraso)
         reg_mes += len(ids_pagos_hoje - ids_pagaram_em_atraso)
@@ -281,7 +281,7 @@ def _render_dashboard(store, clientes, role):
         # segundas, ontem em dias normais) até agora. Antes havia incoerência:
         # novos vinham de diff snapshot (3 dias na segunda), reg vinha só do
         # overlay (1 dia). Agora ambos usam a mesma janela.
-        ids_ontem = fetch_snapshot_ontem()
+        ids_ontem = fetch_snapshot_ontem(_dia=carimbo_dia_cache())
         ids_atuais_set = ids_atuais
         if ids_ontem:
             # Quem ENTROU desde o snapshot de referência
@@ -304,10 +304,10 @@ def _render_dashboard(store, clientes, role):
         # Garante que Esta semana ⊆ Mês sempre. Quando dia 1 do mês cai
         # no meio da semana, baseline é capada — Esta semana coincide
         # com Mês até a próxima segunda.
-        ids_semana = fetch_snapshot_inicio_semana()
+        ids_semana = fetch_snapshot_inicio_semana(_dia=carimbo_dia_cache())
         if ids_semana:
             novos_semana_n = len(ids_atuais_set - ids_semana)
-            ids_uniao_semana = fetch_inadimplentes_uniao_esta_semana()
+            ids_uniao_semana = fetch_inadimplentes_uniao_esta_semana(_dia=carimbo_dia_cache())
             reg_semana_n   = len(ids_uniao_semana - ids_atuais_set) if ids_uniao_semana else len(ids_semana - ids_atuais_set)
             reg_semana_n  += len(ids_pagos_hoje - ids_uniao_semana - ids_semana)
         else:

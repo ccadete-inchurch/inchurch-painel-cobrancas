@@ -3,7 +3,7 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
-from helpers import fmt_moeda_plain, get_effective_atendente, hoje_lote
+from helpers import fmt_moeda_plain, get_effective_atendente, hoje_lote, carimbo_dia_cache
 from data import (
     fetch_ids_em_qualquer_lote_hoje,
     fetch_cobrancas_liquidacao,
@@ -23,7 +23,7 @@ def _build_regularizados_fresh(store) -> list:
     Aqui fazemos fresh: BQ tem nome/cnpj/inativo, overlay adiciona limbos
     (liquidados últimos 3d, crédito vindo). Sem persistência → sem acúmulo.
     """
-    df_liq = fetch_cobrancas_liquidacao()
+    df_liq = fetch_cobrancas_liquidacao(_dia=carimbo_dia_cache())
     regs = []
     if not df_liq.empty:
         for _, row in df_liq.iterrows():

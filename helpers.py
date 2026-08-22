@@ -20,6 +20,25 @@ def hoje_lote() -> str:
         return (agora.date() - timedelta(days=1)).isoformat()
     return agora.date().isoformat()
 
+
+def carimbo_dia_cache() -> str:
+    """Carimbo do 'dia do cache' — vira 08:30 BRT, DEPOIS do cron gerar lote
+    e snapshot. Serve como chave de cache pra invalidar dados 1×/dia com
+    garantia de que o BQ está completamente atualizado no momento do refetch.
+
+    Diferença vs hoje_lote() (que vira 08:15): esperamos os 15min extras
+    pra o cron GH Action terminar de escrever lote + snapshot no BQ.
+    Assim, quando o cache invalida (08:30+), o próximo fetch pesado pega
+    tudo consistente — sem risco de popular cache com lote de ontem no meio
+    da execução do cron.
+
+    Usado como arg _dia=carimbo_dia_cache() nas queries pesadas do BQ.
+    """
+    agora = datetime.now(_BRT)
+    if agora.hour < 8 or (agora.hour == 8 and agora.minute < 30):
+        return (agora.date() - timedelta(days=1)).isoformat()
+    return agora.date().isoformat()
+
 from auth import current_uid, get_store
 from pathlib import Path
 import json

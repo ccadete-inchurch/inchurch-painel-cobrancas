@@ -4,7 +4,7 @@ import streamlit as st
 
 import time as _time
 
-from helpers import get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link
+from helpers import get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link, carimbo_dia_cache
 from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, fetch_carteira_count, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
@@ -556,14 +556,14 @@ def _render_atividades(store, clientes, role):
     # Ordem visual da tela: Bem-vindo → Indicadores → NPL cards (análise macro).
     _npl_html_parts = []
 
-    _npl = fetch_npl_metrics(_npl_atendente, _npl_situacao) or {}
+    _npl = fetch_npl_metrics(_npl_atendente, _npl_situacao, _dia=carimbo_dia_cache()) or {}
     if _npl:
         # ── Overlay live: substitui valores de HOJE pelos calculados em Python
         # a partir de store["clientes"] (que já tem _regularizado_hoje aplicado).
         # D-30 fica do BQ (já passou tempo suficiente pra todas liquidações
         # replicarem). Resultado: cards NPL batem com o indicador "INADIMPLENTES"
         # embaixo do "Bem-vindo" — ambos usam o mesmo store + overlay.
-        _ja_pagou_set = fetch_clientes_com_pagamento_set()
+        _ja_pagou_set = fetch_clientes_com_pagamento_set(_dia=carimbo_dia_cache())
         _today = compute_npl_today_overlay(
             store.get("clientes", []) or [],
             atendente=_npl_atendente,
@@ -641,7 +641,7 @@ def _render_atividades(store, clientes, role):
         #   - 30d: vencidos em [D-30, D]
         #   - 90d: vencidos em [D-90, D]
         # Mesmos filtros (atendente, situação, #4, tipo Setup/Mensalidade).
-        _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao) or {}
+        _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao, _dia=carimbo_dia_cache()) or {}
         if _rolling:
             _label_receita = (
                 '<div style="font-size:13px;color:#6b7280;letter-spacing:1.4px;'
@@ -775,7 +775,7 @@ def _render_atividades(store, clientes, role):
             # Carteira TOTAL da atendente — SEM filtro de tipo (1.2.1/1.2.2)
             # porque a tela mostra QUALQUER cobrança inadimplente, não só
             # assinatura. fetch_carteira_count conta direto em splgc-grupo.
-            lote_carteira_n = fetch_carteira_count(_atendente_nome, _fs_lote.lower())
+            lote_carteira_n = fetch_carteira_count(_atendente_nome, _fs_lote.lower(), _dia=carimbo_dia_cache())
             # Reg + Parc: só do lote do dia (mérito do trabalho do atendente).
             # strict_hoje=False — cliente em lote é trabalho do dia mesmo se
             # liquidação foi ontem (BQ não viu, overlay detectou).
@@ -836,7 +836,7 @@ def _render_atividades(store, clientes, role):
                 _ctx_atend = _fg
             else:
                 _ctx_atend = None
-            total_carteira_n = fetch_carteira_count(_ctx_atend, _fs.lower())
+            total_carteira_n = fetch_carteira_count(_ctx_atend, _fs.lower(), _dia=carimbo_dia_cache())
 
         def _palavra(n, sing, plur):
             return sing if n == 1 else plur

@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from data import fetch_proximas_cobracas
+from helpers import carimbo_dia_cache
 from helpers import fmt_moeda, fmt_moeda_plain
 
 
@@ -43,7 +44,7 @@ def _render_proximas(_store, _clientes):
     days = _PERIODO_DAYS[periodo]
 
     with st.spinner("Carregando cobranças futuras..."):
-        df_raw = fetch_proximas_cobracas(days)
+        df_raw = fetch_proximas_cobracas(days, _dia=carimbo_dia_cache())
 
     if df_raw.empty:
         st.info(f"Nenhuma cobrança nos próximos {days} dias.")

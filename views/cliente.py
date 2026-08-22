@@ -6,6 +6,7 @@ import streamlit as st
 from config import STATUS_LABELS, STATUS_COLORS
 from helpers import get_hist_unificado, get_effective_status, get_effective_lastContact, get_effective_atendente, fmt_moeda_plain, dias_html
 from data import fetch_historico_atrasos, fetch_evolucao_saldo_mensal
+from helpers import carimbo_dia_cache
 from views.dialog import dialog_editar
 
 _MESES_PT = {1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
@@ -142,7 +143,7 @@ def _render_cliente(_store, clientes):
     )
 
     with st.spinner("Calculando evolução do saldo..."):
-        df_evol = fetch_evolucao_saldo_mensal(cid)
+        df_evol = fetch_evolucao_saldo_mensal(cid, _dia=carimbo_dia_cache())
 
     if df_evol.empty:
         st.markdown(
