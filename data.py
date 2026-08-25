@@ -2447,43 +2447,59 @@ def load_mensagens_from_bq():
     st.session_state.setdefault("_msg_concluida_dias", {})
     st.session_state.setdefault("_msg_ultimo_contato_dias", {})
 
-    # Garante conn viva — Streamlit @st.cache_resource pode reter conn morta
-    # após timeout do servidor, causando 'cursor on closed connection'.
-    conn = _pg_n8n_conn_alive()
-    if not conn:
-        return
-
     table = _pg_table_ref()
-    cur = conn.cursor()
 
-    # Janela de 3 dias. fromme=true ignora respostas do cliente (saudações etc).
-    # Colunas text convertidas a BYTEA via convert_to(col, 'UTF8') — pega os
-    # bytes brutos UTF-8 sem passar por byteain (parse de bytea input).
-    # Antes usavamos col::bytea, que sob certos plans dispara byteain no
-    # server e crasha com 22P02 "invalid input syntax for type bytea" — o
-    # cast implicito text->bytea acaba serializando via TEXT e re-parseando,
-    # e strings comuns (com \\, \\x, etc) quebram o parse. convert_to eh o
-    # equivalente correto: bytes UTF-8 diretos, sem parse intermediario.
-    # No Python, decodificamos com errors='replace' — bytes ruins viram
-    # \\ufffd mas o resto eh preservado.
-    try:
-        cur.execute(f"""
-            SELECT convert_to(telefone, 'UTF8') AS tel_bytes,
-                   convert_to(message,  'UTF8') AS msg_bytes,
-                   created_at
-            FROM {table}
-            WHERE created_at >= NOW() - INTERVAL '3 days'
-              AND LOWER(fromme::text) = 'true'
-            ORDER BY created_at ASC
-        """)
-        rows = cur.fetchall()
-    except Exception as e:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        st.warning(f"Falha ao ler N8N (3d): {e}")
-        cur.close()
+    # Fetch com retry — pg8000 ocasionalmente crasha em UnicodeDecodeError
+    # durante o processamento de metadata/notice do server (0xf0 sem
+    # continuacao valida, etc). Erro e' transient: proxima conexao limpa
+    # funciona. Estrategia: 2 tentativas, invalidando cache de conn entre
+    # elas. So aparece st.warning se AMBAS falharem — evita ruido visual
+    # em erro esporadico que se recupera sozinho.
+    def _fetch_rows_com_retry(query: str, tentativas: int = 2):
+        """Executa query no PG N8N com retry. Retorna (rows, erro_final).
+        rows=None + erro='...' quando todas tentativas falharam."""
+        ultimo_erro = None
+        for tentativa in range(tentativas):
+            conn = _pg_n8n_conn_alive()
+            if not conn:
+                ultimo_erro = "conn indisponivel"
+                continue
+            try:
+                cur = conn.cursor()
+                try:
+                    cur.execute(query)
+                    return cur.fetchall(), None
+                finally:
+                    try: cur.close()
+                    except Exception: pass
+            except Exception as e:
+                ultimo_erro = str(e)
+                # Estado suspeito na conn — invalida cache pra proxima
+                # tentativa reconectar do zero (nao usar conn com estado ruim)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                try:
+                    get_pg_n8n_conn.clear()
+                except Exception:
+                    pass
+                continue
+        return None, ultimo_erro
+
+    query1 = f"""
+        SELECT convert_to(telefone, 'UTF8') AS tel_bytes,
+               convert_to(message,  'UTF8') AS msg_bytes,
+               created_at
+        FROM {table}
+        WHERE created_at >= NOW() - INTERVAL '3 days'
+          AND LOWER(fromme::text) = 'true'
+        ORDER BY created_at ASC
+    """
+    rows, erro = _fetch_rows_com_retry(query1)
+    if rows is None:
+        # 2 tentativas falharam — sinal mais amigavel, sem stack trace tecnico
+        st.info(f"N8N temporariamente indisponivel — status de mensagens pode estar defasado. ({erro})")
         return
 
     status_map        = {}
@@ -2556,15 +2572,16 @@ def load_mensagens_from_bq():
         f"POSITION(LOWER('{p.replace(chr(39), chr(39)+chr(39))}') IN LOWER(message)) = 0"
         for p in _MSG_IA_IGNORAR
     )
-    try:
-        cur.execute(f"""
-            SELECT convert_to(telefone, 'UTF8') AS tel_bytes, MAX(created_at) AS ultimo_contato
-            FROM {table}
-            WHERE LOWER(fromme::text) = 'true'
-              AND {ia_filter_sql}
-            GROUP BY telefone
-        """)
-        for tel_raw, ts in cur.fetchall():
+    query2 = f"""
+        SELECT convert_to(telefone, 'UTF8') AS tel_bytes, MAX(created_at) AS ultimo_contato
+        FROM {table}
+        WHERE LOWER(fromme::text) = 'true'
+          AND {ia_filter_sql}
+        GROUP BY telefone
+    """
+    rows2, erro2 = _fetch_rows_com_retry(query2)
+    if rows2 is not None:
+        for tel_raw, ts in rows2:
             # tel_raw vem como bytes (BYTEA). Decodifica com errors=replace.
             chave = _norm(_bytes_to_str(tel_raw))
             if not chave or ts is None:
@@ -2572,13 +2589,7 @@ def load_mensagens_from_bq():
             dias = _dias_calendario_brt(ts)
             if dias is not None and (chave not in ultimo_contato_dias or dias < ultimo_contato_dias[chave]):
                 ultimo_contato_dias[chave] = dias
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-
-    cur.close()
+    # query2 falhando silencia: ultimo_contato ja tem cobertura parcial da query1
 
     st.session_state["_msg_status"]              = status_map
     st.session_state["_msg_concluida_dias"]      = concluida_dias
