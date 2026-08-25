@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -8,12 +8,9 @@ from helpers import carimbo_dia_cache
 from helpers import fmt_moeda, fmt_moeda_plain
 
 
-_PERIODO_DAYS = {
-    "Próximos 7 dias":  7,
-    "Próximos 15 dias": 15,
-    "Próximos 30 dias": 30,
-    "Próximos 60 dias": 60,
-}
+# Janela maxima de fetch — cobre range default (hoje → hoje+30d) com folga.
+# Se user escolher range maior via date picker, refetcha com days ajustado.
+_FETCH_DAYS_DEFAULT = 60
 
 
 def _render_proximas(_store, _clientes):
@@ -24,40 +21,61 @@ def _render_proximas(_store, _clientes):
         unsafe_allow_html=True,
     )
 
-    # Filtros: período, situação, grupo. O grupo é populado depois
-    # que carregamos os dados (precisa do conjunto de grupos disponíveis).
-    fp1, fp2, fp3 = st.columns([2, 2, 2])
-    with fp1:
-        periodo = st.selectbox(
-            "Período",
-            list(_PERIODO_DAYS.keys()),
-            index=2,
-            key="proximas_periodo",
+    hoje = date.today()
+    _ini_default = hoje
+    _fim_default = hoje + timedelta(days=30)
+
+    # Filtros no mesmo padrao da tela Pagamentos: busca + date range + situacao + grupo.
+    # Grupo e' populado apos o fetch (precisa saber quais grupos existem nos dados).
+    fb, fp, fs, fa = st.columns([2.4, 2.2, 1.3, 1.5])
+    with fb:
+        busca = st.text_input("Buscar", placeholder="Nome, CNPJ ou ID sacado...", key="proximas_busca")
+    with fp:
+        intervalo_selecionado = st.date_input(
+            "Período (de → até)",
+            value=(_ini_default, _fim_default),
+            key="proximas_periodo_range",
+            format="DD/MM/YYYY",
         )
-    with fp2:
+    with fs:
         filtro_situacao = st.selectbox(
             "Situação",
             ["Todos", "Apenas ativos", "Apenas inativos"],
             key="proximas_situacao",
         )
 
-    days = _PERIODO_DAYS[periodo]
+    # Parse do date range picker — retorna tupla quando ambas escolhidas,
+    # ou tupla de 1 item durante a selecao. Fallback seguro pro default.
+    dt_ini, dt_fim = _ini_default, _fim_default
+    if isinstance(intervalo_selecionado, tuple):
+        if len(intervalo_selecionado) == 2:
+            dt_ini, dt_fim = intervalo_selecionado
+        elif len(intervalo_selecionado) == 1:
+            dt_ini = dt_fim = intervalo_selecionado[0]
+    elif intervalo_selecionado:
+        dt_ini = dt_fim = intervalo_selecionado
+
+    # Ajusta days do fetch pra cobrir o range escolhido (com margem).
+    # fetch_proximas_cobracas puxa cobrancas com vencimento em [hoje, hoje+days].
+    # Se user escolheu dt_fim mais longe, precisa aumentar days.
+    days = max(_FETCH_DAYS_DEFAULT, (dt_fim - hoje).days + 5)
 
     with st.spinner("Carregando cobranças futuras..."):
         df_raw = fetch_proximas_cobracas(days, _dia=carimbo_dia_cache())
 
     if df_raw.empty:
-        st.info(f"Nenhuma cobrança nos próximos {days} dias.")
+        st.info(f"Nenhuma cobrança no período selecionado.")
         return
 
-    hoje = date.today()
     rows = []
     for _, row in df_raw.iterrows():
         try:
             venc      = pd.to_datetime(row["vencimento"])
+            venc_date = venc.date()
             venc_str  = venc.strftime("%d/%m/%Y")
-            dias_rest = (venc.date() - hoje).days
+            dias_rest = (venc_date - hoje).days
         except Exception:
+            venc_date = None
             venc_str  = str(row.get("vencimento", ""))
             dias_rest = 0
 
@@ -68,6 +86,7 @@ def _render_proximas(_store, _clientes):
             "telefone":       str(row.get("telefone",  "") or "—"),
             "valor":          float(row.get("valor", 0) or 0),
             "vencimento":     venc_str,
+            "_venc_date":     venc_date,
             "dias_restantes": dias_rest,
             "grupo":          str(row.get("grupo",     "") or "—"),
             "inativo":        bool(row.get("inativo",  False)),
@@ -83,13 +102,22 @@ def _render_proximas(_store, _clientes):
         not r["grupo"] or r["grupo"] in ("—", "", "nan", "NaN")
         for r in rows
     )
-    with fp3:
+    with fa:
         filtro_grupo = st.selectbox(
             "Grupo",
             ["Todos"] + grupos_disp + (["Sem especialista"] if _tem_sem_grupo else []),
             key="proximas_grupo",
         )
 
+    # Aplica filtros
+    if busca:
+        b = busca.lower()
+        rows = [
+            r for r in rows
+            if b in str(r.get("nome", "")).lower()
+            or b in str(r.get("cnpj", "")).lower()
+            or b in str(r.get("id", "")).lower()
+        ]
     if filtro_situacao == "Apenas ativos":
         rows = [r for r in rows if not r.get("inativo")]
     elif filtro_situacao == "Apenas inativos":
@@ -98,6 +126,23 @@ def _render_proximas(_store, _clientes):
         rows = [r for r in rows if not r["grupo"] or r["grupo"] in ("—", "", "nan", "NaN")]
     elif filtro_grupo != "Todos":
         rows = [r for r in rows if r["grupo"] == filtro_grupo]
+
+    # Filtro temporal via date range picker — orquestra cards + tabela.
+    if dt_ini and dt_fim:
+        rows = [
+            r for r in rows
+            if r.get("_venc_date") is not None
+            and dt_ini <= r["_venc_date"] <= dt_fim
+        ]
+
+    # Label do período pra exibir nos cards (subtitulo)
+    if dt_ini and dt_fim:
+        if dt_ini == dt_fim:
+            periodo_lbl = dt_ini.strftime("%d/%m/%Y")
+        else:
+            periodo_lbl = f"{dt_ini.strftime('%d/%m/%Y')} → {dt_fim.strftime('%d/%m/%Y')}"
+    else:
+        periodo_lbl = "período"
 
     # ── Métricas ──────────────────────────────────────────────────────────────
     total_valor = sum(r["valor"] for r in rows)
@@ -109,7 +154,7 @@ def _render_proximas(_store, _clientes):
     m1, m2, m3, m4 = st.columns(4)
     # Mesmo padrão visual da tela Pagamentos: padding, font-sizes, peso.
     for col, label, val, sub, cor in [
-        (m1, "Total a Receber", fmt_moeda_plain(total_valor), f"próximos {days} dias", "#2dd36f"),
+        (m1, "Total a Receber", fmt_moeda_plain(total_valor), periodo_lbl, "#2dd36f"),
         (m2, "Cobranças",       str(len(rows)),               "faturas futuras",       "#e8eaf0"),
         (m3, "Clientes",        str(n_clientes),              "com vencimentos",       "#e8eaf0"),
         (m4, "Ticket Médio",    fmt_moeda_plain(ticket_medio),"valor por cobrança",    "#5fa3ff"),
