@@ -600,7 +600,12 @@ def get_pg_n8n_conn():
             pass
         return conn
     except Exception as e:
-        st.error(f"Falha ao conectar Postgres N8N via Auth Proxy: {e}")
+        # Suprime st.error visivel quando estamos em modo retry silencioso
+        # (ver _fetch_rows_com_retry). Erro real e' relatado apenas ao final,
+        # se TODAS as tentativas falharem — evita 2-3 mensagens vermelhas
+        # durante reconexoes transient (Cloud SQL Auth Proxy acordando etc).
+        if not st.session_state.get("_pg_n8n_silent", False):
+            st.error(f"Falha ao conectar Postgres N8N via Auth Proxy: {e}")
         return None
 
 
@@ -2449,43 +2454,53 @@ def load_mensagens_from_bq():
 
     table = _pg_table_ref()
 
-    # Fetch com retry — pg8000 ocasionalmente crasha em UnicodeDecodeError
-    # durante o processamento de metadata/notice do server (0xf0 sem
-    # continuacao valida, etc). Erro e' transient: proxima conexao limpa
-    # funciona. Estrategia: 2 tentativas, invalidando cache de conn entre
-    # elas. So aparece st.warning se AMBAS falharem — evita ruido visual
-    # em erro esporadico que se recupera sozinho.
-    def _fetch_rows_com_retry(query: str, tentativas: int = 2):
+    # Fetch com retry — 2 erros transient conhecidos aqui:
+    # 1) UnicodeDecodeError do pg8000 processando metadata/notice do server
+    #    (byte 0xf0 sem continuacao valida). Proxima conn limpa resolve.
+    # 2) Connection refused (Errno 111) do Cloud SQL Auth Proxy adormecido.
+    #    Instancia demora 5-30s pra acordar; tentativa apos backoff resolve.
+    # Estrategia: 3 tentativas com backoff crescente, em modo silencioso
+    # (nao mostra st.error intermediarios — so uma msg no final se TUDO
+    # falhou). Evita ruido visual em erros que se recuperam sozinhos.
+    def _fetch_rows_com_retry(query: str, tentativas: int = 3):
         """Executa query no PG N8N com retry. Retorna (rows, erro_final).
         rows=None + erro='...' quando todas tentativas falharam."""
         ultimo_erro = None
-        for tentativa in range(tentativas):
-            conn = _pg_n8n_conn_alive()
-            if not conn:
-                ultimo_erro = "conn indisponivel"
-                continue
-            try:
-                cur = conn.cursor()
+        # Ativa modo silencioso: get_pg_n8n_conn nao mostra st.error visivel
+        # durante essas tentativas (so mostra depois se todas falharem)
+        st.session_state["_pg_n8n_silent"] = True
+        try:
+            for tentativa in range(tentativas):
+                if tentativa > 0:
+                    time.sleep(0.5 * tentativa)  # backoff: 0.5s, 1.0s
+                conn = _pg_n8n_conn_alive()
+                if not conn:
+                    ultimo_erro = "conn indisponivel"
+                    continue
                 try:
-                    cur.execute(query)
-                    return cur.fetchall(), None
-                finally:
-                    try: cur.close()
-                    except Exception: pass
-            except Exception as e:
-                ultimo_erro = str(e)
-                # Estado suspeito na conn — invalida cache pra proxima
-                # tentativa reconectar do zero (nao usar conn com estado ruim)
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-                try:
-                    get_pg_n8n_conn.clear()
-                except Exception:
-                    pass
-                continue
-        return None, ultimo_erro
+                    cur = conn.cursor()
+                    try:
+                        cur.execute(query)
+                        return cur.fetchall(), None
+                    finally:
+                        try: cur.close()
+                        except Exception: pass
+                except Exception as e:
+                    ultimo_erro = str(e)
+                    # Estado suspeito na conn — invalida cache pra proxima
+                    # tentativa reconectar do zero (nao usar conn com estado ruim)
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    try:
+                        get_pg_n8n_conn.clear()
+                    except Exception:
+                        pass
+                    continue
+            return None, ultimo_erro
+        finally:
+            st.session_state["_pg_n8n_silent"] = False
 
     query1 = f"""
         SELECT convert_to(telefone, 'UTF8') AS tel_bytes,
