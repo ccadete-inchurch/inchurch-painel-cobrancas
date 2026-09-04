@@ -880,25 +880,47 @@ def _render_atividades(store, clientes, role):
             '<path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>'
         )
 
+        # Delta MoM na linha INADIMPLENTES: comparacao de quantidade absoluta
+        # de inadimplentes hoje vs 30 dias atras. Verde ▼ = diminuiu (bom);
+        # vermelho ▲ = aumentou (ruim); cinza — = neutro. Base metodologica
+        # e' a mesma do card NPL macro (Setup+Mensalidade, exclui onboarding)
+        # — pode divergir do numero absoluto do card por poucos casos, mas
+        # e' a comparacao MoM mais confiavel que temos sem query adicional.
+        def _delta_qty_html(delta: int) -> str:
+            if delta == 0:
+                return (
+                    '<span style="margin-left:auto;color:#9ca3af;font-size:13px;'
+                    'font-weight:600;white-space:nowrap">— 0</span>'
+                )
+            arrow, color = ("▼", "#22c55e") if delta < 0 else ("▲", "#fb7185")
+            return (
+                f'<span style="margin-left:auto;color:{color};font-size:14px;'
+                f'font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums">'
+                f'{arrow} {abs(delta)}</span>'
+            )
+
         # Card vertical empilhado: Clientes (carteira, 1ª linha) + Inadimplentes +
         # Reg + Parc. Linha CLIENTES dá contexto de scope pra atendente saber
         # quantos clientes tem na carteira filtrada (respeitando Situação).
-        def _card_html(label_topo, sublabel, carteira_n, inad_n, reg_n, reg_v, parc_n, parc_v):
+        def _card_html(label_topo, sublabel, carteira_n, inad_n, reg_n, reg_v, parc_n, parc_v, inad_delta=None):
             _inad_palavra = _palavra(inad_n, "inadimplente", "inadimplentes").upper()
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
             _parc_palavra = _palavra(parc_n, "parcial", "parciais").upper()
             _reg_v_fmt = fmt_moeda_plain(reg_v)
             _parc_v_fmt = fmt_moeda_plain(parc_v)
 
-            def _linha(ico, count, palavra, valor_fmt, cor_valor):
+            def _linha(ico, count, palavra, valor_fmt, cor_valor, extra_direita=""):
                 # white-space:nowrap: sem quebra entre 'R$' e '9.275,75' quando
                 # o container ficar estreito. Antes o valor quebrava em 2 linhas
                 # nos cards do lote (screenshot do 30/06).
-                _direita = (
-                    f'<span style="margin-left:auto;font-size:20px;font-weight:800;'
-                    f'color:{cor_valor};font-variant-numeric:tabular-nums;'
-                    f'white-space:nowrap">{valor_fmt}</span>'
-                ) if valor_fmt else ""
+                if valor_fmt:
+                    _direita = (
+                        f'<span style="margin-left:auto;font-size:20px;font-weight:800;'
+                        f'color:{cor_valor};font-variant-numeric:tabular-nums;'
+                        f'white-space:nowrap">{valor_fmt}</span>'
+                    )
+                else:
+                    _direita = extra_direita
                 return (
                     f'<div style="display:flex;align-items:center;gap:8px">'
                     f'{ico}'
@@ -912,19 +934,28 @@ def _render_atividades(store, clientes, role):
 
             _divisor = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
             _cli_palavra = _palavra(carteira_n, "cliente", "clientes").upper()
+            _inad_extra = _delta_qty_html(inad_delta) if inad_delta is not None else ""
 
             return (
                 f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
                 f'border-radius:10px;padding:14px 18px">'
                 f'{_linha(_ico_cli, carteira_n, _cli_palavra, "", "")}'
                 f'{_divisor}'
-                f'{_linha(_ico_inad, inad_n, _inad_palavra, "", "")}'
+                f'{_linha(_ico_inad, inad_n, _inad_palavra, "", "", _inad_extra)}'
                 f'{_divisor}'
                 f'{_linha(_ico_reg, reg_n, _reg_palavra, _reg_v_fmt, "#7cc243")}'
                 f'{_divisor}'
                 f'{_linha(_ico_pag, parc_n, _parc_palavra, _parc_v_fmt, "#5fa3ff")}'
                 f'</div>'
             )
+
+        # Delta MoM: hoje - 30 dias atras (negativo = melhorou). Vem do fetch
+        # NPL macro que ja foi carregado acima com os mesmos filtros de
+        # atendente/situacao. Se _npl vazio (fetch falhou), passa None e
+        # a setinha nao aparece.
+        _inad_delta_mom = None
+        if _npl and "total_n" in _npl and "r_total_n" in _npl:
+            _inad_delta_mom = int(_npl["total_n"]) - int(_npl["r_total_n"])
 
         # Monta linha horizontal — 1 card por contexto (lote ou total).
         cards_html = []
@@ -933,12 +964,14 @@ def _render_atividades(store, clientes, role):
                 "No Lote", "",
                 lote_carteira_n_safe,
                 lote_inad_n, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v,
+                inad_delta=_inad_delta_mom,
             ))
         if _mostrar_total:
             cards_html.append(_card_html(
                 "No Total", total_label,
                 total_carteira_n,
                 total_inad_n, total_reg_n, total_reg_v, total_parc_n, total_parc_v,
+                inad_delta=_inad_delta_mom,
             ))
 
         if cards_html:
