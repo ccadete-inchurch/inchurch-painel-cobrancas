@@ -883,16 +883,18 @@ def _render_atividades(store, clientes, role):
         # Delta MoM na linha INADIMPLENTES: qtd hoje vs 30 dias atras vinda
         # da tabela cobrancas_snapshot_diario (mesma base do card, populada
         # pelo cron 08:30 BRT do proprio store). Verde ▼ = diminuiu (bom);
-        # vermelho ▲ = aumentou (ruim); cinza — = neutro.
+        # vermelho ▲ = aumentou (ruim); cinza — = neutro. Renderizado colado
+        # no numero (entre count e palavra), sem margin-left:auto — fica na
+        # ordem natural: [icone] [545] [▼ 33] [INADIMPLENTES].
         def _delta_qty_html(delta: int) -> str:
             if delta == 0:
                 return (
-                    '<span style="margin-left:auto;color:#9ca3af;font-size:13px;'
+                    '<span style="color:#9ca3af;font-size:13px;'
                     'font-weight:600;white-space:nowrap">— 0</span>'
                 )
             arrow, color = ("▼", "#22c55e") if delta < 0 else ("▲", "#fb7185")
             return (
-                f'<span style="margin-left:auto;color:{color};font-size:14px;'
+                f'<span style="color:{color};font-size:14px;'
                 f'font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums">'
                 f'{arrow} {abs(delta)}</span>'
             )
@@ -907,23 +909,21 @@ def _render_atividades(store, clientes, role):
             _reg_v_fmt = fmt_moeda_plain(reg_v)
             _parc_v_fmt = fmt_moeda_plain(parc_v)
 
-            def _linha(ico, count, palavra, valor_fmt, cor_valor, extra_direita=""):
+            def _linha(ico, count, palavra, valor_fmt, cor_valor, extra_apos_count=""):
                 # white-space:nowrap: sem quebra entre 'R$' e '9.275,75' quando
                 # o container ficar estreito. Antes o valor quebrava em 2 linhas
                 # nos cards do lote (screenshot do 30/06).
-                if valor_fmt:
-                    _direita = (
-                        f'<span style="margin-left:auto;font-size:20px;font-weight:800;'
-                        f'color:{cor_valor};font-variant-numeric:tabular-nums;'
-                        f'white-space:nowrap">{valor_fmt}</span>'
-                    )
-                else:
-                    _direita = extra_direita
+                _direita = (
+                    f'<span style="margin-left:auto;font-size:20px;font-weight:800;'
+                    f'color:{cor_valor};font-variant-numeric:tabular-nums;'
+                    f'white-space:nowrap">{valor_fmt}</span>'
+                ) if valor_fmt else ""
                 return (
                     f'<div style="display:flex;align-items:center;gap:8px">'
                     f'{ico}'
                     f'<span style="font-size:26px;font-weight:800;color:#e8eaf0;line-height:1;'
                     f'font-variant-numeric:tabular-nums">{count}</span>'
+                    f'{extra_apos_count}'
                     f'<span style="font-size:13px;color:#9ca3af;font-weight:700;'
                     f'letter-spacing:1.2px;text-transform:uppercase">{palavra}</span>'
                     f'{_direita}'
