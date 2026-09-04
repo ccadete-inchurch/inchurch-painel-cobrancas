@@ -620,61 +620,95 @@ def _render_atividades(store, clientes, role):
                 '</div>'
             )
 
-        # ─── SEÇÃO 1: POR CLIENTE — aging exclusivo, com overlay live ───────
-        # Label minimalista — apenas texto cinza fraco, sem decoração
-        _label_cliente = (
-            '<div style="font-size:11px;color:#6b7280;letter-spacing:1.2px;'
-            'text-transform:uppercase;font-weight:600;margin-bottom:6px">'
-            'Por cliente</div>'
+        # ─── Card ANALISE DA CARTEIRA — vertical, mesmo formato do operacional
+        # Layout: percentual grande + palavra + delta ao lado (formato igual
+        # `_card_html` da linha inadimplentes). Renderizado lado a lado com
+        # o card operacional (2 colunas de igual largura) — ver render abaixo.
+
+        # Sub-label discreto (POR CLIENTE / POR RECEITA)
+        _sublabel_css = (
+            "font-size:10px;font-weight:700;color:#6b7280;"
+            "text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px"
         )
-        # Card "90 dias ou mais" nao faz sentido no recorte Ativos: 90+ dias
-        # ja e' churn financeiro (igreja considerada perdida), entao o valor
-        # apareceria como 0% e polui a linha visual.
-        _cards_html = (
-            _card("Inadimplência total",       _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
-            + _card("Inadimplência até 30 dias", _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
-        )
-        if _filtro_inativo != "Ativos":
-            _cards_html += _card(
-                "Inadimplência 90 dias ou mais", _npl["d90_pct"], _npl["delta_d90"], _npl["d90_r"]
+
+        def _linha_analise(pct: float, palavra: str, delta_pp: float, rs: float | None = None):
+            """Linha do card analise: percentual grande + delta + label a direita.
+            Formato igual `_linha` do card operacional pra bater visualmente.
+            """
+            pct_str = f"{pct:.2f}".replace(".", ",")
+            _delta = _delta_html(delta_pp) if delta_pp is not None else ""
+            # Valor R$ (opcional, so pras metricas Por receita) — a direita
+            _direita = ""
+            if rs is not None:
+                _rs_fmt = _fmt_rs(rs)
+                _direita = (
+                    f'<span style="margin-left:auto;font-size:12px;color:#6b7280;'
+                    f'white-space:nowrap;font-variant-numeric:tabular-nums">'
+                    f'R$ {_rs_fmt}</span>'
+                )
+            return (
+                f'<div style="display:flex;align-items:baseline;gap:8px">'
+                f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'letter-spacing:-0.4px;font-variant-numeric:tabular-nums">{pct_str}%</span>'
+                f'{_delta}'
+                f'<span style="font-size:11px;color:#9ca3af;font-weight:700;'
+                f'letter-spacing:1px;text-transform:uppercase">{palavra}</span>'
+                f'{_direita}'
+                f'</div>'
             )
-        _cards_cliente = (
-            '<div style="display:flex;gap:10px;margin-bottom:4px">'
-            + _cards_html
+
+        _divisor_a = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
+
+        # SEÇÃO 1: Por cliente (aging exclusivo, com overlay live)
+        _linhas_cliente = [_linha_analise(_npl["total_pct"], "Inad total", _npl["delta_total"])]
+        _linhas_cliente.append(_linha_analise(_npl["d30_pct"], "Até 30 dias", _npl["delta_d30"]))
+        # Card 90d+ nao faz sentido no recorte Ativos: 90+ dias ja e churn
+        # financeiro, valor apareceria como 0% e polui a linha visual.
+        if _filtro_inativo != "Ativos":
+            _linhas_cliente.append(
+                _linha_analise(_npl["d90_pct"], "90 dias ou mais", _npl["delta_d90"])
+            )
+
+        # SEÇÃO 2: Por receita (janela rolante em R$, sem overlay)
+        _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao, _dia=carimbo_dia_cache()) or {}
+        _linhas_receita = []
+        if _rolling:
+            _linhas_receita.append(_linha_analise(
+                _rolling["d30_pct"], "Mensal",
+                _rolling.get("delta_d30_pp"),
+                _rolling.get("d30_aberto"),
+            ))
+            _linhas_receita.append(_linha_analise(
+                _rolling["d90_pct"], "Trimestral",
+                _rolling.get("delta_d90_pp"),
+                _rolling.get("d90_aberto"),
+            ))
+
+        # Monta card unico vertical (mesmo container do card operacional)
+        _bloco_cliente = (
+            f'<div style="{_sublabel_css}">Por cliente</div>'
+            + f'<div style="display:flex;flex-direction:column;gap:8px">'
+            + "".join(_linhas_cliente)
             + '</div>'
         )
-        _npl_html_parts.append(_label_cliente + _cards_cliente)
-
-        # ─── SEÇÃO 2: POR RECEITA — janela rolante em R$, sem overlay ───────
-        # Métricas alinhadas com metodologia do outro dashboard:
-        #   - 30d: vencidos em [D-30, D]
-        #   - 90d: vencidos em [D-90, D]
-        # Mesmos filtros (atendente, situação, #4, tipo Setup/Mensalidade).
-        _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao, _dia=carimbo_dia_cache()) or {}
-        if _rolling:
-            _label_receita = (
-                '<div style="font-size:11px;color:#6b7280;letter-spacing:1.2px;'
-                'text-transform:uppercase;font-weight:600;margin-top:12px;'
-                'margin-bottom:6px">'
-                'Por receita</div>'
-            )
-            _cards_receita = (
-                '<div style="display:flex;gap:10px;margin-bottom:18px">'
-                + _card(
-                    "Inadimplência mensal",
-                    _rolling["d30_pct"],
-                    _rolling["delta_d30_pp"],
-                    _rolling["d30_aberto"],
-                )
-                + _card(
-                    "Inadimplência trimestral",
-                    _rolling["d90_pct"],
-                    _rolling["delta_d90_pp"],
-                    _rolling["d90_aberto"],
-                )
+        _bloco_receita = ""
+        if _linhas_receita:
+            _bloco_receita = (
+                _divisor_a
+                + f'<div style="{_sublabel_css}">Por receita</div>'
+                + f'<div style="display:flex;flex-direction:column;gap:8px">'
+                + "".join(_linhas_receita)
                 + '</div>'
             )
-            _npl_html_parts.append(_label_receita + _cards_receita)
+
+        _analise_card_html_str = (
+            '<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
+            'border-radius:10px;padding:14px 18px">'
+            + _bloco_cliente
+            + _bloco_receita
+            + '</div>'
+        )
+        _npl_html_parts.append(_analise_card_html_str)
 
     # ═══════════════ ORDEM DE RENDER ═══════════════
     # 1. Bem-vindo (saudação personalizada)
@@ -987,33 +1021,39 @@ def _render_atividades(store, clientes, role):
             ))
 
         if cards_html:
-            # Card na MESMA largura do filtro 'Grupo' abaixo.
-            _col_widths = [1.3, 1.3, 2]
+            # Layout: [operacional | analise da carteira | vazio]
+            # Analise so aparece se _npl_html_parts existir E checkbox marcado
+            # (checkbox lido do session_state — foi renderizado fora do fragment)
+            _mostrar_analise = (
+                bool(_npl_html_parts)
+                and st.session_state.get("_npl_show_check", True)
+            )
+            if _mostrar_analise:
+                _col_widths = [1.3, 1.3, 2]
+            else:
+                _col_widths = [1.3, 2.6]
             ind_cols = st.columns(_col_widths)
-            for i, html in enumerate(cards_html[:2]):
-                with ind_cols[i]:
-                    st.markdown(html, unsafe_allow_html=True)
+            with ind_cols[0]:
+                st.markdown(cards_html[0], unsafe_allow_html=True)
+            if _mostrar_analise:
+                with ind_cols[1]:
+                    st.markdown(_npl_html_parts[0], unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    # 2. Indicadores operacionais (resumo do dia)
-    _indicadores_hoje()
-
-    # 3. NPL Cards (análise macro - Por cliente + Por receita)
+    # Checkbox renderizado ANTES do fragment (fragment le do session_state).
+    # Fica visivel so quando ha analise de carteira disponivel pra togglar.
     if _npl_html_parts:
-        st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
-        # Checkbox pra ocultar a analise inteira sem deixar botao grande.
-        # Marcado por padrao pra atendente ver macro ao abrir a tela.
-        _show_npl = st.checkbox(
+        st.checkbox(
             "Mostrar análise da carteira",
-            value=True,
+            value=st.session_state.get("_npl_show_check", True),
             key="_npl_show_check",
         )
-        if _show_npl:
-            for _h in _npl_html_parts:
-                st.markdown(_h, unsafe_allow_html=True)
 
-        # Espaço antes dos filtros
-        st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
+    # 2. Indicadores operacionais + Analise da carteira (lado a lado no fragment)
+    _indicadores_hoje()
+
+    # Espaço antes dos filtros
+    st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
 
     # ── Filtros (fora do fragment — Streamlit preserva valor por session_state)
     # 'nan' (string) cai aqui quando _grupo veio de pandas com NaN convertido
