@@ -622,13 +622,15 @@ def _render_atividades(store, clientes, role):
 
         # ─── 2 cards separados: ANALISE POR CLIENTE + ANALISE POR RECEITA
         # Renderizados lado a lado do card VISAO GERAL (operacional) —
-        # 3 retangulos alinhados no fragment. Cada um com sub-header no topo.
+        # 3 retangulos alinhados no fragment. Cada um com sub-header no topo,
+        # divisor entre linhas e min-height igual pra bater visualmente.
 
-        # Sub-label discreto que serve de titulo interno de cada card
         _sublabel_css = (
             "font-size:11px;font-weight:700;color:#9ca3af;"
             "text-transform:uppercase;letter-spacing:1.2px;margin-bottom:12px"
         )
+        # Divisor identico ao do card operacional pra separacao visual
+        _divisor_a = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
 
         def _linha_analise(pct: float, palavra: str, delta_pp: float, rs: float | None = None):
             """Linha: percentual grande + delta + label. Rs opcional a direita."""
@@ -653,12 +655,15 @@ def _render_atividades(store, clientes, role):
                 f'</div>'
             )
 
-        # SEÇÃO 1: Por cliente (aging exclusivo, com overlay live)
-        _linhas_cliente = [_linha_analise(_npl["total_pct"], "Inad total", _npl["delta_total"])]
-        _linhas_cliente.append(_linha_analise(_npl["d30_pct"], "Até 30 dias", _npl["delta_d30"]))
+        # SEÇÃO 1: Por cliente (aging exclusivo, com overlay live). Labels
+        # completos "Inadimplencia ..." — sem abreviar (feedback).
+        _linhas_cliente = [
+            _linha_analise(_npl["total_pct"], "Inadimplência total", _npl["delta_total"]),
+            _linha_analise(_npl["d30_pct"],   "Inadimplência até 30 dias", _npl["delta_d30"]),
+        ]
         if _filtro_inativo != "Ativos":
             _linhas_cliente.append(
-                _linha_analise(_npl["d90_pct"], "90 dias ou mais", _npl["delta_d90"])
+                _linha_analise(_npl["d90_pct"], "Inadimplência 90 dias ou mais", _npl["delta_d90"])
             )
 
         # SEÇÃO 2: Por receita (janela rolante em R$, sem overlay)
@@ -666,27 +671,30 @@ def _render_atividades(store, clientes, role):
         _linhas_receita = []
         if _rolling:
             _linhas_receita.append(_linha_analise(
-                _rolling["d30_pct"], "Mensal",
+                _rolling["d30_pct"], "Inadimplência mensal",
                 _rolling.get("delta_d30_pp"),
                 _rolling.get("d30_aberto"),
             ))
             _linhas_receita.append(_linha_analise(
-                _rolling["d90_pct"], "Trimestral",
+                _rolling["d90_pct"], "Inadimplência trimestral",
                 _rolling.get("delta_d90_pp"),
                 _rolling.get("d90_aberto"),
             ))
 
+        # Wrapper com min-height pra igualar altura dos 3 cards (o operacional
+        # tem 4 linhas + 3 divisores; os de analise tem 2-3 linhas + divisores).
+        # min-height calibrado no valor do card operacional (~240px).
         _card_wrapper = (
-            'flex:1;background:#181c26;border:1px solid #2a2f42;'
-            'border-radius:10px;padding:14px 18px;height:100%'
+            'background:#181c26;border:1px solid #2a2f42;'
+            'border-radius:10px;padding:14px 18px;min-height:240px;'
+            'display:flex;flex-direction:column'
         )
 
         _analise_cliente_html = (
             f'<div style="{_card_wrapper}">'
             f'<div style="{_sublabel_css}">Análise da carteira por cliente</div>'
-            f'<div style="display:flex;flex-direction:column;gap:10px">'
-            + "".join(_linhas_cliente)
-            + '</div></div>'
+            + _divisor_a.join(_linhas_cliente)
+            + '</div>'
         )
 
         _analise_receita_html = ""
@@ -694,12 +702,10 @@ def _render_atividades(store, clientes, role):
             _analise_receita_html = (
                 f'<div style="{_card_wrapper}">'
                 f'<div style="{_sublabel_css}">Análise da carteira por receita</div>'
-                f'<div style="display:flex;flex-direction:column;gap:10px">'
-                + "".join(_linhas_receita)
-                + '</div></div>'
+                + _divisor_a.join(_linhas_receita)
+                + '</div>'
             )
 
-        # Guarda ambos pra o fragment usar (list de 2 elementos)
         _npl_html_parts.append(_analise_cliente_html)
         if _analise_receita_html:
             _npl_html_parts.append(_analise_receita_html)
@@ -969,8 +975,9 @@ def _render_atividades(store, clientes, role):
             )
 
             return (
-                f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
-                f'border-radius:10px;padding:14px 18px;height:100%">'
+                f'<div style="background:#181c26;border:1px solid #2a2f42;'
+                f'border-radius:10px;padding:14px 18px;min-height:240px;'
+                f'display:flex;flex-direction:column">'
                 f'{_sub_header}'
                 f'{_linha(_ico_cli, carteira_n, _cli_palavra, "", "")}'
                 f'{_divisor}'
