@@ -1001,8 +1001,16 @@ def _render_atividades(store, clientes, role):
     # 3. NPL Cards (análise macro - Por cliente + Por receita)
     if _npl_html_parts:
         st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
-        for _h in _npl_html_parts:
-            st.markdown(_h, unsafe_allow_html=True)
+        # Checkbox pra ocultar a analise inteira sem deixar botao grande.
+        # Marcado por padrao pra atendente ver macro ao abrir a tela.
+        _show_npl = st.checkbox(
+            "Mostrar análise da carteira",
+            value=True,
+            key="_npl_show_check",
+        )
+        if _show_npl:
+            for _h in _npl_html_parts:
+                st.markdown(_h, unsafe_allow_html=True)
 
         # Espaço antes dos filtros
         st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)

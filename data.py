@@ -541,6 +541,47 @@ _LOTE_MAX_INAT_MSG = 15
 _CLOUDSQL_INSTANCE = "business-intelligence-467516:us-central1:bi-db"
 
 
+def _patch_pg8000_decoders_uma_vez():
+    """pg8000 decoda PARAMETER_STATUS e nomes de coluna com errors='strict'
+    (linhas 662 e 862 do pg8000.core). Se o server enviar um valor com byte
+    nao-UTF8 esporadico (ex: application_name mudado por outro cliente pra
+    algo com caractere latin-1, ou TimeZone com nome exotico), o handler
+    quebra e a query inteira falha com UnicodeDecodeError na posicao ~24.
+
+    Ja tinha retry (3 tentativas com backoff), mas erro pode persistir se
+    a mensagem vier na conexao nova. Aqui aplicamos monkey-patch pra
+    decodar com errors='replace' — a metadata bugada vira '?' em vez de
+    quebrar toda a query. Idempotente (nao repatch se ja patchado).
+    """
+    try:
+        import pg8000.core as _pgcore
+        if getattr(_pgcore, "_ANTHROPIC_PATCHED", False):
+            return
+        NULL_BYTE = _pgcore.NULL_BYTE
+
+        def _handle_param_safe(self, data, context):
+            pos = data.find(NULL_BYTE)
+            key = data[:pos].decode("ascii", errors="replace")
+            value = data[pos + 1 : -1].decode(self._client_encoding, errors="replace")
+            self.parameter_statuses[key] = value
+            if key == "client_encoding":
+                encoding = value.lower()
+                self._client_encoding = _pgcore.PG_PY_ENCODINGS.get(encoding, encoding)
+            elif key == "integer_datetimes":
+                # Comportamento original: define flag mas nao usa aqui
+                pass
+
+        _pgcore.CoreConnection.handle_PARAMETER_STATUS = _handle_param_safe
+        _pgcore._ANTHROPIC_PATCHED = True
+    except Exception:
+        # Se o patch nao aplicar (versao diferente de pg8000, etc), segue.
+        # A logica antiga com retry ainda funciona pra maioria dos casos.
+        pass
+
+
+_patch_pg8000_decoders_uma_vez()
+
+
 @st.cache_resource
 def _get_cloudsql_connector():
     """Connector do Cloud SQL — cacheado como resource (1 instancia por app).
