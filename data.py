@@ -1494,6 +1494,81 @@ def fetch_npl_metrics(atendente: str = None, situacao: str = "todos", _dia: str 
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
+def fetch_inadimplentes_snapshot_ref30d(atendente: str = None, situacao: str = "todos", _dia: str | None = None) -> int:
+    """Conta clientes inadimplentes 30 dias atras usando a tabela
+    cobrancas_snapshot_diario (populada pelo cron 08:30 BRT via
+    salvar_snapshot_inadimplentes_hoje).
+
+    Base IGUAL ao card operacional "X INADIMPLENTES" — o snapshot foi
+    gerado do proprio store["clientes"], que ja filtra por valor > 0
+    (so quem tem divida vencida). Delta = hoje - ref bate exato com o
+    numero mostrado no card.
+
+    Snapshot pode nao existir em D-30 exato (feriado, falha do cron):
+    fallback pega o snapshot mais recente ate D-30 (janela de 7 dias).
+
+    Filtro atendente e' anacronico (usa splgc-grupo ATUAL). Se cliente
+    mudou de grupo em 30 dias, filtra como se sempre tivesse sido do
+    grupo atual — edge case raro.
+    """
+    client = get_bq_client()
+    if not client:
+        return 0
+
+    today_str = hoje_brt()
+    today_dt = date.fromisoformat(today_str)
+    ref_str = (today_dt - timedelta(days=30)).isoformat()
+
+    # Filtro atendente via JOIN com splgc-grupo (grupo atual)
+    if atendente == "__SEM_ESPECIALISTA__":
+        atend_cond = """
+        AND s.id_sacado_sac NOT IN (
+          SELECT DISTINCT CAST(id_sacado_sac AS STRING)
+          FROM `business-intelligence-467516.Splgc.splgc-grupo`
+          WHERE grupo IS NOT NULL
+        )"""
+    elif atendente:
+        ate_safe = atendente.replace("'", "''")
+        atend_cond = f"""
+        AND s.id_sacado_sac IN (
+          SELECT DISTINCT CAST(id_sacado_sac AS STRING)
+          FROM `business-intelligence-467516.Splgc.splgc-grupo`
+          WHERE grupo = '{ate_safe}'
+        )"""
+    else:
+        atend_cond = ""
+
+    # Filtro situacao usa a coluna 'inativo' gravada no proprio snapshot
+    if situacao == "ativos":
+        sit_cond = "AND s.inativo = FALSE"
+    elif situacao == "inativos":
+        sit_cond = "AND s.inativo = TRUE"
+    else:
+        sit_cond = ""
+
+    query = f"""
+    WITH ref_date AS (
+      SELECT MAX(data_snapshot) AS dt
+      FROM `{_SNAPSHOT_TABLE}`
+      WHERE data_snapshot <= DATE('{ref_str}')
+        AND data_snapshot >= DATE_SUB(DATE('{ref_str}'), INTERVAL 7 DAY)
+    )
+    SELECT COUNT(DISTINCT s.id_sacado_sac) AS n
+    FROM `{_SNAPSHOT_TABLE}` s, ref_date r
+    WHERE s.data_snapshot = r.dt
+      {atend_cond}
+      {sit_cond}
+    """
+    try:
+        df = client.query(query).to_dataframe()
+        if df.empty or df.iloc[0]["n"] is None:
+            return 0
+        return int(df.iloc[0]["n"])
+    except Exception:
+        return 0
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
 def fetch_carteira_count(atendente: str = None, situacao: str = "todos", _dia: str | None = None) -> int:
     """Total de clientes da carteira SEM filtro de tipo (1.2.1/1.2.2).
 

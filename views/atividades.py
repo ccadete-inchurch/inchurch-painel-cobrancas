@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link, carimbo_dia_cache
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, fetch_carteira_count, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, fetch_carteira_count, fetch_inadimplentes_snapshot_ref30d, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -880,25 +880,45 @@ def _render_atividades(store, clientes, role):
             '<path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>'
         )
 
+        # Delta MoM na linha INADIMPLENTES: qtd hoje vs 30 dias atras vinda
+        # da tabela cobrancas_snapshot_diario (mesma base do card, populada
+        # pelo cron 08:30 BRT do proprio store). Verde ▼ = diminuiu (bom);
+        # vermelho ▲ = aumentou (ruim); cinza — = neutro.
+        def _delta_qty_html(delta: int) -> str:
+            if delta == 0:
+                return (
+                    '<span style="margin-left:auto;color:#9ca3af;font-size:13px;'
+                    'font-weight:600;white-space:nowrap">— 0</span>'
+                )
+            arrow, color = ("▼", "#22c55e") if delta < 0 else ("▲", "#fb7185")
+            return (
+                f'<span style="margin-left:auto;color:{color};font-size:14px;'
+                f'font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums">'
+                f'{arrow} {abs(delta)}</span>'
+            )
+
         # Card vertical empilhado: Clientes (carteira, 1ª linha) + Inadimplentes +
         # Reg + Parc. Linha CLIENTES dá contexto de scope pra atendente saber
         # quantos clientes tem na carteira filtrada (respeitando Situação).
-        def _card_html(label_topo, sublabel, carteira_n, inad_n, reg_n, reg_v, parc_n, parc_v):
+        def _card_html(label_topo, sublabel, carteira_n, inad_n, reg_n, reg_v, parc_n, parc_v, inad_delta=None):
             _inad_palavra = _palavra(inad_n, "inadimplente", "inadimplentes").upper()
             _reg_palavra = _palavra(reg_n, "regularização", "regularizações").upper()
             _parc_palavra = _palavra(parc_n, "parcial", "parciais").upper()
             _reg_v_fmt = fmt_moeda_plain(reg_v)
             _parc_v_fmt = fmt_moeda_plain(parc_v)
 
-            def _linha(ico, count, palavra, valor_fmt, cor_valor):
+            def _linha(ico, count, palavra, valor_fmt, cor_valor, extra_direita=""):
                 # white-space:nowrap: sem quebra entre 'R$' e '9.275,75' quando
                 # o container ficar estreito. Antes o valor quebrava em 2 linhas
                 # nos cards do lote (screenshot do 30/06).
-                _direita = (
-                    f'<span style="margin-left:auto;font-size:20px;font-weight:800;'
-                    f'color:{cor_valor};font-variant-numeric:tabular-nums;'
-                    f'white-space:nowrap">{valor_fmt}</span>'
-                ) if valor_fmt else ""
+                if valor_fmt:
+                    _direita = (
+                        f'<span style="margin-left:auto;font-size:20px;font-weight:800;'
+                        f'color:{cor_valor};font-variant-numeric:tabular-nums;'
+                        f'white-space:nowrap">{valor_fmt}</span>'
+                    )
+                else:
+                    _direita = extra_direita
                 return (
                     f'<div style="display:flex;align-items:center;gap:8px">'
                     f'{ico}'
@@ -912,13 +932,14 @@ def _render_atividades(store, clientes, role):
 
             _divisor = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
             _cli_palavra = _palavra(carteira_n, "cliente", "clientes").upper()
+            _inad_extra = _delta_qty_html(inad_delta) if inad_delta is not None else ""
 
             return (
                 f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
                 f'border-radius:10px;padding:14px 18px">'
                 f'{_linha(_ico_cli, carteira_n, _cli_palavra, "", "")}'
                 f'{_divisor}'
-                f'{_linha(_ico_inad, inad_n, _inad_palavra, "", "")}'
+                f'{_linha(_ico_inad, inad_n, _inad_palavra, "", "", _inad_extra)}'
                 f'{_divisor}'
                 f'{_linha(_ico_reg, reg_n, _reg_palavra, _reg_v_fmt, "#7cc243")}'
                 f'{_divisor}'
@@ -926,19 +947,43 @@ def _render_atividades(store, clientes, role):
                 f'</div>'
             )
 
+        # Delta MoM: qtd atual - qtd 30 dias atras (snapshot BQ). Base
+        # metodologica IGUAL ao numero mostrado no card — snapshot foi
+        # gerado a partir do proprio store["clientes"]. Cada card usa seus
+        # proprios filtros pra manter consistencia.
+        _lote_ref_n = None
+        if _mostrar_lote:
+            _fs_ref = st.session_state.get("atv_filtro_inativo", "Todos").lower()
+            _ate_ref = locals().get("_atendente_nome") or _atendente_sel
+            _lote_ref_n = fetch_inadimplentes_snapshot_ref30d(
+                _ate_ref, _fs_ref, _dia=carimbo_dia_cache()
+            )
+
+        _total_ref_n = None
+        if _mostrar_total:
+            _fs_ref = st.session_state.get("atv_filtro_inativo", "Todos").lower()
+            _ctx_ref = locals().get("_ctx_atend")
+            _total_ref_n = fetch_inadimplentes_snapshot_ref30d(
+                _ctx_ref, _fs_ref, _dia=carimbo_dia_cache()
+            )
+
         # Monta linha horizontal — 1 card por contexto (lote ou total).
         cards_html = []
         if _mostrar_lote:
+            _dlt_lote = (lote_inad_n - _lote_ref_n) if _lote_ref_n else None
             cards_html.append(_card_html(
                 "No Lote", "",
                 lote_carteira_n_safe,
                 lote_inad_n, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v,
+                inad_delta=_dlt_lote,
             ))
         if _mostrar_total:
+            _dlt_total = (total_inad_n - _total_ref_n) if _total_ref_n else None
             cards_html.append(_card_html(
                 "No Total", total_label,
                 total_carteira_n,
                 total_inad_n, total_reg_n, total_reg_v, total_parc_n, total_parc_v,
+                inad_delta=_dlt_total,
             ))
 
         if cards_html:
