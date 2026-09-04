@@ -655,18 +655,12 @@ def _render_atividades(store, clientes, role):
                 f'</div>'
             )
 
-        # SEÇÃO 1: Por cliente (aging exclusivo, com overlay live). Labels
-        # completos "Inadimplencia ..." — sem abreviar (feedback).
-        _linhas_cliente = [
-            _linha_analise(_npl["total_pct"], "Inadimplência total", _npl["delta_total"]),
-            _linha_analise(_npl["d30_pct"],   "Inadimplência até 30 dias", _npl["delta_d30"]),
-        ]
-        if _filtro_inativo != "Ativos":
-            _linhas_cliente.append(
-                _linha_analise(_npl["d90_pct"], "Inadimplência 90 dias ou mais", _npl["delta_d90"])
-            )
+        # Card "Por cliente" foi removido — dado redundante com o card
+        # Visao Geral (# inadimplentes absoluto + delta MoM ja transmite a
+        # informacao operacional; % da carteira nao acrescenta pra o dia-a-dia).
+        # Se quiser aging (30d vs 90d+) de volta, ver commit anterior 136117a.
 
-        # SEÇÃO 2: Por receita (janela rolante em R$, sem overlay)
+        # Por receita (janela rolante em R$, sem overlay)
         _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao, _dia=carimbo_dia_cache()) or {}
         _linhas_receita = []
         if _rolling:
@@ -681,23 +675,13 @@ def _render_atividades(store, clientes, role):
                 _rolling.get("d90_aberto"),
             ))
 
-        # Wrapper com min-height pra igualar altura dos 3 cards (o operacional
-        # tem 4 linhas + 3 divisores; os de analise tem 2-3 linhas + divisores).
-        # min-height calibrado no valor do card operacional (~240px).
+        # Wrapper com min-height pra igualar altura com o card Visao Geral.
         _card_wrapper = (
             'background:#181c26;border:1px solid #2a2f42;'
             'border-radius:10px;padding:14px 18px;min-height:240px;'
             'display:flex;flex-direction:column'
         )
 
-        _analise_cliente_html = (
-            f'<div style="{_card_wrapper}">'
-            f'<div style="{_sublabel_css}">Análise da carteira por cliente</div>'
-            + _divisor_a.join(_linhas_cliente)
-            + '</div>'
-        )
-
-        _analise_receita_html = ""
         if _linhas_receita:
             _analise_receita_html = (
                 f'<div style="{_card_wrapper}">'
@@ -705,9 +689,6 @@ def _render_atividades(store, clientes, role):
                 + _divisor_a.join(_linhas_receita)
                 + '</div>'
             )
-
-        _npl_html_parts.append(_analise_cliente_html)
-        if _analise_receita_html:
             _npl_html_parts.append(_analise_receita_html)
 
     # ═══════════════ ORDEM DE RENDER ═══════════════
@@ -1029,16 +1010,13 @@ def _render_atividades(store, clientes, role):
             ))
 
         if cards_html:
-            # Layout: [Visao geral | Analise Por cliente | Analise Por receita]
-            # Cada card ocupa 1/3 da largura, alinhados. Se nao houver dados
-            # de analise (fetch NPL falhou), so mostra Visao geral em largura
-            # maior.
-            _cards_analise = _npl_html_parts[:2] if _npl_html_parts else []
+            # Layout: [Visao geral | Analise Por receita]
+            # 2 cards de 50% cada. Se nao houver analise (fetch NPL falhou),
+            # so mostra Visao geral em largura maior.
+            _cards_analise = _npl_html_parts[:1] if _npl_html_parts else []
             _n_cards = 1 + len(_cards_analise)
-            if _n_cards == 3:
-                _col_widths = [1, 1, 1]
-            elif _n_cards == 2:
-                _col_widths = [1, 1, 1]  # 3a coluna vazia
+            if _n_cards == 2:
+                _col_widths = [1, 1]
             else:
                 _col_widths = [1, 2]
             ind_cols = st.columns(_col_widths)
