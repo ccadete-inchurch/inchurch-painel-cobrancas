@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link, carimbo_dia_cache
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, fetch_carteira_count, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, fetch_carteira_count, fetch_inadimplentes_ref30d, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -949,29 +949,44 @@ def _render_atividades(store, clientes, role):
                 f'</div>'
             )
 
-        # Delta MoM: hoje - 30 dias atras (negativo = melhorou). Vem do fetch
-        # NPL macro que ja foi carregado acima com os mesmos filtros de
-        # atendente/situacao. Se _npl vazio (fetch falhou), passa None e
-        # a setinha nao aparece.
-        _inad_delta_mom = None
-        if _npl and "total_n" in _npl and "r_total_n" in _npl:
-            _inad_delta_mom = int(_npl["total_n"]) - int(_npl["r_total_n"])
+        # Delta MoM em quantidade absoluta: hoje - 30 dias atras.
+        # Base metodologica IGUAL a do numero mostrado ("X INADIMPLENTES"):
+        # todas as cobrancas, sem filtro de tipo, sem exclusao de onboarding.
+        # Assim o delta bate exato — se card mostra 130 e delta ▼ 33, ha 30
+        # dias eram 163. Sem confusao entre bases diferentes (o comportamento
+        # antigo usava _npl que exclui onboarding, gerando -33 mesmo quando
+        # o card mostrava aumento).
+        # Cada contexto (lote/total) usa seus proprios filtros de atendente
+        # + situacao, batendo com o numero absoluto do respectivo card.
+        _lote_ref_n = None
+        if _mostrar_lote:
+            _fs_ref = st.session_state.get("atv_filtro_inativo", "Todos").lower()
+            _ate_ref = locals().get("_atendente_nome") or _atendente_sel
+            _lote_ref_n = fetch_inadimplentes_ref30d(_ate_ref, _fs_ref, _dia=carimbo_dia_cache())
+
+        _total_ref_n = None
+        if _mostrar_total:
+            _fs_ref = st.session_state.get("atv_filtro_inativo", "Todos").lower()
+            _ctx_ref = locals().get("_ctx_atend")
+            _total_ref_n = fetch_inadimplentes_ref30d(_ctx_ref, _fs_ref, _dia=carimbo_dia_cache())
 
         # Monta linha horizontal — 1 card por contexto (lote ou total).
         cards_html = []
         if _mostrar_lote:
+            _dlt_lote = (lote_inad_n - _lote_ref_n) if _lote_ref_n is not None else None
             cards_html.append(_card_html(
                 "No Lote", "",
                 lote_carteira_n_safe,
                 lote_inad_n, lote_reg_n, lote_reg_v, lote_parc_n, lote_parc_v,
-                inad_delta=_inad_delta_mom,
+                inad_delta=_dlt_lote,
             ))
         if _mostrar_total:
+            _dlt_total = (total_inad_n - _total_ref_n) if _total_ref_n is not None else None
             cards_html.append(_card_html(
                 "No Total", total_label,
                 total_carteira_n,
                 total_inad_n, total_reg_n, total_reg_v, total_parc_n, total_parc_v,
-                inad_delta=_inad_delta_mom,
+                inad_delta=_dlt_total,
             ))
 
         if cards_html:
