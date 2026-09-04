@@ -589,11 +589,11 @@ def _render_atividades(store, clientes, role):
         }
         def _delta_html(v: float) -> str:
             if abs(v) < 0.005:
-                return '<span style="color:#9ca3af;font-size:14px">— 0,00 p.p.</span>'
+                return '<span style="color:#9ca3af;font-size:11px">— 0,00 p.p.</span>'
             arrow, color = ("▼", "#22c55e") if v < 0 else ("▲", "#fb7185")
             val = f"{abs(v):.2f}".replace(".", ",")
             return (
-                f'<span style="color:{color};font-size:14px;font-weight:600">'
+                f'<span style="color:{color};font-size:11px;font-weight:600">'
                 f'{arrow} {val} p.p.</span>'
             )
 
@@ -605,17 +605,17 @@ def _render_atividades(store, clientes, role):
             pct_str = f"{pct:.2f}".replace(".", ",")
             return (
                 '<div style="flex:1;background:#181c26;'
-                'border:1px solid #2a2f42;border-radius:10px;'
-                'padding:16px 18px;min-width:0">'
-                f'<div style="font-size:12px;font-weight:700;color:#9ca3af;'
-                f'text-transform:uppercase;letter-spacing:1.4px;margin-bottom:8px">'
+                'border:1px solid #2a2f42;border-radius:8px;'
+                'padding:10px 12px;min-width:0">'
+                f'<div style="font-size:10px;font-weight:700;color:#9ca3af;'
+                f'text-transform:uppercase;letter-spacing:1.2px;margin-bottom:4px">'
                 f'{label}</div>'
-                f'<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px">'
-                f'<span style="font-size:28px;font-weight:800;color:#e8eaf0;'
-                f'letter-spacing:-0.8px;line-height:1">{pct_str}%</span>'
+                f'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:2px">'
+                f'<span style="font-size:20px;font-weight:800;color:#e8eaf0;'
+                f'letter-spacing:-0.5px;line-height:1">{pct_str}%</span>'
                 f'{_delta_html(delta)}'
                 f'</div>'
-                f'<div style="font-size:12px;color:#6b7280">'
+                f'<div style="font-size:11px;color:#6b7280">'
                 f'R$ {_fmt_rs(rs)} em aberto</div>'
                 '</div>'
             )
@@ -623,15 +623,24 @@ def _render_atividades(store, clientes, role):
         # ─── SEÇÃO 1: POR CLIENTE — aging exclusivo, com overlay live ───────
         # Label minimalista — apenas texto cinza fraco, sem decoração
         _label_cliente = (
-            '<div style="font-size:13px;color:#6b7280;letter-spacing:1.4px;'
-            'text-transform:uppercase;font-weight:600;margin-bottom:10px">'
+            '<div style="font-size:11px;color:#6b7280;letter-spacing:1.2px;'
+            'text-transform:uppercase;font-weight:600;margin-bottom:6px">'
             'Por cliente</div>'
         )
+        # Card "90 dias ou mais" nao faz sentido no recorte Ativos: 90+ dias
+        # ja e' churn financeiro (igreja considerada perdida), entao o valor
+        # apareceria como 0% e polui a linha visual.
+        _cards_html = (
+            _card("Inadimplência total",       _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
+            + _card("Inadimplência até 30 dias", _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
+        )
+        if _filtro_inativo != "Ativos":
+            _cards_html += _card(
+                "Inadimplência 90 dias ou mais", _npl["d90_pct"], _npl["delta_d90"], _npl["d90_r"]
+            )
         _cards_cliente = (
-            '<div style="display:flex;gap:14px;margin-bottom:6px">'
-            + _card("Inadimplência total",            _npl["total_pct"], _npl["delta_total"], _npl["total_r"])
-            + _card("Inadimplência até 30 dias",      _npl["d30_pct"],   _npl["delta_d30"],   _npl["d30_r"])
-            + _card("Inadimplência 90 dias ou mais",  _npl["d90_pct"],   _npl["delta_d90"],   _npl["d90_r"])
+            '<div style="display:flex;gap:10px;margin-bottom:4px">'
+            + _cards_html
             + '</div>'
         )
         _npl_html_parts.append(_label_cliente + _cards_cliente)
@@ -644,13 +653,13 @@ def _render_atividades(store, clientes, role):
         _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao, _dia=carimbo_dia_cache()) or {}
         if _rolling:
             _label_receita = (
-                '<div style="font-size:13px;color:#6b7280;letter-spacing:1.4px;'
-                'text-transform:uppercase;font-weight:600;margin-top:20px;'
-                'margin-bottom:10px">'
+                '<div style="font-size:11px;color:#6b7280;letter-spacing:1.2px;'
+                'text-transform:uppercase;font-weight:600;margin-top:12px;'
+                'margin-bottom:6px">'
                 'Por receita</div>'
             )
             _cards_receita = (
-                '<div style="display:flex;gap:14px;margin-bottom:28px">'
+                '<div style="display:flex;gap:10px;margin-bottom:18px">'
                 + _card(
                     "Inadimplência mensal",
                     _rolling["d30_pct"],
@@ -945,98 +954,10 @@ def _render_atividades(store, clientes, role):
     _indicadores_hoje()
 
     # 3. NPL Cards (análise macro - Por cliente + Por receita)
-    # Setinha minimalista pra ocultar quando o usuario quer focar no kanban
     if _npl_html_parts:
-        if "_show_npl_cards" not in st.session_state:
-            st.session_state["_show_npl_cards"] = True
-        _show_npl = st.session_state["_show_npl_cards"]
-
-        # Botao V estilizado: usa o chevron "▾" do selectbox e a textura
-        # dos cards (background + borda iguais). Mantem o V no canto
-        # como toggle, so ajusta a aparencia visual.
-        st.markdown('''
-        <style>
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            div[data-testid="stColumn"] {
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-        }
-        /* Botao do V - aparencia de selectbox/card: bg escuro + borda */
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"],
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"]:focus,
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"]:active,
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"]:focus-visible {
-            background: #181c26 !important;
-            border: 1px solid #2a2f42 !important;
-            border-radius: 8px !important;
-            outline: none !important;
-            box-shadow: none !important;
-            color: #a3a8b8 !important;
-            font-family: "Source Sans Pro", -apple-system, sans-serif !important;
-            font-size: 16px !important;
-            font-weight: 400 !important;
-            line-height: 1 !important;
-            padding: 6px 14px !important;
-            min-height: 38px !important;
-            transition: border-color 0.15s ease, color 0.15s ease;
-        }
-        div[data-testid="stHorizontalBlock"]:has(button[key="_npl_toggle_btn"])
-            button[data-testid="stBaseButton-secondary"]:hover {
-            background: #181c26 !important;
-            border-color: #7cc243 !important;
-            color: #fafafa !important;
-        }
-        </style>
-        ''', unsafe_allow_html=True)
-
-        st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-
-        # Layout: botão V à ESQUERDA + texto IMPERATIVO colado ao lado
-        # ("Clique aqui para ver/ocultar..."). Convida ação clara.
-        _btn_col, _txt_col, _spacer = st.columns(
-            [1, 14, 6], vertical_alignment="center"
-        )
-        with _btn_col:
-            # V estilizado do selectbox que muda com o estado (feedback visual):
-            #   ▾ (apontando pra baixo) quando expandido = "conteudo embaixo"
-            #   ▸ (apontando pra direita) quando colapsado = "clique pra expandir"
-            # Padrao classico de accordion (Notion, Linear, Stripe).
-            _arrow = "▾" if _show_npl else "▸"
-            if st.button(_arrow, key="_npl_toggle_btn",
-                         help="Ocultar análise" if _show_npl else "Mostrar análise"):
-                st.session_state["_show_npl_cards"] = not _show_npl
-                st.rerun()
-        with _txt_col:
-            _label_txt = (
-                "Clique aqui para ocultar análise da carteira"
-                if _show_npl else
-                "Clique aqui para ver análise da carteira"
-            )
-            # Mesmo estilo das labels de filtro (GRUPO, SITUAÇÃO, BUSCAR):
-            # uppercase, pequeno, letter-spacing, peso 600 e cor cinza
-            # mais discreta (#6b7280) — bate com o tom das labels Streamlit.
-            st.markdown(
-                f'<div style="font-family:-apple-system,BlinkMacSystemFont,'
-                f'\'Segoe UI\',Roboto,sans-serif;font-size:14px;'
-                f'font-weight:600;color:#6b7280;letter-spacing:1.5px;'
-                f'text-transform:uppercase">'
-                f'{_label_txt}</div>',
-                unsafe_allow_html=True,
-            )
-
-        # Sem linha divisória — só respiro mínimo até os cards
-        st.markdown(
-            '<div style="height:14px"></div>',
-            unsafe_allow_html=True,
-        )
-
-        if _show_npl:
-            for _h in _npl_html_parts:
-                st.markdown(_h, unsafe_allow_html=True)
+        st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
+        for _h in _npl_html_parts:
+            st.markdown(_h, unsafe_allow_html=True)
 
         # Espaço antes dos filtros
         st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
