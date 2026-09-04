@@ -675,11 +675,14 @@ def _render_atividades(store, clientes, role):
                 _rolling.get("d90_aberto"),
             ))
 
-        # Wrapper com min-height pra igualar altura com o card Visao Geral.
+        # Wrapper SEM min-height — deixa altura natural. Card com 2 linhas
+        # + 1 divisor + sub-header alinha visualmente perto do 2o separador
+        # do card Visao Geral (feedback do user: nao precisa ter mesma
+        # altura que o operacional).
         _card_wrapper = (
             'background:#181c26;border:1px solid #2a2f42;'
-            'border-radius:10px;padding:14px 18px;min-height:240px;'
-            'display:flex;flex-direction:column'
+            'border-radius:10px;padding:14px 18px;'
+            'display:flex;flex-direction:column;align-self:flex-start'
         )
 
         if _linhas_receita:
