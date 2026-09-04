@@ -620,24 +620,20 @@ def _render_atividades(store, clientes, role):
                 '</div>'
             )
 
-        # ─── Card ANALISE DA CARTEIRA — vertical, mesmo formato do operacional
-        # Layout: percentual grande + palavra + delta ao lado (formato igual
-        # `_card_html` da linha inadimplentes). Renderizado lado a lado com
-        # o card operacional (2 colunas de igual largura) — ver render abaixo.
+        # ─── 2 cards separados: ANALISE POR CLIENTE + ANALISE POR RECEITA
+        # Renderizados lado a lado do card VISAO GERAL (operacional) —
+        # 3 retangulos alinhados no fragment. Cada um com sub-header no topo.
 
-        # Sub-label discreto (POR CLIENTE / POR RECEITA)
+        # Sub-label discreto que serve de titulo interno de cada card
         _sublabel_css = (
-            "font-size:10px;font-weight:700;color:#6b7280;"
-            "text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px"
+            "font-size:11px;font-weight:700;color:#9ca3af;"
+            "text-transform:uppercase;letter-spacing:1.2px;margin-bottom:12px"
         )
 
         def _linha_analise(pct: float, palavra: str, delta_pp: float, rs: float | None = None):
-            """Linha do card analise: percentual grande + delta + label a direita.
-            Formato igual `_linha` do card operacional pra bater visualmente.
-            """
+            """Linha: percentual grande + delta + label. Rs opcional a direita."""
             pct_str = f"{pct:.2f}".replace(".", ",")
             _delta = _delta_html(delta_pp) if delta_pp is not None else ""
-            # Valor R$ (opcional, so pras metricas Por receita) — a direita
             _direita = ""
             if rs is not None:
                 _rs_fmt = _fmt_rs(rs)
@@ -657,13 +653,9 @@ def _render_atividades(store, clientes, role):
                 f'</div>'
             )
 
-        _divisor_a = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
-
         # SEÇÃO 1: Por cliente (aging exclusivo, com overlay live)
         _linhas_cliente = [_linha_analise(_npl["total_pct"], "Inad total", _npl["delta_total"])]
         _linhas_cliente.append(_linha_analise(_npl["d30_pct"], "Até 30 dias", _npl["delta_d30"]))
-        # Card 90d+ nao faz sentido no recorte Ativos: 90+ dias ja e churn
-        # financeiro, valor apareceria como 0% e polui a linha visual.
         if _filtro_inativo != "Ativos":
             _linhas_cliente.append(
                 _linha_analise(_npl["d90_pct"], "90 dias ou mais", _npl["delta_d90"])
@@ -684,31 +676,33 @@ def _render_atividades(store, clientes, role):
                 _rolling.get("d90_aberto"),
             ))
 
-        # Monta card unico vertical (mesmo container do card operacional)
-        _bloco_cliente = (
-            f'<div style="{_sublabel_css}">Por cliente</div>'
-            + f'<div style="display:flex;flex-direction:column;gap:8px">'
-            + "".join(_linhas_cliente)
-            + '</div>'
+        _card_wrapper = (
+            'flex:1;background:#181c26;border:1px solid #2a2f42;'
+            'border-radius:10px;padding:14px 18px;height:100%'
         )
-        _bloco_receita = ""
+
+        _analise_cliente_html = (
+            f'<div style="{_card_wrapper}">'
+            f'<div style="{_sublabel_css}">Análise da carteira por cliente</div>'
+            f'<div style="display:flex;flex-direction:column;gap:10px">'
+            + "".join(_linhas_cliente)
+            + '</div></div>'
+        )
+
+        _analise_receita_html = ""
         if _linhas_receita:
-            _bloco_receita = (
-                _divisor_a
-                + f'<div style="{_sublabel_css}">Por receita</div>'
-                + f'<div style="display:flex;flex-direction:column;gap:8px">'
+            _analise_receita_html = (
+                f'<div style="{_card_wrapper}">'
+                f'<div style="{_sublabel_css}">Análise da carteira por receita</div>'
+                f'<div style="display:flex;flex-direction:column;gap:10px">'
                 + "".join(_linhas_receita)
-                + '</div>'
+                + '</div></div>'
             )
 
-        _analise_card_html_str = (
-            '<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
-            'border-radius:10px;padding:14px 18px">'
-            + _bloco_cliente
-            + _bloco_receita
-            + '</div>'
-        )
-        _npl_html_parts.append(_analise_card_html_str)
+        # Guarda ambos pra o fragment usar (list de 2 elementos)
+        _npl_html_parts.append(_analise_cliente_html)
+        if _analise_receita_html:
+            _npl_html_parts.append(_analise_receita_html)
 
     # ═══════════════ ORDEM DE RENDER ═══════════════
     # 1. Bem-vindo (saudação personalizada)
@@ -967,10 +961,17 @@ def _render_atividades(store, clientes, role):
             _divisor = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
             _cli_palavra = _palavra(carteira_n, "cliente", "clientes").upper()
             _inad_extra = _delta_qty_html(inad_delta) if inad_delta is not None else ""
+            # Sub-header no topo do card (bate com os cards de analise ao lado)
+            _sub_header = (
+                '<div style="font-size:11px;font-weight:700;color:#9ca3af;'
+                'text-transform:uppercase;letter-spacing:1.2px;margin-bottom:12px">'
+                'Visão geral</div>'
+            )
 
             return (
                 f'<div style="flex:1;background:#181c26;border:1px solid #2a2f42;'
-                f'border-radius:10px;padding:14px 18px">'
+                f'border-radius:10px;padding:14px 18px;height:100%">'
+                f'{_sub_header}'
                 f'{_linha(_ico_cli, carteira_n, _cli_palavra, "", "")}'
                 f'{_divisor}'
                 f'{_linha(_ico_inad, inad_n, _inad_palavra, "", "", _inad_extra)}'
@@ -1021,35 +1022,27 @@ def _render_atividades(store, clientes, role):
             ))
 
         if cards_html:
-            # Layout: [operacional | analise da carteira | vazio]
-            # Analise so aparece se _npl_html_parts existir E checkbox marcado
-            # (checkbox lido do session_state — foi renderizado fora do fragment)
-            _mostrar_analise = (
-                bool(_npl_html_parts)
-                and st.session_state.get("_npl_show_check", True)
-            )
-            if _mostrar_analise:
-                _col_widths = [1.3, 1.3, 2]
+            # Layout: [Visao geral | Analise Por cliente | Analise Por receita]
+            # Cada card ocupa 1/3 da largura, alinhados. Se nao houver dados
+            # de analise (fetch NPL falhou), so mostra Visao geral em largura
+            # maior.
+            _cards_analise = _npl_html_parts[:2] if _npl_html_parts else []
+            _n_cards = 1 + len(_cards_analise)
+            if _n_cards == 3:
+                _col_widths = [1, 1, 1]
+            elif _n_cards == 2:
+                _col_widths = [1, 1, 1]  # 3a coluna vazia
             else:
-                _col_widths = [1.3, 2.6]
+                _col_widths = [1, 2]
             ind_cols = st.columns(_col_widths)
             with ind_cols[0]:
                 st.markdown(cards_html[0], unsafe_allow_html=True)
-            if _mostrar_analise:
-                with ind_cols[1]:
-                    st.markdown(_npl_html_parts[0], unsafe_allow_html=True)
+            for i, _h in enumerate(_cards_analise, start=1):
+                with ind_cols[i]:
+                    st.markdown(_h, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    # Checkbox renderizado ANTES do fragment (fragment le do session_state).
-    # Fica visivel so quando ha analise de carteira disponivel pra togglar.
-    if _npl_html_parts:
-        st.checkbox(
-            "Mostrar análise da carteira",
-            value=st.session_state.get("_npl_show_check", True),
-            key="_npl_show_check",
-        )
-
-    # 2. Indicadores operacionais + Analise da carteira (lado a lado no fragment)
+    # 2. Indicadores + Analise da carteira (3 cards lado a lado no fragment)
     _indicadores_hoje()
 
     # Espaço antes dos filtros
