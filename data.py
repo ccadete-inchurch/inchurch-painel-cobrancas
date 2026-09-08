@@ -1040,6 +1040,7 @@ def diagnosticar_bq_saude(_dia: str | None = None) -> dict:
                     WHERE (script LIKE %s OR script LIKE %s)
                       AND script NOT LIKE %s
                       AND dt_update <> CURRENT_DATE
+                      AND dt_update >= (CURRENT_DATE - 30)
                 ),
                 scripts_hoje AS (
                     SELECT DISTINCT script FROM public.splgc_validacoes
@@ -1069,8 +1070,11 @@ def diagnosticar_bq_saude(_dia: str | None = None) -> dict:
             cur.execute(
                 """
                 WITH todos_scripts AS (
+                    -- Janela de 30d: pipelines descontinuados saem naturalmente do
+                    -- baseline apos 30 dias sem rodar (evita 'sempre faltando' pra sempre)
                     SELECT DISTINCT script FROM public.splgc_validacoes
                     WHERE (script LIKE %s OR script LIKE %s) AND script NOT LIKE %s
+                      AND dt_update >= (CURRENT_DATE - 30)
                 ),
                 por_dia AS (
                     SELECT DATE(dt_update) AS dia, COUNT(DISTINCT script) AS n_ok
