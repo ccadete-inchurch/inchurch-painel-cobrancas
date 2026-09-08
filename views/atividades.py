@@ -949,7 +949,10 @@ def _render_atividades(store, clientes, role):
                 )
 
             _divisor = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
-            _cli_palavra = _palavra(carteira_n, "cliente", "clientes").upper()
+            # 'CARTEIRA' em vez de 'CLIENTES' pra diferenciar do card
+            # INADIMPLENTES logo abaixo (fetch_carteira_count conta TODOS os
+            # clientes do escopo, nao so os inadimplentes — evita confusao).
+            _cli_palavra = "CARTEIRA"
             _inad_extra = _delta_qty_html(inad_delta) if inad_delta is not None else ""
             # Sub-header no topo do card (bate com os cards de analise ao lado)
             _sub_header = (
