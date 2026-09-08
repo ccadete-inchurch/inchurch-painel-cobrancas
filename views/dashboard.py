@@ -712,7 +712,7 @@ def _render_dashboard(store, clientes, role):
     # Score: coluna dedicada com gradiente branco→cinza pra valores baixos,
     # laranja só pra score alto (>=150). Reduz ruído visual sem perder a info.
     col_w    = [2.8, 1.1, 1.4, 1, 1, 1.5, 1.5, 1.5, 0.7]
-    hdrs_t   = ["Cliente", "Score", "Saldo devedor", "Atraso em dias", "Histórico", "Telefone", "Grupo", "Último Contato", ""]
+    hdrs_t   = ["Cliente", "Score", "Saldo", "Atraso", "Histórico", "Telefone", "Grupo", "Últ. contato", ""]
 
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
     # Fundo escuro aplicado via container CSS abaixo.
