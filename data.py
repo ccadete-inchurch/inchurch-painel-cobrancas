@@ -715,10 +715,20 @@ def fetch_cobrancas_competencia(_dia: str | None = None):
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
+
+    # Se BQ Splgc esta com dados ruins/velhos, usa time travel pra pegar a
+    # ultima versao boa. Assim o painel continua funcionando mesmo se o
+    # pipeline falhar (partiçoes truncadas + nao repopuladas etc).
+    _diag = diagnosticar_bq_saude()
+    _ts_clause = ""
+    if not _diag["e_confiavel"] and _diag.get("ts_ultimo_bom"):
+        _ts_iso = _diag["ts_ultimo_bom"].isoformat()
+        _ts_clause = f"FOR SYSTEM_TIME AS OF TIMESTAMP('{_ts_iso}')"
+
     # Agrupa por (sacado, recebimento) para somar todos os itens de uma mesma cobrança.
     # Sem este GROUP BY, múltiplos itens do mesmo id_recebimento geram linhas duplicadas
     # e o Python descartava os menores, resultando em valores incorretos.
-    query = """
+    query = f"""
     SELECT
         c.id_sacado_sac                                                   AS codigo,
         c.id_recebimento_recb                                             AS id_recebimento,
@@ -741,7 +751,7 @@ def fetch_cobrancas_competencia(_dia: str | None = None):
         MAX(CASE WHEN ac.id_sacado_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS tem_acordo,
         MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo,
         MAX(c.comp_st_conta_cont)                                         AS tipo
-    FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
+    FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c {_ts_clause}
     LEFT JOIN (
         SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(grupo) AS nm_grupo
         FROM `business-intelligence-467516.Splgc.splgc-grupo`
@@ -754,7 +764,7 @@ def fetch_cobrancas_competencia(_dia: str | None = None):
     ) cli ON CAST(c.id_sacado_sac AS STRING) = cli.id_sacado_sac
     LEFT JOIN (
         SELECT id_sacado_sac, COUNT(DISTINCT id_recebimento_recb) AS parcelas_em_atraso
-        FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
+        FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` {_ts_clause}
         WHERE fl_status_recb = '0'
         GROUP BY id_sacado_sac
     ) p ON c.id_sacado_sac = p.id_sacado_sac
@@ -763,7 +773,7 @@ def fetch_cobrancas_competencia(_dia: str | None = None):
         -- VENCIDA (dt_vencimento <= hoje). Cobranças de acordo a vencer
         -- não disparam a regra "acordo vencido há 7d".
         SELECT DISTINCT id_sacado_sac
-        FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
+        FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` {_ts_clause}
         WHERE comp_st_conta_cont = '1.2.13'
           AND fl_status_recb = '0'
           AND dt_vencimento_recb <= CURRENT_TIMESTAMP()
@@ -972,6 +982,105 @@ def fetch_historico_meses_bulk(_dia: str | None = None) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+_SPLGC_COMPETENCIA_TBL = f"{_BQ_PROJECT}.Splgc.splgc-cobrancas_competencia-all"
+_SPLGC_LIQUIDACAO_TBL  = f"{_BQ_PROJECT}.Splgc.splgc-cobrancas_liquidacao-all"
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def diagnosticar_bq_saude(_dia: str | None = None) -> dict:
+    """Diagnostica se as tabelas BQ Splgc estao com dados confiaveis.
+
+    Detecta 2 tipos de falha:
+    1) Particao recente < 30 cobrancas em aberto (pipeline rodou mas truncou
+       e nao repopulou — caso do bug de 2026-09-08 quando 05-12/2026
+       ficaram com 0 a 4 cobrancas).
+    2) Fallback: last_modified da tabela > 24h (pipeline nao rodou de jeito
+       nenhum — raro, mas possivel se cron parou ou credencial expirou).
+
+    Retorna dict:
+      - e_confiavel: bool (True se dados OK)
+      - motivo: str codigo ('ok', 'particao_vazia', 'modified_stale', 'erro')
+      - detalhes: str humano-readavel (pra banner)
+      - ts_ultimo_bom: datetime UTC (pra usar em FOR SYSTEM_TIME AS OF)
+
+    Cache 30min — nao precisa checar toda leitura, mas suficiente pra
+    detectar recuperacao rapida quando pipeline volta.
+    """
+    from datetime import datetime, timedelta, timezone
+    client = get_bq_client()
+    if not client:
+        return {
+            "e_confiavel": False,
+            "motivo": "erro",
+            "detalhes": "Nao foi possivel conectar ao BigQuery",
+            "ts_ultimo_bom": None,
+        }
+
+    try:
+        tbl = client.get_table(_SPLGC_COMPETENCIA_TBL)
+        ts_modified = tbl.modified  # datetime UTC
+        agora_utc = datetime.now(timezone.utc)
+        horas_desde = (agora_utc - ts_modified).total_seconds() / 3600
+
+        # Fallback: > 24h sem update
+        if horas_desde > 24:
+            return {
+                "e_confiavel": False,
+                "motivo": "modified_stale",
+                "detalhes": (
+                    f"Pipeline Splgc → BQ nao atualiza ha {horas_desde:.0f}h "
+                    f"(ultima: {ts_modified.strftime('%d/%m %H:%M UTC')})"
+                ),
+                # Volta 24h pra pegar estado antes do problema
+                "ts_ultimo_bom": agora_utc - timedelta(hours=24),
+            }
+
+        # Checa particoes recentes (janela -12m a +6m de dt_vencimento)
+        query = f"""
+        SELECT COUNT(*) AS n_particoes_ruins
+        FROM (
+          SELECT FORMAT_TIMESTAMP('%Y-%m', dt_vencimento_recb) AS mes,
+                 COUNT(*) AS n
+          FROM `{_SPLGC_COMPETENCIA_TBL}`
+          WHERE fl_status_recb = '0'
+            AND DATE(dt_vencimento_recb) BETWEEN
+                DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH)
+                AND DATE_ADD(CURRENT_DATE(), INTERVAL 2 MONTH)
+          GROUP BY mes
+          HAVING n < 30
+        )
+        """
+        df = client.query(query).to_dataframe()
+        n_ruins = int(df.iloc[0]["n_particoes_ruins"]) if not df.empty else 0
+
+        if n_ruins > 0:
+            return {
+                "e_confiavel": False,
+                "motivo": "particao_vazia",
+                "detalhes": (
+                    f"{n_ruins} particao(oes) recente(s) com <30 cobrancas em aberto "
+                    f"(pipeline truncou mas nao repopulou). "
+                    f"Ultima atualizacao BQ: {ts_modified.strftime('%d/%m %H:%M UTC')}"
+                ),
+                # Pega estado imediatamente antes do pipeline atual rodar
+                "ts_ultimo_bom": ts_modified - timedelta(hours=1),
+            }
+
+        return {
+            "e_confiavel": True,
+            "motivo": "ok",
+            "detalhes": f"BQ atualizado ha {horas_desde:.1f}h",
+            "ts_ultimo_bom": ts_modified,
+        }
+    except Exception as e:
+        return {
+            "e_confiavel": False,
+            "motivo": "erro",
+            "detalhes": f"Falha ao diagnosticar BQ: {str(e)[:100]}",
+            "ts_ultimo_bom": None,
+        }
+
+
 _SNAPSHOT_TABLE = f"{_BQ_PROJECT}.{_BQ_DATASET}.cobrancas_snapshot_diario"
 
 
@@ -1025,6 +1134,16 @@ def salvar_snapshot_inadimplentes_hoje(clientes: list | None = None):
     _BRT = timezone(timedelta(hours=-3))
     hoje = datetime.now(_BRT).date().isoformat()
 
+    # ─── DEFESA 1: BQ Splgc esta ruim/velho? Nao grava ────────────────────
+    # Se o BQ nao esta confiavel (particoes vazias, modified > 24h), o
+    # snapshot gerado a partir de `clientes` reflete dado ruim. Melhor
+    # buraco no historico que snapshot errado permanente (fallback de 7d
+    # ja cuida no consumo pra cima).
+    _diag = diagnosticar_bq_saude()
+    if not _diag["e_confiavel"]:
+        print(f"[SNAPSHOT SKIP] BQ nao confiavel: {_diag['detalhes']}", flush=True)
+        return
+
     # Idempotência DIÁRIA: se já existe snapshot de HOJE, pula. Múltiplos
     # snapshots por dia seriam redundantes (cron roda 1x/dia mas a função
     # pode ser chamada por outros caminhos).
@@ -1038,6 +1157,34 @@ def salvar_snapshot_inadimplentes_hoje(clientes: list | None = None):
             return
     except Exception:
         pass  # tabela acabou de ser criada — segue
+
+    # ─── DEFESA 2: queda anomala vs snapshot anterior? Nao grava ──────────
+    # Threshold -25% baseado em 40 dias de historico (P95 real ~18%).
+    # Se quantidade caiu mais que isso, provavelmente e falha silenciosa
+    # (pipeline parcialmente rodou, dados incompletos, etc). Melhor abortar.
+    try:
+        df_ant = client.query(f"""
+            SELECT COUNT(*) AS n
+            FROM `{_SNAPSHOT_TABLE}`
+            WHERE data_snapshot = (
+              SELECT MAX(data_snapshot)
+              FROM `{_SNAPSHOT_TABLE}`
+              WHERE data_snapshot < DATE '{hoje}'
+            )
+        """).to_dataframe()
+        n_ant = int(df_ant["n"].iloc[0]) if not df_ant.empty else 0
+        n_hoje = sum(1 for c in clientes if c.get("id"))
+        if n_ant > 0 and n_hoje > 0:
+            variacao = (n_hoje - n_ant) / n_ant
+            if variacao < -0.25:
+                print(
+                    f"[SNAPSHOT SKIP] Queda anomala {variacao*100:.1f}% "
+                    f"(hoje {n_hoje} vs anterior {n_ant}). Threshold -25%.",
+                    flush=True,
+                )
+                return
+    except Exception:
+        pass  # se nao conseguir comparar, segue e grava (fallback conservador)
 
     rows = [{
         "data_snapshot": hoje,
@@ -2326,7 +2473,15 @@ def fetch_cobrancas_liquidacao(_dia: str | None = None):
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
-    query = """
+
+    # Time travel se BQ Splgc estiver stale (mesma logica de fetch_cobrancas_competencia)
+    _diag = diagnosticar_bq_saude()
+    _ts_clause = ""
+    if not _diag["e_confiavel"] and _diag.get("ts_ultimo_bom"):
+        _ts_iso = _diag["ts_ultimo_bom"].isoformat()
+        _ts_clause = f"FOR SYSTEM_TIME AS OF TIMESTAMP('{_ts_iso}')"
+
+    query = f"""
     SELECT
         id_sacado_sac                                              AS codigo,
         MAX(st_nome_sac)                                          AS nome,
@@ -2334,7 +2489,7 @@ def fetch_cobrancas_liquidacao(_dia: str | None = None):
         SUM(comp_valor)                                           AS valor,
         FORMAT_TIMESTAMP('%Y-%m-%d', MAX(dt_liquidacao_recb))     AS data_liquidacao,
         MAX(CASE WHEN dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
-    FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+    FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` {_ts_clause}
     WHERE fl_status_recb = '1'
       AND dt_liquidacao_recb <= CURRENT_TIMESTAMP()
       AND dt_liquidacao_recb > dt_vencimento_recb

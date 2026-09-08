@@ -1,13 +1,48 @@
 import streamlit as st
 
 from auth import current_nome, current_role, current_email
-from data import get_store, ping_online, get_online_users
+from data import get_store, ping_online, get_online_users, diagnosticar_bq_saude
 
 
 _ROLE_DISPLAY = {
     "admin":     "ADMIN",
     "atendente": "SPECIALIST",
 }
+
+
+def _banner_bq_stale():
+    """Banner amarelo visivel SO PRA ADMIN quando BQ Splgc esta com dados
+    ruins/velhos. Aparece em todas as telas via render_header().
+
+    Motivo de ser so admin: atendentes/gestores nao podem agir sobre
+    pipeline BQ. Ver o alerta cria confusao sem acao possivel. Admin
+    (voce/BI) sabe reprocessar partiçoes, apagar snapshots ruins etc.
+
+    Painel continua funcionando com time travel silencioso pra todos.
+    """
+    if current_role() != "admin":
+        return
+    diag = diagnosticar_bq_saude()
+    if diag["e_confiavel"]:
+        return
+    st.markdown(
+        f'<div style="background:#3d2f0f;border:1px solid #f59e0b;'
+        f'border-radius:8px;padding:12px 18px;margin:0 24px 12px;'
+        f'display:flex;align-items:flex-start;gap:12px">'
+        f'<span style="font-size:20px;line-height:1;flex-shrink:0">⚠️</span>'
+        f'<div style="flex:1;font-size:13px;color:#fde68a;line-height:1.5">'
+        f'<div style="font-weight:700;margin-bottom:4px;color:#fbbf24">'
+        f'Dados BQ desatualizados — mostrando ultima versao confiavel'
+        f'</div>'
+        f'<div>{diag["detalhes"]}</div>'
+        f'<div style="margin-top:6px;color:#d97706;font-size:12px">'
+        f'Painel esta usando time travel do BQ automaticamente. '
+        f'Snapshots do dia nao estao sendo gravados.'
+        f'</div>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def render_header():
@@ -62,3 +97,4 @@ def render_header():
         </div>""", unsafe_allow_html=True)
 
     _header_dynamic()
+    _banner_bq_stale()
