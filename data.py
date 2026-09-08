@@ -1032,7 +1032,7 @@ def diagnosticar_bq_saude(_dia: str | None = None) -> dict:
     try:
         cur = conn.cursor()
         try:
-            # Compara pipelines Splgc que existem no historico vs que rodaram hoje
+            # 1. Quantos criticos NAO rodaram hoje?
             cur.execute(
                 """
                 WITH scripts_passado AS (
@@ -1047,46 +1047,72 @@ def diagnosticar_bq_saude(_dia: str | None = None) -> dict:
                       AND script NOT LIKE %s
                       AND dt_update = CURRENT_DATE
                 )
-                SELECT COUNT(*)
-                FROM scripts_passado
+                SELECT COUNT(*) FROM scripts_passado
                 WHERE script NOT IN (SELECT script FROM scripts_hoje)
                 """,
-                (
-                    _PIPELINES_CRITICOS_INAD[0],
-                    _PIPELINES_CRITICOS_INAD[1],
-                    "%histórico%",
-                    _PIPELINES_CRITICOS_INAD[0],
-                    _PIPELINES_CRITICOS_INAD[1],
-                    "%histórico%",
-                ),
+                (_PIPELINES_CRITICOS_INAD[0], _PIPELINES_CRITICOS_INAD[1], "%histórico%",
+                 _PIPELINES_CRITICOS_INAD[0], _PIPELINES_CRITICOS_INAD[1], "%histórico%"),
             )
             n_faltando = int(cur.fetchone()[0] or 0)
+
+            if n_faltando == 0:
+                return {
+                    "e_confiavel": True,
+                    "motivo": "ok",
+                    "detalhes": "Todos pipelines criticos rodaram hoje",
+                    "ts_ultimo_bom": None,
+                }
+
+            # 2. Se tem falhas hoje, busca ULTIMO DIA em que TODOS pipelines
+            # rodaram (nao assumir "24h atras" — se ontem tambem foi ruim,
+            # ou se ontem foi domingo/feriado, 24h nao serve).
+            cur.execute(
+                """
+                WITH todos_scripts AS (
+                    SELECT DISTINCT script FROM public.splgc_validacoes
+                    WHERE (script LIKE %s OR script LIKE %s) AND script NOT LIKE %s
+                ),
+                por_dia AS (
+                    SELECT DATE(dt_update) AS dia, COUNT(DISTINCT script) AS n_ok
+                    FROM public.splgc_validacoes
+                    WHERE (script LIKE %s OR script LIKE %s) AND script NOT LIKE %s
+                      AND DATE(dt_update) >= (CURRENT_DATE - 14)
+                      AND DATE(dt_update) < CURRENT_DATE
+                    GROUP BY DATE(dt_update)
+                )
+                SELECT MAX(dia)
+                FROM por_dia, todos_scripts
+                WHERE por_dia.n_ok >= (SELECT COUNT(*) FROM todos_scripts)
+                """,
+                (_PIPELINES_CRITICOS_INAD[0], _PIPELINES_CRITICOS_INAD[1], "%histórico%",
+                 _PIPELINES_CRITICOS_INAD[0], _PIPELINES_CRITICOS_INAD[1], "%histórico%"),
+            )
+            row = cur.fetchone()
+            ultimo_dia_bom = row[0] if row else None
         finally:
             try: cur.close()
             except Exception: pass
 
-        if n_faltando > 0:
-            return {
-                "e_confiavel": False,
-                "motivo": "pipelines_faltando",
-                "detalhes": (
-                    f"{n_faltando} pipeline(s) critico(s) Splgc nao rodaram hoje. "
-                    f"Veja Google Chat pra detalhes."
-                ),
-                # Volta 24h — assume que ontem estava OK (raro 2 dias seguidos ruim).
-                # Se ficar problematico, refinar pra procurar ultimo dia com todos OK.
-                "ts_ultimo_bom": agora_utc - timedelta(hours=24),
-            }
+        # Se achou dia bom, usa 20:00 UTC dele (bem depois de qualquer pipeline)
+        # Senao, fallback conservador pra 24h atras.
+        if ultimo_dia_bom:
+            from datetime import datetime as _dt
+            ts_bom = _dt.combine(ultimo_dia_bom, _dt.min.time()).replace(
+                hour=20, minute=0, tzinfo=timezone.utc
+            )
+        else:
+            ts_bom = agora_utc - timedelta(hours=24)
 
         return {
-            "e_confiavel": True,
-            "motivo": "ok",
-            "detalhes": "Todos pipelines criticos rodaram hoje",
-            "ts_ultimo_bom": None,
+            "e_confiavel": False,
+            "motivo": "pipelines_faltando",
+            "detalhes": (
+                f"{n_faltando} pipeline(s) critico(s) Splgc nao rodaram hoje. "
+                f"Time travel: {ultimo_dia_bom or '24h atras'}. Veja Google Chat."
+            ),
+            "ts_ultimo_bom": ts_bom,
         }
     except Exception as e:
-        # Se a query falhar, nao bloqueia o painel — mesmo comportamento de
-        # conn indisponivel. Melhor mostrar dado bruto que travar defesa.
         return {
             "e_confiavel": True,
             "motivo": "erro",
