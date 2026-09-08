@@ -1101,14 +1101,19 @@ def diagnosticar_bq_saude(_dia: str | None = None) -> dict:
                 hour=20, minute=0, tzinfo=timezone.utc
             )
         else:
-            ts_bom = agora_utc - timedelta(hours=24)
+            # Nao achou nenhum dia bom nos ultimos 14 dias — situacao extrema
+            # (pipeline quebrado ha 2+ semanas). Melhor NAO fazer time travel
+            # (dados atuais bugados > gambiarra com hora arbitraria). Retorna
+            # ts_bom=None: painel mostra dados ruins mas com aviso claro.
+            ts_bom = None
 
         return {
             "e_confiavel": False,
             "motivo": "pipelines_faltando",
             "detalhes": (
                 f"{n_faltando} pipeline(s) critico(s) Splgc nao rodaram hoje. "
-                f"Time travel: {ultimo_dia_bom or '24h atras'}. Veja Google Chat."
+                f"Time travel: {ultimo_dia_bom}. Veja Google Chat." if ultimo_dia_bom
+                else f"Sem versao confiavel nos ultimos 14 dias — dados podem estar incorretos. Veja Google Chat."
             ),
             "ts_ultimo_bom": ts_bom,
         }
@@ -1197,34 +1202,6 @@ def salvar_snapshot_inadimplentes_hoje(clientes: list | None = None):
             return
     except Exception:
         pass  # tabela acabou de ser criada — segue
-
-    # ─── DEFESA 2: queda anomala vs snapshot anterior? Nao grava ──────────
-    # Threshold -25% baseado em 40 dias de historico (P95 real ~18%).
-    # Se quantidade caiu mais que isso, provavelmente e falha silenciosa
-    # (pipeline parcialmente rodou, dados incompletos, etc). Melhor abortar.
-    try:
-        df_ant = client.query(f"""
-            SELECT COUNT(*) AS n
-            FROM `{_SNAPSHOT_TABLE}`
-            WHERE data_snapshot = (
-              SELECT MAX(data_snapshot)
-              FROM `{_SNAPSHOT_TABLE}`
-              WHERE data_snapshot < DATE '{hoje}'
-            )
-        """).to_dataframe()
-        n_ant = int(df_ant["n"].iloc[0]) if not df_ant.empty else 0
-        n_hoje = sum(1 for c in clientes if c.get("id"))
-        if n_ant > 0 and n_hoje > 0:
-            variacao = (n_hoje - n_ant) / n_ant
-            if variacao < -0.25:
-                print(
-                    f"[SNAPSHOT SKIP] Queda anomala {variacao*100:.1f}% "
-                    f"(hoje {n_hoje} vs anterior {n_ant}). Threshold -25%.",
-                    flush=True,
-                )
-                return
-    except Exception:
-        pass  # se nao conseguir comparar, segue e grava (fallback conservador)
 
     rows = [{
         "data_snapshot": hoje,
