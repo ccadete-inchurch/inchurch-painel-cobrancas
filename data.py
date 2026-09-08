@@ -986,97 +986,111 @@ _SPLGC_COMPETENCIA_TBL = f"{_BQ_PROJECT}.Splgc.splgc-cobrancas_competencia-all"
 _SPLGC_LIQUIDACAO_TBL  = f"{_BQ_PROJECT}.Splgc.splgc-cobrancas_liquidacao-all"
 
 
+# Pipelines criticos do painel-inadimplencia (consumo direto):
+# cobrancas_competencia-all e cobrancas_liquidacao-all sao alimentadas
+# por multiplas particoes no orquestrador (uma por bimestre). Se qualquer
+# uma nao rodar hoje, dados ficam parciais e o painel mostra numeros
+# errados (caso 2026-09-08: 373 clientes quando deveriam ser ~700).
+_PIPELINES_CRITICOS_INAD = (
+    "%Pipeline de cobranças por competência Inchurch%",
+    "%Pipeline de cobranças por liquidação Inchurch%",
+)
+
+
 @st.cache_data(ttl=1800, show_spinner=False)
 def diagnosticar_bq_saude(_dia: str | None = None) -> dict:
-    """Diagnostica se as tabelas BQ Splgc estao com dados confiaveis.
+    """Diagnostica se pipelines Splgc criticos rodaram hoje.
 
-    Detecta 2 tipos de falha:
-    1) Particao recente < 30 cobrancas em aberto (pipeline rodou mas truncou
-       e nao repopulou — caso do bug de 2026-09-08 quando 05-12/2026
-       ficaram com 0 a 4 cobrancas).
-    2) Fallback: last_modified da tabela > 24h (pipeline nao rodou de jeito
-       nenhum — raro, mas possivel se cron parou ou credencial expirou).
+    Fonte da verdade: tabela `public.splgc_validacoes` no Postgres N8N
+    (log oficial do orquestrador). Muito mais preciso que inferir por
+    contagens de particoes ou timestamps de last_modified.
 
     Retorna dict:
-      - e_confiavel: bool (True se dados OK)
-      - motivo: str codigo ('ok', 'particao_vazia', 'modified_stale', 'erro')
-      - detalhes: str humano-readavel (pra banner)
+      - e_confiavel: bool (True se todos criticos rodaram hoje)
+      - motivo: str codigo ('ok', 'pipelines_faltando', 'sem_conn', 'erro')
+      - detalhes: str (n pipelines faltando)
       - ts_ultimo_bom: datetime UTC (pra usar em FOR SYSTEM_TIME AS OF)
 
     Cache 30min — nao precisa checar toda leitura, mas suficiente pra
     detectar recuperacao rapida quando pipeline volta.
+
+    Se conn Postgres N8N falha, retorna e_confiavel=True (conservador:
+    nao interfere no painel se a propria defesa falhar).
     """
     from datetime import datetime, timedelta, timezone
-    client = get_bq_client()
-    if not client:
+    agora_utc = datetime.now(timezone.utc)
+
+    conn = _pg_n8n_conn_alive() if "_pg_n8n_conn_alive" in globals() else get_pg_n8n_conn()
+    if not conn:
         return {
-            "e_confiavel": False,
-            "motivo": "erro",
-            "detalhes": "Nao foi possivel conectar ao BigQuery",
+            "e_confiavel": True,
+            "motivo": "sem_conn",
+            "detalhes": "Postgres N8N inacessivel — defesa desabilitada",
             "ts_ultimo_bom": None,
         }
 
     try:
-        tbl = client.get_table(_SPLGC_COMPETENCIA_TBL)
-        ts_modified = tbl.modified  # datetime UTC
-        agora_utc = datetime.now(timezone.utc)
-        horas_desde = (agora_utc - ts_modified).total_seconds() / 3600
+        cur = conn.cursor()
+        try:
+            # Compara pipelines Splgc que existem no historico vs que rodaram hoje
+            cur.execute(
+                """
+                WITH scripts_passado AS (
+                    SELECT DISTINCT script FROM public.splgc_validacoes
+                    WHERE (script LIKE %s OR script LIKE %s)
+                      AND script NOT LIKE %s
+                      AND dt_update <> CURRENT_DATE
+                ),
+                scripts_hoje AS (
+                    SELECT DISTINCT script FROM public.splgc_validacoes
+                    WHERE (script LIKE %s OR script LIKE %s)
+                      AND script NOT LIKE %s
+                      AND dt_update = CURRENT_DATE
+                )
+                SELECT COUNT(*)
+                FROM scripts_passado
+                WHERE script NOT IN (SELECT script FROM scripts_hoje)
+                """,
+                (
+                    _PIPELINES_CRITICOS_INAD[0],
+                    _PIPELINES_CRITICOS_INAD[1],
+                    "%histórico%",
+                    _PIPELINES_CRITICOS_INAD[0],
+                    _PIPELINES_CRITICOS_INAD[1],
+                    "%histórico%",
+                ),
+            )
+            n_faltando = int(cur.fetchone()[0] or 0)
+        finally:
+            try: cur.close()
+            except Exception: pass
 
-        # Fallback: > 24h sem update
-        if horas_desde > 24:
+        if n_faltando > 0:
             return {
                 "e_confiavel": False,
-                "motivo": "modified_stale",
+                "motivo": "pipelines_faltando",
                 "detalhes": (
-                    f"Pipeline Splgc → BQ nao atualiza ha {horas_desde:.0f}h "
-                    f"(ultima: {ts_modified.strftime('%d/%m %H:%M UTC')})"
+                    f"{n_faltando} pipeline(s) critico(s) Splgc nao rodaram hoje. "
+                    f"Veja Google Chat pra detalhes."
                 ),
-                # Volta 24h pra pegar estado antes do problema
+                # Volta 24h — assume que ontem estava OK (raro 2 dias seguidos ruim).
+                # Se ficar problematico, refinar pra procurar ultimo dia com todos OK.
                 "ts_ultimo_bom": agora_utc - timedelta(hours=24),
-            }
-
-        # Checa particoes recentes (janela -12m a +6m de dt_vencimento)
-        query = f"""
-        SELECT COUNT(*) AS n_particoes_ruins
-        FROM (
-          SELECT FORMAT_TIMESTAMP('%Y-%m', dt_vencimento_recb) AS mes,
-                 COUNT(*) AS n
-          FROM `{_SPLGC_COMPETENCIA_TBL}`
-          WHERE fl_status_recb = '0'
-            AND DATE(dt_vencimento_recb) BETWEEN
-                DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH)
-                AND DATE_ADD(CURRENT_DATE(), INTERVAL 2 MONTH)
-          GROUP BY mes
-          HAVING n < 30
-        )
-        """
-        df = client.query(query).to_dataframe()
-        n_ruins = int(df.iloc[0]["n_particoes_ruins"]) if not df.empty else 0
-
-        if n_ruins > 0:
-            return {
-                "e_confiavel": False,
-                "motivo": "particao_vazia",
-                "detalhes": (
-                    f"{n_ruins} particao(oes) recente(s) com <30 cobrancas em aberto "
-                    f"(pipeline truncou mas nao repopulou). "
-                    f"Ultima atualizacao BQ: {ts_modified.strftime('%d/%m %H:%M UTC')}"
-                ),
-                # Pega estado imediatamente antes do pipeline atual rodar
-                "ts_ultimo_bom": ts_modified - timedelta(hours=1),
             }
 
         return {
             "e_confiavel": True,
             "motivo": "ok",
-            "detalhes": f"BQ atualizado ha {horas_desde:.1f}h",
-            "ts_ultimo_bom": ts_modified,
+            "detalhes": "Todos pipelines criticos rodaram hoje",
+            "ts_ultimo_bom": None,
         }
     except Exception as e:
+        # Se a query falhar, nao bloqueia o painel — mesmo comportamento de
+        # conn indisponivel. Melhor mostrar dado bruto que travar defesa.
         return {
-            "e_confiavel": False,
+            "e_confiavel": True,
             "motivo": "erro",
-            "detalhes": f"Falha ao diagnosticar BQ: {str(e)[:100]}",
+            "detalhes": f"Erro na consulta splgc_validacoes: {str(e)[:100]}",
             "ts_ultimo_bom": None,
         }
 
