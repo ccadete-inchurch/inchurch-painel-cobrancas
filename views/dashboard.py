@@ -99,7 +99,7 @@ def _reset_filtros():
     from config import SORT_MAP as _SM
     st.session_state["fpills"]    = "Todos"
     st.session_state["fordenar"]  = list(_SM.keys())[0]
-    st.session_state["fgrupo"]    = "Todos"
+    st.session_state["fgrupo"]    = []
     st.session_state["fsituacao"] = "Todos"
     st.session_state["fatraso"]   = "Todos"
     st.session_state["fvalor"]    = "Todos"
@@ -121,7 +121,7 @@ def _render_dashboard(store, clientes, role):
     # (default na primeira renderização, valor do usuário daí em diante).
     busca           = st.session_state.get("busca",     "") or ""
     filtro_status   = st.session_state.get("fpills",    "Todos") or "Todos"
-    filtro_grupo    = st.session_state.get("fgrupo",    "Todos")
+    filtro_grupo    = st.session_state.get("fgrupo",    []) or []
     filtro_situacao = st.session_state.get("fsituacao", "Todos")
     filtro_atraso   = st.session_state.get("fatraso",   "Todos")
     filtro_valor    = st.session_state.get("fvalor",    "Todos")
@@ -174,11 +174,15 @@ def _render_dashboard(store, clientes, role):
                 df = df[tem_acordo]
             elif filtro_acordo == "Sem acordo":
                 df = df[~tem_acordo]
-        if filtro_grupo == "Sem especialista" and "_grupo" in df.columns:
-            # Cliente sem grupo: None, '', '—' ou 'nan' (string)
-            df = df[df["_grupo"].fillna("").astype(str).isin(["", "—", "nan", "NaN"])]
-        elif filtro_grupo != "Todos" and "_grupo" in df.columns:
-            df = df[df["_grupo"] == filtro_grupo]
+        if filtro_grupo and "_grupo" in df.columns:
+            # Multi-select: lista de grupos escolhidos. Vazio = todos (sem filtro).
+            # "Sem especialista" e' pseudo-grupo pra clientes sem atribuicao.
+            _sem_esp_sel = "Sem especialista" in filtro_grupo
+            _grupos_sel = [g for g in filtro_grupo if g != "Sem especialista"]
+            _grupo_norm = df["_grupo"].fillna("").astype(str)
+            _mask_sem_esp = _grupo_norm.isin(["", "—", "nan", "NaN"]) if _sem_esp_sel else pd.Series(False, index=df.index)
+            _mask_grupos = _grupo_norm.isin(_grupos_sel) if _grupos_sel else pd.Series(False, index=df.index)
+            df = df[_mask_sem_esp | _mask_grupos]
         if filtro_situacao == "Ativos" and "_inativo" in df.columns:
             df = df[~df["_inativo"].fillna(False).astype(bool)]
         elif filtro_situacao == "Inativos" and "_inativo" in df.columns:
@@ -659,10 +663,11 @@ def _render_dashboard(store, clientes, role):
     with fc1:
         ordenar = st.selectbox("Ordenar por", list(SORT_MAP.keys()), key="fordenar")
     with fc2:
-        filtro_grupo = st.selectbox(
+        filtro_grupo = st.multiselect(
             "Grupo",
-            ["Todos"] + grupos_disp + (["Sem especialista"] if _tem_sem_grupo else []),
+            grupos_disp + (["Sem especialista"] if _tem_sem_grupo else []),
             key="fgrupo",
+            placeholder="Todos",
         )
     with fc3:
         filtro_situacao = st.selectbox("Situação", ["Todos", "Ativos", "Inativos"], key="fsituacao")
@@ -711,7 +716,7 @@ def _render_dashboard(store, clientes, role):
     # ── Tabela ────────────────────────────────────────────────────────────────
     # Score: coluna dedicada com gradiente branco→cinza pra valores baixos,
     # laranja só pra score alto (>=150). Reduz ruído visual sem perder a info.
-    col_w    = [2.8, 1.1, 1.4, 1, 1, 1.5, 1.5, 1.5, 0.7]
+    col_w    = [2.8, 1.1, 1.4, 1, 1.2, 1.3, 1.5, 1.5, 0.7]  # +0.2 pra Historico caber, -0.2 no Telefone
     hdrs_t   = ["Cliente", "Score", "Saldo", "Atraso", "Histórico", "Telefone", "Grupo", "Últ. contato", ""]
 
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.

@@ -152,10 +152,11 @@ def _render_historico(store):
     with fs:
         filtro_sit = st.selectbox("Situação", ["Todos", "Apenas ativos", "Apenas inativos"], key="reg_sit")
     with fa:
-        filtro_atd = st.selectbox(
+        filtro_atd = st.multiselect(
             "Grupo",
-            ["Todos"] + atendentes_disp + (["Sem especialista"] if (not df.empty and (df["atendente"] == "—").any()) else []),
+            atendentes_disp + (["Sem especialista"] if (not df.empty and (df["atendente"] == "—").any()) else []),
             key="reg_atd",
+            placeholder="Todos",
         )
 
     if busca:
@@ -165,10 +166,13 @@ def _render_historico(store):
         df = df[~df["inativo"].fillna(False).astype(bool)]
     elif filtro_sit == "Apenas inativos" and "inativo" in df.columns:
         df = df[df["inativo"].fillna(False).astype(bool)]
-    if filtro_atd == "Sem especialista":
-        df = df[df["atendente"] == "—"]
-    elif filtro_atd != "Todos":
-        df = df[df["atendente"] == filtro_atd]
+    # Multi-select: lista de grupos selecionados. Vazio = todos (sem filtro).
+    if filtro_atd:
+        _sem_esp_sel = "Sem especialista" in filtro_atd
+        _grupos_sel = [g for g in filtro_atd if g != "Sem especialista"]
+        _mask_sem = (df["atendente"] == "—") if _sem_esp_sel else pd.Series(False, index=df.index)
+        _mask_grp = df["atendente"].isin(_grupos_sel) if _grupos_sel else pd.Series(False, index=df.index)
+        df = df[_mask_sem | _mask_grp]
 
     # Filtro temporal via date range picker — orquestra cards + tabela.
     # st.date_input com value tupla retorna tupla (dt_ini, dt_fim) quando

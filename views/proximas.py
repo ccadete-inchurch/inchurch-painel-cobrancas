@@ -103,10 +103,11 @@ def _render_proximas(_store, _clientes):
         for r in rows
     )
     with fa:
-        filtro_grupo = st.selectbox(
+        filtro_grupo = st.multiselect(
             "Grupo",
-            ["Todos"] + grupos_disp + (["Sem especialista"] if _tem_sem_grupo else []),
+            grupos_disp + (["Sem especialista"] if _tem_sem_grupo else []),
             key="proximas_grupo",
+            placeholder="Todos",
         )
 
     # Aplica filtros
@@ -122,10 +123,18 @@ def _render_proximas(_store, _clientes):
         rows = [r for r in rows if not r.get("inativo")]
     elif filtro_situacao == "Apenas inativos":
         rows = [r for r in rows if r.get("inativo")]
-    if filtro_grupo == "Sem especialista":
-        rows = [r for r in rows if not r["grupo"] or r["grupo"] in ("—", "", "nan", "NaN")]
-    elif filtro_grupo != "Todos":
-        rows = [r for r in rows if r["grupo"] == filtro_grupo]
+    # Multi-select: lista de grupos selecionados. Vazio = todos (sem filtro).
+    if filtro_grupo:
+        _sem_esp_sel = "Sem especialista" in filtro_grupo
+        _grupos_sel = [g for g in filtro_grupo if g != "Sem especialista"]
+        def _match_grupo(r):
+            g = r.get("grupo") or ""
+            if _sem_esp_sel and g in ("", "—", "nan", "NaN"):
+                return True
+            if _grupos_sel and g in _grupos_sel:
+                return True
+            return False
+        rows = [r for r in rows if _match_grupo(r)]
 
     # Filtro temporal via date range picker — orquestra cards + tabela.
     if dt_ini and dt_fim:

@@ -136,13 +136,20 @@ def _render_especialista(store, clientes, role):
         unsafe_allow_html=True,
     )
 
-    # ── Filtros: Período, Especialista, Situação ─────────────────────────
+    # ── Filtros: Período (calendario), Especialista, Situação ────────────
+    # Mesmo padrao das telas Pagamentos e Proximas Cobrancas: date range picker
+    # (usuario escolhe qualquer intervalo). Default: mes atual (01 -> hoje).
+    hoje = date.fromisoformat(hoje_brt())
+    _ini_default = hoje.replace(day=1)
+    _fim_default = hoje
+
     fp1, fp2, fp3, _ = st.columns([2, 2, 2, 2])
     with fp1:
-        periodo = st.selectbox(
-            "Período",
-            ["Este mês", "Últimos 30 dias", "Últimos 90 dias", "Mês anterior", "Últimos 12 meses"],
-            key="esp_periodo",
+        intervalo_selecionado = st.date_input(
+            "Período (de → até)",
+            value=(_ini_default, _fim_default),
+            key="esp_periodo_range",
+            format="DD/MM/YYYY",
         )
     with fp3:
         filtro_situacao = st.selectbox(
@@ -151,27 +158,15 @@ def _render_especialista(store, clientes, role):
             key="esp_situacao",
         )
 
-    # IMPORTANTE: usar BRT, não date.today() (que segue UTC no servidor).
-    # Senão, depois das 21h BRT (= 00h UTC do próximo dia), 'hoje' viraria o
-    # dia seguinte e o overlay marcava todas as linhas com data errada —
-    # gráfico "Pagamentos por Dia" pulava o dia real e enchia o dia seguinte.
-    hoje = date.fromisoformat(hoje_brt())
-    if periodo == "Este mês":
-        dt_inicio = hoje.replace(day=1)
-        dt_fim = hoje
-    elif periodo == "Últimos 30 dias":
-        dt_inicio = hoje - timedelta(days=30)
-        dt_fim = hoje
-    elif periodo == "Últimos 90 dias":
-        dt_inicio = hoje - timedelta(days=90)
-        dt_fim = hoje
-    elif periodo == "Mês anterior":
-        primeiro_dia_atual = hoje.replace(day=1)
-        dt_fim = primeiro_dia_atual - timedelta(days=1)
-        dt_inicio = dt_fim.replace(day=1)
-    else:  # Últimos 12 meses
-        dt_inicio = hoje - timedelta(days=365)
-        dt_fim = hoje
+    # Parse do date range picker — retorna tupla quando ambas escolhidas.
+    dt_inicio, dt_fim = _ini_default, _fim_default
+    if isinstance(intervalo_selecionado, tuple):
+        if len(intervalo_selecionado) == 2:
+            dt_inicio, dt_fim = intervalo_selecionado
+        elif len(intervalo_selecionado) == 1:
+            dt_inicio = dt_fim = intervalo_selecionado[0]
+    elif intervalo_selecionado:
+        dt_inicio = dt_fim = intervalo_selecionado
 
     # ── Fonte: BQ JOIN com tarefas — atribui por contato efetivo ──────────
     # painel_tarefas_diarias + liquidações → último atendente que teve
@@ -252,17 +247,19 @@ def _render_especialista(store, clientes, role):
             set(df_reg["atendente"].unique())
             | set(_EMAIL_GRUPO.values())
         )
-        filtro_esp = st.selectbox(
+        filtro_esp = st.multiselect(
             "Especialista",
-            ["Todos"] + especialistas_disp,
+            especialistas_disp,
             key="esp_filtro",
+            placeholder="Todos",
         )
 
-    # Helpers de filtro pra carteira atual (clientes)
+    # Helpers de filtro pra carteira atual (clientes). Multi-select:
+    # lista vazia = todos (sem filtro); com nomes = filtra por esses.
     def _eh_grupo_match(c):
-        if filtro_esp == "Todos":
+        if not filtro_esp:
             return True
-        return _norm_atendente_raw(c.get("_grupo")) == filtro_esp
+        return _norm_atendente_raw(c.get("_grupo")) in filtro_esp
     def _eh_situacao_match(c):
         if filtro_situacao == "Todos":
             return True
@@ -288,8 +285,8 @@ def _render_especialista(store, clientes, role):
         df_per_all = df_per_all[df_per_all["id"].astype(str).isin(ids_situacao_ok)]
     # df_per: também filtrado por especialista (cards individuais)
     df_per = df_per_all.copy()
-    if filtro_esp != "Todos":
-        df_per = df_per[df_per["atendente"] == filtro_esp]
+    if filtro_esp:
+        df_per = df_per[df_per["atendente"].isin(filtro_esp)]
 
     # ── Cards agregados ───────────────────────────────────────────────────
     # Cliente é classificado UMA vez só pra evitar double-count quando BQ
@@ -332,7 +329,10 @@ def _render_especialista(store, clientes, role):
     media_por_esp = (team_total_pgto / team_especialistas) if team_especialistas else 0
     # Não mostra "vs média" pra 'Sem especialista' — ele não é uma pessoa
     # real (é o bucket de clientes não atribuídos), comparar não faz sentido.
-    if filtro_esp not in ("Todos", "Sem especialista") and team_especialistas:
+    # "vs media" so faz sentido pra filtro em 1 especialista real. Nao mostra
+    # pra "Sem especialista" (nao e pessoa) nem pra multi-select > 1 (media pesa).
+    _esp_valid = len(filtro_esp) == 1 and filtro_esp[0] != "Sem especialista"
+    if _esp_valid and team_especialistas:
         diff_pct = ((total_pgto - media_por_esp) / media_por_esp * 100) if media_por_esp else 0
         sinal = "+" if diff_pct >= 0 else ""
         cor_diff = "#22c55e" if diff_pct >= 0 else "#ef4444"
@@ -428,8 +428,8 @@ def _render_especialista(store, clientes, role):
         .reset_index()
     )
     df_ef = fetch_eficacia_por_especialista(dt_inicio.isoformat(), dt_fim.isoformat())
-    if filtro_esp != "Todos" and not df_ef.empty:
-        df_ef = df_ef[df_ef["atendente"] == filtro_esp]
+    if filtro_esp and not df_ef.empty:
+        df_ef = df_ef[df_ef["atendente"].isin(filtro_esp)]
     if not df_ef.empty:
         agg_esp = agg_esp.merge(
             df_ef[["atendente", "eficacia_real", "clientes_contactados", "regularizaram"]],
@@ -673,8 +673,8 @@ def _render_especialista(store, clientes, role):
         # Filtra por especialista se selecionado (só na visualização — base
         # da média da equipe permanece todos os atendentes)
         df_mensal_show = df_mensal.copy()
-        if filtro_esp != "Todos":
-            df_mensal_show = df_mensal_show[df_mensal_show["atendente"] == filtro_esp]
+        if filtro_esp:
+            df_mensal_show = df_mensal_show[df_mensal_show["atendente"].isin(filtro_esp)]
 
         if not df_mensal_show.empty:
             _meses_ordem = (
