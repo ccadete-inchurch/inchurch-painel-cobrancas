@@ -1039,14 +1039,14 @@ def diagnosticar_bq_saude(_dia: str | None = None) -> dict:
                     SELECT DISTINCT script FROM public.splgc_validacoes
                     WHERE (script LIKE %s OR script LIKE %s)
                       AND script NOT LIKE %s
-                      AND dt_update <> CURRENT_DATE
-                      AND dt_update >= (CURRENT_DATE - 30)
+                      AND dt_update <> DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+                      AND dt_update >= (DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo') - 30)
                 ),
                 scripts_hoje AS (
                     SELECT DISTINCT script FROM public.splgc_validacoes
                     WHERE (script LIKE %s OR script LIKE %s)
                       AND script NOT LIKE %s
-                      AND dt_update = CURRENT_DATE
+                      AND dt_update = DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
                 )
                 SELECT COUNT(*) FROM scripts_passado
                 WHERE script NOT IN (SELECT script FROM scripts_hoje)
@@ -1074,14 +1074,14 @@ def diagnosticar_bq_saude(_dia: str | None = None) -> dict:
                     -- baseline apos 30 dias sem rodar (evita 'sempre faltando' pra sempre)
                     SELECT DISTINCT script FROM public.splgc_validacoes
                     WHERE (script LIKE %s OR script LIKE %s) AND script NOT LIKE %s
-                      AND dt_update >= (CURRENT_DATE - 30)
+                      AND dt_update >= (DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo') - 30)
                 ),
                 por_dia AS (
                     SELECT DATE(dt_update) AS dia, COUNT(DISTINCT script) AS n_ok
                     FROM public.splgc_validacoes
                     WHERE (script LIKE %s OR script LIKE %s) AND script NOT LIKE %s
-                      AND DATE(dt_update) >= (CURRENT_DATE - 14)
-                      AND DATE(dt_update) < CURRENT_DATE
+                      AND DATE(dt_update) >= (DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo') - 14)
+                      AND DATE(dt_update) < DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
                     GROUP BY DATE(dt_update)
                 )
                 SELECT MAX(dia)
@@ -3560,7 +3560,7 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
                   -- como 'YYYY-MM-DD 00:00:00 UTC' representando o dia BRT que
                   -- a liquidação aconteceu. Converter pra BRT volta pro dia
                   -- anterior às 21h e quebra o filtro.
-                  -- Usa o dia OPERACIONAL (hoje_lote) em vez de CURRENT_DATE
+                  -- Usa o dia OPERACIONAL (hoje_lote) em vez de DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
                   -- pra alinhar com o ciclo do lote (vira 08:15 BRT).
                   AND DATE(dt_liquidacao_recb) = DATE '{hoje_op}'
                   AND CAST(id_sacado_sac AS STRING) IN ({ids_str})
