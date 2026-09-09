@@ -17,6 +17,9 @@ __pycache__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Documentação
+Documentacoes/
+
 # IDEs
 .vscode/
 .idea/
