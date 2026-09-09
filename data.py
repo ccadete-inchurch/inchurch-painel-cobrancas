@@ -1056,7 +1056,7 @@ def diagnosticar_bq_saude(_dia: str | None = None) -> dict:
             )
             n_faltando = int(cur.fetchone()[0] or 0)
 
-            if n_faltando < 2:  # tolera 1 pipeline faltando (analise 43d: 19% dos dias tem 1 falha isolada, sem afetar operacao)
+            if n_faltando == 0:  # tudo ou nada — qualquer falha aciona defesa
                 return {
                     "e_confiavel": True,
                     "motivo": "ok",

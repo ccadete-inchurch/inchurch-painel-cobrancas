@@ -640,8 +640,8 @@ def _render_atividades(store, clientes, role):
             if rs is not None:
                 _rs_fmt = _fmt_rs(rs)
                 _direita = (
-                    f'<span style="margin-left:auto;font-size:12px;color:#6b7280;'
-                    f'white-space:nowrap;font-variant-numeric:tabular-nums">'
+                    f'<span style="margin-left:auto;font-size:14px;color:#f87171;'
+                    f'font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums">'
                     f'R$ {_rs_fmt}</span>'
                 )
             return (
