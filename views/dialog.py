@@ -218,12 +218,12 @@ def dialog_editar(eid, from_fixados: bool = False):
             unsafe_allow_html=True,
         )
 
-    # Sem espaçador aqui: o gap de 0.5rem do stVerticalBlock já separa, e o
-    # container do streamlit transformava os 8px em ~32px de altura real.
+    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+
     # Cobranças inadimplentes
     st.markdown(
         '<div style="font-size:13px;font-weight:700;color:#8b94a5;letter-spacing:1.2px;'
-        'text-transform:uppercase;margin:2px 0 8px 0">Cobranças Inadimplentes</div>',
+        'text-transform:uppercase;margin:14px 0 10px 0">Cobranças Inadimplentes</div>',
         unsafe_allow_html=True,
     )
     cobracas_inad = sorted(
@@ -259,8 +259,11 @@ def dialog_editar(eid, from_fixados: bool = False):
         )
 
     if cobracas_inad:
-        visiveis = cobracas_inad[:3]
-        extras   = cobracas_inad[3:]
+        # So' a mais atrasada fica visivel; o resto entra no expander. Cada
+        # linha custa ~27px e cliente com muitas parcelas empurrava o dialog
+        # pra fora da tela em notebook.
+        visiveis = cobracas_inad[:1]
+        extras   = cobracas_inad[1:]
         st.markdown("".join(_render_cobranca_row(c) for c in visiveis), unsafe_allow_html=True)
         if extras:
             with st.expander(f"Ver mais {len(extras)} parcela{'s' if len(extras) > 1 else ''}"):
@@ -396,7 +399,7 @@ def dialog_editar(eid, from_fixados: bool = False):
             format="DD/MM/YYYY",
         )
 
-    notes = st.text_area("Observações", value=h.get("notes", ""), placeholder="Ex: Cliente pediu prazo até sexta...", height=100, disabled=somente_leitura)
+    notes = st.text_area("Observações", value=h.get("notes", ""), placeholder="Ex: Cliente pediu prazo até sexta...", height=68, disabled=somente_leitura)
 
     # ── AUTO-SAVE de TODOS os campos (incluindo notes) ───────────────────
     # Status, datas, checkboxes e notes salvam automaticamente quando

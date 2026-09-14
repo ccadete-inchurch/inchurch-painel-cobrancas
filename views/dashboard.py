@@ -730,8 +730,8 @@ def _render_dashboard(store, clientes, role):
     # Grupo e Saldo em duas linhas. O espaco sai de Cliente (que quebra
     # linha de qualquer jeito) e de Últ. contato (data cabe em 1.1). A soma
     # caiu de 12.5 pra 12.35, entao nada ficou mais apertado que hoje.
-    col_w    = [2.45, 1.0, 1.5, 0.95, 1.2, 1.45, 1.45, 1.15, 0.9, 0.6]
-    hdrs_t   = ["Cliente", "Score", "Saldo", "Atraso", "Histórico", "Tel", "Grupo", "Últ. cont.", "Login", ""]
+    col_w    = [2.2, 1.0, 1.45, 0.95, 1.15, 1.55, 1.4, 1.15, 0.85, 0.6]
+    hdrs_t   = ["Cliente", "Score", "Saldo", "Atraso", "Hist", "Telefone", "Grupo", "Últ. cont.", "Login", ""]
 
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
     # Fundo escuro aplicado via container CSS abaixo.
@@ -782,7 +782,7 @@ def _render_dashboard(store, clientes, role):
                 st.markdown(
                     f'<div style="padding:12px 12px;{row_bg}{row_bl}">'
                     f'<div style="margin-bottom:3px">{tags}</div>'
-                    f'<div style="font-weight:600;font-size:18px;color:#e8eaf0;line-height:1.3">{row["nome"]}{obs_icon}</div>'
+                    f'<div style="font-weight:600;font-size:16px;color:#e8eaf0;line-height:1.3">{row["nome"]}{obs_icon}</div>'
                     f'<div style="color:#8b94a5;font-size:15px;margin-top:2px;font-weight:500">{row.get("cnpj","")}{atend_tag}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
@@ -881,7 +881,7 @@ def _render_dashboard(store, clientes, role):
                             f'<span style="color:#6b7280;font-size:12px;font-weight:500">'
                             f'· {extras_html}</span>'
                         )
-                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{tel_display}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5">{tel_display}</div>', unsafe_allow_html=True)
             with rcols[6]:
                 _g_row = row.get("_grupo") or ""
                 # Celula vazia vira "—", nao "Sem especialista": o rotulo longo
@@ -890,7 +890,7 @@ def _render_dashboard(store, clientes, role):
                 _g_row_display = _g_row if _g_row and str(_g_row) not in ("nan", "NaN", "—") else "—"
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{_g_row_display}</div>', unsafe_allow_html=True)
             with rcols[7]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
             with rcols[8]:
                 # Cinza pra quem acessou recente, ambar pra quem sumiu ha 90+
                 # dias — o caso que interessa pra cobranca.
