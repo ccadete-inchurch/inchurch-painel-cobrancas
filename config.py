@@ -175,12 +175,6 @@ div[data-baseweb="menu"] li:hover{background:#1e2333!important}
    Ordenar nao destoarem da fileira de filtros. */
 span[data-baseweb="tag"]{background:#2a2f42!important;border-radius:6px!important}
 span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
-/* Utilitarios de rotulo responsivo: .w-wide some em tela estreita, .w-narrow
-   so' aparece nela. Usado no badge TELEFONE FIXO -> FIXO e no header
-   ÚLT. CONTATO -> ÚLT. CTT. */
-@media (max-width:1500px){.w-wide{display:none}}
-@media (min-width:1501px){.w-narrow{display:none}}
-
 
 /* Em tela estreita o gap padrao de 1rem entre as 10 colunas da tabela custa
    ~144px — mais da metade do que a sidebar inteira ocupa. Apertar o gap e o
