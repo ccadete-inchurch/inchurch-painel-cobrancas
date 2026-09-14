@@ -2504,19 +2504,35 @@ def fetch_cobrancas_liquidacao(_dia: str | None = None):
 
     query = f"""
     SELECT
-        id_sacado_sac                                              AS codigo,
-        MAX(st_nome_sac)                                          AS nome,
-        MAX(st_cgc_sac)                                           AS cnpj,
-        SUM(comp_valor)                                           AS valor,
-        FORMAT_TIMESTAMP('%Y-%m-%d', MAX(dt_liquidacao_recb))     AS data_liquidacao,
-        MAX(CASE WHEN dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
-    FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` {_ts_clause}
-    WHERE fl_status_recb = '1'
-      AND dt_liquidacao_recb <= CURRENT_TIMESTAMP()
-      AND dt_liquidacao_recb > dt_vencimento_recb
-    GROUP BY id_sacado_sac, id_recebimento_recb
-    HAVING SUM(comp_valor) > 0
-    ORDER BY MAX(dt_liquidacao_recb) DESC
+        l.id_sacado_sac                                            AS codigo,
+        MAX(l.st_nome_sac)                                        AS nome,
+        MAX(l.st_cgc_sac)                                         AS cnpj,
+        SUM(l.comp_valor)                                         AS valor,
+        FORMAT_TIMESTAMP('%Y-%m-%d', MAX(l.dt_liquidacao_recb))   AS data_liquidacao,
+        -- Situacao vem da tabela MESTRE de clientes, nao da coluna homonima
+        -- desnormalizada da propria liquidacao. Naquela coluna o dado e
+        -- inconsistente: 451 clientes tem linhas conflitantes (umas dizem
+        -- ativo, outras inativo) e 32 tem mais de uma data de desativacao.
+        -- Como o GROUP BY aqui e por PARCELA, isso fazia o mesmo cliente sair
+        -- ativo numa parcela e inativo noutra dentro do mesmo mes — em ago/2026
+        -- dava R$ 17.233 de inativos contra os R$ 23.418 reais.
+        -- A mestre tem 1 linha por cliente e zero conflito.
+        MAX(CASE WHEN cli.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
+    FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` AS l {_ts_clause}
+    -- Subquery agregada (e nao join direto) pra blindar contra duplicata futura
+    -- na mestre: um id repetido faria fan-out e inflaria SUM(comp_valor).
+    LEFT JOIN (
+        SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac,
+               MAX(dt_desativacao_sac)       AS dt_desativacao_sac
+        FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
+        GROUP BY id_sacado_sac
+    ) cli ON cli.id_sacado_sac = CAST(l.id_sacado_sac AS STRING)
+    WHERE l.fl_status_recb = '1'
+      AND l.dt_liquidacao_recb <= CURRENT_TIMESTAMP()
+      AND l.dt_liquidacao_recb > l.dt_vencimento_recb
+    GROUP BY l.id_sacado_sac, l.id_recebimento_recb
+    HAVING SUM(l.comp_valor) > 0
+    ORDER BY MAX(l.dt_liquidacao_recb) DESC
     """
     try:
         return client.query(query).to_dataframe()
