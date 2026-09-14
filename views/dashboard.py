@@ -715,7 +715,7 @@ def _render_dashboard(store, clientes, role):
     # Grupo e Saldo em duas linhas. O espaco sai de Cliente (que quebra
     # linha de qualquer jeito) e de Últ. contato (data cabe em 1.1). A soma
     # caiu de 12.5 pra 12.35, entao nada ficou mais apertado que hoje.
-    col_w    = [2.0, 0.95, 1.4, 0.9, 1.1, 1.3, 1.0, 1.15, 0.85, 0.55]
+    col_w    = [2.7, 1.0, 1.5, 0.95, 1.3, 1.45, 1.0, 1.25, 0.95, 0.6]
     hdrs_t   = ["Cliente", "Score", "Saldo", "Atraso", "Hist", "Telefone", "Grupo", "Últ. cont.", "Login", ""]
 
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
@@ -768,7 +768,7 @@ def _render_dashboard(store, clientes, role):
                 st.markdown(
                     f'<div style="padding:12px 12px;{row_bg}{row_bl}">'
                     f'<div style="margin-bottom:3px">{tags}</div>'
-                    f'<div style="font-weight:600;font-size:16px;color:#e8eaf0;line-height:1.3">{row["nome"]}{obs_icon}</div>'
+                    f'<div style="font-weight:600;font-size:18px;color:#e8eaf0;line-height:1.3">{row["nome"]}{obs_icon}</div>'
                     f'<div style="color:#8b94a5;font-size:15px;margin-top:2px;font-weight:500">{row.get("cnpj","")}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
@@ -791,13 +791,13 @@ def _render_dashboard(store, clientes, role):
                     cor_sc = f"#{_r:02x}{_g:02x}{_b:02x}"
                 st.markdown(
                     f'<div style="padding:12px 6px;text-align:center;white-space:nowrap">'
-                    f'<span style="color:{cor_sc};font-weight:800;font-size:15px">{_sc}</span>'
+                    f'<span style="color:{cor_sc};font-weight:800;font-size:17px">{_sc}</span>'
                     f'<span style="color:#6b7280;font-size:10px;margin-left:3px">pts</span>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
             with rcols[2]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:15px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:17px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
             with rcols[3]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:14px">{dias_html(row.get("dias_atraso"))}</div>', unsafe_allow_html=True)
             with rcols[4]:
