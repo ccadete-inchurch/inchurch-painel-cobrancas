@@ -82,6 +82,15 @@ def _tel_only_digits(tel: str) -> str:
     return digits
 
 
+def _eh_fixo(tel: str) -> bool:
+    """Fixo BR = 55 + DDD(2) + 8 digitos = 12. Celular = 55 + DDD(2) + 9 = 13
+    (o nono digito). Numero internacional nao da' pra classificar por tamanho,
+    entao cai no else e assume celular — que e' o palpite util aqui (WhatsApp).
+    """
+    d = _tel_only_digits(tel)
+    return d.startswith("55") and len(d) == 12
+
+
 def _hex_to_rgba(hex_color: str, alpha: float = 0.15) -> str:
     """Converte cor hex (#rrggbb) pra rgba pra background tintado de badge."""
     h = hex_color.lstrip("#")
@@ -805,13 +814,13 @@ def _render_dashboard(store, clientes, role):
                     cor_sc = f"#{_r:02x}{_g:02x}{_b:02x}"
                 st.markdown(
                     f'<div style="padding:12px 6px;text-align:center;white-space:nowrap">'
-                    f'<span style="color:{cor_sc};font-weight:800;font-size:17px">{_sc}</span>'
+                    f'<span style="color:{cor_sc};font-weight:800;font-size:15px">{_sc}</span>'
                     f'<span style="color:#6b7280;font-size:10px;margin-left:3px">pts</span>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
             with rcols[2]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:17px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:15px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
             with rcols[3]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:14px">{dias_html(row.get("dias_atraso"))}</div>', unsafe_allow_html=True)
             with rcols[4]:
@@ -841,20 +850,23 @@ def _render_dashboard(store, clientes, role):
                     tel_display = "—"
                 else:
                     def _icons(t: str) -> str:
+                        # UM icone so', o que faz sentido pro numero: fixo nao
+                        # tem WhatsApp, celular quase nunca e' ligado direto.
+                        # Dois icones por numero gastavam ~35px de coluna sem
+                        # informacao nova.
+                        if _eh_fixo(t):
+                            _digs = _tel_only_digits(t)
+                            return (
+                                f'<a href="tel:+{_digs}" '
+                                f'style="text-decoration:none;margin-right:8px;vertical-align:middle">'
+                                f'{_ICON_TBL_PHONE}</a>' if _digs else ""
+                            )
                         wa_num = telefone_wa_link(t)
-                        # Formata numero pra usar em tel: (so digitos)
-                        _digs = _tel_only_digits(t)
-                        _tel_link = (
-                            f'<a href="tel:+{_digs}" '
-                            f'style="text-decoration:none;margin-right:4px;vertical-align:middle">'
-                            f'{_ICON_TBL_PHONE}</a>' if _digs else ""
-                        )
-                        _wa_link = (
+                        return (
                             f'<a href="https://wa.me/{wa_num}" target="_blank" '
                             f'style="text-decoration:none;margin-right:8px;vertical-align:middle">'
                             f'{_ICON_TBL_WHATSAPP}</a>' if wa_num else ""
                         )
-                        return f'{_tel_link}{_wa_link}'
                     _t0, _fmt0 = _pairs[0]
                     primeiro = f'{_icons(_t0)}{_fmt0}'
                     if len(_pairs) == 1:
@@ -865,6 +877,16 @@ def _render_dashboard(store, clientes, role):
                         # nao ocupar muito espaco — o click no icone WA leva
                         # ao chat direto.
                         def _wa_mini(t: str) -> str:
+                            # Mesma regra do icone principal, em tamanho menor.
+                            if _eh_fixo(t):
+                                _d = _tel_only_digits(t)
+                                if not _d:
+                                    return ""
+                                return (
+                                    f'<a href="tel:+{_d}" '
+                                    f'style="text-decoration:none;margin-right:4px;vertical-align:middle">'
+                                    f'{_ICON_FIX_PHONE}</a>'
+                                )
                             wa_num = telefone_wa_link(t)
                             if not wa_num:
                                 return ""
@@ -898,7 +920,7 @@ def _render_dashboard(store, clientes, role):
                 _lg_ord = row.get("_ultimoLoginOrdem")
                 _lg_cor = "#b8860b" if (_lg_ord == _lg_ord and _lg_ord >= 90) else "#8b94a5"
                 st.markdown(
-                    f'<div style="padding:12px 12px;font-size:16px;color:{_lg_cor}">{_lg}</div>',
+                    f'<div style="padding:12px 12px;font-size:16px;font-weight:700;color:{_lg_cor}">{_lg}</div>',
                     unsafe_allow_html=True,
                 )
             with rcols[9]:
