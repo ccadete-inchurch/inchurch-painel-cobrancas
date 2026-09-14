@@ -164,10 +164,49 @@ div[data-baseweb="menu"] li:hover{background:#1e2333!important}
    Ordenar nao destoarem da fileira de filtros. */
 span[data-baseweb="tag"]{background:#2a2f42!important;border-radius:6px!important}
 span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
-/* Badge FIXO: em tela grande cabe "TELEFONE FIXO"; abaixo de 1500px a
-   palavra TELEFONE some e sobra so' "FIXO", que ao lado da coluna
-   Telefone diz a mesma coisa e libera ~60px pros outros badges. */
-@media (max-width:1500px){.tf-long{display:none}}
+/* Utilitarios de rotulo responsivo: .w-wide some em tela estreita, .w-narrow
+   so' aparece nela. Usado no badge TELEFONE FIXO -> FIXO e no header
+   ÚLT. CONTATO -> ÚLT. CTT. */
+@media (max-width:1500px){.w-wide{display:none}}
+@media (min-width:1501px){.w-narrow{display:none}}
+
+/* Grupo: em tela larga cabe numa linha (nowrap + ellipsis). Em tela estreita
+   pode usar DUAS linhas, mas nunca tres nem quebrar no meio da palavra — era
+   o "Ana / Carolin / a". keep-all impede a quebra interna; line-clamp corta
+   na segunda linha. */
+@media (max-width:1500px){
+  .grupo-cell{
+    white-space:normal!important;
+    word-break:keep-all!important;
+    overflow-wrap:normal!important;
+    display:-webkit-box!important;
+    -webkit-line-clamp:2;
+    -webkit-box-orient:vertical;
+    overflow:hidden!important;
+    line-height:1.3!important;
+  }
+}
+
+/* Em tela estreita o gap padrao de 1rem entre as 10 colunas da tabela custa
+   ~144px — mais da metade do que a sidebar inteira ocupa. Apertar o gap e o
+   padding das celulas devolve essa largura sem mexer em fonte nenhuma. */
+@media (max-width:1500px){
+  [data-testid="stHorizontalBlock"]{gap:0.35rem!important}
+}
+
+/* Sidebar em tela estreita: 250px fixos comem ~18% de um notebook de 1366.
+   Encolhe pra 190px e devolve o botao de colapsar (escondido globalmente),
+   pra quem quiser recuperar a largura inteira. O translateX(0) global e' o
+   que prende ela aberta — so' vale quando aria-expanded="true". */
+@media (max-width:1500px){
+  section[data-testid="stSidebar"]{min-width:190px!important;width:190px!important}
+  section[data-testid="stSidebar"] > div:first-child{width:190px!important}
+  section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]{
+    display:block!important;position:absolute!important;top:8px;right:6px;z-index:120!important}
+  section[data-testid="stSidebar"][aria-expanded="false"]{
+    min-width:0!important;width:0!important;
+    transform:translateX(-190px)!important;overflow:visible!important}
+}
 .stDateInput input{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
 
 /* ── Expander ── */
