@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link, carimbo_dia_cache
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, fetch_carteira_count, fetch_inadimplentes_snapshot_ref30d, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, fetch_inadimplencia_diaria, fetch_carteira_count, fetch_inadimplentes_snapshot_ref30d, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -685,6 +685,72 @@ def _render_atividades(store, clientes, role):
             'display:flex;flex-direction:column;align-self:flex-start'
         )
 
+        # ─── Mini-grafico: inadimplentes por dia ───────────────────────
+        # Ocupa o espaco que sobrava embaixo do card de receita (ele usa
+        # align-self:flex-start, entao a coluna direita ficava vazia ate' a
+        # altura do card Visao Geral, que e' bem mais alto).
+        #
+        # SVG inline em vez de Altair: o tema "inchurch_dark" so' e' registrado
+        # no import de views/especialista.py, entao um chart aqui sairia com o
+        # tema claro padrao dependendo da ordem de navegacao. E o SVG entra no
+        # mesmo markdown dos cards, sem elemento streamlit extra.
+        #
+        # Os textos ficam FORA do SVG: o preserveAspectRatio="none" (necessario
+        # pra o grafico esticar na largura da coluna) distorceria a fonte.
+        def _svg_serie(vals: list[float], w: int = 600, h: int = 84) -> str:
+            lo, hi = min(vals), max(vals)
+            span = (hi - lo) or 1
+            pad = span * 0.12
+            lo, hi = lo - pad, hi + pad
+            span = hi - lo
+            n = len(vals)
+            dx = w / max(n - 1, 1)
+            pts = [(i * dx, h - (v - lo) / span * h) for i, v in enumerate(vals)]
+            linha = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
+            area = f"0,{h} " + linha + f" {w},{h}"
+            return (
+                f'<svg viewBox="0 0 {w} {h}" preserveAspectRatio="none" '
+                f'style="width:100%;height:{h}px;display:block">'
+                f'<defs><linearGradient id="gInad" x1="0" x2="0" y1="0" y2="1">'
+                f'<stop offset="0%" stop-color="#5fa3ff" stop-opacity="0.28"/>'
+                f'<stop offset="100%" stop-color="#5fa3ff" stop-opacity="0"/>'
+                f'</linearGradient></defs>'
+                f'<polygon points="{area}" fill="url(#gInad)"/>'
+                f'<polyline points="{linha}" fill="none" stroke="#5fa3ff" '
+                f'stroke-width="2" vector-effect="non-scaling-stroke" '
+                f'stroke-linejoin="round" stroke-linecap="round"/>'
+                f'</svg>'
+            )
+
+        _df_serie = fetch_inadimplencia_diaria(60, _dia=carimbo_dia_cache())
+        _grafico_html = ""
+        if _df_serie is not None and not _df_serie.empty and len(_df_serie) >= 2:
+            _vals = [int(v) for v in _df_serie["inadimplentes"].tolist()]
+            _dias_lbl = [str(d) for d in _df_serie["dia"].tolist()]
+            _ini, _fim = _vals[0], _vals[-1]
+            _dl = _fim - _ini
+            _br = lambda iso: f"{iso[8:10]}/{iso[5:7]}"
+            _grafico_html = (
+                f'<div style="{_card_wrapper}margin-top:10px">'
+                f'<div style="{_sublabel_css}">Inadimplentes por dia</div>'
+                f'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">'
+                f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
+                f'letter-spacing:-0.4px;font-variant-numeric:tabular-nums">{_fim}</span>'
+                f'{_delta_html(_dl)}'
+                f'<span style="font-size:11px;color:#9ca3af;font-weight:700;'
+                f'letter-spacing:1px;text-transform:uppercase">no per&iacute;odo</span>'
+                f'<span style="margin-left:auto;font-size:11px;color:#6b7280">'
+                f'm&aacute;x {max(_vals)} &middot; m&iacute;n {min(_vals)}</span>'
+                f'</div>'
+                + _svg_serie(_vals) +
+                f'<div style="display:flex;justify-content:space-between;'
+                f'font-size:10px;color:#6b7280;margin-top:4px">'
+                f'<span>{_br(_dias_lbl[0])}</span>'
+                f'<span>{len(_vals)} leituras</span>'
+                f'<span>{_br(_dias_lbl[-1])}</span>'
+                f'</div></div>'
+            )
+
         if _linhas_receita:
             _analise_receita_html = (
                 f'<div style="{_card_wrapper}">'
@@ -692,7 +758,7 @@ def _render_atividades(store, clientes, role):
                 + _divisor_a.join(_linhas_receita)
                 + '</div>'
             )
-            _npl_html_parts.append(_analise_receita_html)
+            _npl_html_parts.append(_analise_receita_html + _grafico_html)
 
     # ═══════════════ ORDEM DE RENDER ═══════════════
     # 1. Bem-vindo (saudação personalizada)

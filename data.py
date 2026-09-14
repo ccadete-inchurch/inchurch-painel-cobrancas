@@ -1984,6 +1984,41 @@ def compute_npl_today_overlay(
 
 
 @st.cache_data(ttl=86400)
+def fetch_inadimplencia_diaria(dias: int = 60, _dia: str | None = None) -> pd.DataFrame:
+    """Serie diaria de inadimplentes pro mini-grafico da tela Atividades.
+
+    Le direto o snapshot (1 linha por cliente/dia). ATENCAO: o card Visao
+    Geral ao lado conta a partir do store `clientes` ao vivo, com os overlays
+    do dia (pagamentos via API Superlogica, grupo NAO COBRAR). O snapshot e'
+    gravado 1x/dia as 08:30 BRT e nao tem esses overlays, entao o ultimo ponto
+    da serie pode divergir do numero grande do card por algumas unidades ao
+    longo do dia. E' trajetoria, nao numero de fechamento.
+
+    O snapshot so' tem dia util: fim de semana e feriado simplesmente nao
+    existem na serie, e o grafico usa escala de DATA (nao de indice) pra o
+    buraco aparecer como buraco em vez de encurtar a semana.
+
+    Retorna DataFrame com: dia (date), inadimplentes (int), saldo (float).
+    """
+    client = get_bq_client()
+    if not client:
+        return pd.DataFrame()
+    try:
+        return client.query(f"""
+            SELECT data_snapshot            AS dia,
+                   COUNT(*)                 AS inadimplentes,
+                   ROUND(SUM(valor_saldo),2) AS saldo
+            FROM `{_SNAPSHOT_TABLE}`
+            WHERE data_snapshot >= DATE_SUB(
+                CURRENT_DATE('America/Sao_Paulo'), INTERVAL {int(dias)} DAY)
+            GROUP BY dia
+            ORDER BY dia
+        """).to_dataframe()
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=86400)
 def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", _dia: str | None = None) -> dict:
     """Métricas NPL "por receita" — % por R$ com janela rolante.
 
