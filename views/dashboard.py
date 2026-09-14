@@ -881,12 +881,16 @@ def _render_dashboard(store, clientes, role):
                 # quebrava em duas linhas e competia com o nome do especialista
                 # de verdade. O filtro continua se chamando "Sem especialista".
                 _g_row_display = _g_row if _g_row and str(_g_row) not in ("nan", "NaN", "—") else "—"
-                # Uma linha so' com nowrap. Quebrado em duas, o navegador tambem
-                # quebrava DENTRO da palavra quando a coluna apertava
-                # ("Ana / Carolin / a"); nowrap impede isso de vez.
-                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5;overflow:hidden">'
-                            f'<span class="grupo-txt" style="white-space:nowrap;overflow:hidden;'
-                            f'text-overflow:ellipsis;display:block">{_g_row_display}</span></div>', unsafe_allow_html=True)
+                # Quebra explicita no primeiro espaco: nome numa linha,
+                # sobrenome na outra (so' em tela estreita, via CSS). Deixar a
+                # cargo do navegador era o que produzia "Ana / Carolin / a".
+                _g_p = str(_g_row_display).split(" ", 1)
+                _g_row_display = (
+                    f'<span class="g-nome">{_g_p[0]}</span>'
+                    f'<span class="g-sobre">{_g_p[1]}</span>'
+                ) if len(_g_p) == 2 else f'<span class="g-nome">{_g_row_display}</span>' 
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5;'
+                            f'line-height:1.35;overflow:hidden">{_g_row_display}</div>', unsafe_allow_html=True)
             with rcols[7]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
             with rcols[8]:

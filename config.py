@@ -123,6 +123,13 @@ section[data-testid="stSidebar"] .stButton>button:hover{
 .tag-nova-cob{white-space:nowrap;background:rgba(79,124,255,.18);color:#5fa3ff;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
 
 /* ── Atraso chips ── */
+/* Botao de editar da tabela: a coluna e' estreita (~32px) e o padding padrao
+   de 15px de cada lado nao cabe — sobram 2px de content-box, o conteudo e'
+   empurrado e o lapis sai do centro. Em monitor grande a coluna e' maior e o
+   efeito some, por isso so' aparecia em notebook. */
+[class*="st-key-edit_"] button{padding-left:2px!important;padding-right:2px!important;min-width:0!important}
+span.g-nome,span.g-sobre{white-space:nowrap}
+span.g-sobre{margin-left:4px}
 .da{padding:2px 7px;border-radius:6px;font-size:14px;font-weight:700;display:inline-block}
 .da-ok{background:rgba(45,211,111,.12);color:#2dd36f}
 .da-30{background:rgba(255,184,77,.12);color:#ffb84d}
@@ -175,19 +182,11 @@ span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
    o "Ana / Carolin / a". keep-all impede a quebra interna; line-clamp corta
    na segunda linha. */
 @media (max-width:1500px){
-  /* O clamp vai num <span> INTERNO, nao no div da celula: o div tem
-     padding inline de 12px e o max-height brigava com ele (content-box vs
-     border-box). No span, "2 linhas" e' literalmente 2 x line-height.
-     word-break:keep-all impede o "Ana / Carolin / a". */
-  span.grupo-txt{
-    display:block!important;
-    white-space:normal!important;
-    word-break:keep-all!important;
-    overflow-wrap:normal!important;
-    line-height:1.3!important;
-    max-height:2.6em!important;
-    overflow:hidden!important;
-  }
+  /* Grupo em tela estreita: o sobrenome vai pra segunda linha. A quebra e'
+     EXPLICITA no espaco (dois spans), nao deixada pro navegador — assim sao
+     sempre 2 linhas no maximo e nunca "Ana / Carolin / a". Cada parte leva
+     nowrap pra nao quebrar por dentro. */
+  span.g-sobre{display:block!important;margin-left:0!important}
 }
 
 /* Em tela estreita o gap padrao de 1rem entre as 10 colunas da tabela custa
