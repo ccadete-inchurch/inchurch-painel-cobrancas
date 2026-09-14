@@ -734,8 +734,8 @@ def _render_dashboard(store, clientes, role):
     # Grupo e Saldo em duas linhas. O espaco sai de Cliente (que quebra
     # linha de qualquer jeito) e de Últ. contato (data cabe em 1.1). A soma
     # caiu de 12.5 pra 12.35, entao nada ficou mais apertado que hoje.
-    col_w    = [3.05, 0.9, 1.4, 1.05, 1.3, 1.4, 1.0, 1.25, 0.95, 0.6]
-    hdrs_t   = ["Cliente", "Score", "Saldo", "Atraso", "Hist", "Telefone", "Grupo", "Últ. cont.", "Login", ""]
+    col_w    = [2.7, 0.95, 1.4, 1.05, 1.25, 1.35, 1.7, 1.15, 0.9, 0.55]
+    hdrs_t   = ["Cliente", "Score", "Saldo", "Atraso", "Hist.", "Telefone", "Grupo", "Últ. cont.", "Login", ""]
 
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
     # Fundo escuro aplicado via container CSS abaixo.
@@ -772,9 +772,9 @@ def _render_dashboard(store, clientes, role):
                 '<span class="tag-novo">NOVO</span>'                 if row.get("_novo")          else "",
                 '<span class="tag-upd">ATUALIZADO</span>'           if row.get("_atualizado")    else "",
                 '<span class="tag-nova-cob">+ Nova cobrança</span>' if row.get("_nova_cobranca") else "",
-                '<span style="background:#4f7cff;color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;margin-right:3px">ACORDO</span>'  if row.get("_tem_acordo") else "",
-                '<span style="background:#6b7280;color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;margin-right:3px">INATIVO</span>' if row.get("_inativo")    else "",
-                '<span style="background:rgba(236,72,153,.18);color:#ec4899;border:1px solid rgba(236,72,153,.4);font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;margin-right:3px">TELEFONE FIXO</span>' if row.get("_tel_fixo") else "",
+                '<span style="background:#4f7cff;color:#fff;font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">ACORDO</span>'  if row.get("_tem_acordo") else "",
+                '<span style="background:#6b7280;color:#fff;font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">INATIVO</span>' if row.get("_inativo")    else "",
+                '<span style="background:rgba(236,72,153,.18);color:#ec4899;border:1px solid rgba(236,72,153,.4);font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">FIXO</span>' if row.get("_tel_fixo") else "",
             ])
             obs_icon  = ' <span style="color:#5fa3ff;font-size:12px;font-weight:700">●</span>' if str(row["_notes"] or "") else ""
             row_bl    = "border-left:4px solid rgba(239,68,68,.6);" if is_top else ""
@@ -782,13 +782,23 @@ def _render_dashboard(store, clientes, role):
 
             rcols = st.columns(col_w, vertical_alignment="center")
             with rcols[0]:
-                # Sem tag de atendente aqui: duplicava a coluna Grupo, que esta'
-                # na mesma linha, e empurrava o CNPJ pra uma segunda linha.
+                # A tag de atendente NAO e' redundante com a coluna Grupo:
+                # get_effective_atendente tem 3 niveis (marcacao manual >
+                # splgc-grupo > atendente atual no lote) e a coluna mostra so'
+                # o do meio. Cliente sem grupo aparece como "—" na coluna mas
+                # tem dono aqui. Entao so' mostra quando DIFERE — no caso
+                # comum (grupo = atendente) nao gasta linha nenhuma.
+                _at = str(row["_atendente"] or "")
+                _gr = str(row.get("_grupo") or "")
+                atend_tag = (
+                    f'<span style="font-size:11px;color:#8b94a5;margin-left:6px;'
+                    f'font-weight:500">· {_at}</span>'
+                ) if _at and _at != _gr else ""
                 st.markdown(
                     f'<div style="padding:12px 12px;{row_bg}{row_bl}">'
                     f'<div style="margin-bottom:3px">{tags}</div>'
-                    f'<div style="font-weight:600;font-size:18px;color:#e8eaf0;line-height:1.3">{row["nome"]}{obs_icon}</div>'
-                    f'<div style="color:#8b94a5;font-size:15px;margin-top:2px;font-weight:500">{row.get("cnpj","")}</div>'
+                    f'<div style="font-weight:600;font-size:16px;color:#e8eaf0;line-height:1.3">{row["nome"]}{obs_icon}</div>'
+                    f'<div style="color:#8b94a5;font-size:15px;margin-top:2px;font-weight:500">{row.get("cnpj","")}{atend_tag}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -871,12 +881,10 @@ def _render_dashboard(store, clientes, role):
                 # quebrava em duas linhas e competia com o nome do especialista
                 # de verdade. O filtro continua se chamando "Sem especialista".
                 _g_row_display = _g_row if _g_row and str(_g_row) not in ("nan", "NaN", "—") else "—"
-                # Nome em cima, sobrenome embaixo: "Priscila Oliveira" numa
-                # linha so' exigia ~1.4 de coluna; quebrado cabe em 1.0.
-                _g_partes = str(_g_row_display).split(" ", 1)
-                if len(_g_partes) == 2:
-                    _g_row_display = f'{_g_partes[0]}<br>{_g_partes[1]}'
-                st.markdown(f'<div style="padding:12px 12px;font-size:15px;color:#8b94a5;line-height:1.35">{_g_row_display}</div>', unsafe_allow_html=True)
+                # Uma linha so' com nowrap. Quebrado em duas, o navegador tambem
+                # quebrava DENTRO da palavra quando a coluna apertava
+                # ("Ana / Carolin / a"); nowrap impede isso de vez.
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{_g_row_display}</div>', unsafe_allow_html=True)
             with rcols[7]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
             with rcols[8]:

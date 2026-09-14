@@ -117,10 +117,10 @@ section[data-testid="stSidebar"] .stButton>button:hover{
 .badge-promise{background:rgba(249,115,22,.12);color:#ff9800}
 .badge-negotiating{background:rgba(79,124,255,.12);color:#5fa3ff}
 .badge-paid{background:rgba(34,197,94,.12);color:#2dd36f}
-.tag-novo{background:rgba(34,197,94,.15);color:#2dd36f;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
-.tag-upd{background:rgba(245,158,11,.15);color:#ffb84d;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
-.top-badge{background:rgba(239,68,68,.18);color:#ff6b6b;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
-.tag-nova-cob{background:rgba(79,124,255,.18);color:#5fa3ff;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.tag-novo{white-space:nowrap;background:rgba(34,197,94,.15);color:#2dd36f;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.tag-upd{white-space:nowrap;background:rgba(245,158,11,.15);color:#ffb84d;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.top-badge{white-space:nowrap;background:rgba(239,68,68,.18);color:#ff6b6b;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.tag-nova-cob{white-space:nowrap;background:rgba(79,124,255,.18);color:#5fa3ff;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
 
 /* ── Atraso chips ── */
 .da{padding:2px 7px;border-radius:6px;font-size:14px;font-weight:700;display:inline-block}
