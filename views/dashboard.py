@@ -730,8 +730,8 @@ def _render_dashboard(store, clientes, role):
     # Grupo e Saldo em duas linhas. O espaco sai de Cliente (que quebra
     # linha de qualquer jeito) e de Últ. contato (data cabe em 1.1). A soma
     # caiu de 12.5 pra 12.35, entao nada ficou mais apertado que hoje.
-    col_w    = [2.1, 1.0, 1.5, 0.95, 1.2, 1.6, 1.45, 1.35, 0.9, 0.6]
-    hdrs_t   = ["Cliente", "Score", "Saldo", "Atraso", "Histórico", "Telefone", "Grupo", "Últ. contato", "Login", ""]
+    col_w    = [2.45, 1.0, 1.5, 0.95, 1.2, 1.45, 1.45, 1.15, 0.9, 0.6]
+    hdrs_t   = ["Cliente", "Score", "Saldo", "Atraso", "Histórico", "Tel", "Grupo", "Últ. cont.", "Login", ""]
 
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
     # Fundo escuro aplicado via container CSS abaixo.

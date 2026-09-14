@@ -62,6 +62,14 @@ def dialog_editar(eid, from_fixados: bool = False):
         padding:0 !important;
         line-height:1.3 !important;
     }
+    /* O titulo e' um <h2> filho DIRETO da section — nao existe wrapper
+       [data-testid="stDialogHeader"] nem <header> no 1.59, entao a regra
+       seguinte tambem e' morta (fica so' por seguranca). Com o padding:0 da
+       regra generica de h1/h2/h3 o titulo encostava na borda e o "E" de
+       "Editar" ficava cortado; o padding-right abre espaco pro botao X. */
+    [data-testid="stDialog"] section[role="dialog"] > h2{
+        padding:14px 52px 2px 22px !important;
+    }
     [data-testid="stDialog"] header,
     [data-testid="stDialog"] [data-testid="stDialogHeader"]{
         padding:12px 16px 6px 16px !important;
@@ -210,12 +218,12 @@ def dialog_editar(eid, from_fixados: bool = False):
             unsafe_allow_html=True,
         )
 
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-
+    # Sem espaçador aqui: o gap de 0.5rem do stVerticalBlock já separa, e o
+    # container do streamlit transformava os 8px em ~32px de altura real.
     # Cobranças inadimplentes
     st.markdown(
         '<div style="font-size:13px;font-weight:700;color:#8b94a5;letter-spacing:1.2px;'
-        'text-transform:uppercase;margin:14px 0 10px 0">Cobranças Inadimplentes</div>',
+        'text-transform:uppercase;margin:2px 0 8px 0">Cobranças Inadimplentes</div>',
         unsafe_allow_html=True,
     )
     cobracas_inad = sorted(
