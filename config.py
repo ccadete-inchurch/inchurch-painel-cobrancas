@@ -164,6 +164,10 @@ div[data-baseweb="menu"] li:hover{background:#1e2333!important}
    Ordenar nao destoarem da fileira de filtros. */
 span[data-baseweb="tag"]{background:#2a2f42!important;border-radius:6px!important}
 span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
+/* Badge FIXO: em tela grande cabe "TELEFONE FIXO"; abaixo de 1500px a
+   palavra TELEFONE some e sobra so' "FIXO", que ao lado da coluna
+   Telefone diz a mesma coisa e libera ~60px pros outros badges. */
+@media (max-width:1500px){.tf-long{display:none}}
 .stDateInput input{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
 
 /* ── Expander ── */

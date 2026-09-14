@@ -734,7 +734,7 @@ def _render_dashboard(store, clientes, role):
     # Grupo e Saldo em duas linhas. O espaco sai de Cliente (que quebra
     # linha de qualquer jeito) e de Últ. contato (data cabe em 1.1). A soma
     # caiu de 12.5 pra 12.35, entao nada ficou mais apertado que hoje.
-    col_w    = [2.7, 0.95, 1.4, 1.05, 1.25, 1.35, 1.7, 1.15, 0.9, 0.55]
+    col_w    = [2.6, 0.95, 1.5, 1.05, 1.25, 1.35, 1.7, 1.15, 0.9, 0.55]
     hdrs_t   = ["Cliente", "Score", "Saldo", "Atraso", "Hist.", "Telefone", "Grupo", "Últ. cont.", "Login", ""]
 
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
@@ -774,7 +774,7 @@ def _render_dashboard(store, clientes, role):
                 '<span class="tag-nova-cob">+ Nova cobrança</span>' if row.get("_nova_cobranca") else "",
                 '<span style="background:#4f7cff;color:#fff;font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">ACORDO</span>'  if row.get("_tem_acordo") else "",
                 '<span style="background:#6b7280;color:#fff;font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">INATIVO</span>' if row.get("_inativo")    else "",
-                '<span style="background:rgba(236,72,153,.18);color:#ec4899;border:1px solid rgba(236,72,153,.4);font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">FIXO</span>' if row.get("_tel_fixo") else "",
+                '<span style="background:rgba(236,72,153,.18);color:#ec4899;border:1px solid rgba(236,72,153,.4);font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px"><span class="tf-long">TELEFONE </span>FIXO</span>' if row.get("_tel_fixo") else "",
             ])
             obs_icon  = ' <span style="color:#5fa3ff;font-size:12px;font-weight:700">●</span>' if str(row["_notes"] or "") else ""
             row_bl    = "border-left:4px solid rgba(239,68,68,.6);" if is_top else ""
@@ -797,7 +797,7 @@ def _render_dashboard(store, clientes, role):
                 st.markdown(
                     f'<div style="padding:12px 12px;{row_bg}{row_bl}">'
                     f'<div style="margin-bottom:3px">{tags}</div>'
-                    f'<div style="font-weight:600;font-size:16px;color:#e8eaf0;line-height:1.3">{row["nome"]}{obs_icon}</div>'
+                    f'<div style="font-weight:600;font-size:clamp(15px,0.95vw,18px);color:#e8eaf0;line-height:1.3">{row["nome"]}{obs_icon}</div>'
                     f'<div style="color:#8b94a5;font-size:15px;margin-top:2px;font-weight:500">{row.get("cnpj","")}{atend_tag}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
@@ -826,7 +826,7 @@ def _render_dashboard(store, clientes, role):
                     unsafe_allow_html=True,
                 )
             with rcols[2]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:17px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:clamp(13px,0.92vw,17px);font-weight:600;white-space:nowrap">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
             with rcols[3]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:14px">{dias_html(row.get("dias_atraso"))}</div>', unsafe_allow_html=True)
             with rcols[4]:
