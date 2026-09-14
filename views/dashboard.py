@@ -83,7 +83,7 @@ from views.dialog import dialog_editar
 def _reset_filtros():
     from config import SORT_MAP as _SM
     st.session_state["fpills"]    = "Todos"
-    st.session_state["fordenar"]  = list(_SM.keys())[0]
+    st.session_state["fordenar"]  = []
     st.session_state["fgrupo"]    = []
     st.session_state["fsituacao"] = "Todos"
     st.session_state["fatraso"]   = "Todos"
@@ -111,7 +111,7 @@ def _render_dashboard(store, clientes, role):
     filtro_atraso   = st.session_state.get("fatraso",   "Todos")
     filtro_valor    = st.session_state.get("fvalor",    "Todos")
     filtro_acordo   = st.session_state.get("facordo",   "Todos")
-    ordenar         = st.session_state.get("fordenar",  list(SORT_MAP.keys())[0])
+    ordenar         = st.session_state.get("fordenar", []) or []
 
     # ── Constrói df e aplica filtros (compartilhado: métricas, tabela, CSV) ──
     df = pd.DataFrame(clientes)
@@ -650,9 +650,17 @@ def _render_dashboard(store, clientes, role):
         not c.get("_grupo") or c.get("_grupo") in ("—", "", "nan", "NaN")
         for c in clientes
     )
-    fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.5, 1.6, 1.3, 1.4, 1.4, 1.3])
+    fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([2.2, 1.7, 1.15, 1.3, 1.3, 1.15])
     with fc1:
-        ordenar = st.selectbox("Ordenar por", list(SORT_MAP.keys()), key="fordenar")
+        # Multiselect (e nao selectbox) pra permitir ordenacao combinada:
+        # a ordem de selecao vira a ordem dos criterios — 1o desempata pelo
+        # 2o, e assim por diante.
+        ordenar = st.multiselect(
+            "Ordenar por",
+            list(SORT_MAP.keys()),
+            key="fordenar",
+            placeholder="Padrão",
+        )
     with fc2:
         filtro_grupo = st.multiselect(
             "Grupo",
@@ -679,10 +687,21 @@ def _render_dashboard(store, clientes, role):
         st.info("Nenhum dado disponível. Aguarde o carregamento automático do BigQuery.")
         return
 
-    # Ordenação (filtros já foram aplicados ao df no topo da função).
-    sort_col_name, sort_asc = SORT_MAP[ordenar]
-    if sort_col_name in df.columns:
-        df = df.sort_values(sort_col_name, ascending=sort_asc, na_position="last")
+    # Ordenação combinada (filtros já foram aplicados ao df no topo da função).
+    # Cada critério escolhido entra como uma coluna do sort, na ordem em que
+    # foi selecionado. Se o usuário marcar ↑ e ↓ do MESMO campo, vale o
+    # primeiro — senão o pandas recebe a coluna duplicada e a segunda direção
+    # nunca teria efeito de qualquer forma.
+    _cols, _ascs, _vistas = [], [], set()
+    for _o in ordenar:
+        _c, _a = SORT_MAP[_o]
+        if _c in _vistas or _c not in df.columns:
+            continue
+        _vistas.add(_c)
+        _cols.append(_c)
+        _ascs.append(_a)
+    if _cols:
+        df = df.sort_values(_cols, ascending=_ascs, na_position="last")
 
     top10 = set(pd.DataFrame(clientes).nlargest(10, "valor")["id"].tolist())
 
@@ -695,7 +714,7 @@ def _render_dashboard(store, clientes, role):
     page    = max(1, min(st.session_state.get("page_num", 1), total_pg))
     df_page = df.iloc[(page - 1) * PAGE_SIZE : page * PAGE_SIZE]
 
-    sort_active = ordenar
+    sort_active = " · ".join(ordenar) if ordenar else "padrão"
     st.markdown(
         f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
         f'<span style="font-size:14px;color:#6b7280"><b style="color:#e8eaf0;font-size:15px">{total_f}</b> clientes encontrados</span>'
@@ -715,7 +734,7 @@ def _render_dashboard(store, clientes, role):
     # Grupo e Saldo em duas linhas. O espaco sai de Cliente (que quebra
     # linha de qualquer jeito) e de Últ. contato (data cabe em 1.1). A soma
     # caiu de 12.5 pra 12.35, entao nada ficou mais apertado que hoje.
-    col_w    = [2.7, 1.0, 1.5, 0.95, 1.3, 1.45, 1.0, 1.25, 0.95, 0.6]
+    col_w    = [3.05, 0.9, 1.4, 1.05, 1.3, 1.4, 1.0, 1.25, 0.95, 0.6]
     hdrs_t   = ["Cliente", "Score", "Saldo", "Atraso", "Hist", "Telefone", "Grupo", "Últ. cont.", "Login", ""]
 
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
@@ -753,9 +772,9 @@ def _render_dashboard(store, clientes, role):
                 '<span class="tag-novo">NOVO</span>'                 if row.get("_novo")          else "",
                 '<span class="tag-upd">ATUALIZADO</span>'           if row.get("_atualizado")    else "",
                 '<span class="tag-nova-cob">+ Nova cobrança</span>' if row.get("_nova_cobranca") else "",
-                '<span style="background:#4f7cff;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">ACORDO</span>'  if row.get("_tem_acordo") else "",
-                '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("_inativo")    else "",
-                '<span style="background:rgba(236,72,153,.18);color:#ec4899;border:1px solid rgba(236,72,153,.4);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">TELEFONE FIXO</span>' if row.get("_tel_fixo") else "",
+                '<span style="background:#4f7cff;color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;margin-right:3px">ACORDO</span>'  if row.get("_tem_acordo") else "",
+                '<span style="background:#6b7280;color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;margin-right:3px">INATIVO</span>' if row.get("_inativo")    else "",
+                '<span style="background:rgba(236,72,153,.18);color:#ec4899;border:1px solid rgba(236,72,153,.4);font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;margin-right:3px">TELEFONE FIXO</span>' if row.get("_tel_fixo") else "",
             ])
             obs_icon  = ' <span style="color:#5fa3ff;font-size:12px;font-weight:700">●</span>' if str(row["_notes"] or "") else ""
             row_bl    = "border-left:4px solid rgba(239,68,68,.6);" if is_top else ""
@@ -791,7 +810,7 @@ def _render_dashboard(store, clientes, role):
                     cor_sc = f"#{_r:02x}{_g:02x}{_b:02x}"
                 st.markdown(
                     f'<div style="padding:12px 6px;text-align:center;white-space:nowrap">'
-                    f'<span style="color:{cor_sc};font-weight:800;font-size:17px">{_sc}</span>'
+                    f'<span style="color:{cor_sc};font-weight:800;font-size:15px">{_sc}</span>'
                     f'<span style="color:#6b7280;font-size:10px;margin-left:3px">pts</span>'
                     f'</div>',
                     unsafe_allow_html=True,

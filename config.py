@@ -12,10 +12,10 @@ SORT_MAP = {
     "↓ Menor atraso": ("dias_atraso", True),
     "↑ Maior saldo":  ("valor",       False),
     "↓ Menor saldo":  ("valor",       True),
-    "Nome A→Z":       ("nome",        True),
-    "Nome Z→A":       ("nome",        False),
     "↑ Tempo de login": ("_ultimoLoginOrdem", False),
     "↓ Tempo de login": ("_ultimoLoginOrdem", True),
+    "Nome A→Z":       ("nome",        True),
+    "Nome Z→A":       ("nome",        False),
 }
 
 # ── Status ────────────────────────────────────────────────────────────────────
@@ -117,13 +117,13 @@ section[data-testid="stSidebar"] .stButton>button:hover{
 .badge-promise{background:rgba(249,115,22,.12);color:#ff9800}
 .badge-negotiating{background:rgba(79,124,255,.12);color:#5fa3ff}
 .badge-paid{background:rgba(34,197,94,.12);color:#2dd36f}
-.tag-novo{background:rgba(34,197,94,.15);color:#2dd36f;font-size:10px;padding:2px 6px;border-radius:5px;font-weight:700;margin-right:3px}
-.tag-upd{background:rgba(245,158,11,.15);color:#ffb84d;font-size:10px;padding:2px 6px;border-radius:5px;font-weight:700;margin-right:3px}
-.top-badge{background:rgba(239,68,68,.18);color:#ff6b6b;font-size:10px;padding:2px 6px;border-radius:5px;font-weight:700;margin-right:3px}
-.tag-nova-cob{background:rgba(79,124,255,.18);color:#5fa3ff;font-size:10px;padding:2px 7px;border-radius:5px;font-weight:700;margin-right:3px}
+.tag-novo{background:rgba(34,197,94,.15);color:#2dd36f;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.tag-upd{background:rgba(245,158,11,.15);color:#ffb84d;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.top-badge{background:rgba(239,68,68,.18);color:#ff6b6b;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.tag-nova-cob{background:rgba(79,124,255,.18);color:#5fa3ff;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
 
 /* ── Atraso chips ── */
-.da{padding:3px 9px;border-radius:6px;font-size:16px;font-weight:700;display:inline-block}
+.da{padding:2px 7px;border-radius:6px;font-size:14px;font-weight:700;display:inline-block}
 .da-ok{background:rgba(45,211,111,.12);color:#2dd36f}
 .da-30{background:rgba(255,184,77,.12);color:#ffb84d}
 .da-60{background:rgba(255,152,0,.12);color:#ff9800}
@@ -154,12 +154,16 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"]:hover{
 /* ── Inputs ── */
 .stTextInput input,.stTextArea textarea{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
 .stTextInput input:focus,.stTextArea textarea:focus{border-color:#7cc243!important;box-shadow:0 0 0 2px rgba(124,194,67,.15)!important}
-.stTextInput label,.stTextArea label,.stSelectbox label,.stDateInput label{color:#6b7280!important;font-size:13px!important;text-transform:uppercase!important;letter-spacing:0.8px!important;font-weight:600!important}
+.stTextInput label,.stTextArea label,.stSelectbox label,.stMultiSelect label,.stDateInput label{color:#6b7280!important;font-size:13px!important;text-transform:uppercase!important;letter-spacing:0.8px!important;font-weight:600!important}
 div[data-baseweb="select"]>div{background:#181c26!important;border-color:#1e2333!important;border-radius:8px!important}
 div[data-baseweb="select"] span{color:#e8eaf0!important;font-size:12px!important}
 div[data-baseweb="popover"],div[data-baseweb="menu"]{background:#181c26!important;border:1px solid #2a2f42!important;border-radius:10px!important}
 div[data-baseweb="menu"] li{color:#e8eaf0!important;font-size:13px!important}
 div[data-baseweb="menu"] li:hover{background:#1e2333!important}
+/* Chips do multiselect: mesma paleta dos selects, pra Grupo e
+   Ordenar nao destoarem da fileira de filtros. */
+span[data-baseweb="tag"]{background:#2a2f42!important;border-radius:6px!important}
+span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
 .stDateInput input{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
 
 /* ── Expander ── */
