@@ -128,8 +128,12 @@ section[data-testid="stSidebar"] .stButton>button:hover{
    empurrado e o lapis sai do centro. Em monitor grande a coluna e' maior e o
    efeito some, por isso so' aparecia em notebook. */
 [class*="st-key-edit_"] button{padding-left:2px!important;padding-right:2px!important;min-width:0!important}
-span.g-nome,span.g-sobre{white-space:nowrap}
-span.g-sobre{margin-left:4px}
+/* Grupo sempre em 2 linhas quando o nome tem espaco: "Priscila" em cima,
+   "Oliveira" embaixo. A quebra e' EXPLICITA (dois spans), nao deixada pro
+   navegador — era o que produzia "Ana / Carolin / a". nowrap em cada parte
+   impede quebra por dentro da palavra. Era gated por media query, mas
+   notebook de 1920 nao disparava o breakpoint e ficava numa linha so'. */
+span.g-nome,span.g-sobre{white-space:nowrap;display:block}
 .da{padding:2px 7px;border-radius:6px;font-size:14px;font-weight:700;display:inline-block}
 .da-ok{background:rgba(45,211,111,.12);color:#2dd36f}
 .da-30{background:rgba(255,184,77,.12);color:#ffb84d}
@@ -177,17 +181,6 @@ span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
 @media (max-width:1500px){.w-wide{display:none}}
 @media (min-width:1501px){.w-narrow{display:none}}
 
-/* Grupo: em tela larga cabe numa linha (nowrap + ellipsis). Em tela estreita
-   pode usar DUAS linhas, mas nunca tres nem quebrar no meio da palavra — era
-   o "Ana / Carolin / a". keep-all impede a quebra interna; line-clamp corta
-   na segunda linha. */
-@media (max-width:1500px){
-  /* Grupo em tela estreita: o sobrenome vai pra segunda linha. A quebra e'
-     EXPLICITA no espaco (dois spans), nao deixada pro navegador — assim sao
-     sempre 2 linhas no maximo e nunca "Ana / Carolin / a". Cada parte leva
-     nowrap pra nao quebrar por dentro. */
-  span.g-sobre{display:block!important;margin-left:0!important}
-}
 
 /* Em tela estreita o gap padrao de 1rem entre as 10 colunas da tabela custa
    ~144px — mais da metade do que a sidebar inteira ocupa. Apertar o gap e o
