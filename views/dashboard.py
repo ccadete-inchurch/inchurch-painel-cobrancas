@@ -884,7 +884,9 @@ def _render_dashboard(store, clientes, role):
                 # Uma linha so' com nowrap. Quebrado em duas, o navegador tambem
                 # quebrava DENTRO da palavra quando a coluna apertava
                 # ("Ana / Carolin / a"); nowrap impede isso de vez.
-                st.markdown(f'<div class="grupo-cell" style="padding:12px 12px;font-size:14px;color:#8b94a5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{_g_row_display}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5;overflow:hidden">'
+                            f'<span class="grupo-txt" style="white-space:nowrap;overflow:hidden;'
+                            f'text-overflow:ellipsis;display:block">{_g_row_display}</span></div>', unsafe_allow_html=True)
             with rcols[7]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
             with rcols[8]:

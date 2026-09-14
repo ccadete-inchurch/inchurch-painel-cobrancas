@@ -175,15 +175,18 @@ span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
    o "Ana / Carolin / a". keep-all impede a quebra interna; line-clamp corta
    na segunda linha. */
 @media (max-width:1500px){
-  .grupo-cell{
+  /* O clamp vai num <span> INTERNO, nao no div da celula: o div tem
+     padding inline de 12px e o max-height brigava com ele (content-box vs
+     border-box). No span, "2 linhas" e' literalmente 2 x line-height.
+     word-break:keep-all impede o "Ana / Carolin / a". */
+  span.grupo-txt{
+    display:block!important;
     white-space:normal!important;
     word-break:keep-all!important;
     overflow-wrap:normal!important;
-    display:-webkit-box!important;
-    -webkit-line-clamp:2;
-    -webkit-box-orient:vertical;
-    overflow:hidden!important;
     line-height:1.3!important;
+    max-height:2.6em!important;
+    overflow:hidden!important;
   }
 }
 
