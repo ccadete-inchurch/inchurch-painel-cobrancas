@@ -33,7 +33,7 @@ def dialog_editar(eid, from_fixados: bool = False):
        sem max-width/max-height: os dois precisam ser sobrescritos. */
     [data-testid="stDialog"]{
         align-items:center !important;   /* centraliza na vertical */
-        padding:24px 0 !important;
+        padding:12px 0 !important;
     }
     /* O cap TEM que ir no div filho direto, nao so' na section: e' ele que
        pinta o fundo do painel e ancora o botao de fechar. Limitando so' a
@@ -41,12 +41,12 @@ def dialog_editar(eid, from_fixados: bool = False):
     [data-testid="stDialog"] > div{
         max-width:900px !important;
         width:94vw !important;
-        max-height:92vh !important;      /* nunca estoura a tela do notebook */
+        max-height:95vh !important;      /* nunca estoura a tela do notebook */
     }
     [data-testid="stDialog"] section[role="dialog"]{
         max-width:100% !important;
         width:100% !important;
-        max-height:92vh !important;
+        max-height:95vh !important;
         overflow-y:auto !important;      /* rolagem interna, nao da pagina */
     }
     /* Título "Editar Registro" menor + reset agressivo de spacing.
@@ -162,7 +162,7 @@ def dialog_editar(eid, from_fixados: bool = False):
         )
 
     # Cabeçalho informativo
-    c1, c2, c3, c4, c5 = st.columns([1.6, 1.1, 1.05, 1.15, 1.3])
+    c1, c2, c3, c4, c5 = st.columns([1.9, 1.05, 1.0, 1.1, 1.25])
     with c1:
         inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if cliente.get("_inativo") else ""
         st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Cliente</div><div class="dialog-info-value" style="font-size:16px">{cliente["nome"]}{inativo_badge}</div><div style="font-size:12px;color:#8b94a5;margin-top:3px">{cliente.get("cnpj","—")}</div></div>', unsafe_allow_html=True)
@@ -218,8 +218,6 @@ def dialog_editar(eid, from_fixados: bool = False):
             unsafe_allow_html=True,
         )
 
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-
     # Cobranças inadimplentes
     st.markdown(
         '<div style="font-size:13px;font-weight:700;color:#8b94a5;letter-spacing:1.2px;'
@@ -271,7 +269,12 @@ def dialog_editar(eid, from_fixados: bool = False):
     else:
         st.info("Nenhuma cobrança em atraso")
 
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+    # Respiro antes do STATUS. Sem expander (1 parcela so') o campo colava na
+    # linha da cobranca; com expander o proprio bloco ja' separava. Compensa a
+    # diferenca pra os dois casos ficarem iguais.
+    _tem_expander = bool(cobracas_inad) and len(cobracas_inad) > 1
+    st.markdown(f'<div style="height:{4 if _tem_expander else 26}px"></div>',
+                unsafe_allow_html=True)
 
     # Campos (desabilitados se admin — modo só leitura).
     # Dropdown de status: so DECISOES INTENCIONAIS (promise, negotiating,
@@ -466,7 +469,6 @@ def dialog_editar(eid, from_fixados: bool = False):
     # Linha "Editado por" só faz sentido em modo edição
     if not somente_leitura:
         st.markdown(f'<div style="font-size:12px;color:#8b94a5;margin-top:6px;font-weight:500">Editado por: <span style="color:#e8eaf0;font-weight:700">{current_nome()}</span></div>', unsafe_allow_html=True)
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
     # Detecta se cliente está fixado (promise vencida OU retorno vencido)
     # pra exibir o botão Concluir junto com Salvar/Cancelar.
