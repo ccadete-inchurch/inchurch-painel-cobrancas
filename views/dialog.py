@@ -41,12 +41,12 @@ def dialog_editar(eid, from_fixados: bool = False):
     [data-testid="stDialog"] > div{
         max-width:900px !important;
         width:94vw !important;
-        max-height:88vh !important;      /* nunca estoura a tela do notebook */
+        max-height:92vh !important;      /* nunca estoura a tela do notebook */
     }
     [data-testid="stDialog"] section[role="dialog"]{
         max-width:100% !important;
         width:100% !important;
-        max-height:88vh !important;
+        max-height:92vh !important;
         overflow-y:auto !important;      /* rolagem interna, nao da pagina */
     }
     /* Título "Editar Registro" menor + reset agressivo de spacing.
@@ -68,17 +68,21 @@ def dialog_editar(eid, from_fixados: bool = False):
         margin:0 !important;
         min-height:auto !important;
     }
-    [data-testid="stDialog"] [data-testid="stDialogBody"]{
-        padding-top:6px !important;
-        margin-top:0 !important;
-    }
-    [data-testid="stDialog"] [data-testid="stDialogBody"] > div:first-child{
-        margin-top:0 !important;
-        padding-top:0 !important;
-    }
-    /* stVerticalBlock dentro do body — gap menor entre elementos */
-    [data-testid="stDialog"] [data-testid="stDialogBody"] [data-testid="stVerticalBlock"]{
+    /* stDialogBody TAMBEM nao existe no DOM do 1.59 (como div[role=dialog]
+       nao existia): as duas regras abaixo miravam nele e eram codigo morto —
+       era por isso que o espacamento entre blocos ficava enorme e o dialog
+       exigia rolagem. Ancoradas direto no stDialog agora. */
+    [data-testid="stDialog"] [data-testid="stVerticalBlock"]{
         gap:0.5rem !important;
+    }
+    /* Labels dos widgets (STATUS, OBSERVAÇÕES...) com respiro menor: o
+       global usa margem de paragrafo e, somada em 4 widgets, custa ~60px. */
+    [data-testid="stDialog"] [data-testid="stWidgetLabel"]{
+        margin-bottom:2px !important;
+    }
+    [data-testid="stDialog"] [data-testid="stWidgetLabel"] p{
+        margin-bottom:0 !important;
+        line-height:1.2 !important;
     }
     [data-testid="stDialog"] button[kind="primary"]{
         background-color:#4a8a2c !important;
@@ -118,11 +122,19 @@ def dialog_editar(eid, from_fixados: bool = False):
     }
     /* Min-height força os 4 cards do header a terem altura igual.
        Cascata via align-items:stretch é flaky no DOM do streamlit. */
+    /* Sem min-height: com 5 cards estreitos o conteudo cabe em ~80px e o
+       104px virava espaco morto no topo — caro num dialog que ja' rola.
+       align-items:stretch no bloco das colunas iguala a altura sem reservar
+       espaco fixo. Padding tambem mais justo que o .dialog-info global. */
     [data-testid="stDialog"] .dialog-info{
-        min-height:104px !important;
+        padding:10px 13px !important;
         display:flex !important;
         flex-direction:column !important;
         justify-content:flex-start !important;
+        height:100% !important;
+    }
+    [data-testid="stDialog"] [data-testid="stHorizontalBlock"]{
+        align-items:stretch !important;
     }
     </style>
     """, unsafe_allow_html=True)

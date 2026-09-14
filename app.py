@@ -81,9 +81,6 @@ def main():
         # Última interação por cliente sem janela temporal — alimenta o
         # "Último Contato" do dashboard mesmo pra ações antigas (>6 dias).
         load_ultimo_contato_painel()
-        # Ultimo login da igreja no painel de controle (mat_login_dias do
-        # health-score, de-para por st_sincro_sac). ~10 MB, 1x por sessao.
-        load_ultimo_login_painel()
         # Atendente atual no lote (painel_tarefas_diarias) — fallback do grupo.
         # Tem só clientes que já entraram em algum lote.
         load_atendente_atual_painel()
@@ -95,6 +92,15 @@ def main():
     # (sessão antiga pode ter pulado o load se foi setado antes do deploy).
     if not st.session_state.get("_grupo_atendente"):
         load_grupo_atendente_map()
+
+    # Ultimo login da igreja no painel de controle (mat_login_dias do
+    # health-score, de-para por st_sincro_sac). ~10 MB por sessao.
+    # Gate proprio pelo MESMO motivo do _grupo_atendente acima: sessao que
+    # setou _mensagens_loaded antes do deploy pularia o load pra sempre —
+    # foi o que deixou a coluna Login inteira com "—" no primeiro deploy.
+    # Gate pelo proprio dict: se vier vazio (query falhou), tenta de novo.
+    if not st.session_state.get("_painel_ultimo_login"):
+        load_ultimo_login_painel()
 
     # Overlay real-time de pagamentos do dia via API Superlógica.
     # Roda a cada render — fetch é cacheado (TTL 5min), apply é O(n) idempotente.

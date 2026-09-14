@@ -3171,10 +3171,11 @@ def load_ultimo_login_painel():
             LEFT JOIN agg a ON a.tg = SAFE_CAST(c.st_sincro_sac AS INT64)
             WHERE SAFE_CAST(c.st_sincro_sac AS INT64) IS NOT NULL
         """).to_dataframe()
-    except Exception:
+    except Exception as e:
         # Sem fallback pro log cru de proposito: o painel-cs cai num scan de
         # ~17 GB quando a materializacao some. Por SESSAO isso seria caro
         # demais aqui — melhor a coluna vir vazia.
+        print(f"[LOGIN PAINEL] query falhou: {str(e)[:200]}", flush=True)
         return
 
     _BRT = timezone(timedelta(hours=-3))
