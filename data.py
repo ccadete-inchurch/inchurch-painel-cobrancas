@@ -1987,27 +1987,31 @@ def compute_npl_today_overlay(
 def fetch_inadimplencia_diaria(dias: int = 60, _dia: str | None = None) -> pd.DataFrame:
     """Serie diaria de inadimplentes pro mini-grafico da tela Atividades.
 
-    Le direto o snapshot (1 linha por cliente/dia). ATENCAO: o card Visao
-    Geral ao lado conta a partir do store `clientes` ao vivo, com os overlays
-    do dia (pagamentos via API Superlogica, grupo NAO COBRAR). O snapshot e'
-    gravado 1x/dia as 08:30 BRT e nao tem esses overlays, entao o ultimo ponto
-    da serie pode divergir do numero grande do card por algumas unidades ao
-    longo do dia. E' trajetoria, nao numero de fechamento.
+    Conta so' o bucket M0 (atraso de 1 a 30 dias) — mesmo criterio da linha
+    "Inadimplencia mensal" do card de receita logo acima, entao o grafico e' a
+    trajetoria diaria daquele indicador. A carteira total nao serve aqui: os
+    ~400 clientes de 180+ dias quase nao se mexem e achatavam o sinal. Em M0 a
+    serie varia de ~95 a ~272 e mostra o ciclo do mes (cai conforme pagam,
+    salta quando vence fatura nova).
 
-    O snapshot so' tem dia util: fim de semana e feriado simplesmente nao
-    existem na serie, e o grafico usa escala de DATA (nao de indice) pra o
-    buraco aparecer como buraco em vez de encurtar a semana.
+    ATENCAO: o card Visao Geral ao lado conta a partir do store `clientes` ao
+    vivo, com os overlays do dia (pagamentos via API Superlogica, grupo NAO
+    COBRAR). O snapshot e' gravado 1x/dia as 08:30 BRT e nao tem esses
+    overlays. Sao numeros de escopo diferente de qualquer forma (M0 vs total),
+    entao nao se espera que batam.
 
-    Retorna DataFrame com: dia (date), inadimplentes (int), saldo (float).
+    O snapshot so' tem dia util: fim de semana e feriado nao existem na serie.
+
+    Retorna DataFrame com: dia (date), m0 (int), saldo_m0 (float).
     """
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
     try:
         return client.query(f"""
-            SELECT data_snapshot            AS dia,
-                   COUNT(*)                 AS inadimplentes,
-                   ROUND(SUM(valor_saldo),2) AS saldo
+            SELECT data_snapshot AS dia,
+                   COUNTIF(dias_atraso BETWEEN 1 AND 30) AS m0,
+                   ROUND(SUM(IF(dias_atraso BETWEEN 1 AND 30, valor_saldo, 0)), 2) AS saldo_m0
             FROM `{_SNAPSHOT_TABLE}`
             WHERE data_snapshot >= DATE_SUB(
                 CURRENT_DATE('America/Sao_Paulo'), INTERVAL {int(dias)} DAY)
