@@ -9,7 +9,7 @@ st.set_page_config(
 
 from config import CSS
 from auth import is_logged, current_role
-from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq, load_cooldowns_from_painel, load_ultimo_contato_painel, load_atendente_atual_painel, load_grupo_atendente_map, aplicar_pagamentos_hoje_no_store, aplicar_grupo_nao_cobrar_no_store, precisa_processar_bq
+from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq, load_cooldowns_from_painel, load_ultimo_contato_painel, load_ultimo_login_painel, load_atendente_atual_painel, load_grupo_atendente_map, aplicar_pagamentos_hoje_no_store, aplicar_grupo_nao_cobrar_no_store, precisa_processar_bq
 from views import (
     render_sidebar, render_header, tela_login, tela_importar,
     _render_dashboard, _render_historico, _render_cliente, _render_proximas,
@@ -81,6 +81,9 @@ def main():
         # Última interação por cliente sem janela temporal — alimenta o
         # "Último Contato" do dashboard mesmo pra ações antigas (>6 dias).
         load_ultimo_contato_painel()
+        # Ultimo login da igreja no painel de controle (mat_login_dias do
+        # health-score, de-para por st_sincro_sac). ~10 MB, 1x por sessao.
+        load_ultimo_login_painel()
         # Atendente atual no lote (painel_tarefas_diarias) — fallback do grupo.
         # Tem só clientes que já entraram em algum lote.
         load_atendente_atual_painel()

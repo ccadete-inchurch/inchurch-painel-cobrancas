@@ -3120,6 +3120,95 @@ def load_ultimo_contato_painel():
     st.session_state["_painel_ultimo_contato_dias"] = out
 
 
+# Materializacao do painel-health-score (deploy/run_daily.py): 1 linha por
+# (igreja, dia) com login no PAINEL DE CONTROLE — channel='control_panel' ja'
+# filtrado na origem. Nao e' login de membro no app/site: esse e' consumo de
+# conteudo, nao gestao da igreja.
+_MAT_LOGIN_DIAS = "business-intelligence-467516.health_score_config.mat_login_dias"
+
+
+def load_ultimo_login_painel():
+    """Ultimo login da igreja no painel de controle, por cliente.
+
+    De-para: a tabela de login e' chaveada por tertiarygroup_id (id do produto)
+    e o painel por id_sacado_sac (id do Superlogica). A ponte e' o campo
+    `st_sincro_sac` da propria splgc-clientes-inchurch, que guarda o
+    tertiarygroup_id do cliente. Medido na carteira: st_sincro_sac cobre 93,8%,
+    contra 77,1% via CNPJ e 40,4% via vw_healthscore_healthscore (essa ultima
+    so' tem igreja ativa). 97 valores sao lixo de CRM ('teste', 'Deal ID:3611')
+    — o SAFE_CAST derruba pra NULL, que e' o comportamento certo.
+
+    Salva em session_state:
+      _painel_ultimo_login[cid] = {"dias": int|None, "data": "DD/MM/AAAA"|None}
+          dias=None  -> tem tenant no produto, mas nenhum login desde o inicio
+                        do log (ver _painel_login_piso_dias)
+          cid ausente -> nao tem tenant (convencao/federacao). Nao e' igreja.
+      _painel_login_piso_dias -> idade do primeiro dia do log. Quem tem
+          dias=None esta' sem acessar ha PELO MENOS isso; nao e' "nao sei".
+    """
+    st.session_state.setdefault("_painel_ultimo_login", {})
+    st.session_state.setdefault("_painel_login_piso_dias", None)
+
+    client = get_bq_client()
+    if not client:
+        return
+
+    try:
+        df = client.query(f"""
+            WITH agg AS (
+                SELECT tertiarygroup_id AS tg, MAX(dia) AS ultimo
+                FROM `{_MAT_LOGIN_DIAS}`
+                GROUP BY tg
+            ),
+            piso AS (
+                SELECT MIN(dia) AS dt_piso FROM `{_MAT_LOGIN_DIAS}`
+            )
+            SELECT CAST(c.id_sacado_sac AS STRING) AS cid,
+                   a.ultimo   AS dt_login,
+                   p.dt_piso  AS dt_piso
+            FROM `{_BQ_PROJECT}.Splgc.splgc-clientes-inchurch` c
+            CROSS JOIN piso p
+            LEFT JOIN agg a ON a.tg = SAFE_CAST(c.st_sincro_sac AS INT64)
+            WHERE SAFE_CAST(c.st_sincro_sac AS INT64) IS NOT NULL
+        """).to_dataframe()
+    except Exception:
+        # Sem fallback pro log cru de proposito: o painel-cs cai num scan de
+        # ~17 GB quando a materializacao some. Por SESSAO isso seria caro
+        # demais aqui — melhor a coluna vir vazia.
+        return
+
+    _BRT = timezone(timedelta(hours=-3))
+    hoje_brt_dt = datetime.now(_BRT).date()
+
+    def _as_date(v):
+        """BQ DATE chega como date, Timestamp ou dbdate dependendo da versao
+        do driver — normaliza antes de subtrair."""
+        if v is None or pd.isna(v):
+            return None
+        try:
+            return pd.Timestamp(v).date()
+        except Exception:
+            return None
+
+    out, piso = {}, None
+    for _, row in df.iterrows():
+        cid = str(row["cid"])
+        if piso is None:
+            d_piso = _as_date(row.get("dt_piso"))
+            if d_piso is not None:
+                piso = max((hoje_brt_dt - d_piso).days, 0)
+        d_login = _as_date(row.get("dt_login"))
+        if d_login is None:
+            out[cid] = {"dias": None, "data": None}
+        else:
+            out[cid] = {
+                "dias": max((hoje_brt_dt - d_login).days, 0),
+                "data": d_login.strftime("%d/%m/%Y"),
+            }
+    st.session_state["_painel_ultimo_login"] = out
+    st.session_state["_painel_login_piso_dias"] = piso
+
+
 def load_grupo_atendente_map():
     """Lê splgc-grupo e mapeia cliente_id → grupo (que é o nome do atendente
     responsável). Fonte PRIMÁRIA de 'quem é dona desse cliente' — cobertura

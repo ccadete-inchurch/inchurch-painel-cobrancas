@@ -14,6 +14,8 @@ SORT_MAP = {
     "↓ Menor saldo":  ("valor",       True),
     "Nome A→Z":       ("nome",        True),
     "Nome Z→A":       ("nome",        False),
+    "↑ Mais tempo sem login": ("_ultimoLoginOrdem", False),
+    "↓ Menos tempo sem login": ("_ultimoLoginOrdem", True),
 }
 
 # ── Status ────────────────────────────────────────────────────────────────────
@@ -166,8 +168,10 @@ div[data-baseweb="menu"] li:hover{background:#1e2333!important}
 hr{border-color:#1e2333!important;margin:16px 0!important;opacity:1}
 
 /* ── Dialog ── */
-[data-testid="stDialogContent"]{background:#181c26!important;border:1px solid #2a2f42!important;border-radius:16px!important;box-shadow:0 16px 48px rgba(0,0,0,.5)!important}
-div[role="dialog"] [data-testid="stVerticalBlock"]{gap:0.8rem!important}
+/* Streamlit 1.59: stDialogContent/div[role=dialog] nao existem mais no DOM.
+   O painel e' <section role="dialog"> dentro de [data-testid="stDialog"]. */
+[data-testid="stDialog"] section[role="dialog"]{background:#181c26!important;border:1px solid #2a2f42!important;border-radius:16px!important;box-shadow:0 16px 48px rgba(0,0,0,.5)!important}
+[data-testid="stDialog"] [data-testid="stVerticalBlock"]{gap:0.8rem!important}
 .dialog-info{background:#13161f;border:1px solid #1e2333;border-radius:10px;padding:14px 16px;margin-bottom:4px}
 .dialog-info-label{font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:#8b94a5;margin-bottom:6px;font-weight:700}
 .dialog-info-value{font-size:14px;color:#e8eaf0;font-weight:600}

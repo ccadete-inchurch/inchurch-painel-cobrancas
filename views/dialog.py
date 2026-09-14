@@ -3,7 +3,7 @@ import streamlit as st
 
 from config import STATUS_OPTS
 from auth import get_store, current_nome, current_email, current_role
-from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html, get_effective_lastContact, parse_date_br
+from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html, get_effective_lastContact, get_ultimo_login, parse_date_br
 
 
 @st.dialog("Editar Registro", width="large")
@@ -25,72 +25,101 @@ def dialog_editar(eid, from_fixados: bool = False):
     #   é a abordagem robusta).
     st.markdown("""
     <style>
-    div[role="dialog"]{
-        max-width:760px !important;
-        width:90vw !important;
+    /* Streamlit 1.59: o dialog e' <section role="dialog"> dentro de
+       [data-testid="stDialog"]. O seletor antigo era div[role="dialog"], que
+       nao casa com NADA — por isso o cap de largura, o titulo menor e o
+       min-height dos cards nunca pegaram e o dialog abria com 1300px.
+       O wrapper vem com align-items:flex-start (cola no topo) e a section
+       sem max-width/max-height: os dois precisam ser sobrescritos. */
+    [data-testid="stDialog"]{
+        align-items:center !important;   /* centraliza na vertical */
+        padding:24px 0 !important;
+    }
+    /* O cap TEM que ir no div filho direto, nao so' na section: e' ele que
+       pinta o fundo do painel e ancora o botao de fechar. Limitando so' a
+       section, sobra um retangulo de 1300px atras dela e o X vai pro canto. */
+    [data-testid="stDialog"] > div{
+        max-width:900px !important;
+        width:94vw !important;
+        max-height:88vh !important;      /* nunca estoura a tela do notebook */
+    }
+    [data-testid="stDialog"] section[role="dialog"]{
+        max-width:100% !important;
+        width:100% !important;
+        max-height:88vh !important;
+        overflow-y:auto !important;      /* rolagem interna, nao da pagina */
     }
     /* Título "Editar Registro" menor + reset agressivo de spacing.
        Streamlit injeta margin/padding em vários níveis (header, h1/h2,
        body container, primeiro filho do body). Reset todos pra eliminar
        o gap grande entre título e o conteúdo. */
-    div[role="dialog"] h1,
-    div[role="dialog"] h2,
-    div[role="dialog"] h3{
+    [data-testid="stDialog"] h1,
+    [data-testid="stDialog"] h2,
+    [data-testid="stDialog"] h3{
         font-size:20px !important;
         font-weight:700 !important;
         margin:0 !important;
         padding:0 !important;
         line-height:1.3 !important;
     }
-    div[role="dialog"] header,
-    div[role="dialog"] [data-testid="stDialogHeader"]{
+    [data-testid="stDialog"] header,
+    [data-testid="stDialog"] [data-testid="stDialogHeader"]{
         padding:12px 16px 6px 16px !important;
         margin:0 !important;
         min-height:auto !important;
     }
-    div[role="dialog"] [data-testid="stDialogBody"]{
+    [data-testid="stDialog"] [data-testid="stDialogBody"]{
         padding-top:6px !important;
         margin-top:0 !important;
     }
-    div[role="dialog"] [data-testid="stDialogBody"] > div:first-child{
+    [data-testid="stDialog"] [data-testid="stDialogBody"] > div:first-child{
         margin-top:0 !important;
         padding-top:0 !important;
     }
     /* stVerticalBlock dentro do body — gap menor entre elementos */
-    div[role="dialog"] [data-testid="stDialogBody"] [data-testid="stVerticalBlock"]{
+    [data-testid="stDialog"] [data-testid="stDialogBody"] [data-testid="stVerticalBlock"]{
         gap:0.5rem !important;
     }
-    div[role="dialog"] button[kind="primary"]{
+    [data-testid="stDialog"] button[kind="primary"]{
         background-color:#4a8a2c !important;
         border:1px solid #4a8a2c !important;
         color:#ffffff !important;
     }
-    div[role="dialog"] button[kind="primary"]:hover{
+    [data-testid="stDialog"] button[kind="primary"]:hover{
         background-color:#3d731f !important;
         border-color:#3d731f !important;
     }
-    div[role="dialog"] [data-testid="stExpander"] details{
+    [data-testid="stDialog"] [data-testid="stExpander"] details{
         border:none !important;
         background:transparent !important;
     }
-    div[role="dialog"] [data-testid="stExpander"] details summary{
+    [data-testid="stDialog"] [data-testid="stExpander"] details summary{
         color:#8b94a5 !important;
         font-size:13px !important;
         padding:6px 0 !important;
         background:transparent !important;
     }
-    div[role="dialog"] [data-testid="stExpander"] details summary:hover{
+    [data-testid="stDialog"] [data-testid="stExpander"] details summary:hover{
         color:#e8eaf0 !important;
     }
-    div[role="dialog"] [data-testid="stExpander"] details > div{
+    [data-testid="stDialog"] [data-testid="stExpander"] details > div{
         padding:6px 0 0 0 !important;
         background:transparent !important;
         border:none !important;
     }
+    /* Com 5 cards em 900px a coluna fica estreita e o label de 13px quebrava
+       no meio da palavra ("VENCIMENT/O"). 11px + keep-all resolve; label de
+       duas palavras ainda quebra, mas no espaco. */
+    [data-testid="stDialog"] .dialog-info-label{
+        font-size:11px !important;
+        letter-spacing:0.8px !important;
+        word-break:keep-all !important;
+        overflow-wrap:normal !important;
+    }
     /* Min-height força os 4 cards do header a terem altura igual.
        Cascata via align-items:stretch é flaky no DOM do streamlit. */
-    div[role="dialog"] .dialog-info{
-        min-height:130px !important;
+    [data-testid="stDialog"] .dialog-info{
+        min-height:104px !important;
         display:flex !important;
         flex-direction:column !important;
         justify-content:flex-start !important;
@@ -113,7 +142,7 @@ def dialog_editar(eid, from_fixados: bool = False):
         )
 
     # Cabeçalho informativo
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns([1.6, 1.1, 1.05, 1.15, 1.3])
     with c1:
         inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if cliente.get("_inativo") else ""
         st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Cliente</div><div class="dialog-info-value" style="font-size:16px">{cliente["nome"]}{inativo_badge}</div><div style="font-size:12px;color:#8b94a5;margin-top:3px">{cliente.get("cnpj","—")}</div></div>', unsafe_allow_html=True)
@@ -123,6 +152,30 @@ def dialog_editar(eid, from_fixados: bool = False):
     with c3:
         st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Vencimento</div><div class="dialog-info-value" style="font-size:16px">{cliente.get("vencimento","—")}</div><div style="font-size:12px;color:#8b94a5;margin-top:3px">{dias_html(cliente.get("dias_atraso"))}</div></div>', unsafe_allow_html=True)
     with c4:
+        # Ultimo login da igreja no PAINEL DE CONTROLE. Nao e' acesso de membro
+        # no app/site — esse e' consumo de conteudo e misturaria os vieses.
+        _ul = get_ultimo_login(eid)
+        if _ul["estado"] == "com_login":
+            _ul_valor = _ul["data"]
+            _n = _ul["dias"]
+            _ul_sub = "hoje" if _n == 0 else f'há {_n} dia{"s" if _n != 1 else ""}'
+        elif _ul["estado"] == "sem_login":
+            _ul_valor = _ul["curto"]
+            _ul_sub = "nunca acessou o painel"
+        else:
+            # "Nao vinculado" e nao "nao existe no produto": das 8 da carteira,
+            # 4 SAO igrejas reais cujo st_sincro_sac foi preenchido com id de
+            # deal do CRM ("Deal ID:3507") em vez do tertiarygroup_id. O campo
+            # nao diz que a igreja nao usa o produto — diz que nao achamos ela.
+            _ul_valor = "—"
+            _ul_sub = "não vinculado ao produto"
+        st.markdown(
+            f'<div class="dialog-info"><div class="dialog-info-label">Último login painel</div>'
+            f'<div class="dialog-info-value" style="font-size:16px">{_ul_valor}</div>'
+            f'<div style="font-size:12px;color:#8b94a5;margin-top:3px">{_ul_sub}</div></div>',
+            unsafe_allow_html=True,
+        )
+    with c5:
         # Todos os telefones do cliente — primeiro destacado, demais inline
         # em fonte menor (igual aos cards). Todos selecionáveis/copiáveis.
         tels = cliente.get("telefones") or ([cliente.get("telefone")] if cliente.get("telefone") else [])
@@ -297,15 +350,15 @@ def dialog_editar(eid, from_fixados: bool = False):
         st.markdown("""
         <style>
         /* Esconde o wrapper do marker pra nao tomar espaco vertical */
-        div[role="dialog"] div[data-testid="stElementContainer"]:has(div[data-naoatend]) {
+        [data-testid="stDialog"] div[data-testid="stElementContainer"]:has(div[data-naoatend]) {
             display: none !important;
         }
-        div[role="dialog"] div[data-testid="stColumn"]:has(div[data-naoatend]) button {
+        [data-testid="stDialog"] div[data-testid="stColumn"]:has(div[data-naoatend]) button {
             background-color: #ff5555 !important;
             border-color: #ff5555 !important;
             color: #ffffff !important;
         }
-        div[role="dialog"] div[data-testid="stColumn"]:has(div[data-naoatend]) button:hover {
+        [data-testid="stDialog"] div[data-testid="stColumn"]:has(div[data-naoatend]) button:hover {
             background-color: #d94040 !important;
             border-color: #d94040 !important;
         }

@@ -5,7 +5,7 @@ import streamlit as st
 
 from config import SORT_MAP, STATUS_FILTER_MAP, STATUS_LABELS, PAGE_SIZE
 from auth import get_store, current_role
-from helpers import get_hist, get_hist_unificado, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_effective_atendente, parse_date_br, telefone_wa_link, formatar_telefone, carimbo_dia_cache
+from helpers import get_hist, get_hist_unificado, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_ultimo_login, get_effective_atendente, parse_date_br, telefone_wa_link, formatar_telefone, carimbo_dia_cache
 from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_esta_semana, concluir_pendencia
 import re as _re_tel
 
@@ -133,6 +133,12 @@ def _render_dashboard(store, clientes, role):
     if not df.empty:
         df["_status"]      = df["id"].apply(get_effective_status)
         df["_lastContact"] = df["id"].apply(get_effective_lastContact)
+        # Ultimo login no painel de controle. Guarda o rotulo (exibicao) e a
+        # ordem (int) separados: ordenar pelo texto sairia alfabetico — "9d"
+        # depois de "372d".
+        _ul = df["id"].apply(get_ultimo_login)
+        df["_ultimoLogin"]      = _ul.apply(lambda r: r["curto"])
+        df["_ultimoLoginOrdem"] = _ul.apply(lambda r: r["ordem"])
         df["_atendente"]   = df["id"].apply(get_effective_atendente)
         df["_notes"]       = df["id"].apply(lambda i: get_hist(i).get("notes", ""))
         # get_hist_unificado une historicos das atendentes pro admin —
@@ -716,8 +722,16 @@ def _render_dashboard(store, clientes, role):
     # ── Tabela ────────────────────────────────────────────────────────────────
     # Score: coluna dedicada com gradiente branco→cinza pra valores baixos,
     # laranja só pra score alto (>=150). Reduz ruído visual sem perder a info.
-    col_w    = [2.8, 1.1, 1.4, 1, 1.2, 1.3, 1.5, 1.5, 0.7]  # +0.2 pra Historico caber, -0.2 no Telefone
-    hdrs_t   = ["Cliente", "Score", "Saldo", "Atraso", "Histórico", "Telefone", "Grupo", "Últ. contato", ""]
+    # "Login" (e nao "Últ. login") de proposito: o header e' o que estica a
+    # coluna, nao o valor — os valores sao curtos ("5d", "372d", "—").
+    #
+    # A coluna nova NAO foi paga com aperto geral: medido em 1366px, so'
+    # acrescentar 0.9 truncava o header "Histórico" e quebrava Telefone,
+    # Grupo e Saldo em duas linhas. O espaco sai de Cliente (que quebra
+    # linha de qualquer jeito) e de Últ. contato (data cabe em 1.1). A soma
+    # caiu de 12.5 pra 12.35, entao nada ficou mais apertado que hoje.
+    col_w    = [2.1, 1.0, 1.5, 0.95, 1.2, 1.6, 1.45, 1.35, 0.9, 0.6]
+    hdrs_t   = ["Cliente", "Score", "Saldo", "Atraso", "Histórico", "Telefone", "Grupo", "Últ. contato", "Login", ""]
 
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
     # Fundo escuro aplicado via container CSS abaixo.
@@ -870,11 +884,24 @@ def _render_dashboard(store, clientes, role):
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{tel_display}</div>', unsafe_allow_html=True)
             with rcols[6]:
                 _g_row = row.get("_grupo") or ""
-                _g_row_display = _g_row if _g_row and str(_g_row) not in ("nan", "NaN", "—") else "Sem especialista"
+                # Celula vazia vira "—", nao "Sem especialista": o rotulo longo
+                # quebrava em duas linhas e competia com o nome do especialista
+                # de verdade. O filtro continua se chamando "Sem especialista".
+                _g_row_display = _g_row if _g_row and str(_g_row) not in ("nan", "NaN", "—") else "—"
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{_g_row_display}</div>', unsafe_allow_html=True)
             with rcols[7]:
                 st.markdown(f'<div style="padding:12px 12px;font-size:16px;color:#8b94a5">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
             with rcols[8]:
+                # Cinza pra quem acessou recente, ambar pra quem sumiu ha 90+
+                # dias — o caso que interessa pra cobranca.
+                _lg = row.get("_ultimoLogin") or "—"
+                _lg_ord = row.get("_ultimoLoginOrdem")
+                _lg_cor = "#b8860b" if (_lg_ord == _lg_ord and _lg_ord >= 90) else "#8b94a5"
+                st.markdown(
+                    f'<div style="padding:12px 12px;font-size:16px;color:{_lg_cor}">{_lg}</div>',
+                    unsafe_allow_html=True,
+                )
+            with rcols[9]:
                 if st.button("✏", key=f"edit_{row['id']}_{ridx}", width="stretch", help=f"Editar {row['nome']}"):
                     dialog_editar(row["id"])
 

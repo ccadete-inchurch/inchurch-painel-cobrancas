@@ -562,6 +562,38 @@ def get_effective_lastContact(cid) -> str:
     return (m_d if m_d > painel_d else painel_d).strftime("%d/%m/%Y")
 
 
+def get_ultimo_login(cid) -> dict:
+    """Ultimo login da igreja no painel de controle.
+
+    Tres estados possiveis, e nenhum deles e' "nao sei":
+      com_login  -> dias/data reais (93,8% da carteira)
+      sem_login  -> tem tenant no produto mas nao loga desde o inicio do log.
+                    Nao e' ausencia de dado: e' piso real (hoje ~853 dias).
+      sem_tenant -> convencao/federacao, nao e' igreja no produto (o 6648 e'
+                    o caso relevante). Ai sim nao ha o que mostrar.
+
+    `ordem` e' o que a tabela ordena: dias reais pra quem tem, o piso pra quem
+    nao loga (ordena junto dos piores, que e' onde ele pertence), NaN pra quem
+    nao tem tenant (o na_position="last" do sort joga pro fim).
+    """
+    import streamlit as st
+
+    reg = st.session_state.get("_painel_ultimo_login", {}).get(str(cid))
+    if reg is None:
+        return {"estado": "sem_tenant", "dias": None, "data": None,
+                "curto": "—", "ordem": float("nan")}
+
+    piso = st.session_state.get("_painel_login_piso_dias")
+    if reg["dias"] is None:
+        curto = f"+{piso}d" if piso else "+2a"
+        return {"estado": "sem_login", "dias": None, "data": None,
+                "curto": curto, "ordem": float(piso) if piso else 9999.0}
+
+    d = int(reg["dias"])
+    return {"estado": "com_login", "dias": d, "data": reg["data"],
+            "curto": "hoje" if d == 0 else f"{d}d", "ordem": float(d)}
+
+
 def save_hist(cid, data):
     store = get_store()
     uid   = current_uid()
