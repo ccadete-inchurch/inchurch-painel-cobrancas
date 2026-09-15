@@ -704,10 +704,23 @@ def _render_atividades(store, clientes, role):
             lo, hi = lo - pad, hi + pad
             span = hi - lo
             n = len(vals)
-            dx = w / max(n - 1, 1)
-            pts = [(i * dx, h - (v - lo) / span * h) for i, v in enumerate(vals)]
+            # Inset horizontal: os pontos tem 5px e os das pontas ficariam
+            # cortados pela metade na borda do viewBox.
+            _in = 4
+            dx = (w - 2 * _in) / max(n - 1, 1)
+            pts = [(_in + i * dx, h - (v - lo) / span * h) for i, v in enumerate(vals)]
             linha = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
             area = f"0,{h} " + linha + f" {w},{h}"
+            # Um ponto por leitura. Circle viraria elipse por causa do
+            # preserveAspectRatio="none"; linha de comprimento ZERO com
+            # stroke-linecap:round + vector-effect:non-scaling-stroke desenha
+            # um ponto redondo que ignora a distorcao da escala.
+            _pontos = "".join(
+                f'<line x1="{x:.1f}" y1="{y:.1f}" x2="{x:.1f}" y2="{y:.1f}" '
+                f'stroke="#5fa3ff" stroke-width="5" stroke-linecap="round" '
+                f'vector-effect="non-scaling-stroke"/>'
+                for x, y in pts
+            )
             return (
                 f'<svg viewBox="0 0 {w} {h}" preserveAspectRatio="none" '
                 f'style="width:100%;height:{h}px;display:block">'
@@ -719,6 +732,7 @@ def _render_atividades(store, clientes, role):
                 f'<polyline points="{linha}" fill="none" stroke="#5fa3ff" '
                 f'stroke-width="2" vector-effect="non-scaling-stroke" '
                 f'stroke-linejoin="round" stroke-linecap="round"/>'
+                + _pontos +
                 f'</svg>'
             )
 
@@ -731,6 +745,18 @@ def _render_atividades(store, clientes, role):
             # da carteira, que e' o que o card responde.
             _fim = _vals[-1]
             _dl = _fim - _vals[0]
+            # _delta_html e' dos cards de RECEITA e sufixa "p.p." — aqui o
+            # delta e' contagem de clientes, entao "147,00 p.p." nao queria
+            # dizer nada. Renderizador proprio, e o rotulo diz contra QUE dia
+            # a comparacao e' feita em vez do generico "no mes".
+            if _dl == 0:
+                _dl_html = '<span style="color:#9ca3af;font-size:11px">— 0</span>'
+            else:
+                _seta, _cor = ("▼", "#22c55e") if _dl < 0 else ("▲", "#fb7185")
+                _dl_html = (
+                    f'<span style="color:{_cor};font-size:11px;font-weight:600">'
+                    f'{_seta} {abs(_dl)}</span>'
+                )
             _br = lambda iso: f"{iso[8:10]}/{iso[5:7]}"
             _grafico_html = (
                 f'<div class="card-grafico" style="{_card_wrapper}">'
@@ -738,9 +764,9 @@ def _render_atividades(store, clientes, role):
                 f'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">'
                 f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'letter-spacing:-0.4px;font-variant-numeric:tabular-nums">{_fim}</span>'
-                f'{_delta_html(_dl)}'
+                f'{_dl_html}'
                 f'<span style="font-size:11px;color:#9ca3af;font-weight:700;'
-                f'letter-spacing:1px;text-transform:uppercase">no m&ecirc;s</span>'
+                f'letter-spacing:1px;text-transform:uppercase">vs {_br(_dias_lbl[0])}</span>'
                 f'<span style="margin-left:auto;font-size:11px;color:#6b7280">'
                 f'm&aacute;x {max(_vals)} &middot; m&iacute;n {min(_vals)}</span>'
                 f'</div>'
@@ -748,7 +774,6 @@ def _render_atividades(store, clientes, role):
                 f'<div style="display:flex;justify-content:space-between;'
                 f'font-size:10px;color:#6b7280;margin-top:4px">'
                 f'<span>{_br(_dias_lbl[0])}</span>'
-                f'<span>{len(_vals)} leituras</span>'
                 f'<span>{_br(_dias_lbl[-1])}</span>'
                 f'</div></div>'
             )
