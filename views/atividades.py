@@ -685,7 +685,7 @@ def _render_atividades(store, clientes, role):
             'display:flex;flex-direction:column;align-self:flex-start'
         )
 
-        # ─── Mini-grafico: M0 por dia ──────────────────────────────────
+        # ─── Mini-grafico: inadimplentes por dia no mes corrente ───────
         # Ocupa o espaco que sobrava embaixo do card de receita (ele usa
         # align-self:flex-start, entao a coluna direita ficava vazia ate' a
         # altura do card Visao Geral, que e' bem mais alto).
@@ -697,7 +697,7 @@ def _render_atividades(store, clientes, role):
         #
         # Os textos ficam FORA do SVG: o preserveAspectRatio="none" (necessario
         # pra o grafico esticar na largura da coluna) distorceria a fonte.
-        def _svg_serie(vals: list[float], w: int = 600, h: int = 84) -> str:
+        def _svg_serie(vals: list[float], w: int = 600, h: int = 52) -> str:
             lo, hi = min(vals), max(vals)
             span = (hi - lo) or 1
             pad = span * 0.12
@@ -722,35 +722,25 @@ def _render_atividades(store, clientes, role):
                 f'</svg>'
             )
 
-        _df_serie = fetch_inadimplencia_diaria(60, _dia=carimbo_dia_cache())
+        _df_serie = fetch_inadimplencia_diaria(_dia=carimbo_dia_cache())
         _grafico_html = ""
         if _df_serie is not None and not _df_serie.empty and len(_df_serie) >= 2:
-            _vals = [int(v) for v in _df_serie["m0"].tolist()]
+            _vals = [int(v) for v in _df_serie["inadimplentes"].tolist()]
             _dias_lbl = [str(d) for d in _df_serie["dia"].tolist()]
-            # Delta contra a leitura de ~30 dias atras, nao contra o inicio da
-            # janela: M0 tem ciclo mensal forte (cai conforme pagam, salta
-            # quando vence fatura nova), entao comparar com 60 dias atras da'
-            # um numero que depende so' de onde a janela caiu no ciclo. A 30
-            # dias a fase e' a mesma e a comparacao significa alguma coisa.
-            import datetime as _dt
-            _d_fim = _dt.date.fromisoformat(_dias_lbl[-1])
-            _alvo = _d_fim - _dt.timedelta(days=30)
-            _i_ref = min(
-                range(len(_dias_lbl)),
-                key=lambda i: abs((_dt.date.fromisoformat(_dias_lbl[i]) - _alvo).days),
-            )
+            # Delta = ultima leitura vs primeira DO MES. E' a variacao mensal
+            # da carteira, que e' o que o card responde.
             _fim = _vals[-1]
-            _dl = _fim - _vals[_i_ref]
+            _dl = _fim - _vals[0]
             _br = lambda iso: f"{iso[8:10]}/{iso[5:7]}"
             _grafico_html = (
-                f'<div style="{_card_wrapper}margin-top:10px">'
-                f'<div style="{_sublabel_css}">M0 por dia &middot; 1 a 30 dias de atraso</div>'
+                f'<div class="card-grafico" style="{_card_wrapper}">'
+                f'<div style="{_sublabel_css}">Inadimplentes por dia &middot; m&ecirc;s atual</div>'
                 f'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">'
                 f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
                 f'letter-spacing:-0.4px;font-variant-numeric:tabular-nums">{_fim}</span>'
                 f'{_delta_html(_dl)}'
                 f'<span style="font-size:11px;color:#9ca3af;font-weight:700;'
-                f'letter-spacing:1px;text-transform:uppercase">vs 30 dias</span>'
+                f'letter-spacing:1px;text-transform:uppercase">no m&ecirc;s</span>'
                 f'<span style="margin-left:auto;font-size:11px;color:#6b7280">'
                 f'm&aacute;x {max(_vals)} &middot; m&iacute;n {min(_vals)}</span>'
                 f'</div>'
@@ -770,7 +760,9 @@ def _render_atividades(store, clientes, role):
                 + _divisor_a.join(_linhas_receita)
                 + '</div>'
             )
-            _npl_html_parts.append(_analise_receita_html + _grafico_html)
+            _npl_html_parts.append(
+                f'<div class="col-analise">{_analise_receita_html}{_grafico_html}</div>'
+            )
 
     # ═══════════════ ORDEM DE RENDER ═══════════════
     # 1. Bem-vindo (saudação personalizada)

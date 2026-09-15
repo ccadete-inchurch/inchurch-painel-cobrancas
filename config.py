@@ -123,6 +123,28 @@ section[data-testid="stSidebar"] .stButton>button:hover{
 .tag-nova-cob{white-space:nowrap;background:rgba(79,124,255,.18);color:#5fa3ff;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
 
 /* ── Atraso chips ── */
+/* Coluna direita de Atividades [receita + grafico]: sem isso o grafico tinha
+   altura fixa e a coluna passava da linha de "parciais" do card Visao Geral.
+   Agora o card do grafico estica (flex:1) ate' bater a altura do vizinho.
+   O min-height e' piso de seguranca: se a cadeia de flex do streamlit mudar e
+   a altura da coluna virar auto, o card cai nele em vez de colapsar pra 0. */
+.col-analise{display:flex;flex-direction:column;gap:10px;height:100%}
+/* O card de receita traz align-self:flex-start do _card_wrapper. Num flex
+   COLUMN isso e' eixo horizontal e encolhia ele pra largura do conteudo —
+   ficava mais estreito que o card do grafico. Forca stretch nos dois. */
+.col-analise > div{align-self:stretch!important}
+.col-analise > .card-grafico{flex:1 1 auto;min-height:132px}
+.col-analise > .card-grafico svg{flex:1 1 auto;min-height:52px;height:auto}
+[data-testid="stHorizontalBlock"]:has(.col-analise){align-items:stretch}
+[data-testid="stHorizontalBlock"]:has(.col-analise) > [data-testid="stColumn"]{display:flex}
+[data-testid="stHorizontalBlock"]:has(.col-analise) > [data-testid="stColumn"] > div{
+  width:100%;display:flex;flex-direction:column}
+[data-testid="stHorizontalBlock"]:has(.col-analise) [data-testid="stVerticalBlock"],
+[data-testid="stHorizontalBlock"]:has(.col-analise) [data-testid="stElementContainer"],
+[data-testid="stHorizontalBlock"]:has(.col-analise) [data-testid="stMarkdown"],
+[data-testid="stHorizontalBlock"]:has(.col-analise) [data-testid="stMarkdownContainer"]{
+  flex:1 1 auto;display:flex;flex-direction:column}
+
 /* Botao de editar da tabela: a coluna e' estreita (~32px) e o padding padrao
    de 15px de cada lado nao cabe — sobram 2px de content-box, o conteudo e'
    empurrado e o lapis sai do centro. Em monitor grande a coluna e' maior e o

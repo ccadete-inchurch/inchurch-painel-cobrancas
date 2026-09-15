@@ -1984,37 +1984,33 @@ def compute_npl_today_overlay(
 
 
 @st.cache_data(ttl=86400)
-def fetch_inadimplencia_diaria(dias: int = 60, _dia: str | None = None) -> pd.DataFrame:
-    """Serie diaria de inadimplentes pro mini-grafico da tela Atividades.
+def fetch_inadimplencia_diaria(_dia: str | None = None) -> pd.DataFrame:
+    """Quantidade total de inadimplentes por dia, dentro do MES CORRENTE.
 
-    Conta so' o bucket M0 (atraso de 1 a 30 dias) — mesmo criterio da linha
-    "Inadimplencia mensal" do card de receita logo acima, entao o grafico e' a
-    trajetoria diaria daquele indicador. A carteira total nao serve aqui: os
-    ~400 clientes de 180+ dias quase nao se mexem e achatavam o sinal. Em M0 a
-    serie varia de ~95 a ~272 e mostra o ciclo do mes (cai conforme pagam,
-    salta quando vence fatura nova).
+    M0 aqui e' o eixo do TEMPO (mes atual), nao faixa de atraso: o card
+    responde "como a carteira se moveu neste mes". Por isso conta a carteira
+    inteira — COUNT(*) do snapshot — e nao um bucket de aging.
 
-    ATENCAO: o card Visao Geral ao lado conta a partir do store `clientes` ao
-    vivo, com os overlays do dia (pagamentos via API Superlogica, grupo NAO
-    COBRAR). O snapshot e' gravado 1x/dia as 08:30 BRT e nao tem esses
-    overlays. Sao numeros de escopo diferente de qualquer forma (M0 vs total),
-    entao nao se espera que batam.
+    NAO confundir com a linha "Inadimplencia mensal" do card de receita logo
+    acima: aquela e' outra metrica (% de R$ aberto/emitido sobre boletos
+    vencidos em [D-30, D], janela ROLANTE, so' contas 1.2.1/1.2.2). Sao dois
+    indicadores diferentes que por acaso dividem a palavra "mensal".
 
-    O snapshot so' tem dia util: fim de semana e feriado nao existem na serie.
+    O snapshot so' tem dia util, entao no inicio do mes a serie tem poucos
+    pontos — o chamador exige >= 2 pra desenhar.
 
-    Retorna DataFrame com: dia (date), m0 (int), saldo_m0 (float).
+    Retorna DataFrame com: dia (date), inadimplentes (int), saldo (float).
     """
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
     try:
         return client.query(f"""
-            SELECT data_snapshot AS dia,
-                   COUNTIF(dias_atraso BETWEEN 1 AND 30) AS m0,
-                   ROUND(SUM(IF(dias_atraso BETWEEN 1 AND 30, valor_saldo, 0)), 2) AS saldo_m0
+            SELECT data_snapshot             AS dia,
+                   COUNT(*)                  AS inadimplentes,
+                   ROUND(SUM(valor_saldo), 2) AS saldo
             FROM `{_SNAPSHOT_TABLE}`
-            WHERE data_snapshot >= DATE_SUB(
-                CURRENT_DATE('America/Sao_Paulo'), INTERVAL {int(dias)} DAY)
+            WHERE data_snapshot >= DATE_TRUNC(CURRENT_DATE('America/Sao_Paulo'), MONTH)
             GROUP BY dia
             ORDER BY dia
         """).to_dataframe()
