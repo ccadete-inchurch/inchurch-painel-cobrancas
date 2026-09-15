@@ -128,13 +128,27 @@ section[data-testid="stSidebar"] .stButton>button:hover{
    Agora o card do grafico estica (flex:1) ate' bater a altura do vizinho.
    O min-height e' piso de seguranca: se a cadeia de flex do streamlit mudar e
    a altura da coluna virar auto, o card cai nele em vez de colapsar pra 0. */
-.col-analise{display:flex;flex-direction:column;gap:10px;height:100%}
+/* flex:1 alem do height:100%: o height percentual so' resolve se TODA a
+   cadeia acima tiver altura definida, o que no DOM do streamlit nao e'
+   garantido. Como flex item do stMarkdownContainer (que a regra abaixo
+   poe em flex column), o flex:1 preenche de forma confiavel. */
+.col-analise{display:flex;flex-direction:column;gap:10px;height:100%;flex:1 1 auto}
 /* O card de receita traz align-self:flex-start do _card_wrapper. Num flex
    COLUMN isso e' eixo horizontal e encolhia ele pra largura do conteudo —
    ficava mais estreito que o card do grafico. Forca stretch nos dois. */
 .col-analise > div{align-self:stretch!important}
-.col-analise > .card-grafico{flex:1 1 auto!important;min-height:132px}
-.col-analise > .card-grafico svg{flex:1 1 auto;min-height:52px;height:auto}
+/* O card do grafico ENCOLHE e cresce (min-height:0), e quem absorve a
+   diferenca e' o SVG: altura vira auto + flex:1. Antes o min-height fixo so'
+   deixava crescer, entao eu precisava calibrar a altura na mao contra o card
+   Visao Geral — que muda de altura conforme o papel (admin ve 3 blocos,
+   atendente ve menos). Agora a altura vem da coluna, que ja' e' a do vizinho. */
+/* Altura NATURAL, sem esticar. Tentei tres variacoes de flex pra o card
+   acompanhar a altura do Visao Geral e nenhuma preencheu de forma confiavel
+   no DOM do streamlit (o height:100% da coluna nao resolve em toda a cadeia).
+   Ficar mais BAIXO que o vizinho e' visualmente aceitavel; passar dele nao e'.
+   Entao: altura fixa e compacta, que cabe embaixo de qualquer variacao do
+   card ao lado (admin ve 3 blocos, atendente ve menos). */
+.col-analise > .card-grafico{flex:0 0 auto;min-height:0}
 [data-testid="stHorizontalBlock"]:has(.col-analise){align-items:stretch}
 [data-testid="stHorizontalBlock"]:has(.col-analise) > [data-testid="stColumn"]{display:flex}
 [data-testid="stHorizontalBlock"]:has(.col-analise) > [data-testid="stColumn"] > div{
