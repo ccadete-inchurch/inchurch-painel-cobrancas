@@ -123,45 +123,6 @@ section[data-testid="stSidebar"] .stButton>button:hover{
 .tag-nova-cob{white-space:nowrap;background:rgba(79,124,255,.18);color:#5fa3ff;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
 
 /* ── Atraso chips ── */
-/* Coluna direita de Atividades [receita + grafico]: sem isso o grafico tinha
-   altura fixa e a coluna passava da linha de "parciais" do card Visao Geral.
-   Agora o card do grafico estica (flex:1) ate' bater a altura do vizinho.
-   O min-height e' piso de seguranca: se a cadeia de flex do streamlit mudar e
-   a altura da coluna virar auto, o card cai nele em vez de colapsar pra 0. */
-/* flex:1 alem do height:100%: o height percentual so' resolve se TODA a
-   cadeia acima tiver altura definida, o que no DOM do streamlit nao e'
-   garantido. Como flex item do stMarkdownContainer (que a regra abaixo
-   poe em flex column), o flex:1 preenche de forma confiavel. */
-.col-analise{display:flex;flex-direction:column;gap:10px;height:100%;flex:1 1 auto}
-/* O card de receita traz align-self:flex-start do _card_wrapper. Num flex
-   COLUMN isso e' eixo horizontal e encolhia ele pra largura do conteudo —
-   ficava mais estreito que o card do grafico. Forca stretch nos dois. */
-.col-analise > div{align-self:stretch!important}
-/* O card do grafico ENCOLHE e cresce (min-height:0), e quem absorve a
-   diferenca e' o SVG: altura vira auto + flex:1. Antes o min-height fixo so'
-   deixava crescer, entao eu precisava calibrar a altura na mao contra o card
-   Visao Geral — que muda de altura conforme o papel (admin ve 3 blocos,
-   atendente ve menos). Agora a altura vem da coluna, que ja' e' a do vizinho. */
-/* Altura NATURAL, sem esticar. Tentei tres variacoes de flex pra o card
-   acompanhar a altura do Visao Geral e nenhuma preencheu de forma confiavel
-   no DOM do streamlit (o height:100% da coluna nao resolve em toda a cadeia).
-   Ficar mais BAIXO que o vizinho e' visualmente aceitavel; passar dele nao e'.
-   Entao: altura fixa e compacta, que cabe embaixo de qualquer variacao do
-   card ao lado (admin ve 3 blocos, atendente ve menos). */
-/* Padding vertical menor que o _card_wrapper compartilhado: o card do
-   grafico e' so' 3 linhas e o respiro de 14px o deixava mais alto que o
-   Visao Geral ao lado. */
-.col-analise > .card-grafico{flex:0 0 auto;min-height:0;padding-top:9px!important;padding-bottom:9px!important}
-[data-testid="stHorizontalBlock"]:has(.col-analise){align-items:stretch}
-[data-testid="stHorizontalBlock"]:has(.col-analise) > [data-testid="stColumn"]{display:flex}
-[data-testid="stHorizontalBlock"]:has(.col-analise) > [data-testid="stColumn"] > div{
-  width:100%;display:flex;flex-direction:column}
-[data-testid="stHorizontalBlock"]:has(.col-analise) [data-testid="stVerticalBlock"],
-[data-testid="stHorizontalBlock"]:has(.col-analise) [data-testid="stElementContainer"],
-[data-testid="stHorizontalBlock"]:has(.col-analise) [data-testid="stMarkdown"],
-[data-testid="stHorizontalBlock"]:has(.col-analise) [data-testid="stMarkdownContainer"]{
-  flex:1 1 auto;display:flex;flex-direction:column}
-
 /* Botao de editar da tabela: a coluna e' estreita (~32px) e o padding padrao
    de 15px de cada lado nao cabe — sobram 2px de content-box, o conteudo e'
    empurrado e o lapis sai do centro. Em monitor grande a coluna e' maior e o

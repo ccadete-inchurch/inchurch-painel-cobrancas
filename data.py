@@ -2003,41 +2003,6 @@ def compute_npl_today_overlay(
 
 
 @st.cache_data(ttl=86400)
-def fetch_inadimplencia_diaria(_dia: str | None = None) -> pd.DataFrame:
-    """Quantidade total de inadimplentes por dia, dentro do MES CORRENTE.
-
-    M0 aqui e' o eixo do TEMPO (mes atual), nao faixa de atraso: o card
-    responde "como a carteira se moveu neste mes". Por isso conta a carteira
-    inteira — COUNT(*) do snapshot — e nao um bucket de aging.
-
-    NAO confundir com a linha "Inadimplencia mensal" do card de receita logo
-    acima: aquela e' outra metrica (% de R$ aberto/emitido sobre boletos
-    vencidos em [D-30, D], janela ROLANTE, so' contas 1.2.1/1.2.2). Sao dois
-    indicadores diferentes que por acaso dividem a palavra "mensal".
-
-    O snapshot so' tem dia util, entao no inicio do mes a serie tem poucos
-    pontos — o chamador exige >= 2 pra desenhar.
-
-    Retorna DataFrame com: dia (date), inadimplentes (int), saldo (float).
-    """
-    client = get_bq_client()
-    if not client:
-        return pd.DataFrame()
-    try:
-        return client.query(f"""
-            SELECT data_snapshot             AS dia,
-                   COUNT(*)                  AS inadimplentes,
-                   ROUND(SUM(valor_saldo), 2) AS saldo
-            FROM `{_SNAPSHOT_TABLE}`
-            WHERE data_snapshot >= DATE_TRUNC(CURRENT_DATE('America/Sao_Paulo'), MONTH)
-            GROUP BY dia
-            ORDER BY dia
-        """).to_dataframe()
-    except Exception:
-        return pd.DataFrame()
-
-
-@st.cache_data(ttl=86400)
 def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", _dia: str | None = None) -> dict:
     """Métricas NPL "por receita" — % por R$ com janela rolante.
 
