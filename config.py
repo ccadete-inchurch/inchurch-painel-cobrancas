@@ -148,7 +148,10 @@ section[data-testid="stSidebar"] .stButton>button:hover{
    Ficar mais BAIXO que o vizinho e' visualmente aceitavel; passar dele nao e'.
    Entao: altura fixa e compacta, que cabe embaixo de qualquer variacao do
    card ao lado (admin ve 3 blocos, atendente ve menos). */
-.col-analise > .card-grafico{flex:0 0 auto;min-height:0}
+/* Padding vertical menor que o _card_wrapper compartilhado: o card do
+   grafico e' so' 3 linhas e o respiro de 14px o deixava mais alto que o
+   Visao Geral ao lado. */
+.col-analise > .card-grafico{flex:0 0 auto;min-height:0;padding-top:9px!important;padding-bottom:9px!important}
 [data-testid="stHorizontalBlock"]:has(.col-analise){align-items:stretch}
 [data-testid="stHorizontalBlock"]:has(.col-analise) > [data-testid="stColumn"]{display:flex}
 [data-testid="stHorizontalBlock"]:has(.col-analise) > [data-testid="stColumn"] > div{

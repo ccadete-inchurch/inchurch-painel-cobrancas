@@ -748,9 +748,9 @@ def _render_atividades(store, clientes, role):
                 # pontos sao equidistantes, um flex com space-between alinha
                 # exatamente com eles.
                 #
-                # Dia (numero) embaixo em vez da data cheia: num mes fechado
-                # sao ~22 leituras e "14/09" a 9px nao cabe em ~20px de celula.
-                # O mes fica no rodape, que nao repete.
+                # Eixo X com dia/mes. A 8px, "14/09" ocupa ~20px, que e' o
+                # tamanho da celula num mes fechado (~22 leituras) — cabe no
+                # limite. Se um dia apertar, o recurso e' voltar pro dia solto.
                 + f'<div style="display:flex;justify-content:space-between;'
                   f'font-size:9px;color:#8b94a5;font-variant-numeric:tabular-nums;'
                   f'margin-bottom:2px">'
@@ -758,9 +758,9 @@ def _render_atividades(store, clientes, role):
                 + '</div>'
                 + _svg_serie(_vals)
                 + f'<div style="display:flex;justify-content:space-between;'
-                  f'font-size:9px;color:#6b7280;font-variant-numeric:tabular-nums;'
+                  f'font-size:8px;color:#6b7280;font-variant-numeric:tabular-nums;'
                   f'margin-top:2px">'
-                + "".join(f'<span>{d[8:10]}</span>' for d in _dias_lbl)
+                + "".join(f'<span>{d[8:10]}/{d[5:7]}</span>' for d in _dias_lbl)
                 + '</div>'
                 # Sem rodape com o intervalo: o titulo ja' diz "mes atual" e os
                 # dias estao embaixo de cada ponto. Os ~20px que ele custava
