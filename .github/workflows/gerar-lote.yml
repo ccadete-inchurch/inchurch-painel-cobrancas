@@ -31,4 +31,8 @@ jobs:
         env:
           GCP_SA_JSON:     ${{ secrets.GCP_SA_JSON }}
           PG_N8N_PASSWORD: ${{ secrets.PG_N8N_PASSWORD }}
+          # API Superlógica: confere quem já regularizou antes de gerar o lote.
+          # Mesmos valores de [superlogica] nos secrets do Streamlit.
+          SL_APP_TOKEN:    ${{ secrets.SL_APP_TOKEN }}
+          SL_ACCESS_TOKEN: ${{ secrets.SL_ACCESS_TOKEN }}
         run: python scripts/gerar_lote_cron.py

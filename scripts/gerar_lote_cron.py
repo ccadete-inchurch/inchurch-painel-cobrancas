@@ -87,7 +87,7 @@ def _build_secrets():
     if not pg_pwd:
         raise SystemExit("❌ Falta env var PG_N8N_PASSWORD")
 
-    return _SecretsDict({
+    secrets = _SecretsDict({
         "gcp_service_account": sa,
         "n8n_postgres": _SecretsDict({
             "host":     os.environ.get("PG_N8N_HOST", "34.56.87.143"),
@@ -100,6 +100,21 @@ def _build_secrets():
             "sslmode":  os.environ.get("PG_N8N_SSLMODE", "require"),
         }),
     })
+
+    # Superlógica: sem essas chaves a consulta de pagamentos volta vazia SEM
+    # erro e o lote sai com clientes que já regularizaram (foi assim desde a
+    # criação do cron até 15/09/2026). Não é fatal aqui — se gera ou não o
+    # lote sem a API é decidido no main, conforme o estado do BQ.
+    sl_app = os.environ.get("SL_APP_TOKEN")
+    sl_access = os.environ.get("SL_ACCESS_TOKEN")
+    if sl_app and sl_access:
+        secrets["superlogica"] = _SecretsDict({
+            "app_token":    sl_app,
+            "access_token": sl_access,
+        })
+    else:
+        print("[WARN] SL_APP_TOKEN/SL_ACCESS_TOKEN ausentes — API Superlógica indisponível", flush=True)
+    return secrets
 
 
 # Constrói o módulo fake e registra em sys.modules
@@ -140,8 +155,28 @@ from data import (  # noqa: E402
     salvar_snapshot_inadimplentes_hoje,
     aplicar_pagamentos_hoje_no_store,
     resetar_status_reincidentes,
+    diagnosticar_bq_saude,
+    _superlogica_get,
     _EMAIL_GRUPO,
 )
+
+
+def _api_superlogica_ok() -> tuple[bool, str]:
+    """Testa a API antes do overlay. fetch_pagamentos_hoje_api devolve {} tanto
+    quando ninguém pagou quanto quando a API falhou — aqui separamos os dois.
+    Resposta válida é HTTP 200 com lista (vazia inclusive)."""
+    from helpers import hoje_lote
+    dia = hoje_lote()
+    status, body, erro = _superlogica_get("/cobranca", {
+        "filtrarpor": "liquidacao",
+        "dtInicio": dia,
+        "dtFim": dia,
+        "itensPorPagina": 1,
+        "pagina": 1,
+    })
+    if status == 200 and isinstance(body, list):
+        return True, ""
+    return False, erro or f"HTTP {status}"
 
 
 def main():
@@ -159,16 +194,40 @@ def main():
     print("[3/7] Lendo cooldowns do painel...", flush=True)
     load_cooldowns_from_painel()
 
-    print("[4/7] Aplicando overlay de pagamentos recentes (3 dias)...", flush=True)
-    # CRÍTICO: rodar ANTES de gerar_tarefas_do_dia. Cliente que pagou nos
-    # últimos 3 dias (com crédito ainda pendente) é detectado via API e
-    # marcado como _regularizado_hoje — assim não entra no lote.
-    try:
-        aplicar_pagamentos_hoje_no_store()
-        _n_reg_overlay = sum(1 for c in clientes if c.get("_regularizado_hoje"))
-        print(f"      {_n_reg_overlay} clientes marcados como regularizados via overlay", flush=True)
-    except Exception as e:
-        print(f"      [WARN] Overlay falhou: {e}", flush=True)
+    print("[4/7] Conferindo pagamentos recentes na API Superlógica...", flush=True)
+    # CRÍTICO: rodar ANTES de gerar_tarefas_do_dia. Cliente que regularizou e
+    # o BQ ainda não mostra (boleto em compensação, ou BQ em time travel por
+    # falha de pipeline) é marcado como _regularizado_hoje — e não entra no lote.
+    #
+    # Trava: sem a API, o lote só sai se o BQ estiver comprovadamente em dia
+    # (motivo 'ok'). 'sem_conn'/'erro' devolvem e_confiavel=True sem ter
+    # verificado nada, então contam como NÃO confirmado.
+    diag = diagnosticar_bq_saude()
+    bq_em_dia = bool(diag.get("e_confiavel")) and diag.get("motivo") == "ok"
+    print(f"      BigQuery: {diag.get('motivo')} — {diag.get('detalhes')}", flush=True)
+
+    overlay_ok = False
+    api_ok, api_erro = _api_superlogica_ok()
+    if api_ok:
+        try:
+            aplicar_pagamentos_hoje_no_store()
+            overlay_ok = True
+            _n_reg_overlay = sum(1 for c in clientes if c.get("_regularizado_hoje"))
+            _n_parc_overlay = sum(1 for c in clientes if c.get("_pago_parcial_hoje"))
+            print(f"      {_n_reg_overlay} regularizados e {_n_parc_overlay} parciais via API "
+                  f"(regularizados ficam fora do lote)", flush=True)
+        except Exception as e:
+            api_erro = f"overlay falhou: {e}"
+
+    bloquear_lote = False
+    if not overlay_ok:
+        if bq_em_dia:
+            print(f"      [WARN] API indisponível ({api_erro}). BigQuery em dia — "
+                  f"lote segue sem a conferência.", flush=True)
+        else:
+            bloquear_lote = True
+            print(f"      [ERR] API indisponível ({api_erro}) e BigQuery desatualizado "
+                  f"ou não confirmado — lote NÃO será gerado.", flush=True)
 
     print("[5/7] Resetando status de reincidentes...", flush=True)
     # Cliente que saiu da inadimplência e voltou tem status antigo (promessa,
@@ -182,18 +241,30 @@ def main():
 
     print("[6/7] Gerando lote por atendente...", flush=True)
     resumo = {}
-    for email_atd, nome_atd in _EMAIL_GRUPO.items():
-        buckets = gerar_tarefas_do_dia(clientes, email_atd) or {}
-        n_lig = sum(1 for b in buckets.values() if b == "ligacao")
-        n_msg = sum(1 for b in buckets.values() if b == "mensagem")
-        resumo[nome_atd] = {"total": len(buckets), "ligacao": n_lig, "mensagem": n_msg}
-        print(f"      {nome_atd}: {len(buckets)} tarefas (lig={n_lig}, msg={n_msg})", flush=True)
+    if bloquear_lote:
+        # Sem lote do cron, o painel gera quando a atendente abrir Atividades
+        # (gerar_tarefas_do_dia em views/atividades.py), já com o overlay do
+        # próprio painel — se a API tiver voltado até lá.
+        print("      PULADO — ver [ERR] no passo 4", flush=True)
+    else:
+        for email_atd, nome_atd in _EMAIL_GRUPO.items():
+            buckets = gerar_tarefas_do_dia(clientes, email_atd) or {}
+            n_lig = sum(1 for b in buckets.values() if b == "ligacao")
+            n_msg = sum(1 for b in buckets.values() if b == "mensagem")
+            resumo[nome_atd] = {"total": len(buckets), "ligacao": n_lig, "mensagem": n_msg}
+            print(f"      {nome_atd}: {len(buckets)} tarefas (lig={n_lig}, msg={n_msg})", flush=True)
 
+    # Snapshot é independente do lote (usa só BQ e tem a própria defesa).
     print("[7/7] Salvando snapshot diário de inadimplentes...", flush=True)
     salvar_snapshot_inadimplentes_hoje(clientes)
-    print(f"      snapshot de {len(clientes)} clientes gravado", flush=True)
+    print(f"      snapshot de {len(clientes)} clientes processado", flush=True)
 
     print("=" * 60, flush=True)
+    if bloquear_lote:
+        # Exit != 0 marca a execução como falha no GitHub Actions — é o aviso.
+        print("❌ Lote NÃO gerado: API Superlógica indisponível com BigQuery "
+              "desatualizado ou não confirmado.", flush=True)
+        sys.exit(1)
     print("✅ Lote gerado com sucesso", flush=True)
     print(json.dumps(resumo, ensure_ascii=False, indent=2), flush=True)
 

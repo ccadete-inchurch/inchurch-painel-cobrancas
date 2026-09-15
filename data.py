@@ -173,14 +173,15 @@ def _superlogica_get(path: str, params: dict | None = None) -> tuple[int, dict |
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_pagamentos_hoje_api() -> dict:
-    """Delta real-time: agrega cobranças liquidadas nos últimos 3 dias via API
+    """Delta real-time: agrega cobranças liquidadas nos últimos 10 dias via API
     Superlógica, contornando o lag entre liquidação e crédito (compensação
     bancária D+1, D+2). Pagina até esgotar (limite 200/pg).
     Cache TTL 5min — atualiza automaticamente sem precisar de refresh manual.
 
-    Por que 3 dias e não 1: cliente paga sex, crédito chega ter/qua. Sem essa
-    janela, o sistema só "vê" o pagamento quando crédito entra — atendente
-    fica cobrando quem já pagou por 1-3 dias úteis.
+    Por que 10 dias e não 3: boleto liquidado na quinta só credita na segunda
+    e só depois chega no BQ. Com 3 dias a quinta já tinha saído da janela —
+    em 15/09/2026, 29 clientes que liquidaram 10/09 (crédito 14/09) entraram
+    no lote como inadimplentes.
 
     Retorno: {cliente_id (str): {valor_total, nome, cnpj, dt_liquidacao,
     dt_liquidacao_date (date), cobrancas_ids, foi_hoje (bool)}}.
@@ -195,26 +196,22 @@ def fetch_pagamentos_hoje_api() -> dict:
     # cards do lote do dia anterior ainda estão em CONCLUÍDA.
     _BRT = _tz(_td(hours=-3))
     hoje = _date.fromisoformat(_hoje_lote())
-    # Janela ADAPTATIVA. Os 3 dias fixos cobriam fim de semana e feriado curto,
-    # que e' o caso normal. Mas quando o pipeline do BQ quebra, o painel
-    # congela na ultima versao boa por ATE' 14 DIAS (time travel) — e o
-    # curativo continuava sendo de 3. Do 4o dia em diante o pagamento sumia da
-    # janela com o BQ ainda congelado: o cliente ressuscitava na carteira e
-    # voltava pro lote, que e' exatamente o que este overlay existe pra evitar.
+    # Janela de no mínimo 10 dias: cobre boleto (liquidação → crédito em ~2
+    # dias úteis) somado a fim de semana e feriado. Custo: ~5 páginas da API.
     #
-    # Agora a janela acompanha a defasagem: se o BQ esta' 9 dias atrasado, olha
-    # 10 dias pra tras. Em dia normal continua 3, sem custo extra. O teto de 15
-    # espelha o limite do proprio time travel — passou disso, o painel ja' esta'
-    # avisando que os dados nao sao confiaveis.
-    janela_dias = 3
+    # Quando o pipeline do BQ quebra, o painel congela na ultima versao boa
+    # (time travel) e a janela acompanha a defasagem: BQ 12 dias atrasado olha
+    # 13 dias pra tras. O teto de 15 espelha o limite do proprio time travel —
+    # passou disso, o painel ja' esta' avisando que os dados nao sao confiaveis.
+    janela_dias = 10
     try:
         _diag = diagnosticar_bq_saude()
         _ts_bom = _diag.get("ts_ultimo_bom") if not _diag.get("e_confiavel") else None
         if _ts_bom is not None:
             _atraso = (hoje - _ts_bom.astimezone(_BRT).date()).days
-            janela_dias = max(3, min(_atraso + 1, 15))
+            janela_dias = max(10, min(_atraso + 1, 15))
     except Exception:
-        pass  # sem diagnostico, mantem o comportamento antigo
+        pass  # sem diagnostico, fica no minimo de 10
     dt_inicio = hoje - _td(days=janela_dias - 1)
     dt_inicio_iso = dt_inicio.strftime("%Y-%m-%d")
     hoje_iso = hoje.strftime("%Y-%m-%d")
@@ -239,19 +236,18 @@ def fetch_pagamentos_hoje_api() -> dict:
             cid = str(item.get("id_sacado_sac") or "")
             if not cid:
                 continue
-            # Validação defensiva: filtra dt_liq dentro da janela [hoje-2d, hoje].
+            # Validação defensiva: filtra dt_liq dentro da janela [dt_inicio, hoje].
             # A API SL não filtra estritamente por dtInicio/dtFim — retorna
             # itens fora da janela (provavelmente por dt_recebimento_recb).
             dt_liq_str = str(item.get("dt_liquidacao_recb") or "")
             dt_liq = None
-            # Tenta múltiplos formatos — SL às vezes retorna US (MM/DD/YYYY),
-            # outras vezes BR (DD/MM/YYYY) ou ISO (YYYY-MM-DD). Cron de
-            # 2026-06-17 marcou 0 clientes — provável que o formato mudou
-            # e o parse %m/%d/%Y antigo rejeitava silenciosamente tudo.
-            # Ordem: ISO (sempre não-ambíguo) → BR (SL é brasileiro) → US
-            # (fallback histórico). Datas tipo "05/06/2026" são ambíguas mas
-            # BR é a hipótese mais provável.
-            for _fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+            # A API devolve MÊS/DIA/ANO ("09/14/2026"). O BR vinha antes do US
+            # (commit 1afe161, jun/2026) e toda liquidação com dia <= 12 era
+            # lida invertida: "09/10/2026" virava 09/out, caía fora da janela
+            # e o pagamento sumia sem erro. O "cron marcou 0" que motivou
+            # aquela troca era, muito provavelmente, o cron sem credencial da
+            # API, não o formato. BR fica só de fallback.
+            for _fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y"):
                 try:
                     dt_liq = _datetime.strptime(dt_liq_str[:10], _fmt).date()
                     break
@@ -3573,7 +3569,7 @@ def gerar_tarefas_do_dia(clientes, email_logado: str) -> dict:
             pass  # Em caso de erro, segue com cache atual
 
     # Geração inicial: 4 fases (30 lig + 50 msg, ≤10/15 inativos, overflow B).
-    # Exclui clientes já regularizados (pago via API hoje OU últimos 3 dias).
+    # Exclui clientes já regularizados (pago via API dentro da janela do overlay).
     # Sem essa filtragem, cliente que pagou sex aparecia no lote da seg porque
     # BQ ainda não tinha replicado a liquidação (compensação D+1/D+2).
     #
