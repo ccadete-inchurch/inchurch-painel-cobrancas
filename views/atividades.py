@@ -770,12 +770,28 @@ def _render_atividades(store, clientes, role):
                 f'<span style="margin-left:auto;font-size:11px;color:#6b7280">'
                 f'm&aacute;x {max(_vals)} &middot; m&iacute;n {min(_vals)}</span>'
                 f'</div>'
-                + _svg_serie(_vals) +
-                f'<div style="display:flex;justify-content:space-between;'
-                f'font-size:10px;color:#6b7280;margin-top:4px">'
-                f'<span>{_br(_dias_lbl[0])}</span>'
-                f'<span>{_br(_dias_lbl[-1])}</span>'
-                f'</div></div>'
+                # Rotulos como linhas de HTML, nao texto dentro do SVG: o
+                # preserveAspectRatio="none" esticaria a fonte junto. Como os
+                # pontos sao equidistantes, um flex com space-between alinha
+                # exatamente com eles.
+                #
+                # Dia (numero) embaixo em vez da data cheia: num mes fechado
+                # sao ~22 leituras e "14/09" a 9px nao cabe em ~20px de celula.
+                # O mes fica no rodape, que nao repete.
+                + f'<div style="display:flex;justify-content:space-between;'
+                  f'font-size:9px;color:#8b94a5;font-variant-numeric:tabular-nums;'
+                  f'margin-bottom:2px">'
+                + "".join(f'<span>{v}</span>' for v in _vals)
+                + '</div>'
+                + _svg_serie(_vals)
+                + f'<div style="display:flex;justify-content:space-between;'
+                  f'font-size:9px;color:#6b7280;font-variant-numeric:tabular-nums;'
+                  f'margin-top:2px">'
+                + "".join(f'<span>{d[8:10]}</span>' for d in _dias_lbl)
+                + '</div>'
+                + f'<div style="font-size:10px;color:#6b7280;margin-top:5px;'
+                  f'text-align:right">{_br(_dias_lbl[0])} a {_br(_dias_lbl[-1])}</div>'
+                + '</div>'
             )
 
         if _linhas_receita:
