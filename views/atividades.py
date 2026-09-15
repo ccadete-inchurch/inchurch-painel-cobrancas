@@ -697,7 +697,7 @@ def _render_atividades(store, clientes, role):
         #
         # Os textos ficam FORA do SVG: o preserveAspectRatio="none" (necessario
         # pra o grafico esticar na largura da coluna) distorceria a fonte.
-        def _svg_serie(vals: list[float], w: int = 600, h: int = 52) -> str:
+        def _svg_serie(vals: list[float], w: int = 600, h: int = 78) -> str:
             lo, hi = min(vals), max(vals)
             span = (hi - lo) or 1
             pad = span * 0.12
@@ -743,7 +743,6 @@ def _render_atividades(store, clientes, role):
             _dias_lbl = [str(d) for d in _df_serie["dia"].tolist()]
             _grafico_html = (
                 f'<div class="card-grafico" style="{_card_wrapper}">'
-                f'<div style="{_sublabel_css}">Inadimplentes por dia &middot; m&ecirc;s atual</div>'
                 # Rotulos como linhas de HTML, nao texto dentro do SVG: o
                 # preserveAspectRatio="none" esticaria a fonte junto. Como os
                 # pontos sao equidistantes, um flex com space-between alinha

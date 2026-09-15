@@ -133,7 +133,7 @@ section[data-testid="stSidebar"] .stButton>button:hover{
    COLUMN isso e' eixo horizontal e encolhia ele pra largura do conteudo —
    ficava mais estreito que o card do grafico. Forca stretch nos dois. */
 .col-analise > div{align-self:stretch!important}
-.col-analise > .card-grafico{flex:1 1 auto;min-height:132px}
+.col-analise > .card-grafico{flex:1 1 auto!important;min-height:132px}
 .col-analise > .card-grafico svg{flex:1 1 auto;min-height:52px;height:auto}
 [data-testid="stHorizontalBlock"]:has(.col-analise){align-items:stretch}
 [data-testid="stHorizontalBlock"]:has(.col-analise) > [data-testid="stColumn"]{display:flex}

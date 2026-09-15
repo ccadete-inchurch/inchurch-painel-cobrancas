@@ -195,7 +195,26 @@ def fetch_pagamentos_hoje_api() -> dict:
     # cards do lote do dia anterior ainda estão em CONCLUÍDA.
     _BRT = _tz(_td(hours=-3))
     hoje = _date.fromisoformat(_hoje_lote())
-    janela_dias = 3  # cobre fim de semana + feriados curtos
+    # Janela ADAPTATIVA. Os 3 dias fixos cobriam fim de semana e feriado curto,
+    # que e' o caso normal. Mas quando o pipeline do BQ quebra, o painel
+    # congela na ultima versao boa por ATE' 14 DIAS (time travel) — e o
+    # curativo continuava sendo de 3. Do 4o dia em diante o pagamento sumia da
+    # janela com o BQ ainda congelado: o cliente ressuscitava na carteira e
+    # voltava pro lote, que e' exatamente o que este overlay existe pra evitar.
+    #
+    # Agora a janela acompanha a defasagem: se o BQ esta' 9 dias atrasado, olha
+    # 10 dias pra tras. Em dia normal continua 3, sem custo extra. O teto de 15
+    # espelha o limite do proprio time travel — passou disso, o painel ja' esta'
+    # avisando que os dados nao sao confiaveis.
+    janela_dias = 3
+    try:
+        _diag = diagnosticar_bq_saude()
+        _ts_bom = _diag.get("ts_ultimo_bom") if not _diag.get("e_confiavel") else None
+        if _ts_bom is not None:
+            _atraso = (hoje - _ts_bom.astimezone(_BRT).date()).days
+            janela_dias = max(3, min(_atraso + 1, 15))
+    except Exception:
+        pass  # sem diagnostico, mantem o comportamento antigo
     dt_inicio = hoje - _td(days=janela_dias - 1)
     dt_inicio_iso = dt_inicio.strftime("%Y-%m-%d")
     hoje_iso = hoje.strftime("%Y-%m-%d")
