@@ -741,35 +741,9 @@ def _render_atividades(store, clientes, role):
         if _df_serie is not None and not _df_serie.empty and len(_df_serie) >= 2:
             _vals = [int(v) for v in _df_serie["inadimplentes"].tolist()]
             _dias_lbl = [str(d) for d in _df_serie["dia"].tolist()]
-            # Delta = ultima leitura vs primeira DO MES. E' a variacao mensal
-            # da carteira, que e' o que o card responde.
-            _fim = _vals[-1]
-            _dl = _fim - _vals[0]
-            # _delta_html e' dos cards de RECEITA e sufixa "p.p." — aqui o
-            # delta e' contagem de clientes, entao "147,00 p.p." nao queria
-            # dizer nada. Renderizador proprio, e o rotulo diz contra QUE dia
-            # a comparacao e' feita em vez do generico "no mes".
-            if _dl == 0:
-                _dl_html = '<span style="color:#9ca3af;font-size:11px">— 0</span>'
-            else:
-                _seta, _cor = ("▼", "#22c55e") if _dl < 0 else ("▲", "#fb7185")
-                _dl_html = (
-                    f'<span style="color:{_cor};font-size:11px;font-weight:600">'
-                    f'{_seta} {abs(_dl)}</span>'
-                )
-            _br = lambda iso: f"{iso[8:10]}/{iso[5:7]}"
             _grafico_html = (
                 f'<div class="card-grafico" style="{_card_wrapper}">'
                 f'<div style="{_sublabel_css}">Inadimplentes por dia &middot; m&ecirc;s atual</div>'
-                f'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">'
-                f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
-                f'letter-spacing:-0.4px;font-variant-numeric:tabular-nums">{_fim}</span>'
-                f'{_dl_html}'
-                f'<span style="font-size:11px;color:#9ca3af;font-weight:700;'
-                f'letter-spacing:1px;text-transform:uppercase">vs {_br(_dias_lbl[0])}</span>'
-                f'<span style="margin-left:auto;font-size:11px;color:#6b7280">'
-                f'm&aacute;x {max(_vals)} &middot; m&iacute;n {min(_vals)}</span>'
-                f'</div>'
                 # Rotulos como linhas de HTML, nao texto dentro do SVG: o
                 # preserveAspectRatio="none" esticaria a fonte junto. Como os
                 # pontos sao equidistantes, um flex com space-between alinha
@@ -789,8 +763,9 @@ def _render_atividades(store, clientes, role):
                   f'margin-top:2px">'
                 + "".join(f'<span>{d[8:10]}</span>' for d in _dias_lbl)
                 + '</div>'
-                + f'<div style="font-size:10px;color:#6b7280;margin-top:5px;'
-                  f'text-align:right">{_br(_dias_lbl[0])} a {_br(_dias_lbl[-1])}</div>'
+                # Sem rodape com o intervalo: o titulo ja' diz "mes atual" e os
+                # dias estao embaixo de cada ponto. Os ~20px que ele custava
+                # eram o que fazia a coluna passar do card Visao Geral.
                 + '</div>'
             )
 
