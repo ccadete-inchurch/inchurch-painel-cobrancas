@@ -4,7 +4,7 @@ import altair as alt
 import streamlit as st
 
 from config import STATUS_LABELS, STATUS_COLORS
-from helpers import get_hist_unificado, get_effective_status, get_effective_lastContact, get_effective_atendente, fmt_moeda_plain, dias_html
+from helpers import get_hist_unificado, get_effective_status, get_effective_lastContact, get_effective_atendente, fmt_moeda_plain, dias_html, get_ultimo_login
 from data import fetch_historico_atrasos, fetch_evolucao_saldo_mensal
 from helpers import carimbo_dia_cache
 from views.dialog import dialog_editar
@@ -317,6 +317,17 @@ def _render_cliente(_store, clientes):
 
         status_val   = f'<span style="color:{cor};font-weight:700">{STATUS_LABELS.get(s,"—")}</span>'
 
+        # Ultimo login da igreja no painel de controle (mesma fonte da coluna
+        # LOGIN na Inadimplencia). Tres estados: com login (data + dias), sem
+        # login desde o inicio do log (piso, ex. "+853d") e sem tenant ("—").
+        _lg = get_ultimo_login(cid)
+        if _lg["estado"] == "com_login":
+            _login_val = f'{_lg["data"]} <span style="color:#8b94a5">· {_lg["curto"]}</span>'
+        elif _lg["estado"] == "sem_login":
+            _login_val = f'sem login <span style="color:#8b94a5">· {_lg["curto"]}</span>'
+        else:
+            _login_val = "—"
+
         # Bloco único com border, grid 2×3 dentro (3 linhas de 2 campos)
         bloco_html = (
             '<div style="background:#181c26;border:1px solid #1e2333;border-radius:10px;'
@@ -325,7 +336,7 @@ def _render_cliente(_store, clientes):
             '<div style="height:1px;background:#1e2333;margin:0 8px"></div>'
             f'<div style="display:flex">{_fld("Último contato", ult_contato)}{_fld("Retorno agendado", retorno)}</div>'
             '<div style="height:1px;background:#1e2333;margin:0 8px"></div>'
-            f'<div style="display:flex">{_fld("Prometeu pagar", promessa)}{_fld("", "")}</div>'
+            f'<div style="display:flex">{_fld("Prometeu pagar", promessa)}{_fld("Último login painel", _login_val)}</div>'
             '</div>'
         )
         st.markdown(bloco_html, unsafe_allow_html=True)

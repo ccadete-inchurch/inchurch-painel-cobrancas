@@ -2640,6 +2640,14 @@ def registrar_acao_manual(cid: str, atendente: str, atendeu: bool) -> bool:
     Atualiza:
       - ligacao_feita    = TRUE (sempre — atendente tentou)
       - ligacao_atendida = atendeu (TRUE se atendeu, FALSE se nao)
+      - dt_ligacao_feita / dt_ligacao_atendida = agora
+
+    Os timestamps sao o que load_cooldowns_from_painel le (MAX por cliente).
+    Sem eles a ligacao manual ficava invisivel pro cooldown: cliente de
+    telefone fixo que ATENDEU podia voltar pro lote no dia seguinte, em vez
+    de esperar os 5 dias. Aconteceu 13 vezes entre ago/2026 e 03/09/2026.
+    COALESCE preserva o horario da primeira marcacao do dia (clicar duas
+    vezes nao adia o cooldown).
 
     Pra cliente em telefone fixo, N8N nao detecta ligacao. Esta funcao
     e' chamada pelos botoes 'Atendeu' / 'Nao atendeu' do dialog quando
@@ -2654,8 +2662,12 @@ def registrar_acao_manual(cid: str, atendente: str, atendeu: bool) -> bool:
     try:
         job = client.query(f"""
             UPDATE `{_TAREFAS_TABLE}`
-            SET ligacao_feita    = TRUE,
-                ligacao_atendida = {str(bool(atendeu)).upper()}
+            SET ligacao_feita       = TRUE,
+                ligacao_atendida    = {str(bool(atendeu)).upper()},
+                dt_ligacao_feita    = COALESCE(dt_ligacao_feita, CURRENT_TIMESTAMP()),
+                dt_ligacao_atendida = {
+                    "COALESCE(dt_ligacao_atendida, CURRENT_TIMESTAMP())" if atendeu else "NULL"
+                }
             WHERE id_sacado_sac = '{cid}'
               AND atendente     = '{atendente}'
               AND data_tarefa   = '{hoje}'
