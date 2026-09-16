@@ -788,7 +788,7 @@ def _render_especialista(store, clientes, role):
             df_cob[["atendente", "cobertura_pct", "contactados", "inadimplentes_periodo"]],
             on="atendente", how="left",
         )
-        rank_agg["cobertura"] = rank_agg["cobertura_pct"].fillna(0).astype(int)
+        rank_agg["cobertura"] = rank_agg["cobertura_pct"].fillna(0).astype(float)
         rank_agg["cob_contactados"] = rank_agg["contactados"].fillna(0).astype(int)
         rank_agg["cob_base"] = rank_agg["inadimplentes_periodo"].fillna(0).astype(int)
         rank_agg = rank_agg.drop(columns=["cobertura_pct", "contactados", "inadimplentes_periodo"])
@@ -803,29 +803,32 @@ def _render_especialista(store, clientes, role):
     # quando merges com floats convertem o tipo silenciosamente.
     # Eficácia mantém como float (duas casas decimais); demais são int.
     for col in ("pagamentos", "regularizacoes", "parciais", "via_contato",
-                "espontaneos", "carteira_atual", "cobertura", "cob_contactados",
-                "cob_base"):
+                "espontaneos", "carteira_atual", "cob_contactados", "cob_base"):
         if col in ranking.columns:
             ranking[col] = ranking[col].astype(int)
-    if "eficacia" in ranking.columns:
-        ranking["eficacia"] = ranking["eficacia"].astype(float)
+    # Eficácia e cobertura ficam float (duas casas) — percentuais pequenos
+    # arredondados pra inteiro escondem diferença entre as especialistas.
+    for col in ("eficacia", "cobertura"):
+        if col in ranking.columns:
+            ranking[col] = ranking[col].astype(float)
     ranking = ranking.sort_values("regularizacoes", ascending=False).reset_index(drop=True)
     ranking["rank"] = ranking.index + 1
     ranking["valor_fmt"] = ranking["valor"].apply(fmt_moeda_plain)
 
-    # Headers — 10 colunas (Cobertura adicionada ao lado da Eficácia).
-    # Eficácia responde "converteu bem o que tocou?"; Cobertura responde
-    # "tocou quanto do que tinha?". As duas juntas evitam comparar atendentes
-    # com carteiras de tamanhos diferentes como se fossem iguais.
-    _col_widths = [0.65, 1.85, 0.95, 0.95, 1.05, 1.2, 0.9, 1.0, 1.3, 0.85]
+    # Headers — 11 colunas. Contatados vem logo após o nome porque é o
+    # denominador de Eficácia e Cobertura: sem ele, os dois percentuais ficam
+    # soltos. As colunas de pagamento são por CLIENTE (o mesmo cliente pode
+    # pagar várias vezes no período), daí o rótulo "Clientes com pagamento".
+    _col_widths = [0.6, 1.7, 1.0, 1.35, 1.25, 1.3, 1.2, 0.85, 0.95, 1.25, 0.8]
     hdr_cols = st.columns(_col_widths)
     _hdr_labels = [
         ("Posição", ""),
         ("Especialista", ""),
-        ("Pagamentos", "Pagamentos totais (clientes únicos)"),
-        ("Via Contato", "Pagamentos com contato registrado antes (msg ou ligação)"),
-        ("Espontâneos", "Pagamentos sem contato — atribuído por grupo"),
-        ("Regularizações", "Clientes que NÃO estão mais inadimplentes hoje"),
+        ("Contatados", "Clientes distintos que receberam mensagem ou ligação no período. É a base da Eficácia e da Cobertura."),
+        ("Clientes com pagamento", "Clientes distintos que pagaram algo em atraso no período. Um mesmo cliente que pagou 3 vezes conta 1."),
+        ("Pag. via contato", "Clientes cujo pagamento teve contato registrado antes (msg ou ligação), até 30 dias"),
+        ("Pag. espontâneos", "Clientes que pagaram sem contato registrado — crédito vai pelo grupo"),
+        ("Regularizações", "Clientes que, em algum momento do período, zeraram tudo que estava vencido"),
         ("Eficácia", "Dos clientes contactados no período (msg/ligação), % que estão regularizados hoje. Reflete trabalho real — cobrança tem conversão típica de 10-20%."),
         ("Cobertura", "Dos clientes que estiveram inadimplentes no período, % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
         ("Valor Recuperado", ""),
@@ -851,19 +854,25 @@ def _render_especialista(store, clientes, role):
             f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{row["atendente"]}</div>',
             unsafe_allow_html=True,
         )
+        # Contatados — base dos dois percentuais à direita.
+        _contatados = int(row.get("ef_contatados", 0) or 0) or int(row.get("cob_contactados", 0) or 0)
         rcols[2].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{row["pagamentos"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{_contatados}</div>',
             unsafe_allow_html=True,
         )
         rcols[3].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#7cc243;font-weight:600">{row["via_contato"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{row["pagamentos"]}</div>',
             unsafe_allow_html=True,
         )
         rcols[4].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["espontaneos"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:#7cc243;font-weight:600">{row["via_contato"]}</div>',
             unsafe_allow_html=True,
         )
         rcols[5].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["espontaneos"]}</div>',
+            unsafe_allow_html=True,
+        )
+        rcols[6].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
             unsafe_allow_html=True,
         )
@@ -876,31 +885,31 @@ def _render_especialista(store, clientes, role):
         _ef_reg = int(row.get("ef_regularizaram", 0) or 0)
         _ef_cont = int(row.get("ef_contatados", 0) or 0)
         _ef_tip = f"{_ef_reg} de {_ef_cont} clientes contactados regularizaram"
-        rcols[6].markdown(
+        rcols[7].markdown(
             f'<div title="{_ef_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
             f'color:{_ef_cor};font-weight:700">{_ef:.2f}%</div>',
             unsafe_allow_html=True,
         )
         # Cobertura — sem faixa de cor "boa/ruim": depende do tamanho da
         # carteira, entao e' contexto pra ler a eficacia, nao nota.
-        _cob = int(row.get("cobertura", 0) or 0)
+        _cob = float(row.get("cobertura", 0) or 0)
         _cob_cont = int(row.get("cob_contactados", 0) or 0)
         _cob_base = int(row.get("cob_base", 0) or 0)
-        _cob_txt = f"{_cob}%" if _cob_base else "—"
+        _cob_txt = f"{_cob:.2f}%" if _cob_base else "—"
         _cob_tip = (
             f"{_cob_cont} de {_cob_base} inadimplentes do período foram contactados"
             if _cob_base else "Sem snapshot diário no período"
         )
-        rcols[7].markdown(
+        rcols[8].markdown(
             f'<div title="{_cob_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
             f'color:#9ca3af;font-weight:600">{_cob_txt}</div>',
             unsafe_allow_html=True,
         )
-        rcols[8].markdown(
+        rcols[9].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
             unsafe_allow_html=True,
         )
-        rcols[9].markdown(
+        rcols[10].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["carteira_atual"]}</div>',
             unsafe_allow_html=True,
         )

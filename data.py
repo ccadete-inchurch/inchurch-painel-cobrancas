@@ -2379,7 +2379,7 @@ def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.
             return df
         df["cobertura_pct"] = (
             df["contactados"] / df["inadimplentes_periodo"].replace(0, pd.NA) * 100
-        ).fillna(0).round(0).astype(int)
+        ).fillna(0).round(2).astype(float)
         return df
     except Exception:
         return pd.DataFrame()
