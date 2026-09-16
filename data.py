@@ -2247,9 +2247,88 @@ def fetch_regularizados_mes_atual(_dia: str | None = None) -> set:
         return set()
 
 
-@st.cache_data(ttl=1800)
-def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
-    """Eficácia REAL de contato por especialista no período.
+@st.cache_data(ttl=None)
+def fetch_eficacia_base(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -> pd.DataFrame:
+    """Uma linha POR CLIENTE contactado no periodo: cid, atendente,
+    primeiro_contato e pagou_apos_contato (bool).
+
+    Existe pra tela conseguir somar o overlay da API antes de agregar. A
+    versao agregada (fetch_eficacia_por_especialista) so enxerga o BigQuery,
+    que replica 1x/dia — em 16/09/2026 havia 133 pagamentos de setembro (129
+    clientes) so na API, entao a eficacia do mes corrente ficava atras do
+    ranking, que ja usa BQ + overlay.
+
+    `versao` e' so chave de cache (sem underscore de proposito: argumento
+    iniciado por '_' NAO entra no hash do st.cache_data). Mes fechado recebe
+    string fixa e fica cacheado 24h; mes corrente recebe um carimbo que muda
+    a cada 30 min.
+    """
+    client = get_bq_client()
+    if not client:
+        return pd.DataFrame()
+    try:
+        return client.query(f"""
+            WITH contatos_periodo AS (
+                SELECT
+                    CAST(id_sacado_sac AS STRING) AS cid,
+                    atendente,
+                    MIN(data_tarefa) AS primeiro_contato
+                FROM `{_TAREFAS_TABLE}`
+                WHERE data_tarefa >= DATE('{dt_inicio_iso}')
+                  AND data_tarefa <= DATE('{dt_fim_iso}')
+                  AND (
+                      mensagem_enviada = TRUE
+                      OR ligacao_feita = TRUE
+                      OR ligacao_atendida = TRUE
+                  )
+                GROUP BY cid, atendente
+            ),
+            pagamentos_apos_contato AS (
+                SELECT DISTINCT CAST(p.id_sacado_sac AS STRING) AS cid
+                FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` p
+                JOIN contatos_periodo c
+                  ON CAST(p.id_sacado_sac AS STRING) = c.cid
+                WHERE p.fl_status_recb = '1'
+                  AND p.dt_liquidacao_recb > p.dt_vencimento_recb
+                  AND DATE(p.dt_liquidacao_recb) >= DATE('{dt_inicio_iso}')
+                  AND DATE(p.dt_liquidacao_recb) <= DATE('{dt_fim_iso}')
+                  AND DATE(p.dt_liquidacao_recb) >= c.primeiro_contato
+            )
+            SELECT c.cid, c.atendente, c.primeiro_contato,
+                   (p.cid IS NOT NULL) AS pagou_apos_contato
+            FROM contatos_periodo c
+            LEFT JOIN pagamentos_apos_contato p ON p.cid = c.cid
+        """).to_dataframe()
+    except Exception:
+        return pd.DataFrame()
+
+
+def agregar_eficacia(df_base: pd.DataFrame) -> pd.DataFrame:
+    """Agrega o per-cliente de fetch_eficacia_base por atendente.
+    Separado pra tela poder marcar pagou_apos_contato pelo overlay antes."""
+    if df_base is None or df_base.empty:
+        return pd.DataFrame()
+    df = (
+        df_base.groupby("atendente")
+        .agg(
+            clientes_contactados=("cid", "nunique"),
+            regularizaram=("pagou_apos_contato", "sum"),
+        )
+        .reset_index()
+    )
+    df["regularizaram"] = df["regularizaram"].astype(int)
+    df["ainda_inadimplentes"] = df["clientes_contactados"] - df["regularizaram"]
+    # 2 casas: o arredondamento pra inteiro fazia Ana e Priscila aparecerem
+    # as duas com "50,00%" quando a diferenca real era de decimos.
+    df["eficacia_real"] = (
+        df["regularizaram"] / df["clientes_contactados"].replace(0, pd.NA) * 100
+    ).fillna(0).round(2).astype(float)
+    return df
+
+
+def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str,
+                                    versao: str = "") -> pd.DataFrame:
+    """Eficácia REAL de contato por especialista no período (só BigQuery).
 
     Eficácia REAL = clientes_contactados_que_pagaram_no_período /
                     clientes_contactados_no_período
@@ -2267,118 +2346,15 @@ def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.D
 
     Denominador (total de contactados) inclui clientes que nem pagaram —
     reflete o esforço real, não só o que converteu.
+
+    Wrapper sobre fetch_eficacia_base + agregar_eficacia. A tela Especialista
+    chama as duas partes separadas pra somar o overlay no meio.
     """
-    client = get_bq_client()
-    if not client:
-        return pd.DataFrame()
-    try:
-        df = client.query(f"""
-            WITH contatos_periodo AS (
-                -- Clientes contactados no período. Usa PRIMEIRO contato pra
-                -- saber a data a partir de qual pagamento conta como conversão.
-                SELECT
-                    CAST(id_sacado_sac AS STRING) AS cid,
-                    atendente,
-                    MIN(data_tarefa) AS primeiro_contato
-                FROM `{_TAREFAS_TABLE}`
-                WHERE data_tarefa >= DATE('{dt_inicio_iso}')
-                  AND data_tarefa <= DATE('{dt_fim_iso}')
-                  AND (
-                      mensagem_enviada = TRUE
-                      OR ligacao_feita = TRUE
-                      OR ligacao_atendida = TRUE
-                  )
-                GROUP BY cid, atendente
-            ),
-            pagamentos_apos_contato AS (
-                -- Cliente que pagou EM ATRASO no período E o pagamento foi
-                -- DEPOIS do primeiro contato (causalidade temporal).
-                -- Sem essa condição, pagamentos antigos (antes do contato)
-                -- contavam como conversão — inflavam eficácia em períodos
-                -- longos onde contatos começaram recentemente.
-                SELECT DISTINCT CAST(p.id_sacado_sac AS STRING) AS cid
-                FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` p
-                JOIN contatos_periodo c
-                  ON CAST(p.id_sacado_sac AS STRING) = c.cid
-                WHERE p.fl_status_recb = '1'
-                  AND p.dt_liquidacao_recb > p.dt_vencimento_recb
-                  AND DATE(p.dt_liquidacao_recb) >= DATE('{dt_inicio_iso}')
-                  AND DATE(p.dt_liquidacao_recb) <= DATE('{dt_fim_iso}')
-                  AND DATE(p.dt_liquidacao_recb) >= c.primeiro_contato
-            )
-            SELECT
-                c.atendente,
-                COUNT(DISTINCT c.cid) AS clientes_contactados,
-                COUNT(DISTINCT IF(p.cid IS NOT NULL, c.cid, NULL)) AS regularizaram,
-                COUNT(DISTINCT IF(p.cid IS NULL, c.cid, NULL)) AS ainda_inadimplentes
-            FROM contatos_periodo c
-            LEFT JOIN pagamentos_apos_contato p ON p.cid = c.cid
-            GROUP BY c.atendente
-        """).to_dataframe()
-        if df.empty:
-            return df
-        # 2 casas: o arredondamento pra inteiro fazia Ana e Priscila
-        # aparecerem as duas com "50,00%" quando a diferenca real era de
-        # decimos. A tela ja formata com .2f.
-        df["eficacia_real"] = (
-            df["regularizaram"] / df["clientes_contactados"].replace(0, pd.NA) * 100
-        ).fillna(0).round(2).astype(float)
-        return df
-    except Exception:
-        return pd.DataFrame()
+    return agregar_eficacia(fetch_eficacia_base(dt_inicio_iso, dt_fim_iso, versao))
 
 
-@st.cache_data(ttl=1800)
-def fetch_carteira_fim_mes(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
-    """Foto da carteira inadimplente no ULTIMO dia com snapshot dentro do
-    periodo — usada na tela Especialista quando o mes selecionado ja fechou.
-
-    Por que existe: a coluna "Carteira inad." saia do store, que e' sempre
-    HOJE. Olhando Jun/2026, a linha inteira falava de junho e a carteira
-    falava de hoje.
-
-    Usa o ULTIMO snapshot do mes (nao o dia 30/31) porque dia sem snapshot
-    acontece — o cron pula quando o BQ nao esta confiavel. Conferido em
-    set/2026: 29/05, 30/06, 31/07 e 31/08 existem, entao a foto cai no fim do
-    mes ou bem perto.
-
-    Atribuicao pelo grupo ATUAL (splgc-grupo): cliente que trocou de dono
-    depois aparece na foto antiga sob o dono de hoje. E' o mesmo criterio das
-    outras colunas do ranking.
-
-    Retorna DataFrame com atendente, carteira_mes e data_ref (dd/mm/aaaa).
-    """
-    client = get_bq_client()
-    if not client:
-        return pd.DataFrame()
-    try:
-        return client.query(f"""
-            WITH ref AS (
-                SELECT MAX(data_snapshot) AS dia
-                FROM `{_SNAPSHOT_TABLE}`
-                WHERE data_snapshot >= DATE('{dt_inicio_iso}')
-                  AND data_snapshot <= DATE('{dt_fim_iso}')
-            ),
-            g AS (
-                SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(grupo) AS grupo
-                FROM `business-intelligence-467516.Splgc.splgc-grupo`
-                WHERE grupo IN ('Ana Carolina', 'Priscila Oliveira')
-                GROUP BY id_sacado_sac
-            )
-            SELECT g.grupo AS atendente,
-                   COUNT(DISTINCT s.id_sacado_sac) AS carteira_mes,
-                   FORMAT_DATE('%d/%m/%Y', MAX(s.data_snapshot)) AS data_ref
-            FROM `{_SNAPSHOT_TABLE}` s
-            JOIN g ON g.cid = s.id_sacado_sac
-            WHERE s.data_snapshot = (SELECT dia FROM ref)
-            GROUP BY g.grupo
-        """).to_dataframe()
-    except Exception:
-        return pd.DataFrame()
-
-
-@st.cache_data(ttl=1800)
-def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
+@st.cache_data(ttl=None)
+def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -> pd.DataFrame:
     """Cobertura da carteira: % dos inadimplentes do especialista que ele
     tocou (msg ou ligacao) no periodo.
 
@@ -2508,8 +2484,8 @@ def fetch_eventos_regularizacao() -> set:
         return set()
 
 
-@st.cache_data(ttl=1800)
-def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
+@st.cache_data(ttl=None)
+def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -> pd.DataFrame:
     """Pagamentos com atraso no período, agrupados POR CLIENTE+DIA, com:
       - atendente_credito: HÍBRIDO em ordem de prioridade:
           1. Último especialista com contato efetivo antes do pgto (msg/lig)

@@ -5,8 +5,8 @@ import pandas as pd
 import streamlit as st
 
 from auth import current_role
-from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_por_especialista, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_carteira_fim_mes
-from helpers import fmt_moeda_plain, hoje_brt
+from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_base, agregar_eficacia, fetch_eventos_regularizacao, fetch_cobertura_por_especialista
+from helpers import fmt_moeda_plain, hoje_brt, carimbo_dia_cache
 
 
 # Paleta categórica — verde InChurch pras atendentes ativas + cinza forte
@@ -91,6 +91,43 @@ def _build_overlay_rows(clientes, df_bq, dt_inicio, dt_fim):
             "tipo_atribuicao": tipo_atrib,
         })
     return rows
+
+
+def _eficacia_com_overlay(clientes, dt_inicio, dt_fim, versao):
+    """Eficácia por especialista somando o overlay da API ao BigQuery.
+
+    O BQ replica 1x/dia, então no mês corrente faltam os pagamentos mais
+    recentes: em 16/09/2026 eram 133 pagamentos de setembro (129 clientes) que
+    a API já tinha e o BQ não. O ranking enxergava (usa BQ + overlay) e a
+    eficácia não — daí a coluna aparecer sempre atrás.
+
+    Aqui a base vem por cliente, o overlay marca quem pagou depois do primeiro
+    contato, e só então agrega. Marcar antes de agregar evita contar duas
+    vezes quem já estava no BQ.
+    """
+    base = fetch_eficacia_base(dt_inicio.isoformat(), dt_fim.isoformat(), versao)
+    if base.empty:
+        return pd.DataFrame()
+    base = base.copy()
+    base["cid"] = base["cid"].astype(str)
+    primeiro = dict(zip(base["cid"], base["primeiro_contato"]))
+    pagos_overlay = set()
+    for c in clientes or []:
+        if not (c.get("_regularizado_hoje") or c.get("_pago_parcial_hoje")):
+            continue
+        dt_real = c.get("_dt_liquidacao_real")
+        cid = str(c.get("id") or "")
+        if dt_real is None or cid not in primeiro:
+            continue
+        if not (dt_inicio <= dt_real <= dt_fim):
+            continue
+        _pc = primeiro[cid]
+        _pc = _pc.date() if hasattr(_pc, "date") else _pc
+        if dt_real >= _pc:
+            pagos_overlay.add(cid)
+    if pagos_overlay:
+        base["pagou_apos_contato"] = base["pagou_apos_contato"].astype(bool) | base["cid"].isin(pagos_overlay)
+    return agregar_eficacia(base)
 
 
 def _altair_theme():
@@ -182,12 +219,33 @@ def _render_especialista(store, clientes, role):
         _prox = (_mes_sel[0] + 1, 1) if _mes_sel[1] == 12 else (_mes_sel[0], _mes_sel[1] + 1)
         dt_fim = date(_prox[0], _prox[1], 1) - timedelta(days=1)
 
+    _mes_corrente = (_mes_sel[0], _mes_sel[1]) == (hoje.year, hoje.month)
+    _mes_label = f"{_MESES_PT[_mes_sel[1]]}/{_mes_sel[0]}"
+
+    # Chave de cache das consultas da tela. Abrir a tela custa ~36 MB de
+    # leitura no BigQuery (as pesadas são pagamentos creditados com 11,9 MB e
+    # eventos de regularização com 14,6 MB), então vale cachear bem:
+    #   mês FECHADO  -> chave fixa + ttl=None: consulta 1x e nunca mais.
+    #   mês CORRENTE -> chave do dia operacional (vira 08:30 BRT, depois do
+    #                   pipeline e do cron): 1x por dia, sempre com o dado do
+    #                   dia. O que muda durante o dia entra pelo overlay da API.
+    # Nome sem underscore de propósito: st.cache_data IGNORA argumentos
+    # iniciados por '_' no hash, então '_versao' não invalidaria nada.
+    _versao_cache = (
+        f"dia-{carimbo_dia_cache()}" if _mes_corrente
+        else f"mes-{_mes_sel[0]:04d}-{_mes_sel[1]:02d}"
+    )
+
+    # Cobertura vem cedo porque alimenta DOIS lugares: o card de inadimplentes
+    # (mês fechado) e a coluna Carteira inad. do ranking. Uma consulta só.
+    df_cob = fetch_cobertura_por_especialista(dt_inicio.isoformat(), dt_fim.isoformat(), _versao_cache)
+
     # ── Fonte: BQ JOIN com tarefas — atribui por contato efetivo ──────────
     # painel_tarefas_diarias + liquidações → último atendente que teve
     # contato (msg/lig) antes do pagamento. Credita quem trabalhou o caso,
     # não o grupo atual do cliente.
     with st.spinner("Carregando pagamentos creditados..."):
-        df_reg = fetch_pagamentos_creditados(dt_inicio.isoformat(), dt_fim.isoformat())
+        df_reg = fetch_pagamentos_creditados(dt_inicio.isoformat(), dt_fim.isoformat(), _versao_cache)
 
     if df_reg.empty:
         st.info("Sem pagamentos com atraso no período selecionado.")
@@ -333,6 +391,22 @@ def _render_especialista(store, clientes, role):
     )
     taxa_reg = (total_reg / total_pgto * 100) if total_pgto else 0
 
+    # Card de inadimplentes: mês corrente mostra a carteira de HOJE; mês
+    # fechado mostra quantos clientes ESTIVERAM inadimplentes naquele mês
+    # (mesma base da Cobertura). Antes mostrava "hoje" em qualquer mês, o que
+    # deixava o card falando de setembro enquanto o resto da tela era agosto.
+    if _mes_corrente:
+        _card_inad_valor = inadimplentes_atual
+        _card_inad_sub = "carteira hoje"
+    else:
+        _cob_card = df_cob
+        if filtro_esp and not _cob_card.empty:
+            _cob_card = _cob_card[_cob_card["atendente"].isin(filtro_esp)]
+        _card_inad_valor = (
+            int(_cob_card["inadimplentes_periodo"].sum()) if not _cob_card.empty else 0
+        )
+        _card_inad_sub = f"carteira {_mes_label}"
+
     # Sub-texto contextual no 'Pagamentos' — se filtrando por 1 especialista,
     # mostra comparativo com a média da equipe.
     # Exclui 'Sem especialista' do cálculo: não é uma pessoa real, é o
@@ -362,6 +436,9 @@ def _render_especialista(store, clientes, role):
     _tt_inad = (
         "Total de clientes inadimplentes na carteira HOJE (snapshot atual). "
         "Equivale ao 'Total Clientes' da tela Inadimplência."
+        if _mes_corrente else
+        f"Clientes que estiveram inadimplentes em algum dia de {_mes_label} "
+        "(snapshots diários do mês). Mesma base da Cobertura."
     )
     _tt_pag = (
         "Clientes únicos que fizeram pagamento de cobrança ATRASADA no período "
@@ -395,8 +472,8 @@ def _render_especialista(store, clientes, role):
     )
     with c1:
         st.markdown(
-            _card_fmt("Inadimplentes Atual", f"{inadimplentes_atual:,}",
-                      "carteira hoje", "#ef4444", _tt_inad),
+            _card_fmt("Inadimplentes", f"{_card_inad_valor:,}",
+                      _card_inad_sub, "#ef4444", _tt_inad),
             unsafe_allow_html=True,
         )
     with c2:
@@ -407,7 +484,7 @@ def _render_especialista(store, clientes, role):
     with c3:
         st.markdown(
             _card_fmt("Regularizações", f"{total_reg:,}",
-                      f"{taxa_reg:.0f}% dos pagamentos", "#22c55e", _tt_reg),
+                      f"{taxa_reg:.2f}% dos pagamentos", "#22c55e", _tt_reg),
             unsafe_allow_html=True,
         )
     with c4:
@@ -442,7 +519,7 @@ def _render_especialista(store, clientes, role):
         .agg(pagamentos=("id", "nunique"), valor=("valor", "sum"))
         .reset_index()
     )
-    df_ef = fetch_eficacia_por_especialista(dt_inicio.isoformat(), dt_fim.isoformat())
+    df_ef = _eficacia_com_overlay(clientes, dt_inicio, dt_fim, _versao_cache)
     if filtro_esp and not df_ef.empty:
         df_ef = df_ef[df_ef["atendente"].isin(filtro_esp)]
     if not df_ef.empty:
@@ -658,7 +735,10 @@ def _render_especialista(store, clientes, role):
         _mes += 12
         _ano -= 1
     _trend_inicio = date(_ano, _mes, 1)
-    df_trend = fetch_pagamentos_creditados(_trend_inicio.isoformat(), _hoje_trend.isoformat())
+    # Trend sempre inclui o mês corrente, então usa o carimbo do dia.
+    df_trend = fetch_pagamentos_creditados(
+        _trend_inicio.isoformat(), _hoje_trend.isoformat(), f"dia-{carimbo_dia_cache()}"
+    )
     if not df_trend.empty:
         df_trend = df_trend.rename(columns={
             "id_sacado_sac": "id",
@@ -783,9 +863,9 @@ def _render_especialista(store, clientes, role):
     )
     rank_agg["espontaneos"] = rank_agg["pagamentos"] - rank_agg["via_contato"]
     rank_agg["pct_contato"] = (rank_agg["via_contato"] / rank_agg["pagamentos"] * 100).round(0).astype(int)
-    # Eficácia REAL = dos clientes contactados no período, % regularizados hoje.
-    # Usa fetch_eficacia_por_especialista (denominador correto, não só pagamentos).
-    df_ef_real = fetch_eficacia_por_especialista(dt_inicio.isoformat(), dt_fim.isoformat())
+    # Eficácia REAL = dos clientes contactados no mês, % que pagou depois do
+    # contato. Usa _eficacia_com_overlay (BQ + API), mesmo dado da matriz.
+    df_ef_real = _eficacia_com_overlay(clientes, dt_inicio, dt_fim, _versao_cache)
     if df_ef_real.empty:
         rank_agg["eficacia"] = 0
         rank_agg["ef_regularizaram"] = 0
@@ -802,7 +882,7 @@ def _render_especialista(store, clientes, role):
     # Cobertura = quanto da propria carteira inadimplente o especialista tocou
     # no periodo. Complementa a eficacia: quem tem carteira maior recebe o
     # mesmo lote de 80/dia e por isso cobre uma fatia menor.
-    df_cob = fetch_cobertura_por_especialista(dt_inicio.isoformat(), dt_fim.isoformat())
+    # df_cob já veio lá de cima (uma consulta só pro card e pro ranking).
     if df_cob.empty:
         rank_agg["cobertura"] = 0
         rank_agg["cob_contactados"] = 0
@@ -818,26 +898,24 @@ def _render_especialista(store, clientes, role):
         rank_agg = rank_agg.drop(columns=["cobertura_pct", "contactados", "inadimplentes_periodo"])
     # Junta com carteira atual
     # Carteira: mês corrente usa a foto de HOJE (store, já carregado); mês
-    # fechado usa o último snapshot daquele mês. Sem isso, a linha inteira
-    # falava do mês escolhido e a carteira falava de hoje.
-    _mes_corrente = (_mes_sel[0], _mes_sel[1]) == (hoje.year, hoje.month)
-    _carteira_ref = ""
+    # fechado usa quantos clientes ESTIVERAM inadimplentes naquele mês — mesma
+    # base da Cobertura, então a linha fica autoexplicativa:
+    # Contatados ÷ Carteira inad. = Cobertura.
+    # Fim do mês esconderia quem entrou e saiu no meio: em ago/2026 a Ana
+    # terminou com 243, mas passaram 525 pelas mãos dela.
     if _mes_corrente:
         carteira_count = (
             pd.DataFrame([{"atendente": _norm_atendente_raw(c.get("_grupo"))} for c in clientes])
             .groupby("atendente").size().reset_index(name="carteira_atual")
             if clientes else pd.DataFrame(columns=["atendente", "carteira_atual"])
         )
+    elif df_cob.empty:
+        carteira_count = pd.DataFrame(columns=["atendente", "carteira_atual"])
     else:
-        _df_cart = fetch_carteira_fim_mes(dt_inicio.isoformat(), dt_fim.isoformat())
-        if _df_cart.empty:
-            carteira_count = pd.DataFrame(columns=["atendente", "carteira_atual"])
-        else:
-            _carteira_ref = str(_df_cart["data_ref"].iloc[0])
-            carteira_count = (
-                _df_cart.rename(columns={"carteira_mes": "carteira_atual"})
-                [["atendente", "carteira_atual"]]
-            )
+        carteira_count = (
+            df_cob.rename(columns={"inadimplentes_periodo": "carteira_atual"})
+            [["atendente", "carteira_atual"]]
+        )
     # Sem o filtro aqui, o merge outer traria "Sem especialista" de volta só
     # com a carteira preenchida e o resto zerado.
     if not carteira_count.empty:
@@ -867,8 +945,8 @@ def _render_especialista(store, clientes, role):
     _carteira_tip = (
         "Clientes inadimplentes HOJE sob esse especialista."
         if _mes_corrente else
-        f"Clientes inadimplentes na foto de {_carteira_ref or 'fim do mês'} — "
-        "último snapshot diário do mês selecionado."
+        f"Clientes que estiveram inadimplentes em algum dia de {_mes_label}. "
+        "É o denominador da Cobertura."
     )
     hdr_cols = st.columns(_col_widths)
     _hdr_labels = [
