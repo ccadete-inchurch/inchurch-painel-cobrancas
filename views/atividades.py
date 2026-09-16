@@ -145,15 +145,16 @@ def _motivo(bucket, acoes, c) -> tuple:
     pra manter a info do acordo visível mesmo durante cooldown ou em outras colunas.
     """
     if c.get("_regularizado_hoje"):
-        # "Hoje" = liquidação de hoje. Pagamento de dia anterior mostra a data:
-        # no lote isso vira sinal de que o cliente escapou da conferência das
-        # 08:15 (a Superlógica registrou depois). Sem as chaves do overlay
-        # (regularizado vindo de fetch_regularizados_do_dia, que só olha
-        # liquidação de hoje) o pagamento é de hoje.
+        # "Regularizado hoje" = baixa detectada hoje (explica por que estava no
+        # lote). A segunda parte é a data da liquidação: pagamento de dia
+        # anterior mostra a data — sinal de que a Superlógica registrou depois
+        # da conferência das 08:15. Sem as chaves do overlay (regularizado
+        # vindo de fetch_regularizados_do_dia, que só olha liquidação de hoje)
+        # o pagamento é de hoje.
         _dt_pag = c.get("_dt_pagamento_recente")
         if c.get("_pagamento_foi_hoje", True) or not _dt_pag:
-            return "Regularizado hoje · pagamento confirmado", "blue"
-        return f"Regularizado · pago em {_dt_pag}", "blue"
+            return "Regularizado hoje · pago hoje", "blue"
+        return f"Regularizado hoje · pago em {_dt_pag}", "blue"
     if c.get("_regularizado_antes_hoje"):
         # Cliente já tinha pago em dia anterior — BQ só refletiu agora.
         # Label diferente pra atendente saber que não foi hoje (sem valor).
