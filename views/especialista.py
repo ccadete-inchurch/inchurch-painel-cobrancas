@@ -229,11 +229,12 @@ def _render_especialista(store, clientes, role):
             _dstr = _dt.strftime("%d/%m/%Y") if hasattr(_dt, "strftime") else str(_dt)
             if (_cid, _dstr) in eventos_reg:
                 return True
-            # Fallback: pagamentos recentes (ultimos 3d) — BQ nao replicou,
-            # respeita a classificacao vinda do overlay (_regularizado_hoje)
+            # Fallback: pagamentos recentes (ultimos 10d) — BQ nao replicou,
+            # respeita a classificacao vinda do overlay (_regularizado_hoje).
+            # 10 dias = mesma janela do overlay (fetch_pagamentos_hoje_api).
             try:
                 dt_date = _dt.date() if hasattr(_dt, "date") else _dt
-                if (_dc.today() - dt_date).days <= 3:
+                if (_dc.today() - dt_date).days <= 10:
                     return bool(row.get("eh_regularizacao", False))
             except Exception:
                 pass

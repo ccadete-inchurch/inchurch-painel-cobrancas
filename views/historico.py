@@ -247,11 +247,14 @@ def _render_historico(store):
             _data_pag = str(r.get("data") or "")
             if (_rid, _data_pag) in eventos_reg:
                 return True
-            # Fallback pra pagamentos recentes (ultimos 3d) — BQ ainda pode
-            # nao ter replicado, overlay via API SL preenche a lacuna
+            # Fallback pra pagamentos recentes (ultimos 10d) — BQ ainda pode
+            # nao ter replicado, overlay via API SL preenche a lacuna. 10 dias
+            # = mesma janela do overlay (fetch_pagamentos_hoje_api). Com 3, um
+            # pagamento de 4-10 dias atras que o BQ ainda nao tivesse caia como
+            # "nao regularizou" e o cliente aparecia como parcial.
             try:
                 d_pag = _dt_c.strptime(_data_pag, "%d/%m/%Y").date()
-                if (_dc.today() - d_pag).days <= 3:
+                if (_dc.today() - d_pag).days <= 10:
                     return _rid in ids_reg_hoje_all
             except Exception:
                 pass
