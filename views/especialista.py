@@ -58,7 +58,12 @@ def _build_overlay_rows(clientes, df_bq, dt_inicio, dt_fim):
         eh_parc = bool(c.get("_pago_parcial_hoje"))
         if not (eh_reg or eh_parc):
             continue
-        dt_real = c.get("_dt_liquidacao_real")
+        # Só a parte ATRASADA: esta tela mede pagamento de cobrança vencida,
+        # igual ao filtro do BQ (dt_liquidacao > dt_vencimento). Antes usava o
+        # valor total do overlay e entrava quem pagou em dia — em set/2026 o
+        # overlay somava 230 linhas quando só 132 pagamentos do mês tinham
+        # atraso.
+        dt_real = c.get("_dt_liquidacao_atraso")
         if dt_real is None:
             continue
         # Filtra por período
@@ -68,7 +73,7 @@ def _build_overlay_rows(clientes, df_bq, dt_inicio, dt_fim):
         # Deduplica contra BQ
         if cid in ids_por_dia_bq.get(dt_real, set()):
             continue
-        valor = float(c.get("_valor_pago_hoje") or 0)
+        valor = float(c.get("_valor_pago_atraso") or 0)
         if valor <= 0:
             continue
         atendente = _norm_atendente_raw(c.get("_grupo"))
@@ -115,7 +120,9 @@ def _eficacia_com_overlay(clientes, dt_inicio, dt_fim, versao):
     for c in clientes or []:
         if not (c.get("_regularizado_hoje") or c.get("_pago_parcial_hoje")):
             continue
-        dt_real = c.get("_dt_liquidacao_real")
+        # Data do pagamento ATRASADO — mesma régua do BQ nesta tela. Com a data
+        # do pagamento total, quem só pagou em dia entraria como conversão.
+        dt_real = c.get("_dt_liquidacao_atraso")
         cid = str(c.get("id") or "")
         if dt_real is None or cid not in primeiro:
             continue

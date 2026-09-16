@@ -261,8 +261,31 @@ def fetch_pagamentos_hoje_api() -> dict:
                 valor = 0.0
             id_receb = str(item.get("id_recebimento_recb") or "")
             foi_hoje = (dt_liq == hoje)
+
+            # Separa a parte ATRASADA (liquidacao depois do vencimento). As
+            # telas Especialista e Pagamentos medem "pagamento de cobranca
+            # atrasada" — a consulta do BQ filtra dt_liquidacao >
+            # dt_vencimento, mas o overlay somava tudo, inclusive quem pagou
+            # em dia. Em 14-16/09/2026 foram 163 pagamentos em dia contra 42
+            # em atraso, entao a distorcao nas metricas era grande.
+            # Fila, lote e carteira NAO usam isso: la o criterio continua
+            # sendo "sobrou alguma cobranca vencida em aberto?".
+            dt_venc = None
+            _venc_str = str(item.get("dt_vencimento_recb") or "")
+            for _fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y"):
+                try:
+                    dt_venc = _datetime.strptime(_venc_str[:10], _fmt).date()
+                    break
+                except (ValueError, TypeError):
+                    continue
+            em_atraso = bool(dt_venc and dt_liq > dt_venc)
+
             if cid in agg:
                 agg[cid]["valor_total"] += valor
+                if em_atraso:
+                    agg[cid]["valor_atraso"] += valor
+                    if (agg[cid]["dt_atraso"] is None) or (dt_liq > agg[cid]["dt_atraso"]):
+                        agg[cid]["dt_atraso"] = dt_liq
                 if id_receb:
                     agg[cid]["cobrancas_ids"].append(id_receb)
                 # Se alguma liquidação foi hoje, marca foi_hoje=True
@@ -277,6 +300,8 @@ def fetch_pagamentos_hoje_api() -> dict:
             else:
                 agg[cid] = {
                     "valor_total":        valor,
+                    "valor_atraso":       valor if em_atraso else 0.0,
+                    "dt_atraso":          dt_liq if em_atraso else None,
                     "nome":               str(item.get("st_nome_sac") or ""),
                     "cnpj":               str(item.get("st_cgc_sac") or ""),
                     "dt_liquidacao":      dt_liq_str,
@@ -332,6 +357,12 @@ def aplicar_pagamentos_hoje_no_store():
         info = pagamentos[cid]
         foi_hoje = bool(info.get("foi_hoje"))
         c["_valor_pago_hoje"] = info["valor_total"]
+        # Parte atrasada do que ele pagou — usada SO pelas telas de metrica
+        # (Especialista e Pagamentos), que medem pagamento de cobranca
+        # vencida. Cards, fila e lote seguem usando _valor_pago_hoje.
+        c["_valor_pago_atraso"] = float(info.get("valor_atraso") or 0)
+        c["_pagou_em_atraso"] = c["_valor_pago_atraso"] > 0
+        c["_dt_liquidacao_atraso"] = info.get("dt_atraso")
         # Data da liquidação pro badge "PAGOU R$ X EM dd/mm" quando não foi hoje
         # E pra atribuir o pagamento ao dia REAL nos gráficos do Especialista
         # (em vez de "hoje" pra todos, que enviesa a barra do dia atual).

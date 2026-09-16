@@ -59,10 +59,13 @@ def _build_regularizados_fresh(store) -> list:
         eh_parc = bool(c.get("_pago_parcial_hoje"))
         if not (eh_reg or eh_parc):
             continue
-        dt_real = c.get("_dt_liquidacao_real")
+        # Só a parte ATRASADA — esta tela lista pagamentos de cobrança
+        # atrasada (a consulta do BQ filtra dt_liquidacao > dt_vencimento).
+        # O overlay somava tudo, inclusive quem pagou em dia ou adiantado.
+        dt_real = c.get("_dt_liquidacao_atraso")
         if dt_real is None:
             continue
-        valor = float(c.get("_valor_pago_hoje") or 0)
+        valor = float(c.get("_valor_pago_atraso") or 0)
         if valor <= 0:
             continue
         cid = str(c.get("id") or "")
