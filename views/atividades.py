@@ -145,7 +145,15 @@ def _motivo(bucket, acoes, c) -> tuple:
     pra manter a info do acordo visível mesmo durante cooldown ou em outras colunas.
     """
     if c.get("_regularizado_hoje"):
-        return "Regularizado hoje · pagamento confirmado", "blue"
+        # "Hoje" = liquidação de hoje. Pagamento de dia anterior mostra a data:
+        # no lote isso vira sinal de que o cliente escapou da conferência das
+        # 08:15 (a Superlógica registrou depois). Sem as chaves do overlay
+        # (regularizado vindo de fetch_regularizados_do_dia, que só olha
+        # liquidação de hoje) o pagamento é de hoje.
+        _dt_pag = c.get("_dt_pagamento_recente")
+        if c.get("_pagamento_foi_hoje", True) or not _dt_pag:
+            return "Regularizado hoje · pagamento confirmado", "blue"
+        return f"Regularizado · pago em {_dt_pag}", "blue"
     if c.get("_regularizado_antes_hoje"):
         # Cliente já tinha pago em dia anterior — BQ só refletiu agora.
         # Label diferente pra atendente saber que não foi hoje (sem valor).
@@ -293,15 +301,21 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     # cliente está pagando, prioridade alta.
     _vl_parcial = float(c.get("_valor_pago_hoje") or 0)
     # Badge de pagamento parcial — aparece sempre que overlay marcou
-    # _pago_parcial_hoje, mostra "HOJE" (perspectiva do sistema: o sistema
-    # detectou hoje, mesmo que liquidação real tenha sido ontem). Coerente
-    # com o badge "Regularizado hoje" que segue mesma lógica.
+    # _pago_parcial_hoje. "HOJE" quando a liquidação foi hoje; senão a data
+    # real (mesma regra do motivo "Regularizado"). Cliente que pagou parte em
+    # dia anterior continua no lote com o saldo restante — a data evita que a
+    # atendente ache que ele acabou de pagar.
     _eh_parcial = bool(c.get("_pago_parcial_hoje")) and not _regularizado and _vl_parcial > 0
+    _dt_parcial = c.get("_dt_pagamento_recente")
+    _quando_parcial = (
+        "HOJE" if c.get("_pagamento_foi_hoje", True) or not _dt_parcial
+        else f"EM {_dt_parcial}"
+    )
     parcial_badge = (
         f'<span style="background:rgba(124,194,67,.18);color:#7cc243;font-size:10px;'
         f'font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;'
         f'border:1px solid rgba(124,194,67,.35);'
-        f'vertical-align:middle">PAGOU {fmt_moeda_plain(_vl_parcial)} HOJE</span>'
+        f'vertical-align:middle">PAGOU {fmt_moeda_plain(_vl_parcial)} {_quando_parcial}</span>'
     ) if _eh_parcial else ""
     motivo_txt, motivo_style = _motivo(bucket, acoes, c)
     _motivo_css = {
