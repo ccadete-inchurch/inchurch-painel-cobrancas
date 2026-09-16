@@ -941,7 +941,7 @@ def _render_especialista(store, clientes, role):
     # o que tocou (contatados), o que voltou (pagamentos e regularizações) e
     # só então os percentuais e o valor. As colunas de pagamento são por
     # CLIENTE — o mesmo cliente pode pagar várias vezes no mês.
-    _col_widths = [0.6, 1.7, 1.05, 1.0, 1.2, 1.25, 1.3, 1.2, 0.85, 0.95, 1.25]
+    _col_widths = [0.55, 1.6, 1.0, 0.95, 1.15, 1.2, 1.25, 1.1, 0.85, 0.95, 1.2, 1.15]
     _carteira_tip = (
         "Clientes inadimplentes HOJE sob esse especialista."
         if _mes_corrente else
@@ -957,10 +957,11 @@ def _render_especialista(store, clientes, role):
         ("Clientes com pag.", "Clientes distintos que pagaram algo em atraso no mês. Um mesmo cliente que pagou 3 vezes conta 1."),
         ("Pag. via contato", "Clientes cujo pagamento teve contato registrado antes (msg ou ligação), até 30 dias"),
         ("Pag. espontâneos", "Clientes que pagaram sem contato registrado — crédito vai pelo grupo"),
-        ("Regularizações", "Clientes que, em algum momento do mês, zeraram tudo que estava vencido"),
+        ("Reg. contato", "Clientes contactados no mês que pagaram DEPOIS do contato. É o numerador da Eficácia (Reg. contato ÷ Contatados)."),
         ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que estão regularizados hoje. Reflete trabalho real — cobrança tem conversão típica de 10-20%."),
         ("Cobertura", "Dos clientes que estiveram inadimplentes no mês, % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
         ("Valor Recuperado", ""),
+        ("Regularizações", "Clientes que, em algum momento do mês, zeraram tudo que estava vencido — INCLUI quem pagou sem contato e quem pagou antes de ser contactado. Por isso é maior que Reg. contato."),
     ]
     for col, (h, tip) in zip(hdr_cols, _hdr_labels):
         title_attr = f' title="{tip}"' if tip else ""
@@ -1005,8 +1006,10 @@ def _render_especialista(store, clientes, role):
             f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["espontaneos"]}</div>',
             unsafe_allow_html=True,
         )
+        # Reg. contato = numerador da Eficácia, ao lado dela pra leitura direta.
         rcols[7].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">'
+            f'{int(row.get("ef_regularizaram", 0) or 0)}</div>',
             unsafe_allow_html=True,
         )
         # Eficácia REAL — faixas ajustadas (cobrança é trabalho difícil,
@@ -1040,5 +1043,11 @@ def _render_especialista(store, clientes, role):
         )
         rcols[10].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
+            unsafe_allow_html=True,
+        )
+        # Regularizações TOTAL na ponta: inclui espontâneos e quem pagou antes
+        # do contato, então é sempre >= Reg. contato.
+        rcols[11].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
             unsafe_allow_html=True,
         )
