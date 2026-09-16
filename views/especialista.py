@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from auth import current_role
-from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_por_especialista, fetch_eventos_regularizacao, fetch_cobertura_por_especialista
+from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_por_especialista, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_carteira_fim_mes
 from helpers import fmt_moeda_plain, hoje_brt
 
 
@@ -678,6 +678,11 @@ def _render_especialista(store, clientes, role):
         # Aplica filtro de Situação no trend também (consistência com o resto)
         if ids_situacao_ok is not None:
             df_trend = df_trend[df_trend["id"].astype(str).isin(ids_situacao_ok)]
+        # Fora do gráfico: "Sem especialista" não é pessoa, é o balde de
+        # clientes sem grupo — a linha dele no trend não representa trabalho de
+        # ninguém. Filtra DEPOIS do overlay porque as linhas do overlay também
+        # podem vir com esse rótulo. Mesma exclusão do ranking e da matriz.
+        df_trend = df_trend[df_trend["atendente"] != "Sem especialista"]
         df_trend["mes_dt"] = df_trend["data_dt"].dt.to_period("M").dt.to_timestamp()
         df_trend["mes_label"] = df_trend["mes_dt"].dt.strftime("%b/%y").str.capitalize()
         df_mensal = (
@@ -742,10 +747,15 @@ def _render_especialista(store, clientes, role):
         df_per["eh_regularizacao"].astype(bool)
         & (df_per["tipo_atribuicao"] == "via_contato")
     )
+    # Fora do ranking: "Sem especialista" não é pessoa, é o balde de clientes
+    # sem grupo. Ele nunca entra no lote, então aparecia com 0 contatados,
+    # 0% de eficácia e 100% espontâneos — linha que só polui a comparação.
+    # Mesma exclusão já feita na Matriz de Desempenho e na média da equipe.
+    df_rank = df_per[df_per["atendente"] != "Sem especialista"]
     # Passo 1: classifica cada cliente UMA vez (qualquer linha reg → reg;
     # qualquer via_contato → via_contato; valor total)
     per_cli_rank = (
-        df_per.groupby(["id", "atendente"])
+        df_rank.groupby(["id", "atendente"])
         .agg(
             tem_reg=("eh_regularizacao", "any"),
             tem_parc=("eh_parcial", "any"),
@@ -807,11 +817,31 @@ def _render_especialista(store, clientes, role):
         rank_agg["cob_base"] = rank_agg["inadimplentes_periodo"].fillna(0).astype(int)
         rank_agg = rank_agg.drop(columns=["cobertura_pct", "contactados", "inadimplentes_periodo"])
     # Junta com carteira atual
-    carteira_count = (
-        pd.DataFrame([{"atendente": _norm_atendente_raw(c.get("_grupo"))} for c in clientes])
-        .groupby("atendente").size().reset_index(name="carteira_atual")
-        if clientes else pd.DataFrame(columns=["atendente", "carteira_atual"])
-    )
+    # Carteira: mês corrente usa a foto de HOJE (store, já carregado); mês
+    # fechado usa o último snapshot daquele mês. Sem isso, a linha inteira
+    # falava do mês escolhido e a carteira falava de hoje.
+    _mes_corrente = (_mes_sel[0], _mes_sel[1]) == (hoje.year, hoje.month)
+    _carteira_ref = ""
+    if _mes_corrente:
+        carteira_count = (
+            pd.DataFrame([{"atendente": _norm_atendente_raw(c.get("_grupo"))} for c in clientes])
+            .groupby("atendente").size().reset_index(name="carteira_atual")
+            if clientes else pd.DataFrame(columns=["atendente", "carteira_atual"])
+        )
+    else:
+        _df_cart = fetch_carteira_fim_mes(dt_inicio.isoformat(), dt_fim.isoformat())
+        if _df_cart.empty:
+            carteira_count = pd.DataFrame(columns=["atendente", "carteira_atual"])
+        else:
+            _carteira_ref = str(_df_cart["data_ref"].iloc[0])
+            carteira_count = (
+                _df_cart.rename(columns={"carteira_mes": "carteira_atual"})
+                [["atendente", "carteira_atual"]]
+            )
+    # Sem o filtro aqui, o merge outer traria "Sem especialista" de volta só
+    # com a carteira preenchida e o resto zerado.
+    if not carteira_count.empty:
+        carteira_count = carteira_count[carteira_count["atendente"] != "Sem especialista"]
     ranking = rank_agg.merge(carteira_count, on="atendente", how="outer").fillna(0)
     # Força int em todas as colunas numéricas inteiras — evita exibir '16.0'
     # quando merges com floats convertem o tipo silenciosamente.
@@ -834,11 +864,17 @@ def _render_especialista(store, clientes, role):
     # só então os percentuais e o valor. As colunas de pagamento são por
     # CLIENTE — o mesmo cliente pode pagar várias vezes no mês.
     _col_widths = [0.6, 1.7, 1.05, 1.0, 1.2, 1.25, 1.3, 1.2, 0.85, 0.95, 1.25]
+    _carteira_tip = (
+        "Clientes inadimplentes HOJE sob esse especialista."
+        if _mes_corrente else
+        f"Clientes inadimplentes na foto de {_carteira_ref or 'fim do mês'} — "
+        "último snapshot diário do mês selecionado."
+    )
     hdr_cols = st.columns(_col_widths)
     _hdr_labels = [
         ("Posição", ""),
         ("Especialista", ""),
-        ("Carteira inad.", "Clientes inadimplentes HOJE sob esse especialista. Não depende do mês filtrado."),
+        ("Carteira inad.", _carteira_tip),
         ("Contatados", "Clientes distintos que receberam mensagem ou ligação no mês. É a base da Eficácia e da Cobertura."),
         ("Clientes com pag.", "Clientes distintos que pagaram algo em atraso no mês. Um mesmo cliente que pagou 3 vezes conta 1."),
         ("Pag. via contato", "Clientes cujo pagamento teve contato registrado antes (msg ou ligação), até 30 dias"),

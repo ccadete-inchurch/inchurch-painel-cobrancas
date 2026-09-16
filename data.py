@@ -2329,6 +2329,55 @@ def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.D
 
 
 @st.cache_data(ttl=1800)
+def fetch_carteira_fim_mes(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
+    """Foto da carteira inadimplente no ULTIMO dia com snapshot dentro do
+    periodo — usada na tela Especialista quando o mes selecionado ja fechou.
+
+    Por que existe: a coluna "Carteira inad." saia do store, que e' sempre
+    HOJE. Olhando Jun/2026, a linha inteira falava de junho e a carteira
+    falava de hoje.
+
+    Usa o ULTIMO snapshot do mes (nao o dia 30/31) porque dia sem snapshot
+    acontece — o cron pula quando o BQ nao esta confiavel. Conferido em
+    set/2026: 29/05, 30/06, 31/07 e 31/08 existem, entao a foto cai no fim do
+    mes ou bem perto.
+
+    Atribuicao pelo grupo ATUAL (splgc-grupo): cliente que trocou de dono
+    depois aparece na foto antiga sob o dono de hoje. E' o mesmo criterio das
+    outras colunas do ranking.
+
+    Retorna DataFrame com atendente, carteira_mes e data_ref (dd/mm/aaaa).
+    """
+    client = get_bq_client()
+    if not client:
+        return pd.DataFrame()
+    try:
+        return client.query(f"""
+            WITH ref AS (
+                SELECT MAX(data_snapshot) AS dia
+                FROM `{_SNAPSHOT_TABLE}`
+                WHERE data_snapshot >= DATE('{dt_inicio_iso}')
+                  AND data_snapshot <= DATE('{dt_fim_iso}')
+            ),
+            g AS (
+                SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(grupo) AS grupo
+                FROM `business-intelligence-467516.Splgc.splgc-grupo`
+                WHERE grupo IN ('Ana Carolina', 'Priscila Oliveira')
+                GROUP BY id_sacado_sac
+            )
+            SELECT g.grupo AS atendente,
+                   COUNT(DISTINCT s.id_sacado_sac) AS carteira_mes,
+                   FORMAT_DATE('%d/%m/%Y', MAX(s.data_snapshot)) AS data_ref
+            FROM `{_SNAPSHOT_TABLE}` s
+            JOIN g ON g.cid = s.id_sacado_sac
+            WHERE s.data_snapshot = (SELECT dia FROM ref)
+            GROUP BY g.grupo
+        """).to_dataframe()
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=1800)
 def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
     """Cobertura da carteira: % dos inadimplentes do especialista que ele
     tocou (msg ou ligacao) no periodo.
