@@ -2961,9 +2961,17 @@ def load_mensagens_from_bq():
         finally:
             st.session_state["_pg_n8n_silent"] = False
 
+    # telefone/message saem em BASE64 (texto ASCII puro), nao em BYTEA.
+    # BYTEA dependia do pg8000 decodificar o formato do servidor com
+    # bytes.fromhex(); em 16/09/2026 o painel no Streamlit Cloud passou a
+    # falhar com "non-hexadecimal number found in fromhex() arg at position
+    # 21" em todas as tentativas (localmente a mesma consulta funcionava), e
+    # o kanban parou de receber os status do N8N. Base64 nao passa por
+    # decodificador de bytea e continua blindando contra UTF-8 invalido na
+    # mensagem, que era o motivo original do convert_to.
     query1 = f"""
-        SELECT convert_to(telefone, 'UTF8') AS tel_bytes,
-               convert_to(message,  'UTF8') AS msg_bytes,
+        SELECT encode(convert_to(telefone, 'UTF8'), 'base64') AS tel_b64,
+               encode(convert_to(message,  'UTF8'), 'base64') AS msg_b64,
                created_at
         FROM {table}
         WHERE created_at >= NOW() - INTERVAL '3 days'
@@ -2981,15 +2989,22 @@ def load_mensagens_from_bq():
     ultimo_contato_ts = {}
 
     def _bytes_to_str(b):
-        """Decodifica bytes vindos de BYTEA como UTF-8 com errors='replace'."""
+        """Texto em base64 (SELECT com encode(..., 'base64')) -> str UTF-8 com
+        errors='replace'. Aceita bytes tambem, por compatibilidade."""
+        import base64 as _b64
         if b is None:
             return ""
         if isinstance(b, (bytes, bytearray, memoryview)):
             return bytes(b).decode("utf-8", errors="replace")
-        return str(b)
+        try:
+            # b64decode ignora as quebras de linha que o Postgres insere a
+            # cada 76 caracteres no encode base64.
+            return _b64.b64decode(str(b)).decode("utf-8", errors="replace")
+        except Exception:
+            return str(b)
 
     for tel_raw, msg_bytes, ts in rows:
-        # Ambos telefone e message vem como bytes agora (BYTEA no SELECT).
+        # Ambos telefone e message vem em base64 (texto) no SELECT.
         chave = _norm(_bytes_to_str(tel_raw))
         if not chave:
             continue
@@ -3047,7 +3062,7 @@ def load_mensagens_from_bq():
         for p in _MSG_IA_IGNORAR
     )
     query2 = f"""
-        SELECT convert_to(telefone, 'UTF8') AS tel_bytes, MAX(created_at) AS ultimo_contato
+        SELECT encode(convert_to(telefone, 'UTF8'), 'base64') AS tel_b64, MAX(created_at) AS ultimo_contato
         FROM {table}
         WHERE LOWER(fromme::text) = 'true'
           AND {ia_filter_sql}
@@ -3056,7 +3071,7 @@ def load_mensagens_from_bq():
     rows2, erro2 = _fetch_rows_com_retry(query2)
     if rows2 is not None:
         for tel_raw, ts in rows2:
-            # tel_raw vem como bytes (BYTEA). Decodifica com errors=replace.
+            # tel_raw vem em base64 (texto). Decodifica com errors=replace.
             chave = _norm(_bytes_to_str(tel_raw))
             if not chave or ts is None:
                 continue
