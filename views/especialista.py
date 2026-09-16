@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from auth import current_role
-from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_por_especialista, fetch_eventos_regularizacao
+from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_por_especialista, fetch_eventos_regularizacao, fetch_cobertura_por_especialista
 from helpers import fmt_moeda_plain, hoje_brt
 
 
@@ -775,6 +775,23 @@ def _render_especialista(store, clientes, role):
         rank_agg["ef_regularizaram"] = rank_agg["regularizaram"].fillna(0).astype(int)
         rank_agg["ef_contatados"] = rank_agg["clientes_contactados"].fillna(0).astype(int)
         rank_agg = rank_agg.drop(columns=["eficacia_real", "regularizaram", "clientes_contactados"])
+    # Cobertura = quanto da propria carteira inadimplente o especialista tocou
+    # no periodo. Complementa a eficacia: quem tem carteira maior recebe o
+    # mesmo lote de 80/dia e por isso cobre uma fatia menor.
+    df_cob = fetch_cobertura_por_especialista(dt_inicio.isoformat(), dt_fim.isoformat())
+    if df_cob.empty:
+        rank_agg["cobertura"] = 0
+        rank_agg["cob_contactados"] = 0
+        rank_agg["cob_base"] = 0
+    else:
+        rank_agg = rank_agg.merge(
+            df_cob[["atendente", "cobertura_pct", "contactados", "inadimplentes_periodo"]],
+            on="atendente", how="left",
+        )
+        rank_agg["cobertura"] = rank_agg["cobertura_pct"].fillna(0).astype(int)
+        rank_agg["cob_contactados"] = rank_agg["contactados"].fillna(0).astype(int)
+        rank_agg["cob_base"] = rank_agg["inadimplentes_periodo"].fillna(0).astype(int)
+        rank_agg = rank_agg.drop(columns=["cobertura_pct", "contactados", "inadimplentes_periodo"])
     # Junta com carteira atual
     carteira_count = (
         pd.DataFrame([{"atendente": _norm_atendente_raw(c.get("_grupo"))} for c in clientes])
@@ -786,7 +803,8 @@ def _render_especialista(store, clientes, role):
     # quando merges com floats convertem o tipo silenciosamente.
     # Eficácia mantém como float (duas casas decimais); demais são int.
     for col in ("pagamentos", "regularizacoes", "parciais", "via_contato",
-                "espontaneos", "carteira_atual"):
+                "espontaneos", "carteira_atual", "cobertura", "cob_contactados",
+                "cob_base"):
         if col in ranking.columns:
             ranking[col] = ranking[col].astype(int)
     if "eficacia" in ranking.columns:
@@ -795,11 +813,11 @@ def _render_especialista(store, clientes, role):
     ranking["rank"] = ranking.index + 1
     ranking["valor_fmt"] = ranking["valor"].apply(fmt_moeda_plain)
 
-    # Headers — 9 colunas (Eficácia adicionada)
-    # 9 colunas: Posição (mais larga pra header completo), Especialista (nome),
-    # Pagamentos, Via Contato, Espontâneos, Regularizações, Eficácia, Valor
-    # Recuperado, Carteira.
-    _col_widths = [0.7, 2.0, 1.0, 1.0, 1.1, 1.2, 0.9, 1.4, 0.9]
+    # Headers — 10 colunas (Cobertura adicionada ao lado da Eficácia).
+    # Eficácia responde "converteu bem o que tocou?"; Cobertura responde
+    # "tocou quanto do que tinha?". As duas juntas evitam comparar atendentes
+    # com carteiras de tamanhos diferentes como se fossem iguais.
+    _col_widths = [0.65, 1.85, 0.95, 0.95, 1.05, 1.2, 0.9, 1.0, 1.3, 0.85]
     hdr_cols = st.columns(_col_widths)
     _hdr_labels = [
         ("Posição", ""),
@@ -809,6 +827,7 @@ def _render_especialista(store, clientes, role):
         ("Espontâneos", "Pagamentos sem contato — atribuído por grupo"),
         ("Regularizações", "Clientes que NÃO estão mais inadimplentes hoje"),
         ("Eficácia", "Dos clientes contactados no período (msg/ligação), % que estão regularizados hoje. Reflete trabalho real — cobrança tem conversão típica de 10-20%."),
+        ("Cobertura", "Dos clientes que estiveram inadimplentes no período, % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
         ("Valor Recuperado", ""),
         ("Carteira", "Clientes inadimplentes hoje sob esse especialista"),
     ]
@@ -862,11 +881,26 @@ def _render_especialista(store, clientes, role):
             f'color:{_ef_cor};font-weight:700">{_ef:.2f}%</div>',
             unsafe_allow_html=True,
         )
+        # Cobertura — sem faixa de cor "boa/ruim": depende do tamanho da
+        # carteira, entao e' contexto pra ler a eficacia, nao nota.
+        _cob = int(row.get("cobertura", 0) or 0)
+        _cob_cont = int(row.get("cob_contactados", 0) or 0)
+        _cob_base = int(row.get("cob_base", 0) or 0)
+        _cob_txt = f"{_cob}%" if _cob_base else "—"
+        _cob_tip = (
+            f"{_cob_cont} de {_cob_base} inadimplentes do período foram contactados"
+            if _cob_base else "Sem snapshot diário no período"
+        )
         rcols[7].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
+            f'<div title="{_cob_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
+            f'color:#9ca3af;font-weight:600">{_cob_txt}</div>',
             unsafe_allow_html=True,
         )
         rcols[8].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
+            unsafe_allow_html=True,
+        )
+        rcols[9].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["carteira_atual"]}</div>',
             unsafe_allow_html=True,
         )

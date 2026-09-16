@@ -2326,6 +2326,66 @@ def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.D
 
 
 @st.cache_data(ttl=1800)
+def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
+    """Cobertura da carteira: % dos inadimplentes do especialista que ele
+    tocou (msg ou ligacao) no periodo.
+
+    Por que existe: a eficacia divide por CONTACTADOS, nao pela carteira.
+    Duas atendentes com carteiras diferentes (set/2026: Ana 1.795 clientes,
+    Priscila 2.486) podem ter a mesma eficacia trabalhando fatias bem
+    diferentes da propria base — o lote e' fixo em 80/dia pras duas, entao
+    quem tem carteira maior cobre proporcionalmente menos. A eficacia diz
+    "converteu bem o que tocou"; a cobertura diz "tocou quanto do que tinha".
+
+    Denominador: clientes distintos que apareceram nos snapshots diarios do
+    periodo (esteve inadimplente em ALGUM dia), atribuidos pelo grupo atual
+    em splgc-grupo. Dia sem snapshot (cron pulou) so reduz a amostra, nao
+    quebra a conta. Sem nenhum snapshot no periodo, retorna vazio e a tela
+    mostra '—'.
+    """
+    client = get_bq_client()
+    if not client:
+        return pd.DataFrame()
+    try:
+        df = client.query(f"""
+            WITH contatos AS (
+                SELECT atendente,
+                       COUNT(DISTINCT CAST(id_sacado_sac AS STRING)) AS contactados
+                FROM `{_TAREFAS_TABLE}`
+                WHERE data_tarefa >= DATE('{dt_inicio_iso}')
+                  AND data_tarefa <= DATE('{dt_fim_iso}')
+                  AND (mensagem_enviada OR ligacao_feita OR ligacao_atendida)
+                GROUP BY atendente
+            ),
+            inad AS (
+                SELECT g.grupo AS atendente,
+                       COUNT(DISTINCT s.id_sacado_sac) AS inadimplentes_periodo
+                FROM `{_SNAPSHOT_TABLE}` s
+                JOIN (
+                    SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(grupo) AS grupo
+                    FROM `business-intelligence-467516.Splgc.splgc-grupo`
+                    WHERE grupo IN ('Ana Carolina', 'Priscila Oliveira')
+                    GROUP BY id_sacado_sac
+                ) g ON g.cid = s.id_sacado_sac
+                WHERE s.data_snapshot >= DATE('{dt_inicio_iso}')
+                  AND s.data_snapshot <= DATE('{dt_fim_iso}')
+                GROUP BY g.grupo
+            )
+            SELECT c.atendente, c.contactados, i.inadimplentes_periodo
+            FROM contatos c
+            JOIN inad i ON i.atendente = c.atendente
+        """).to_dataframe()
+        if df.empty:
+            return df
+        df["cobertura_pct"] = (
+            df["contactados"] / df["inadimplentes_periodo"].replace(0, pd.NA) * 100
+        ).fillna(0).round(0).astype(int)
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=1800)
 def fetch_eventos_regularizacao() -> set:
     """Retorna set de (id_sacado_sac, data_dd_mm_aaaa) — eventos de
     REGULARIZAÇÃO detectados via analise direta de liquidações.
