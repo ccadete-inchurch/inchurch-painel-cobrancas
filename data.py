@@ -2317,9 +2317,12 @@ def fetch_eficacia_por_especialista(dt_inicio_iso: str, dt_fim_iso: str) -> pd.D
         """).to_dataframe()
         if df.empty:
             return df
+        # 2 casas: o arredondamento pra inteiro fazia Ana e Priscila
+        # aparecerem as duas com "50,00%" quando a diferenca real era de
+        # decimos. A tela ja formata com .2f.
         df["eficacia_real"] = (
             df["regularizaram"] / df["clientes_contactados"].replace(0, pd.NA) * 100
-        ).fillna(0).round(0).astype(int)
+        ).fillna(0).round(2).astype(float)
         return df
     except Exception:
         return pd.DataFrame()

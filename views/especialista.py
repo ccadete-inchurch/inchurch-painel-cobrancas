@@ -136,20 +136,36 @@ def _render_especialista(store, clientes, role):
         unsafe_allow_html=True,
     )
 
-    # ── Filtros: Período (calendario), Especialista, Situação ────────────
-    # Mesmo padrao das telas Pagamentos e Proximas Cobrancas: date range picker
-    # (usuario escolhe qualquer intervalo). Default: mes atual (01 -> hoje).
+    # ── Filtros: Mês, Especialista, Situação ──────────────────────────────
+    # Seletor MENSAL, não range livre. Eficácia e Regularizações são
+    # ACUMULADAS — contam quem regularizou em QUALQUER momento do período —
+    # então janela longa satura e a leitura perde sentido: em 01/01-30/09/2026
+    # apareciam 1.461 de 1.468 clientes com pagamento como regularizados, e as
+    # duas especialistas empatadas em "50%". Mês a mês é a comparação honesta.
+    #
+    # Piso 05/2026: primeiro mês com contato registrado em
+    # painel_tarefas_diarias (19 dias com lote, 580 clientes contactados, as 2
+    # atendentes). Antes disso não havia como registrar msg/ligação, então todo
+    # pagamento aparecia como espontâneo e a eficácia como 0%.
     hoje = date.fromisoformat(hoje_brt())
-    _ini_default = hoje.replace(day=1)
-    _fim_default = hoje
+    _MES_INICIAL = (2026, 5)
+    _MESES_PT = {1: "Jan", 2: "Fev", 3: "Mar", 4: "Abr", 5: "Mai", 6: "Jun",
+                 7: "Jul", 8: "Ago", 9: "Set", 10: "Out", 11: "Nov", 12: "Dez"}
+
+    _meses = []
+    _y, _m = _MES_INICIAL
+    while (_y, _m) <= (hoje.year, hoje.month):
+        _meses.append((_y, _m))
+        _y, _m = (_y + 1, 1) if _m == 12 else (_y, _m + 1)
 
     fp1, fp2, fp3, _ = st.columns([2, 2, 2, 2])
     with fp1:
-        intervalo_selecionado = st.date_input(
-            "Período (de → até)",
-            value=(_ini_default, _fim_default),
-            key="esp_periodo_range",
-            format="DD/MM/YYYY",
+        _mes_sel = st.selectbox(
+            "Mês",
+            _meses,
+            index=len(_meses) - 1,
+            format_func=lambda ym: f"{_MESES_PT[ym[1]]}/{ym[0]}",
+            key="esp_mes",
         )
     with fp3:
         filtro_situacao = st.selectbox(
@@ -158,15 +174,13 @@ def _render_especialista(store, clientes, role):
             key="esp_situacao",
         )
 
-    # Parse do date range picker — retorna tupla quando ambas escolhidas.
-    dt_inicio, dt_fim = _ini_default, _fim_default
-    if isinstance(intervalo_selecionado, tuple):
-        if len(intervalo_selecionado) == 2:
-            dt_inicio, dt_fim = intervalo_selecionado
-        elif len(intervalo_selecionado) == 1:
-            dt_inicio = dt_fim = intervalo_selecionado[0]
-    elif intervalo_selecionado:
-        dt_inicio = dt_fim = intervalo_selecionado
+    # Mês fechado vai até o último dia; mês corrente vai até hoje.
+    dt_inicio = date(_mes_sel[0], _mes_sel[1], 1)
+    if (_mes_sel[0], _mes_sel[1]) == (hoje.year, hoje.month):
+        dt_fim = hoje
+    else:
+        _prox = (_mes_sel[0] + 1, 1) if _mes_sel[1] == 12 else (_mes_sel[0], _mes_sel[1] + 1)
+        dt_fim = date(_prox[0], _prox[1], 1) - timedelta(days=1)
 
     # ── Fonte: BQ JOIN com tarefas — atribui por contato efetivo ──────────
     # painel_tarefas_diarias + liquidações → último atendente que teve
@@ -815,24 +829,24 @@ def _render_especialista(store, clientes, role):
     ranking["rank"] = ranking.index + 1
     ranking["valor_fmt"] = ranking["valor"].apply(fmt_moeda_plain)
 
-    # Headers — 11 colunas. Contatados vem logo após o nome porque é o
-    # denominador de Eficácia e Cobertura: sem ele, os dois percentuais ficam
-    # soltos. As colunas de pagamento são por CLIENTE (o mesmo cliente pode
-    # pagar várias vezes no período), daí o rótulo "Clientes com pagamento".
-    _col_widths = [0.6, 1.7, 1.0, 1.35, 1.25, 1.3, 1.2, 0.85, 0.95, 1.25, 0.8]
+    # Headers — 11 colunas, na ordem do funil: o que tem na mão (carteira),
+    # o que tocou (contatados), o que voltou (pagamentos e regularizações) e
+    # só então os percentuais e o valor. As colunas de pagamento são por
+    # CLIENTE — o mesmo cliente pode pagar várias vezes no mês.
+    _col_widths = [0.6, 1.7, 1.05, 1.0, 1.2, 1.25, 1.3, 1.2, 0.85, 0.95, 1.25]
     hdr_cols = st.columns(_col_widths)
     _hdr_labels = [
         ("Posição", ""),
         ("Especialista", ""),
-        ("Contatados", "Clientes distintos que receberam mensagem ou ligação no período. É a base da Eficácia e da Cobertura."),
-        ("Clientes com pagamento", "Clientes distintos que pagaram algo em atraso no período. Um mesmo cliente que pagou 3 vezes conta 1."),
+        ("Carteira inad.", "Clientes inadimplentes HOJE sob esse especialista. Não depende do mês filtrado."),
+        ("Contatados", "Clientes distintos que receberam mensagem ou ligação no mês. É a base da Eficácia e da Cobertura."),
+        ("Clientes com pag.", "Clientes distintos que pagaram algo em atraso no mês. Um mesmo cliente que pagou 3 vezes conta 1."),
         ("Pag. via contato", "Clientes cujo pagamento teve contato registrado antes (msg ou ligação), até 30 dias"),
         ("Pag. espontâneos", "Clientes que pagaram sem contato registrado — crédito vai pelo grupo"),
-        ("Regularizações", "Clientes que, em algum momento do período, zeraram tudo que estava vencido"),
-        ("Eficácia", "Dos clientes contactados no período (msg/ligação), % que estão regularizados hoje. Reflete trabalho real — cobrança tem conversão típica de 10-20%."),
-        ("Cobertura", "Dos clientes que estiveram inadimplentes no período, % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
+        ("Regularizações", "Clientes que, em algum momento do mês, zeraram tudo que estava vencido"),
+        ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que estão regularizados hoje. Reflete trabalho real — cobrança tem conversão típica de 10-20%."),
+        ("Cobertura", "Dos clientes que estiveram inadimplentes no mês, % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
         ("Valor Recuperado", ""),
-        ("Carteira", "Clientes inadimplentes hoje sob esse especialista"),
     ]
     for col, (h, tip) in zip(hdr_cols, _hdr_labels):
         title_attr = f' title="{tip}"' if tip else ""
@@ -854,25 +868,30 @@ def _render_especialista(store, clientes, role):
             f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{row["atendente"]}</div>',
             unsafe_allow_html=True,
         )
-        # Contatados — base dos dois percentuais à direita.
-        _contatados = int(row.get("ef_contatados", 0) or 0) or int(row.get("cob_contactados", 0) or 0)
+        # Carteira inadimplente de hoje — contexto pra ler o resto da linha.
         rcols[2].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["carteira_atual"]}</div>',
+            unsafe_allow_html=True,
+        )
+        # Contatados — base dos dois percentuais mais à direita.
+        _contatados = int(row.get("ef_contatados", 0) or 0) or int(row.get("cob_contactados", 0) or 0)
+        rcols[3].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{_contatados}</div>',
             unsafe_allow_html=True,
         )
-        rcols[3].markdown(
+        rcols[4].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{row["pagamentos"]}</div>',
             unsafe_allow_html=True,
         )
-        rcols[4].markdown(
+        rcols[5].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#7cc243;font-weight:600">{row["via_contato"]}</div>',
             unsafe_allow_html=True,
         )
-        rcols[5].markdown(
+        rcols[6].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["espontaneos"]}</div>',
             unsafe_allow_html=True,
         )
-        rcols[6].markdown(
+        rcols[7].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
             unsafe_allow_html=True,
         )
@@ -885,7 +904,7 @@ def _render_especialista(store, clientes, role):
         _ef_reg = int(row.get("ef_regularizaram", 0) or 0)
         _ef_cont = int(row.get("ef_contatados", 0) or 0)
         _ef_tip = f"{_ef_reg} de {_ef_cont} clientes contactados regularizaram"
-        rcols[7].markdown(
+        rcols[8].markdown(
             f'<div title="{_ef_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
             f'color:{_ef_cor};font-weight:700">{_ef:.2f}%</div>',
             unsafe_allow_html=True,
@@ -900,16 +919,12 @@ def _render_especialista(store, clientes, role):
             f"{_cob_cont} de {_cob_base} inadimplentes do período foram contactados"
             if _cob_base else "Sem snapshot diário no período"
         )
-        rcols[8].markdown(
+        rcols[9].markdown(
             f'<div title="{_cob_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
             f'color:#9ca3af;font-weight:600">{_cob_txt}</div>',
             unsafe_allow_html=True,
         )
-        rcols[9].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
-            unsafe_allow_html=True,
-        )
         rcols[10].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["carteira_atual"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
             unsafe_allow_html=True,
         )
