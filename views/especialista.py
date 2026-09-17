@@ -755,17 +755,18 @@ def _render_especialista(store, clientes, role):
         'text-transform:uppercase;letter-spacing:1.5px;'
         'margin-bottom:4px">Evolução Mensal de Pagamentos</div>'
         '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-        'Desde mai/26, início do registro de contatos — independente do '
+        'Desde jun/26, primeiro mês completo de operação — independente do '
         'filtro de período. Mostra tendência do time ao longo do tempo.'
         '</div>',
         unsafe_allow_html=True,
     )
-    # Começa em mai/2026 e cresce um ponto por mês. Antes eram 6 meses fixos,
-    # que traziam abril: mês sem nenhum contato registrado, em que TODO
-    # pagamento era creditado pelo grupo atual do cliente — trabalho que não
-    # aconteceu. mai/26 é o mesmo início do filtro mensal da tela.
+    # Começa em jun/2026 e cresce um ponto por mês. Antes eram 6 meses fixos,
+    # que traziam abril (nenhum contato registrado: todo pagamento creditado
+    # pelo grupo atual — trabalho que não aconteceu). Maio também fica fora:
+    # o lote começou em 05/05 (19 dias) e os snapshots diários só em 20/05
+    # (5 dias), então o mês não é comparável com os seguintes.
     _hoje_trend = date.fromisoformat(hoje_brt())
-    _trend_inicio = date(2026, 5, 1)
+    _trend_inicio = date(2026, 6, 1)
     # Trend sempre inclui o mês corrente, então usa o carimbo do dia.
     df_trend = fetch_pagamentos_creditados(
         _trend_inicio.isoformat(), _hoje_trend.isoformat(), f"dia-{carimbo_dia_cache()}"
@@ -851,7 +852,8 @@ def _render_especialista(store, clientes, role):
         'text-transform:uppercase;letter-spacing:1.5px;'
         'margin-bottom:4px">Funil Mensal</div>'
         '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-        'Clientes por mês desde mai/26 — independente do filtro de período. '
+        'Clientes por mês desde jun/26, primeiro mês completo — independente '
+        'do filtro de período. '
         'Espontâneo = pagou sem contato nos 30 dias antes.'
         '</div>',
         unsafe_allow_html=True,
