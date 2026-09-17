@@ -99,7 +99,8 @@ def _render_proximas(_store, clientes):
             "vencimento":     venc_str,
             "_venc_date":     venc_date,
             "dias_restantes": dias_rest,
-            "grupo":          str(row.get("grupo",     "") or "—"),
+            # NaN do pandas é truthy — sem o isna virava "nan" na tabela.
+            "grupo":          "—" if pd.isna(row.get("grupo")) or not str(row.get("grupo")).strip() else str(row.get("grupo")),
             "inativo":        bool(row.get("inativo",  False)),
         })
 
@@ -282,7 +283,7 @@ def _render_proximas(_store, clientes):
         # HOJE: selo preenchido (vermelho vivo + texto branco) pra destacar dos
         # 1-7d, que ficam só com borda vermelha.
         _selo_css = (
-            "background:#ff2d2d;border:1px solid #ff2d2d;color:#ffffff;letter-spacing:0.5px;"
+            "background:rgba(255,45,45,.72);border:1px solid rgba(255,45,45,.72);color:#ffffff;letter-spacing:0.5px;"
             if d == 0 else f"border:1px solid {cor_d};color:{cor_d};"
         )
 

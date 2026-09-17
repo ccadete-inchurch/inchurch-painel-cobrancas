@@ -1,3 +1,4 @@
+import html
 from datetime import date
 import pandas as pd
 import altair as alt
@@ -23,7 +24,7 @@ def _render_cliente(_store, clientes):
     st.markdown(
         '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:36px;'
         'font-weight:800;color:#e8eaf0;margin-top:24px;margin-bottom:24px;letter-spacing:-1px;line-height:1.1">'
-        'Visão do Cliente</div>',
+        'Cliente Devedor</div>',
         unsafe_allow_html=True,
     )
 
@@ -98,12 +99,36 @@ def _render_cliente(_store, clientes):
     c1, c2, c3, c4 = st.columns(4)
     inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle">INATIVO</span>' if cliente.get("_inativo") else ""
 
+    # Maior Atraso na mesma escala do badge de Atraso da Inadimplência
+    # (.da-30/60/90/max em config.py), só a cor do texto, sem fundo.
+    _dias = cliente.get("dias_atraso")
+    if not _dias:
+        _cor_atraso = "#e8eaf0"
+    elif _dias <= 30:
+        _cor_atraso = "#ffb84d"
+    elif _dias <= 60:
+        _cor_atraso = "#ff9800"
+    elif _dias <= 90:
+        _cor_atraso = "#ff5555"
+    else:
+        _cor_atraso = "#ff4444"
+
+    # Nome: até 2 linhas com reticências + tooltip com o nome inteiro. Com
+    # nowrap numa coluna flex o texto não encolhia (min-width:auto) e nome
+    # longo sumia do card.
+    _nome_html = html.escape(str(cliente["nome"]))
+    _nome_css = (
+        "font-size:16px;color:#e8eaf0;min-width:0;overflow:hidden;"
+        "display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;"
+        "word-break:break-word;line-height:1.25"
+    )
+
     # Valor de cada card — 22px nos numéricos, 16px nos textos (nome/grupo).
-    # Cores preservadas: Saldo vermelho, demais brancos.
+    # Cores: Saldo vermelho, Maior Atraso na escala de atraso, demais brancos.
     cards = [
         (
             c1, "Cliente",
-            f'<div style="{_CARD_VALUE_CSS};font-size:16px;color:#e8eaf0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{cliente["nome"]}{inativo_badge}</div>',
+            f'<div title="{_nome_html}" style="{_CARD_VALUE_CSS};{_nome_css}">{_nome_html}{inativo_badge}</div>',
             cliente.get("cnpj", "—"),
         ),
         (
@@ -113,7 +138,7 @@ def _render_cliente(_store, clientes):
         ),
         (
             c3, "Maior Atraso",
-            f'<div style="{_CARD_VALUE_CSS};color:#e8eaf0">{cliente.get("dias_atraso","—")}<span style="font-size:14px;color:#8b94a5;margin-left:4px;font-weight:600">dias</span></div>',
+            f'<div style="{_CARD_VALUE_CSS};color:{_cor_atraso}">{cliente.get("dias_atraso") or "—"}<span style="font-size:14px;color:#8b94a5;margin-left:4px;font-weight:600">dias</span></div>',
             cliente.get("vencimento", "—"),
         ),
         (
@@ -125,7 +150,7 @@ def _render_cliente(_store, clientes):
     for col, label, val_html, sub in cards:
         with col:
             st.markdown(
-                f'<div class="metric-card" style="padding:18px 20px">'
+                f'<div class="metric-card" style="padding:18px 20px;min-width:0">'
                 f'<div class="metric-label" style="{_CARD_LABEL_CSS}">{label}</div>'
                 f'{val_html}'
                 f'<div class="metric-sub" style="{_CARD_SUB_CSS}">{sub}</div>'
