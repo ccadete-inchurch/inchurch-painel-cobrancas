@@ -202,12 +202,13 @@ def _render_especialista(store, clientes, role):
     # apareciam 1.461 de 1.468 clientes com pagamento como regularizados, e as
     # duas especialistas empatadas em "50%". Mês a mês é a comparação honesta.
     #
-    # Piso 05/2026: primeiro mês com contato registrado em
-    # painel_tarefas_diarias (19 dias com lote, 580 clientes contactados, as 2
-    # atendentes). Antes disso não havia como registrar msg/ligação, então todo
-    # pagamento aparecia como espontâneo e a eficácia como 0%.
+    # Piso 06/2026: primeiro mês COMPLETO de operação. Maio saiu da lista —
+    # o lote começou em 05/05 (19 dias) e os snapshots diários só em 20/05
+    # (5 dias), então carteira, cobertura e eficácia do mês não são
+    # comparáveis com os seguintes. Antes de maio não havia registro de
+    # contato: todo pagamento aparecia como espontâneo e a eficácia como 0%.
     hoje = date.fromisoformat(hoje_brt())
-    _MES_INICIAL = (2026, 5)
+    _MES_INICIAL = (2026, 6)
     _MESES_PT = {1: "Jan", 2: "Fev", 3: "Mar", 4: "Abr", 5: "Mai", 6: "Jun",
                  7: "Jul", 8: "Ago", 9: "Set", 10: "Out", 11: "Nov", 12: "Dez"}
 
