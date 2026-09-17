@@ -844,35 +844,24 @@ def _render_especialista(store, clientes, role):
 
     st.markdown(_DIVIDER, unsafe_allow_html=True)
 
-    # ── Funil Mensal: carteira → contato → pagamento → regularização ──────
-    # Junta duas bases: carteira/contatos (snapshots + painel de tarefas) e
-    # pagamentos (df_trend, já com overlay e sem "Sem especialista"). Cada
-    # cliente conta 1x por mês em cada série.
-    st.markdown(
-        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
-        'text-transform:uppercase;letter-spacing:1.5px;'
-        'margin-bottom:4px">Funil Mensal</div>'
-        '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-        'Clientes por mês desde jun/26, primeiro mês completo — independente '
-        'do filtro de período. '
-        'Espontâneo = pagou sem contato nos 30 dias antes.'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    # ── Recuperação mensal: volume (barras) + taxas (linhas) ──────────────
+    # Antes eram 5 linhas de volume no mesmo eixo: inadimplentes e contatados
+    # ficavam lá em cima e as 3 de regularização coladas embaixo, e quando a
+    # carteira caía tudo caía junto. Volume vira barra empilhada; o que
+    # compara mês a mês são as taxas, que não dependem do tamanho da carteira.
+    _serie_mes = {}
     df_serie = fetch_serie_carteira_mensal(
         _trend_inicio.isoformat(), _hoje_trend.isoformat(), f"dia-{carimbo_dia_cache()}"
     )
-    _linhas_funil = []
     if not df_serie.empty:
         _serie = df_serie
         if filtro_esp:
             _serie = _serie[_serie["atendente"].isin(filtro_esp)]
-        _agg = _serie.groupby("mes").agg(
-            Inadimplentes=("inadimplentes", "sum"), Contatados=("contatados", "sum")
-        ).reset_index()
-        for _, r in _agg.iterrows():
-            _linhas_funil.append({"mes": r["mes"], "serie": "Inadimplentes", "clientes": int(r["Inadimplentes"])})
-            _linhas_funil.append({"mes": r["mes"], "serie": "Contatados", "clientes": int(r["Contatados"])})
+        for _, r in _serie.groupby("mes").agg(
+            inad=("inadimplentes", "sum"), cont=("contatados", "sum")
+        ).reset_index().iterrows():
+            _serie_mes[r["mes"]] = {"inad": int(r["inad"]), "cont": int(r["cont"]),
+                                    "reg_via": 0, "reg_esp": 0}
 
     if not df_trend.empty:
         _pag = df_trend.copy()
@@ -893,51 +882,108 @@ def _render_especialista(store, clientes, role):
             )
             _cli_mes["reg_via"] = _cli_mes["reg"] & _cli_mes["via"]
             _cli_mes["reg_esp"] = _cli_mes["reg"] & ~_cli_mes["via"]
-            _cli_mes["pag_esp"] = ~_cli_mes["via"]
-            _agg2 = _cli_mes.groupby("mes").agg(
-                pag_esp=("pag_esp", "sum"), reg_via=("reg_via", "sum"), reg_esp=("reg_esp", "sum")
-            ).reset_index()
-            _nomes = {
-                "pag_esp": "Pag. espontâneos",
-                "reg_via": "Reg. via contato",
-                "reg_esp": "Reg. espontâneas",
-            }
-            for _, r in _agg2.iterrows():
-                for _col, _nome in _nomes.items():
-                    _linhas_funil.append({"mes": r["mes"], "serie": _nome, "clientes": int(r[_col])})
+            for _, r in _cli_mes.groupby("mes").agg(
+                reg_via=("reg_via", "sum"), reg_esp=("reg_esp", "sum")
+            ).reset_index().iterrows():
+                _d = _serie_mes.setdefault(
+                    r["mes"], {"inad": 0, "cont": 0, "reg_via": 0, "reg_esp": 0}
+                )
+                _d["reg_via"] = int(r["reg_via"])
+                _d["reg_esp"] = int(r["reg_esp"])
 
-    if _linhas_funil:
-        df_funil = pd.DataFrame(_linhas_funil)
-        df_funil["mes_dt"] = pd.to_datetime(df_funil["mes"] + "-01")
-        df_funil["mes_label"] = df_funil["mes_dt"].dt.strftime("%b/%y").str.capitalize()
-        _ordem_meses = (
-            df_funil[["mes_dt", "mes_label"]].drop_duplicates()
-            .sort_values("mes_dt")["mes_label"].tolist()
-        )
-        _ordem_series = ["Inadimplentes", "Contatados", "Pag. espontâneos",
-                         "Reg. via contato", "Reg. espontâneas"]
-        _cores_series = ["#ef4444", "#5fa3ff", "#9ca3af", "#22c55e", "#f59e0b"]
-        base_funil = alt.Chart(df_funil).encode(
-            x=alt.X("mes_label:O", title="MÊS", sort=_ordem_meses, axis=alt.Axis(labelAngle=0)),
-            y=alt.Y("clientes:Q", title="CLIENTES"),
-            color=alt.Color(
-                "serie:N", title="Série",
-                sort=_ordem_series,
-                scale=alt.Scale(domain=_ordem_series, range=_cores_series),
-            ),
-            tooltip=[
-                alt.Tooltip("mes_label:N", title="Mês"),
-                alt.Tooltip("serie:N", title="Série"),
-                alt.Tooltip("clientes:Q", title="Clientes"),
-            ],
-        )
-        chart_funil = (
-            base_funil.mark_line(strokeWidth=2.5, interpolate="monotone")
-            + base_funil.mark_circle(size=80, stroke="#0f1117", strokeWidth=2)
-        ).properties(height=320)
-        st.altair_chart(chart_funil, use_container_width=True)
+    def _mes_label_pt(ym):
+        _a, _m = ym.split("-")
+        return f"{_MESES_PT[int(_m)]}/{_a[2:]}"
+
+    _meses_funil = sorted(_serie_mes)
+    _ordem_lbl = [_mes_label_pt(m) for m in _meses_funil]
+
+    if _meses_funil:
+        _vol, _taxas = [], []
+        for _m_key in _meses_funil:
+            d = _serie_mes[_m_key]
+            lbl = _mes_label_pt(_m_key)
+            _vol.append({"mes": lbl, "serie": "Via contato", "clientes": d["reg_via"]})
+            _vol.append({"mes": lbl, "serie": "Espontâneas", "clientes": d["reg_esp"]})
+            _sem_contato = max(d["inad"] - d["cont"], 0)
+            if d["inad"]:
+                _taxas.append({"mes": lbl, "serie": "Cobertura",
+                               "pct": d["cont"] / d["inad"] * 100})
+            if d["cont"]:
+                _taxas.append({"mes": lbl, "serie": "Conversão do contato",
+                               "pct": d["reg_via"] / d["cont"] * 100})
+            if _sem_contato:
+                _taxas.append({"mes": lbl, "serie": "Conversão espontânea",
+                               "pct": d["reg_esp"] / _sem_contato * 100})
+
+        g_vol, g_tx = st.columns(2)
+        with g_vol:
+            st.markdown(
+                '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+                'text-transform:uppercase;letter-spacing:1.5px;'
+                'margin-bottom:4px">Regularizações por Mês</div>'
+                '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
+                'Clientes que zeraram o atraso, por origem. Espontâneo = pagou '
+                'sem contato nos 30 dias antes.'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            chart_vol = (
+                alt.Chart(pd.DataFrame(_vol))
+                .mark_bar(cornerRadiusEnd=2)
+                .encode(
+                    x=alt.X("mes:O", title="MÊS", sort=_ordem_lbl, axis=alt.Axis(labelAngle=0)),
+                    y=alt.Y("clientes:Q", title="CLIENTES"),
+                    color=alt.Color(
+                        "serie:N", title=None,
+                        scale=alt.Scale(domain=["Via contato", "Espontâneas"],
+                                        range=["#22c55e", "#9ca3af"]),
+                        legend=alt.Legend(orient="top"),
+                    ),
+                    tooltip=[
+                        alt.Tooltip("mes:N", title="Mês"),
+                        alt.Tooltip("serie:N", title="Origem"),
+                        alt.Tooltip("clientes:Q", title="Clientes"),
+                    ],
+                )
+                .properties(height=320)
+            )
+            st.altair_chart(chart_vol, use_container_width=True)
+
+        with g_tx:
+            st.markdown(
+                '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+                'text-transform:uppercase;letter-spacing:1.5px;'
+                'margin-bottom:4px">Taxas Mensais</div>'
+                '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
+                'Cobertura = contatados ÷ inadimplentes do mês. Conversão = '
+                'regularizados ÷ base (contatados ou não contatados).'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            _ordem_tx = ["Cobertura", "Conversão do contato", "Conversão espontânea"]
+            base_tx = alt.Chart(pd.DataFrame(_taxas)).encode(
+                x=alt.X("mes:O", title="MÊS", sort=_ordem_lbl, axis=alt.Axis(labelAngle=0)),
+                y=alt.Y("pct:Q", title="% DOS CLIENTES"),
+                color=alt.Color(
+                    "serie:N", title=None, sort=_ordem_tx,
+                    scale=alt.Scale(domain=_ordem_tx, range=["#5fa3ff", "#22c55e", "#f59e0b"]),
+                    legend=alt.Legend(orient="top"),
+                ),
+                tooltip=[
+                    alt.Tooltip("mes:N", title="Mês"),
+                    alt.Tooltip("serie:N", title="Taxa"),
+                    alt.Tooltip("pct:Q", title="%", format=".2f"),
+                ],
+            )
+            chart_tx = (
+                base_tx.mark_line(strokeWidth=2.5, interpolate="monotone")
+                + base_tx.mark_circle(size=80, stroke="#0f1117", strokeWidth=2)
+            ).properties(height=320)
+            st.altair_chart(chart_tx, use_container_width=True)
     else:
-        st.info("Sem dados pro funil mensal.")
+        st.info("Sem dados mensais de recuperação.")
+
 
     st.markdown(_DIVIDER, unsafe_allow_html=True)
 
