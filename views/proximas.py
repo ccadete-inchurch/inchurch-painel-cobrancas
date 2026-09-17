@@ -32,10 +32,17 @@ def _render_proximas(_store, clientes):
     fb, fp, fs, fa = st.columns([2.4, 2.2, 1.3, 1.5])
     with fb:
         busca = st.text_input("Buscar", placeholder="Nome, CNPJ ou ID sacado...", key="proximas_busca")
+    # Tela é só do presente pro futuro (a consulta só traz cobranças a vencer
+    # em aberto). Seleção guardada na sessão de um dia anterior começaria no
+    # passado — e o date_input recusa valor abaixo do min_value — então reseta.
+    _sel_antiga = st.session_state.get("proximas_periodo_range")
+    if isinstance(_sel_antiga, (tuple, list)) and _sel_antiga and _sel_antiga[0] < hoje:
+        del st.session_state["proximas_periodo_range"]
     with fp:
         intervalo_selecionado = st.date_input(
             "Período (de → até)",
             value=(_ini_default, _fim_default),
+            min_value=hoje,
             key="proximas_periodo_range",
             format="DD/MM/YYYY",
         )
@@ -56,6 +63,8 @@ def _render_proximas(_store, clientes):
             dt_ini = dt_fim = intervalo_selecionado[0]
     elif intervalo_selecionado:
         dt_ini = dt_fim = intervalo_selecionado
+    dt_ini = max(dt_ini, hoje)
+    dt_fim = max(dt_fim, dt_ini)
 
     # Ajusta days do fetch pra cobrir o range escolhido (com margem).
     # fetch_proximas_cobracas puxa cobrancas com vencimento em [hoje, hoje+days].
@@ -138,6 +147,10 @@ def _render_proximas(_store, clientes):
             return False
         rows = [r for r in rows if _match_grupo(r)]
 
+    # Base sem o filtro de período (respeita busca/situação/grupo) — usada no
+    # card "Vence em 7 dias", que olha sempre a próxima semana.
+    rows_sem_periodo = rows
+
     # Filtro temporal via date range picker — orquestra cards + tabela.
     if dt_ini and dt_fim:
         rows = [
@@ -146,14 +159,12 @@ def _render_proximas(_store, clientes):
             and dt_ini <= r["_venc_date"] <= dt_fim
         ]
 
-    # Label do período pra exibir nos cards (subtitulo)
-    if dt_ini and dt_fim:
-        if dt_ini == dt_fim:
-            periodo_lbl = dt_ini.strftime("%d/%m/%Y")
-        else:
-            periodo_lbl = f"{dt_ini.strftime('%d/%m/%Y')} → {dt_fim.strftime('%d/%m/%Y')}"
+    # Label do período pra exibir nos cards (subtitulo) — dd/mm pra caber
+    # junto da quantidade de cobranças.
+    if dt_ini == dt_fim:
+        periodo_lbl = dt_ini.strftime("%d/%m")
     else:
-        periodo_lbl = "período"
+        periodo_lbl = f"{dt_ini.strftime('%d/%m')} → {dt_fim.strftime('%d/%m')}"
 
     # ── Métricas ──────────────────────────────────────────────────────────────
     total_valor = sum(r["valor"] for r in rows)
@@ -189,11 +200,29 @@ def _render_proximas(_store, clientes):
     pct_ja_inad = (n_ja_inad / n_clientes * 100) if n_clientes else 0.0
     pct_ja_inad_str = f"{pct_ja_inad:.2f}".replace(".", ",")
 
+    # Vence em 7 dias: hoje até hoje+7, independente do período escolhido —
+    # a semana da cobrança preventiva. Substituiu o card "Cobranças" (quase
+    # igual ao de clientes); a quantidade foi pro subtítulo do Total a Receber.
+    _fim_7d = hoje + timedelta(days=7)
+    rows_7d = [
+        r for r in rows_sem_periodo
+        if r.get("_venc_date") is not None and hoje <= r["_venc_date"] <= _fim_7d
+    ]
+    valor_7d = sum(r["valor"] for r in rows_7d)
+    n_cli_7d = len({r["id"] for r in rows_7d})
+    sub_7d = (
+        f"{_fmt_n(n_cli_7d)} {'cliente' if n_cli_7d == 1 else 'clientes'} · "
+        f"até {_fim_7d.strftime('%d/%m')}"
+    )
+    sub_total = (
+        f"{_fmt_n(len(rows))} {'cobrança' if len(rows) == 1 else 'cobranças'} · {periodo_lbl}"
+    )
+
     m1, m2, m3, m4 = st.columns(4)
     # Mesmo padrão visual da tela Pagamentos: padding, font-sizes, peso.
     for col, label, val, sub, cor in [
-        (m1, "Total a Receber",   fmt_moeda_plain(total_valor), periodo_lbl,     "#2dd36f"),
-        (m2, "Cobranças",         _fmt_n(len(rows)),               "faturas a vencer", "#e8eaf0"),
+        (m1, "Total a Receber",   fmt_moeda_plain(total_valor), sub_total,       "#2dd36f"),
+        (m2, "Vence em 7 dias",   fmt_moeda_plain(valor_7d),    sub_7d,          "#f59e0b"),
         (m3, "Clientes",          _fmt_n(n_clientes),              sub_clientes,    "#e8eaf0"),
         (m4, "Já Inadimplentes",
              f'{_fmt_n(n_ja_inad)} ({pct_ja_inad_str}%)',
@@ -249,7 +278,13 @@ def _render_proximas(_store, clientes):
         cor_d = "#ef4444" if d <= 7 else ("#f59e0b" if d <= 15 else "#2dd36f")
         # Vencimento é só data (sem hora) — "Hoje" em vez de "0d"; horas seria
         # precisão falsa, o cliente pode pagar até o fim do dia.
-        d_lbl = "Hoje" if d == 0 else f"{d}d"
+        d_lbl = "HOJE" if d == 0 else f"{d}d"
+        # HOJE: selo preenchido (vermelho vivo + texto branco) pra destacar dos
+        # 1-7d, que ficam só com borda vermelha.
+        _selo_css = (
+            "background:#ff2d2d;border:1px solid #ff2d2d;color:#ffffff;letter-spacing:0.5px;"
+            if d == 0 else f"border:1px solid {cor_d};color:{cor_d};"
+        )
 
         rcols = st.columns(col_w)
         with rcols[0]:
@@ -269,7 +304,7 @@ def _render_proximas(_store, clientes):
         with rcols[3]:
             st.markdown(
                 f'<div style="padding:12px 14px">'
-                f'<span style="border:1px solid {cor_d};color:{cor_d};'
+                f'<span style="{_selo_css}'
                 f'padding:3px 9px;border-radius:6px;font-size:12px;font-weight:700">{d_lbl}</span>'
                 f'</div>',
                 unsafe_allow_html=True,

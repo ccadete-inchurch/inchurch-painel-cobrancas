@@ -89,7 +89,7 @@ def _render_historico(store):
     st.markdown(
         '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:36px;'
         'font-weight:800;color:#e8eaf0;margin-top:24px;margin-bottom:24px;letter-spacing:-1px;line-height:1.1">'
-        'Pagamentos</div>',
+        'Pagamentos em Atraso</div>',
         unsafe_allow_html=True,
     )
 
@@ -278,32 +278,31 @@ def _render_historico(store):
 
     m1, m2, m3 = st.columns(3)
     _tooltip_pag = (
-        f"Todos os pagamentos atrasados no período selecionado "
-        f"({periodo}). Inclui parciais + regularizações."
+        f"Pagamentos de cobranças em atraso feitos por clientes inadimplentes "
+        f"no período ({periodo}). Inclui quem pagou parte e quem quitou tudo."
     )
     _tooltip_reg = (
-        f"Clientes que quitaram TODAS as cobranças vencidas no período "
-        f"({periodo}). Subset de Pagamentos."
+        f"Clientes que quitaram todo o atraso no período ({periodo}) e "
+        f"deixaram de ser inadimplentes. Parte dos Pagamentos em Atraso."
     )
     _tooltip_taxa = (
-        "Percentual de pagamentos que resultaram em regularização total. "
-        "Reflete quão 'completos' são os pagamentos no período."
+        "Dos clientes inadimplentes que pagaram no período, quantos % "
+        "quitaram todo o atraso."
     )
     # Cards adaptam label ao período. Tipo "moeda" formata R$, "pct" formata %.
     # Taxa de Regularização tem sub-texto diferente (X de Y, não 'X regularizaram').
     _sub_taxa = (
-        f'{n_reg} de {n_periodo} {"regularizou" if n_periodo == 1 else "regularizaram"}'
+        f'{n_reg} de {n_periodo} '
+        f'{"inadimplente quitou" if n_periodo == 1 else "inadimplentes quitaram"} tudo'
     ) if n_periodo > 0 else "sem pagamentos no período"
     _sub_pag = (
-        f'{n_periodo} {"cliente" if n_periodo == 1 else "clientes"} '
-        f'{"pagou" if n_periodo == 1 else "pagaram"}'
+        f'{n_periodo} {"cliente inadimplente pagou" if n_periodo == 1 else "clientes inadimplentes pagaram"}'
     )
     _sub_reg = (
-        f'{n_reg} {"cliente" if n_reg == 1 else "clientes"} '
-        f'{"regularizou" if n_reg == 1 else "regularizaram"}'
+        f'{n_reg} {"cliente quitou" if n_reg == 1 else "clientes quitaram"} todo o atraso'
     )
     cards = [
-        (m1, f"Pagamentos · {periodo}",     fmt_moeda_plain(v_periodo), _sub_pag,  _tooltip_pag,  "#2dd36f"),
+        (m1, f"Pagamentos em Atraso · {periodo}", fmt_moeda_plain(v_periodo), _sub_pag,  _tooltip_pag,  "#2dd36f"),
         (m2, f"Regularizações · {periodo}", fmt_moeda_plain(v_reg),     _sub_reg,  _tooltip_reg,  "#2dd36f"),
         (m3, "Taxa de Regularização",       f"{taxa_reg:.2f}%",         _sub_taxa, _tooltip_taxa, "#5fa3ff"),
     ]

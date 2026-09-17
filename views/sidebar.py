@@ -58,7 +58,7 @@ def render_sidebar():
 
     nav_item("Atividades",          "atividades")
     nav_item("Inadimplência",      "dashboard")
-    nav_item("Pagamentos",         "historico")
+    nav_item("Pagamentos em Atraso", "historico")
     nav_item("Próximas Cobranças", "proximas")
     nav_item("Cliente",            "cliente")
     # Especialista: análise por atendente (gráficos) — admin only
