@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from auth import current_role
-from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_base, agregar_eficacia, fetch_eventos_regularizacao, fetch_cobertura_por_especialista
+from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_base, agregar_eficacia, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_contatos_janela
 from helpers import fmt_moeda_plain, hoje_brt, carimbo_dia_cache
 
 
@@ -52,6 +52,16 @@ def _build_overlay_rows(clientes, df_bq, dt_inicio, dt_fim):
             d = row["data_dt"].date() if hasattr(row["data_dt"], "date") else row["data_dt"]
             ids_por_dia_bq.setdefault(d, set()).add(str(row["id"]))
 
+    # Contatos da janela [dt_inicio-30d, dt_fim] por cliente, do mais recente
+    # pro mais antigo — mesma regra do BQ (fetch_pagamentos_creditados).
+    contatos_por_cid = {}
+    df_cont = fetch_contatos_janela(dt_inicio.isoformat(), dt_fim.isoformat())
+    if not df_cont.empty:
+        for _, r in df_cont.sort_values("data_tarefa", ascending=False).iterrows():
+            _d = r["data_tarefa"]
+            _d = _d.date() if hasattr(_d, "date") else _d
+            contatos_por_cid.setdefault(str(r["cid"]), []).append((_d, str(r["atendente"])))
+
     rows = []
     for c in clientes:
         eh_reg = bool(c.get("_regularizado_hoje"))
@@ -76,15 +86,20 @@ def _build_overlay_rows(clientes, df_bq, dt_inicio, dt_fim):
         valor = float(c.get("_valor_pago_atraso") or 0)
         if valor <= 0:
             continue
-        atendente = _norm_atendente_raw(c.get("_grupo"))
-        # Atribuição:
-        # - Cliente sem grupo (Sem especialista) → sem_atribuicao (não tem
-        #   ninguém pra creditar). Antes default era via_contato, o que
-        #   incorretamente inflava "via contato" do Sem especialista.
-        # - Cliente com grupo (Ana/Priscila) → via_contato como default
-        #   conservador (em real-time não temos como checar se a atendente
-        #   realmente fez contato pra esse cliente).
-        tipo_atrib = "sem_atribuicao" if atendente == "Sem especialista" else "via_contato"
+        # Atribuição igual ao BQ: contato mais recente até o dia do pagamento
+        # (janela de 30 dias) credita quem fez o contato; sem contato, vai
+        # pelo grupo (espontâneo). Antes todo cliente com grupo virava
+        # via_contato, inflando "Pag. via contato" do mês corrente.
+        contato = next(
+            (at for d, at in contatos_por_cid.get(cid, [])
+             if d <= dt_real and (dt_real - d).days <= 30),
+            None,
+        )
+        if contato:
+            atendente, tipo_atrib = _norm_atendente_raw(contato), "via_contato"
+        else:
+            atendente = _norm_atendente_raw(c.get("_grupo"))
+            tipo_atrib = "sem_atribuicao" if atendente == "Sem especialista" else "via_grupo"
         rows.append({
             "id": cid,
             "atendente": atendente,
@@ -322,10 +337,19 @@ def _render_especialista(store, clientes, role):
         df_reg["eh_regularizacao"] = df_reg.apply(_classifica_evento, axis=1)
         df_reg["eh_parcial"] = ~df_reg["eh_regularizacao"]
 
+    # "Sem especialista" fora da tela inteira (cards, matriz, gráficos,
+    # ranking): é o balde de clientes sem grupo, não uma pessoa, e não deve
+    # entrar em análise nem métrica.
+    df_reg = df_reg[df_reg["atendente"] != "Sem especialista"]
+    df_cob = df_cob[df_cob["atendente"] != "Sem especialista"] if not df_cob.empty else df_cob
+    if df_reg.empty:
+        st.info("Sem pagamentos com atraso no período selecionado.")
+        return
+
     with fp2:
         especialistas_disp = sorted(
-            set(df_reg["atendente"].unique())
-            | set(_EMAIL_GRUPO.values())
+            (set(df_reg["atendente"].unique()) | set(_EMAIL_GRUPO.values()))
+            - {"Sem especialista"}
         )
         filtro_esp = st.multiselect(
             "Especialista",
@@ -337,9 +361,12 @@ def _render_especialista(store, clientes, role):
     # Helpers de filtro pra carteira atual (clientes). Multi-select:
     # lista vazia = todos (sem filtro); com nomes = filtra por esses.
     def _eh_grupo_match(c):
+        _g = _norm_atendente_raw(c.get("_grupo"))
+        if _g == "Sem especialista":
+            return False
         if not filtro_esp:
             return True
-        return _norm_atendente_raw(c.get("_grupo")) in filtro_esp
+        return _g in filtro_esp
     def _eh_situacao_match(c):
         if filtro_situacao == "Todos":
             return True
@@ -962,13 +989,13 @@ def _render_especialista(store, clientes, role):
         ("Carteira inad.", _carteira_tip),
         ("Contatados", "Clientes distintos que receberam mensagem ou ligação no mês. É a base da Eficácia e da Cobertura."),
         ("Clientes com pag.", "Clientes distintos que pagaram algo em atraso no mês. Um mesmo cliente que pagou 3 vezes conta 1."),
-        ("Pag. via contato", "Clientes cujo pagamento teve contato registrado antes (msg ou ligação), até 30 dias"),
-        ("Pag. espontâneos", "Clientes que pagaram sem contato registrado — crédito vai pelo grupo"),
-        ("Reg. contato", "Clientes contactados no mês que pagaram DEPOIS do contato. É o numerador da Eficácia (Reg. contato ÷ Contatados)."),
-        ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que estão regularizados hoje. Reflete trabalho real — cobrança tem conversão típica de 10-20%."),
+        ("Pag. via contato", "Clientes que pagaram algo em atraso no mês com contato (msg ou ligação) nos 30 dias antes do pagamento. Crédito vai pra quem fez o contato mais recente."),
+        ("Pag. espontâneos", "Clientes que pagaram sem contato nos 30 dias antes — crédito vai pelo grupo"),
+        ("Reg. via contato", "Clientes que regularizaram (quitaram todo o atraso) no mês com contato nos 30 dias antes do pagamento. Parte do Pag. via contato."),
+        ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que pagaram algo em atraso depois do primeiro contato."),
         ("Cobertura", "Dos clientes que estiveram inadimplentes no mês, % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
         ("Valor Recuperado", ""),
-        ("Regularizações", "Clientes que, em algum momento do mês, zeraram tudo que estava vencido — INCLUI quem pagou sem contato e quem pagou antes de ser contactado. Por isso é maior que Reg. contato."),
+        ("Regularizações", "Clientes que, em algum momento do mês, zeraram tudo que estava vencido — INCLUI quem pagou sem contato. Por isso é maior que Reg. via contato."),
     ]
     for col, (h, tip) in zip(hdr_cols, _hdr_labels):
         title_attr = f' title="{tip}"' if tip else ""
@@ -1013,10 +1040,11 @@ def _render_especialista(store, clientes, role):
             f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["espontaneos"]}</div>',
             unsafe_allow_html=True,
         )
-        # Reg. contato = numerador da Eficácia, ao lado dela pra leitura direta.
+        # Reg. via contato = regularizações do mês com contato nos 30 dias
+        # antes do pagamento (mesma regra do Pag. via contato, então <= ele).
         rcols[7].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">'
-            f'{int(row.get("ef_regularizaram", 0) or 0)}</div>',
+            f'{int(row.get("reg_via_contato", 0) or 0)}</div>',
             unsafe_allow_html=True,
         )
         # Eficácia REAL — faixas ajustadas (cobrança é trabalho difícil,
@@ -1027,7 +1055,7 @@ def _render_especialista(store, clientes, role):
         _ef_cor = "#22c55e" if _ef >= 30 else ("#f59e0b" if _ef >= 15 else "#ef4444")
         _ef_reg = int(row.get("ef_regularizaram", 0) or 0)
         _ef_cont = int(row.get("ef_contatados", 0) or 0)
-        _ef_tip = f"{_ef_reg} de {_ef_cont} clientes contactados regularizaram"
+        _ef_tip = f"{_ef_reg} de {_ef_cont} clientes contactados pagaram algo em atraso depois do contato"
         rcols[8].markdown(
             f'<div title="{_ef_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
             f'color:{_ef_cor};font-weight:700">{_ef:.2f}%</div>',
@@ -1052,8 +1080,8 @@ def _render_especialista(store, clientes, role):
             f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
             unsafe_allow_html=True,
         )
-        # Regularizações TOTAL na ponta: inclui espontâneos e quem pagou antes
-        # do contato, então é sempre >= Reg. contato.
+        # Regularizações TOTAL na ponta: inclui espontâneos, então é sempre
+        # >= Reg. via contato.
         rcols[11].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
             unsafe_allow_html=True,

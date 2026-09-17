@@ -837,7 +837,7 @@ def fetch_cobrancas_competencia(dia: str | None = None):
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_evolucao_saldo_mensal(cliente_id: str, dia: str | None = None) -> pd.DataFrame:
-    """Saldo devedor ao FIM DE CADA MÊS nos últimos 12 meses.
+    """Saldo devedor ao FIM DE CADA MÊS nos últimos 12 meses (mês corrente: até ontem).
 
     Reconstrói o saldo a partir das tabelas de competência + liquidação:
     pra cada fim de mês EOM, soma as cobranças do cliente que:
@@ -875,8 +875,15 @@ def fetch_evolucao_saldo_mensal(cliente_id: str, dia: str | None = None) -> pd.D
       UNION ALL
       SELECT * FROM pagas
     ),
+    -- Mês corrente usa ONTEM como data de referência (vencido até hoje),
+    -- não o fim do mês: LAST_DAY ainda não chegou e o ponto somava boletos
+    -- a vencer como se já estivessem atrasados. Rótulo segue pelo mês.
     meses AS (
-      SELECT LAST_DAY(DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL n MONTH)) AS eom
+      SELECT
+        LAST_DAY(DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL n MONTH)) AS eom,
+        IF(n = 0,
+           DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY),
+           LAST_DAY(DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL n MONTH))) AS ref
       FROM UNNEST(GENERATE_ARRAY(0, 11)) AS n
     )
     SELECT
@@ -884,8 +891,8 @@ def fetch_evolucao_saldo_mensal(cliente_id: str, dia: str | None = None) -> pd.D
       ROUND(COALESCE(SUM(t.valor), 0), 2) AS saldo
     FROM meses m
     LEFT JOIN todas t
-      ON t.dt_venc <= m.eom
-      AND (t.dt_pag IS NULL OR t.dt_pag > m.eom)
+      ON t.dt_venc <= m.ref
+      AND (t.dt_pag IS NULL OR t.dt_pag > m.ref)
     GROUP BY mes
     ORDER BY mes ASC
     """
@@ -2182,6 +2189,27 @@ def fetch_eventos_regularizacao() -> set:
         return set()
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_contatos_janela(dt_inicio_iso: str, dt_fim_iso: str) -> pd.DataFrame:
+    """Contatos (msg/ligacao) entre dt_inicio-30d e dt_fim: cid, atendente,
+    data_tarefa. Usado pelo overlay da tela Especialista pra atribuir
+    pagamentos que o BQ ainda nao tem com a MESMA regra de
+    fetch_pagamentos_creditados (contato mais recente ate 30 dias antes)."""
+    client = get_bq_client()
+    if not client:
+        return pd.DataFrame()
+    try:
+        return client.query(f"""
+            SELECT CAST(id_sacado_sac AS STRING) AS cid, atendente, data_tarefa
+            FROM `{_TAREFAS_TABLE}`
+            WHERE data_tarefa >= DATE_SUB(DATE('{dt_inicio_iso}'), INTERVAL 30 DAY)
+              AND data_tarefa <= DATE('{dt_fim_iso}')
+              AND (mensagem_enviada = TRUE OR ligacao_feita = TRUE OR ligacao_atendida = TRUE)
+        """).to_dataframe()
+    except Exception:
+        return pd.DataFrame()
+
+
 @st.cache_data(ttl=None)
 def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -> pd.DataFrame:
     """Pagamentos com atraso no período, agrupados POR CLIENTE+DIA, com:
@@ -2222,15 +2250,28 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str, versao: str
                 GROUP BY id_sacado_sac, dt_pagamento
             ),
             contatos AS (
-                SELECT cid, atendente, data_tarefa,
-                    ROW_NUMBER() OVER (PARTITION BY cid ORDER BY data_tarefa DESC) AS rn
-                FROM (
-                    SELECT CAST(id_sacado_sac AS STRING) AS cid, atendente, data_tarefa
-                    FROM `{_TAREFAS_TABLE}`
-                    WHERE mensagem_enviada = TRUE
-                       OR ligacao_feita = TRUE
-                       OR ligacao_atendida = TRUE
-                )
+                SELECT CAST(id_sacado_sac AS STRING) AS cid, atendente, data_tarefa
+                FROM `{_TAREFAS_TABLE}`
+                WHERE mensagem_enviada = TRUE
+                   OR ligacao_feita = TRUE
+                   OR ligacao_atendida = TRUE
+            ),
+            -- Contato MAIS RECENTE ATE o dia do pagamento (janela de 30 dias).
+            -- Antes o rn=1 era o ultimo contato de TODOS os tempos e so depois
+            -- checava "<= pagamento": cliente contatado de novo depois de pagar
+            -- perdia o credito e virava espontaneo. Em ago/2026 "Pag. via
+            -- contato" dava 57/59 em vez de 98/108 (Ana/Priscila).
+            contato_do_pagamento AS (
+                SELECT liq.id_sacado_sac, liq.dt_pagamento, c.atendente,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY liq.id_sacado_sac, liq.dt_pagamento
+                        ORDER BY c.data_tarefa DESC
+                    ) AS rn
+                FROM liq
+                JOIN contatos c
+                  ON c.cid = liq.id_sacado_sac
+                  AND c.data_tarefa <= liq.dt_pagamento
+                  AND DATE_DIFF(liq.dt_pagamento, c.data_tarefa, DAY) <= 30
             ),
             grupos AS (
                 -- Grupo atual do cliente (Ana/Priscila). Fallback se sem contato.
@@ -2271,10 +2312,9 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str, versao: str
             -- causa do pagamento. Quem cai fora da janela é creditado pelo
             -- grupo do cliente (quase sempre a mesma atendente), então muda
             -- o rótulo da atribuição, não o valor por atendente.
-            LEFT JOIN contatos c
-              ON c.cid = liq.id_sacado_sac
-              AND c.data_tarefa <= liq.dt_pagamento
-              AND DATE_DIFF(liq.dt_pagamento, c.data_tarefa, DAY) <= 30
+            LEFT JOIN contato_do_pagamento c
+              ON c.id_sacado_sac = liq.id_sacado_sac
+              AND c.dt_pagamento = liq.dt_pagamento
               AND c.rn = 1
             LEFT JOIN grupos g
               ON g.cid = liq.id_sacado_sac

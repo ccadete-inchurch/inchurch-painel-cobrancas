@@ -238,24 +238,38 @@ def _render_cliente(_store, clientes):
 
         st.altair_chart(chart, use_container_width=True)
 
-        # Tendência: média 3 primeiros vs 3 últimos meses
-        if len(df_evol) >= 6:
-            avg_inicio = df_evol["saldo"].iloc[:3].mean()
-            avg_fim    = df_evol["saldo"].iloc[-3:].mean()
-            if avg_inicio > 0:
-                delta_pct = (avg_fim - avg_inicio) / avg_inicio * 100
-                if abs(delta_pct) < 10:
-                    tendencia, cor_t = "estável", "#8b94a5"
-                elif delta_pct > 0:
-                    tendencia, cor_t = f"crescendo {delta_pct:+.0f}%", "#ef4444"
-                else:
-                    tendencia, cor_t = f"reduzindo {delta_pct:+.0f}%", "#2dd36f"
+        # Tendência em R$: saldo de hoje vs 3 meses atrás. A versão antiga
+        # comparava média dos 3 primeiros vs 3 últimos meses em %, e os meses
+        # zerados do início (antes de dever) inflavam: [0,0,250] vs [250,250,250]
+        # dava "crescendo +200%" pra uma dívida parada.
+        def _mes_pt(d):
+            return f"{_MESES_PT[d.month].lower()}/{d.strftime('%y')}"
+
+        if len(df_evol) >= 4:
+            saldos = df_evol["saldo"].astype(float).tolist()
+            meses_dt = df_evol["mes_dt"].tolist()
+            atual, antes = saldos[-1], saldos[-4]
+            dif = atual - antes
+            if antes <= 0 < atual:
+                # Início da sequência atual de meses com saldo > 0
+                i = len(saldos) - 1
+                while i > 0 and saldos[i - 1] > 0:
+                    i -= 1
+                tendencia = f"Devendo desde {_mes_pt(meses_dt[i])} · {fmt_moeda_plain(atual)} hoje"
+                cor_t = "#ef4444"
+            elif abs(dif) < 0.01:
+                tendencia = f"sem variação vs 3 meses atrás · {fmt_moeda_plain(atual)}"
+                cor_t = "#8b94a5"
             else:
-                tendencia, cor_t = "saldo estava zerado no início", "#8b94a5"
+                sinal = "+" if dif > 0 else "−"
+                tendencia = (
+                    f"vs 3 meses atrás: {sinal}{fmt_moeda_plain(abs(dif))} "
+                    f"({fmt_moeda_plain(antes)} → {fmt_moeda_plain(atual)})"
+                )
+                cor_t = "#ef4444" if dif > 0 else "#2dd36f"
             st.markdown(
                 f'<div style="font-size:12px;color:#6b7280;margin-top:8px;text-align:right">'
-                f'Tendência (média 3 primeiros vs 3 últimos meses): '
-                f'<span style="color:{cor_t};font-weight:700">{tendencia}</span>'
+                f'Tendência: <span style="color:{cor_t};font-weight:700">{tendencia}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
