@@ -796,6 +796,10 @@ def fetch_cobrancas_competencia(dia: str | None = None):
         MAX(p.parcelas_em_atraso)                                         AS parcelas,
         MAX(CASE WHEN ac.id_sacado_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS tem_acordo,
         MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo,
+        -- Data da desativacao vem da tabela MESTRE de clientes (1 linha por
+        -- cliente). Na competencia a coluna e' desnormalizada por parcela e
+        -- ja teve linhas conflitantes. Fallback pra competencia se faltar.
+        FORMAT_DATE('%Y-%m-%d', COALESCE(DATE(MAX(cli.dt_desativacao_sac)), DATE(MAX(c.dt_desativacao_sac)))) AS dt_desativacao,
         MAX(c.comp_st_conta_cont)                                         AS tipo
     FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c {_ts_clause}
     LEFT JOIN (
@@ -804,7 +808,8 @@ def fetch_cobrancas_competencia(dia: str | None = None):
         GROUP BY id_sacado_sac
     ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
     LEFT JOIN (
-        SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(st_fax_sac) AS st_fax_sac
+        SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(st_fax_sac) AS st_fax_sac,
+               MAX(dt_desativacao_sac) AS dt_desativacao_sac
         FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
         GROUP BY id_sacado_sac
     ) cli ON CAST(c.id_sacado_sac AS STRING) = cli.id_sacado_sac
@@ -3919,6 +3924,7 @@ def processar_dados_bigquery():
                 "_grupo":           str(row.get("grupo", "") or "—"),
                 "_tem_acordo":      bool(row.get("tem_acordo", False)),
                 "_inativo":         bool(row.get("inativo", False)),
+                "_dt_desativacao":  str(row.get("dt_desativacao") or ""),
                 "_ids_recebimento": {id_receb} if id_receb else set(),
                 "_cobracas":        [{
                     "id_recebimento": id_receb,

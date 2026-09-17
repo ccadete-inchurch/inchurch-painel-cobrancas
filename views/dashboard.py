@@ -608,6 +608,11 @@ def _render_dashboard(store, clientes, role):
             # (inclui automaticamente 'Telefone errado' e 'Igreja fechada')
             # Colunas novas entram DEPOIS das antigas: planilha que ja usa o
             # arquivo continua lendo as mesmas posicoes.
+            def _fmt_data_br(v):
+                # BQ devolve YYYY-MM-DD; planilha do time le dd/mm/aaaa.
+                v = str(v or "")
+                return f"{v[8:10]}/{v[5:7]}/{v[0:4]}" if len(v) >= 10 else ""
+
             rows = []
             for _, c in df.iterrows():
                 _dt_login = c.get("_ultimoLoginData")
@@ -619,6 +624,7 @@ def _render_dashboard(store, clientes, role):
                     c.get("id", ""), c.get("_atendente", "") or "",
                     c.get("telefone", "") or "", "Sim" if c.get("_tel_fixo") else "Não",
                     "Inativo" if c.get("_inativo") else "Ativo",
+                    _fmt_data_br(c.get("_dt_desativacao")),
                     c.get("_score", ""),
                     c.get("_ultimoLoginDias") if c.get("_ultimoLoginDias") is not None else "",
                     _dt_login.strftime("%d/%m/%Y") if hasattr(_dt_login, "strftime") else (_dt_login or ""),
@@ -627,7 +633,7 @@ def _render_dashboard(store, clientes, role):
             df_exp = pd.DataFrame(rows, columns=[
                 "Grupo","Nome","CNPJ","Saldo","Competências","Vencimento","Dias Atraso","Status",
                 "Último Contato","Observações","Acordo",
-                "ID","Especialista","Telefone","Telefone fixo","Situação","Score",
+                "ID","Especialista","Telefone","Telefone fixo","Situação","Data desativação","Score",
                 "Dias sem login","Data último login","Meses com atraso",
             ])
             st.download_button(
