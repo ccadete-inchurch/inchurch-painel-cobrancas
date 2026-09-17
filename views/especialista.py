@@ -1110,7 +1110,12 @@ def _render_especialista(store, clientes, role):
     for col in ("eficacia", "cobertura"):
         if col in ranking.columns:
             ranking[col] = ranking[col].astype(float)
-    ranking = ranking.sort_values("regularizacoes", ascending=False).reset_index(drop=True)
+    # % da carteira regularizada: ordena o ranking. Volume puro premiava
+    # quem tem carteira maior (Priscila tem mais clientes que Ana).
+    ranking["pct_carteira"] = (
+        ranking["regularizacoes"] / ranking["carteira_atual"].replace(0, pd.NA) * 100
+    ).fillna(0).astype(float)
+    ranking = ranking.sort_values("pct_carteira", ascending=False).reset_index(drop=True)
     ranking["rank"] = ranking.index + 1
     ranking["valor_fmt"] = ranking["valor"].apply(fmt_moeda_plain)
 
@@ -1118,7 +1123,7 @@ def _render_especialista(store, clientes, role):
     # o que tocou (contatados), o que voltou (pagamentos e regularizações) e
     # só então os percentuais e o valor. As colunas de pagamento são por
     # CLIENTE — o mesmo cliente pode pagar várias vezes no mês.
-    _col_widths = [0.6, 1.8, 1.1, 1.05, 1.25, 1.25, 1.25, 0.95, 1.0, 1.3]
+    _col_widths = [0.6, 1.7, 1.05, 1.0, 1.2, 1.2, 1.2, 1.1, 0.95, 1.0, 1.25]
     _carteira_tip = (
         "Clientes inadimplentes HOJE sob esse especialista."
         if _mes_corrente else
@@ -1134,6 +1139,7 @@ def _render_especialista(store, clientes, role):
         ("Reg. com contato", "Clientes que zeraram o atraso no mês tendo recebido msg ou ligação nos 30 dias antes do pagamento. Crédito vai pra quem fez o contato mais recente."),
         ("Reg. sem contato", "Clientes que zeraram o atraso no mês SEM contato da cobrança nos 30 dias antes. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
         ("Regularizações", "Total de clientes que zeraram tudo que estava vencido no mês. É a soma de Reg. com contato + Reg. sem contato."),
+        ("% da carteira", "Regularizações ÷ carteira inadimplente do mês. Ordena o ranking: compara carteiras de tamanhos diferentes. Inclui quem pagou sem contato."),
         ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que pagaram algo em atraso depois do primeiro contato."),
         ("Cobertura", "Dos clientes que estiveram inadimplentes no mês, % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
         ("Valor Recuperado", ""),
@@ -1186,6 +1192,17 @@ def _render_especialista(store, clientes, role):
             f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
             unsafe_allow_html=True,
         )
+        # % da carteira regularizada — critério de ordenação do ranking.
+        _pct_cart = float(row.get("pct_carteira", 0) or 0)
+        _pct_cart_tip = (
+            f'{int(row["regularizacoes"])} de {int(row["carteira_atual"])} '
+            f'inadimplentes do período'
+        )
+        rcols[7].markdown(
+            f'<div title="{_pct_cart_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
+            f'color:#22c55e;font-weight:700">{_pct_cart:.2f}%</div>',
+            unsafe_allow_html=True,
+        )
         # Eficácia REAL — faixas ajustadas (cobrança é trabalho difícil,
         # taxa típica de conversão é 10-20% em operação saudável).
         # Tooltip mostra a fração explícita pra transparência: X de Y
@@ -1195,7 +1212,7 @@ def _render_especialista(store, clientes, role):
         _ef_reg = int(row.get("ef_regularizaram", 0) or 0)
         _ef_cont = int(row.get("ef_contatados", 0) or 0)
         _ef_tip = f"{_ef_reg} de {_ef_cont} clientes contactados pagaram algo em atraso depois do contato"
-        rcols[7].markdown(
+        rcols[8].markdown(
             f'<div title="{_ef_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
             f'color:{_ef_cor};font-weight:700">{_ef:.2f}%</div>',
             unsafe_allow_html=True,
@@ -1210,12 +1227,12 @@ def _render_especialista(store, clientes, role):
             f"{_cob_cont} de {_cob_base} inadimplentes do período foram contactados"
             if _cob_base else "Sem snapshot diário no período"
         )
-        rcols[8].markdown(
+        rcols[9].markdown(
             f'<div title="{_cob_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
             f'color:#9ca3af;font-weight:600">{_cob_txt}</div>',
             unsafe_allow_html=True,
         )
-        rcols[9].markdown(
+        rcols[10].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
             unsafe_allow_html=True,
         )
