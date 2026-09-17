@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from auth import current_role
-from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_base, agregar_eficacia, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_contatos_janela
+from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_base, agregar_eficacia, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_contatos_janela, fetch_serie_carteira_mensal
 from helpers import fmt_moeda_plain, hoje_brt, carimbo_dia_cache
 
 
@@ -839,6 +839,102 @@ def _render_especialista(store, clientes, role):
             st.info("Sem pagamentos do especialista selecionado nos últimos 6 meses.")
     else:
         st.info("Sem dados históricos de pagamentos.")
+
+    st.markdown(_DIVIDER, unsafe_allow_html=True)
+
+    # ── Funil Mensal: carteira → contato → pagamento → regularização ──────
+    # Junta duas bases: carteira/contatos (snapshots + painel de tarefas) e
+    # pagamentos (df_trend, já com overlay e sem "Sem especialista"). Cada
+    # cliente conta 1x por mês em cada série.
+    st.markdown(
+        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+        'text-transform:uppercase;letter-spacing:1.5px;'
+        'margin-bottom:4px">Funil Mensal</div>'
+        '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
+        'Clientes por mês desde mai/26 — independente do filtro de período. '
+        'Espontâneo = pagou sem contato nos 30 dias antes.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    df_serie = fetch_serie_carteira_mensal(
+        _trend_inicio.isoformat(), _hoje_trend.isoformat(), f"dia-{carimbo_dia_cache()}"
+    )
+    _linhas_funil = []
+    if not df_serie.empty:
+        _serie = df_serie
+        if filtro_esp:
+            _serie = _serie[_serie["atendente"].isin(filtro_esp)]
+        _agg = _serie.groupby("mes").agg(
+            Inadimplentes=("inadimplentes", "sum"), Contatados=("contatados", "sum")
+        ).reset_index()
+        for _, r in _agg.iterrows():
+            _linhas_funil.append({"mes": r["mes"], "serie": "Inadimplentes", "clientes": int(r["Inadimplentes"])})
+            _linhas_funil.append({"mes": r["mes"], "serie": "Contatados", "clientes": int(r["Contatados"])})
+
+    if not df_trend.empty:
+        _pag = df_trend.copy()
+        if filtro_esp:
+            _pag = _pag[_pag["atendente"].isin(filtro_esp)]
+        if not _pag.empty:
+            _ev = fetch_eventos_regularizacao()
+            _pag["id"] = _pag["id"].astype(str)
+            _pag["mes"] = _pag["data_dt"].dt.strftime("%Y-%m")
+            _pag["eh_reg_ev"] = _pag.apply(
+                lambda r: (r["id"], r["data_dt"].strftime("%d/%m/%Y")) in _ev, axis=1
+            )
+            _pag["via"] = _pag["tipo_atribuicao"] == "via_contato"
+            _cli_mes = (
+                _pag.groupby(["mes", "id"])
+                .agg(via=("via", "any"), reg=("eh_reg_ev", "any"))
+                .reset_index()
+            )
+            _cli_mes["reg_via"] = _cli_mes["reg"] & _cli_mes["via"]
+            _cli_mes["reg_esp"] = _cli_mes["reg"] & ~_cli_mes["via"]
+            _cli_mes["pag_esp"] = ~_cli_mes["via"]
+            _agg2 = _cli_mes.groupby("mes").agg(
+                pag_esp=("pag_esp", "sum"), reg_via=("reg_via", "sum"), reg_esp=("reg_esp", "sum")
+            ).reset_index()
+            _nomes = {
+                "pag_esp": "Pag. espontâneos",
+                "reg_via": "Reg. via contato",
+                "reg_esp": "Reg. espontâneas",
+            }
+            for _, r in _agg2.iterrows():
+                for _col, _nome in _nomes.items():
+                    _linhas_funil.append({"mes": r["mes"], "serie": _nome, "clientes": int(r[_col])})
+
+    if _linhas_funil:
+        df_funil = pd.DataFrame(_linhas_funil)
+        df_funil["mes_dt"] = pd.to_datetime(df_funil["mes"] + "-01")
+        df_funil["mes_label"] = df_funil["mes_dt"].dt.strftime("%b/%y").str.capitalize()
+        _ordem_meses = (
+            df_funil[["mes_dt", "mes_label"]].drop_duplicates()
+            .sort_values("mes_dt")["mes_label"].tolist()
+        )
+        _ordem_series = ["Inadimplentes", "Contatados", "Pag. espontâneos",
+                         "Reg. via contato", "Reg. espontâneas"]
+        _cores_series = ["#ef4444", "#5fa3ff", "#9ca3af", "#22c55e", "#f59e0b"]
+        base_funil = alt.Chart(df_funil).encode(
+            x=alt.X("mes_label:O", title="MÊS", sort=_ordem_meses, axis=alt.Axis(labelAngle=0)),
+            y=alt.Y("clientes:Q", title="CLIENTES"),
+            color=alt.Color(
+                "serie:N", title="Série",
+                sort=_ordem_series,
+                scale=alt.Scale(domain=_ordem_series, range=_cores_series),
+            ),
+            tooltip=[
+                alt.Tooltip("mes_label:N", title="Mês"),
+                alt.Tooltip("serie:N", title="Série"),
+                alt.Tooltip("clientes:Q", title="Clientes"),
+            ],
+        )
+        chart_funil = (
+            base_funil.mark_line(strokeWidth=2.5, interpolate="monotone")
+            + base_funil.mark_circle(size=80, stroke="#0f1117", strokeWidth=2)
+        ).properties(height=320)
+        st.altair_chart(chart_funil, use_container_width=True)
+    else:
+        st.info("Sem dados pro funil mensal.")
 
     st.markdown(_DIVIDER, unsafe_allow_html=True)
 

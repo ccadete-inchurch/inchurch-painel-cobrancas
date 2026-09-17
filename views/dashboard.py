@@ -1,5 +1,7 @@
 from datetime import date, datetime
 
+import re
+
 import pandas as pd
 import streamlit as st
 
@@ -613,22 +615,42 @@ def _render_dashboard(store, clientes, role):
                 v = str(v or "")
                 return f"{v[8:10]}/{v[5:7]}/{v[0:4]}" if len(v) >= 10 else ""
 
+            def _fmt_doc(v):
+                # CNPJ/CPF com mascara: sem ela o Excel le como numero e come
+                # o zero a esquerda (CNPJ 01.234.../CPF 012...).
+                d = re.sub(r"\D", "", str(v or ""))
+                if len(d) == 14:
+                    return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}"
+                if len(d) == 11:
+                    return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}"
+                return str(v or "")
+
+            def _fmt_num(v, casas=0):
+                # Decimal com virgula (planilha pt-BR) e sem separador de
+                # milhar, pra entrar como numero e nao como texto.
+                try:
+                    if v is None or v == "":
+                        return ""
+                    return f"{float(v):.{casas}f}".replace(".", ",")
+                except (TypeError, ValueError):
+                    return ""
+
             rows = []
             for _, c in df.iterrows():
                 _dt_login = c.get("_ultimoLoginData")
                 rows.append([
-                    c.get("_grupo", "") or "", c["nome"], c.get("cnpj", ""), c["valor"],
-                    c.get("parcelas", ""), c.get("vencimento", ""), c.get("dias_atraso", ""),
+                    c.get("_grupo", "") or "", c["nome"], _fmt_doc(c.get("cnpj", "")), _fmt_num(c["valor"], 2),
+                    _fmt_num(c.get("parcelas")), c.get("vencimento", ""), _fmt_num(c.get("dias_atraso")),
                     STATUS_LABELS.get(c.get("_status", "pending"), ""), c.get("_lastContact", ""), c.get("_notes", ""),
                     "Sim" if c.get("_tem_acordo") else "Não",
-                    c.get("id", ""), c.get("_atendente", "") or "",
+                    str(c.get("id", "") or ""), c.get("_atendente", "") or "",
                     c.get("telefone", "") or "", "Sim" if c.get("_tel_fixo") else "Não",
                     "Inativo" if c.get("_inativo") else "Ativo",
                     _fmt_data_br(c.get("_dt_desativacao")),
-                    c.get("_score", ""),
-                    c.get("_ultimoLoginDias") if c.get("_ultimoLoginDias") is not None else "",
+                    _fmt_num(c.get("_score")),
+                    _fmt_num(c.get("_ultimoLoginDias")),
                     _dt_login.strftime("%d/%m/%Y") if hasattr(_dt_login, "strftime") else (_dt_login or ""),
-                    int(c.get("_meses_atraso") or 0),
+                    _fmt_num(c.get("_meses_atraso") or 0),
                 ])
             df_exp = pd.DataFrame(rows, columns=[
                 "Grupo","Nome","CNPJ","Saldo","Competências","Vencimento","Dias Atraso","Status",

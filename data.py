@@ -2123,6 +2123,55 @@ def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str, versao
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_serie_carteira_mensal(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -> pd.DataFrame:
+    """Por mes e atendente: inadimplentes (clientes distintos nos snapshots
+    diarios do mes) e contatados (msg/ligacao no mes).
+
+    Mesma base da Cobertura, so que quebrada por mes — alimenta o grafico
+    temporal do funil na tela Especialista. `versao` e' chave de cache (sem
+    underscore: st.cache_data ignora args iniciados por '_').
+    """
+    client = get_bq_client()
+    if not client:
+        return pd.DataFrame()
+    try:
+        return client.query(f"""
+            WITH grupos AS (
+                SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(grupo) AS atendente
+                FROM `business-intelligence-467516.Splgc.splgc-grupo`
+                WHERE grupo IN ('Ana Carolina', 'Priscila Oliveira')
+                GROUP BY id_sacado_sac
+            ),
+            contatos AS (
+                SELECT FORMAT_DATE('%Y-%m', data_tarefa) AS mes, atendente,
+                       COUNT(DISTINCT CAST(id_sacado_sac AS STRING)) AS contatados
+                FROM `{_TAREFAS_TABLE}`
+                WHERE data_tarefa >= DATE('{dt_inicio_iso}')
+                  AND data_tarefa <= DATE('{dt_fim_iso}')
+                  AND (mensagem_enviada OR ligacao_feita OR ligacao_atendida)
+                GROUP BY mes, atendente
+            ),
+            inad AS (
+                SELECT FORMAT_DATE('%Y-%m', s.data_snapshot) AS mes, g.atendente,
+                       COUNT(DISTINCT s.id_sacado_sac) AS inadimplentes
+                FROM `{_SNAPSHOT_TABLE}` s
+                JOIN grupos g ON g.cid = s.id_sacado_sac
+                WHERE s.data_snapshot >= DATE('{dt_inicio_iso}')
+                  AND s.data_snapshot <= DATE('{dt_fim_iso}')
+                GROUP BY mes, g.atendente
+            )
+            SELECT COALESCE(c.mes, i.mes) AS mes,
+                   COALESCE(c.atendente, i.atendente) AS atendente,
+                   IFNULL(c.contatados, 0) AS contatados,
+                   IFNULL(i.inadimplentes, 0) AS inadimplentes
+            FROM contatos c
+            FULL OUTER JOIN inad i ON i.mes = c.mes AND i.atendente = c.atendente
+        """).to_dataframe()
+    except Exception:
+        return pd.DataFrame()
+
+
 @st.cache_data(ttl=1800)
 def fetch_eventos_regularizacao() -> set:
     """Retorna set de (id_sacado_sac, data_dd_mm_aaaa) — eventos de
