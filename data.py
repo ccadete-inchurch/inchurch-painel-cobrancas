@@ -964,7 +964,10 @@ def fetch_proximas_cobracas(days: int = 30, dia: str | None = None) -> pd.DataFr
                 THEN cli.st_fax_sac
             ELSE CONCAT(cli.st_fax_sac, ';', c.st_telefone_sac)
         END)                                                       AS telefone,
-        MAX(c.comp_valor)                                      AS valor,
+        -- Total do boleto: soma TODOS os itens (App, Site, Setup, acordo,
+        -- multa, desconto…), igual à lista de inadimplentes. Era MAX(item),
+        -- que mostrava só o maior item (boleto de R$ 40.560 aparecia 19.980).
+        SUM(c.comp_valor)                                         AS valor,
         FORMAT_TIMESTAMP('%Y-%m-%d', MAX(c.dt_vencimento_recb))   AS vencimento,
         MAX(u.nm_grupo)                                           AS grupo,
         MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
@@ -979,9 +982,12 @@ def fetch_proximas_cobracas(days: int = 30, dia: str | None = None) -> pd.DataFr
         FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
         GROUP BY id_sacado_sac
     ) cli ON CAST(c.id_sacado_sac AS STRING) = cli.id_sacado_sac
+    -- DATE() sem timezone: a SL grava o vencimento como 'YYYY-MM-DD 00:00 UTC'
+    -- representando o dia BRT. Comparar com CURRENT_TIMESTAMP() jogava fora
+    -- quem vence HOJE (00:00 UTC ja passou).
     WHERE c.fl_status_recb    = '0'
-      AND c.dt_vencimento_recb > CURRENT_TIMESTAMP()
-      AND c.dt_vencimento_recb <= TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)
+      AND DATE(c.dt_vencimento_recb) >= CURRENT_DATE("America/Sao_Paulo")
+      AND DATE(c.dt_vencimento_recb) <= DATE_ADD(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {days} DAY)
     GROUP BY c.id_sacado_sac, c.id_recebimento_recb
     ORDER BY MAX(c.dt_vencimento_recb) ASC
     """

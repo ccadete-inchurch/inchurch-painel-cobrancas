@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from data import fetch_proximas_cobracas
-from helpers import carimbo_dia_cache
+from helpers import carimbo_dia_cache, hoje_brt
 from helpers import fmt_moeda, fmt_moeda_plain
 
 
@@ -13,7 +13,7 @@ from helpers import fmt_moeda, fmt_moeda_plain
 _FETCH_DAYS_DEFAULT = 60
 
 
-def _render_proximas(_store, _clientes):
+def _render_proximas(_store, clientes):
     st.markdown(
         '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:36px;'
         'font-weight:800;color:#e8eaf0;margin-top:24px;margin-bottom:24px;letter-spacing:-1px;line-height:1.1">'
@@ -21,7 +21,9 @@ def _render_proximas(_store, _clientes):
         unsafe_allow_html=True,
     )
 
-    hoje = date.today()
+    # BRT, não date.today(): o servidor roda em UTC e depois das 21h já
+    # estaria no dia seguinte.
+    hoje = date.fromisoformat(hoje_brt())
     _ini_default = hoje
     _fim_default = hoje + timedelta(days=30)
 
@@ -155,18 +157,40 @@ def _render_proximas(_store, _clientes):
 
     # ── Métricas ──────────────────────────────────────────────────────────────
     total_valor = sum(r["valor"] for r in rows)
-    n_clientes  = len({r["cnpj"] for r in rows})
-    # Ticket médio: valor por cobrança. Indica se o pipeline é de cobranças
-    # pequenas (volume) ou grandes (concentração).
-    ticket_medio = (total_valor / len(rows)) if rows else 0.0
+    # Clientes por ID (não CNPJ: há clientes sem CNPJ e CNPJ com mais de um
+    # cliente). Em "Todos", o número é de ativos e os inativos vão no subtítulo
+    # — inativo com cobrança futura tende a virar inadimplência.
+    ids_ativos   = {r["id"] for r in rows if not r.get("inativo")}
+    ids_inativos = {r["id"] for r in rows if r.get("inativo")}
+    if filtro_situacao == "Apenas inativos":
+        n_clientes, sub_clientes = len(ids_inativos), "inativos com vencimentos"
+    elif filtro_situacao == "Apenas ativos":
+        n_clientes, sub_clientes = len(ids_ativos), "ativos com vencimentos"
+    else:
+        n_clientes = len(ids_ativos)
+        sub_clientes = (
+            f"ativos · + {len(ids_inativos)} inativo{'s' if len(ids_inativos) != 1 else ''}"
+            if ids_inativos else "ativos com vencimentos"
+        )
+
+    # Já inadimplentes: clientes com cobrança a vencer no período que HOJE já
+    # têm atraso (mesma base da lista de inadimplentes, com overlay do dia).
+    # São os que mais podem acumular dívida — prioridade da cobrança preventiva.
+    ids_inad = {
+        str(c.get("id")) for c in (clientes or [])
+        if float(c.get("valor") or 0) > 0 and not c.get("_regularizado_hoje")
+    }
+    rows_inad = [r for r in rows if r["id"] in ids_inad]
+    n_ja_inad = len({r["id"] for r in rows_inad})
+    valor_ja_inad = sum(r["valor"] for r in rows_inad)
 
     m1, m2, m3, m4 = st.columns(4)
     # Mesmo padrão visual da tela Pagamentos: padding, font-sizes, peso.
     for col, label, val, sub, cor in [
-        (m1, "Total a Receber", fmt_moeda_plain(total_valor), periodo_lbl, "#2dd36f"),
-        (m2, "Cobranças",       str(len(rows)),               "faturas futuras",       "#e8eaf0"),
-        (m3, "Clientes",        str(n_clientes),              "com vencimentos",       "#e8eaf0"),
-        (m4, "Ticket Médio",    fmt_moeda_plain(ticket_medio),"valor por cobrança",    "#5fa3ff"),
+        (m1, "Total a Receber",   fmt_moeda_plain(total_valor), periodo_lbl,     "#2dd36f"),
+        (m2, "Cobranças",         str(len(rows)),               "faturas a vencer", "#e8eaf0"),
+        (m3, "Clientes",          str(n_clientes),              sub_clientes,    "#e8eaf0"),
+        (m4, "Já Inadimplentes",  str(n_ja_inad),               f"{fmt_moeda_plain(valor_ja_inad)} a vencer", "#f87171"),
     ]:
         with col:
             st.markdown(
