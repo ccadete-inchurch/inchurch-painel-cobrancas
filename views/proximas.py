@@ -61,7 +61,7 @@ def _render_proximas(_store, _clientes):
     days = max(_FETCH_DAYS_DEFAULT, (dt_fim - hoje).days + 5)
 
     with st.spinner("Carregando cobranças futuras..."):
-        df_raw = fetch_proximas_cobracas(days, _dia=carimbo_dia_cache())
+        df_raw = fetch_proximas_cobracas(days, dia=carimbo_dia_cache())
 
     if df_raw.empty:
         st.info(f"Nenhuma cobrança no período selecionado.")

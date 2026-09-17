@@ -32,7 +32,9 @@ def carimbo_dia_cache() -> str:
     tudo consistente — sem risco de popular cache com lote de ontem no meio
     da execução do cron.
 
-    Usado como arg _dia=carimbo_dia_cache() nas queries pesadas do BQ.
+    Usado como arg dia=carimbo_dia_cache() nas queries pesadas do BQ. O nome
+    NAO pode comecar com "_": st.cache_data ignora esses args na chave do cache
+    e o resultado de ontem seria reaproveitado (so renovava pelo ttl de 24h).
     """
     agora = datetime.now(_BRT)
     if agora.hour < 8 or (agora.hour == 8 and agora.minute < 30):

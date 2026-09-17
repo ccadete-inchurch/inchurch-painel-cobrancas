@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link, carimbo_dia_cache
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_metrics, fetch_clientes_com_pagamento_set, compute_npl_today_overlay, fetch_npl_rolling, fetch_carteira_count, fetch_inadimplentes_snapshot_ref30d, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_rolling, fetch_carteira_count, fetch_inadimplentes_snapshot_ref30d, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -528,186 +528,110 @@ def _render_atividades(store, clientes, role):
             # Quando admin visualiza lote de outro atendente, usa o bucket dele
             buckets_hoje = buckets_lote
 
-    # ── Cards NPL: TOTAL, 30D+, 90D+ (acima do "Bem-vindo") ─────────────────
-    # Combina 3 fontes de filtro em ordem de precedência:
-    #   1. Painel Administrativo (admin "Lote do dia" de X): trava em X
-    #   2. Filtro "Grupo" abaixo do "Bem-vindo": admin pode escolher Ana,
-    #      Priscila ou Sem especialista
-    #   3. Filtro "Situação": Todos / Ativos / Inativos
-    # Atendente comum logada sempre vê sua própria carteira.
+    # ── Card "Análise da carteira por receita" (acima do kanban) ────────────
+    # Filtro de carteira em ordem de precedencia:
+    #   1. Admin em 'Lote do dia' de X: trava em X
+    #   2. Filtro Grupo "Sem especialista" (so admin tem essa opcao no dropdown)
+    #   3. Filtro Grupo igual a nome de atendente
+    #   4. Filtro Grupo = "Todos" — visao global
+    # + Filtro "Situação": Todos / Ativos / Inativos
     _filtro_grupo   = st.session_state.get("atv_filtro_grupo", "Todos")
     _filtro_inativo = st.session_state.get("atv_filtro_inativo", "Todos")
 
-    # Ordem de precedencia:
-    #   1. Admin em 'Lote do dia' de X: trava em X
-    #   2. Filtro Grupo "Sem especialista" (so admin tem essa opcao no dropdown)
-    #   3. Filtro Grupo igual a nome de atendente (admin ou atendente logada
-    #      escolhendo o proprio grupo)
-    #   4. Filtro Grupo = "Todos" (admin OU atendente em modo visao geral)
     if role == "admin" and _modo_admin == "Lote do dia" and _atendente_sel:
         _npl_atendente = _atendente_sel
-        _npl_escopo = f"Carteira de {_atendente_sel}"
     elif _filtro_grupo == "Sem especialista":
         _npl_atendente = "__SEM_ESPECIALISTA__"
-        _npl_escopo = "Sem especialista"
     elif _filtro_grupo in _EMAIL_GRUPO.values():
         _npl_atendente = _filtro_grupo
-        _npl_escopo = (
-            f"Sua carteira ({_filtro_grupo})"
-            if email in _EMAIL_GRUPO
-            else f"Carteira de {_filtro_grupo}"
-        )
     else:
-        # _filtro_grupo == "Todos" (ou estado inicial) — visao global
         _npl_atendente = None
-        _npl_escopo = "Carteira inChurch"
 
     _sit_map = {"Ativos": "ativos", "Inativos": "inativos"}
     _npl_situacao = _sit_map.get(_filtro_inativo, "todos")
-    if _npl_situacao != "todos":
-        _npl_escopo += f" · {_filtro_inativo.lower()}"
 
-    # Acumula HTML do NPL pra renderizar DEPOIS (após Bem-vindo + Indicadores).
-    # Ordem visual da tela: Bem-vindo → Indicadores → NPL cards (análise macro).
+    # Acumula HTML pra renderizar DEPOIS (após Bem-vindo + Indicadores).
     _npl_html_parts = []
 
-    _npl = fetch_npl_metrics(_npl_atendente, _npl_situacao, _dia=carimbo_dia_cache()) or {}
-    if _npl:
-        # ── Overlay live: substitui valores de HOJE pelos calculados em Python
-        # a partir de store["clientes"] (que já tem _regularizado_hoje aplicado).
-        # D-30 fica do BQ (já passou tempo suficiente pra todas liquidações
-        # replicarem). Resultado: cards NPL batem com o indicador "INADIMPLENTES"
-        # embaixo do "Bem-vindo" — ambos usam o mesmo store + overlay.
-        _ja_pagou_set = fetch_clientes_com_pagamento_set(_dia=carimbo_dia_cache())
-        _today = compute_npl_today_overlay(
-            store.get("clientes", []) or [],
-            atendente=_npl_atendente,
-            situacao=_npl_situacao,
-            ja_pagou_set=_ja_pagou_set,
-        )
-        _carteira = _npl["carteira"]
-        # Sobrescreve valores de hoje + delta com versão overlay
-        _npl = {
-            **_npl,
-            "total_n":     _today["total_n"],
-            "total_r":     _today["total_r"],
-            "total_pct":   _today["total_n"] / _carteira * 100,
-            "d30_n":       _today["d30_n"],
-            "d30_r":       _today["d30_r"],
-            "d30_pct":     _today["d30_n"] / _carteira * 100,
-            "d90_n":       _today["d90_n"],
-            "d90_r":       _today["d90_r"],
-            "d90_pct":     _today["d90_n"] / _carteira * 100,
-            "delta_total": (_today["total_n"] - _npl["r_total_n"]) / _carteira * 100,
-            "delta_d30":   (_today["d30_n"]   - _npl["r_d30_n"])   / _carteira * 100,
-            "delta_d90":   (_today["d90_n"]   - _npl["r_d90_n"])   / _carteira * 100,
-        }
-        def _delta_html(v: float) -> str:
-            if abs(v) < 0.005:
-                return '<span style="color:#9ca3af;font-size:11px">— 0,00 p.p.</span>'
-            arrow, color = ("▼", "#22c55e") if v < 0 else ("▲", "#fb7185")
-            val = f"{abs(v):.2f}".replace(".", ",")
-            return (
-                f'<span style="color:{color};font-size:11px;font-weight:600">'
-                f'{arrow} {val} p.p.</span>'
-            )
-
-        def _fmt_rs(v: float) -> str:
-            s = f"{v:,.2f}"
-            return s.replace(",", "X").replace(".", ",").replace("X", ".")
-
-        def _card(label: str, pct: float, delta: float, rs: float) -> str:
-            pct_str = f"{pct:.2f}".replace(".", ",")
-            return (
-                '<div style="flex:1;background:#181c26;'
-                'border:1px solid #2a2f42;border-radius:8px;'
-                'padding:10px 12px;min-width:0">'
-                f'<div style="font-size:10px;font-weight:700;color:#9ca3af;'
-                f'text-transform:uppercase;letter-spacing:1.2px;margin-bottom:4px">'
-                f'{label}</div>'
-                f'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:2px">'
-                f'<span style="font-size:20px;font-weight:800;color:#e8eaf0;'
-                f'letter-spacing:-0.5px;line-height:1">{pct_str}%</span>'
-                f'{_delta_html(delta)}'
-                f'</div>'
-                f'<div style="font-size:11px;color:#6b7280">'
-                f'R$ {_fmt_rs(rs)} em aberto</div>'
-                '</div>'
-            )
-
-        # ─── 2 cards separados: ANALISE POR CLIENTE + ANALISE POR RECEITA
-        # Renderizados lado a lado do card VISAO GERAL (operacional) —
-        # 3 retangulos alinhados no fragment. Cada um com sub-header no topo,
-        # divisor entre linhas e min-height igual pra bater visualmente.
-
-        _sublabel_css = (
-            "font-size:11px;font-weight:700;color:#9ca3af;"
-            "text-transform:uppercase;letter-spacing:1.2px;margin-bottom:12px"
-        )
-        # Divisor identico ao do card operacional pra separacao visual
-        _divisor_a = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
-
-        def _linha_analise(pct: float, palavra: str, delta_pp: float, rs: float | None = None):
-            """Linha: percentual grande + delta + label. Rs opcional a direita."""
-            pct_str = f"{pct:.2f}".replace(".", ",")
-            _delta = _delta_html(delta_pp) if delta_pp is not None else ""
-            _direita = ""
-            if rs is not None:
-                _rs_fmt = _fmt_rs(rs)
-                _direita = (
-                    f'<span style="margin-left:auto;font-size:14px;color:#f87171;'
-                    f'font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums">'
-                    f'R$ {_rs_fmt}</span>'
-                )
-            return (
-                f'<div style="display:flex;align-items:baseline;gap:8px">'
-                f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
-                f'letter-spacing:-0.4px;font-variant-numeric:tabular-nums">{pct_str}%</span>'
-                f'{_delta}'
-                f'<span style="font-size:11px;color:#9ca3af;font-weight:700;'
-                f'letter-spacing:1px;text-transform:uppercase">{palavra}</span>'
-                f'{_direita}'
-                f'</div>'
-            )
-
-        # Card "Por cliente" foi removido — dado redundante com o card
-        # Visao Geral (# inadimplentes absoluto + delta MoM ja transmite a
-        # informacao operacional; % da carteira nao acrescenta pra o dia-a-dia).
-        # Se quiser aging (30d vs 90d+) de volta, ver commit anterior 136117a.
-
-        # Por receita (janela rolante em R$, sem overlay)
-        _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao, _dia=carimbo_dia_cache()) or {}
-        _linhas_receita = []
-        if _rolling:
-            _linhas_receita.append(_linha_analise(
-                _rolling["d30_pct"], "Inadimplência mensal",
-                _rolling.get("delta_d30_pp"),
-                _rolling.get("d30_aberto"),
-            ))
-            _linhas_receita.append(_linha_analise(
-                _rolling["d90_pct"], "Inadimplência trimestral",
-                _rolling.get("delta_d90_pp"),
-                _rolling.get("d90_aberto"),
-            ))
-
-        # Wrapper SEM min-height — deixa altura natural. Card com 2 linhas
-        # + 1 divisor + sub-header alinha visualmente perto do 2o separador
-        # do card Visao Geral (feedback do user: nao precisa ter mesma
-        # altura que o operacional).
-        _card_wrapper = (
-            'background:#181c26;border:1px solid #2a2f42;'
-            'border-radius:10px;padding:14px 18px;'
-            'display:flex;flex-direction:column;align-self:flex-start'
+    def _delta_html(v: float) -> str:
+        if abs(v) < 0.005:
+            return '<span style="color:#9ca3af;font-size:11px">— 0,00 p.p.</span>'
+        arrow, color = ("▼", "#22c55e") if v < 0 else ("▲", "#fb7185")
+        val = f"{abs(v):.2f}".replace(".", ",")
+        return (
+            f'<span style="color:{color};font-size:11px;font-weight:600">'
+            f'{arrow} {val} p.p.</span>'
         )
 
-        if _linhas_receita:
-            _analise_receita_html = (
-                f'<div style="{_card_wrapper}">'
-                f'<div style="{_sublabel_css}">Análise da carteira por receita</div>'
-                + _divisor_a.join(_linhas_receita)
-                + '</div>'
+    def _fmt_rs(v: float) -> str:
+        s = f"{v:,.2f}"
+        return s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+    # ─── Card ANALISE POR RECEITA — renderizado ao lado do card VISAO GERAL.
+    _sublabel_css = (
+        "font-size:11px;font-weight:700;color:#9ca3af;"
+        "text-transform:uppercase;letter-spacing:1.2px;margin-bottom:12px"
+    )
+    # Divisor identico ao do card operacional pra separacao visual
+    _divisor_a = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
+
+    def _linha_analise(pct: float, palavra: str, delta_pp: float, rs: float | None = None):
+        """Linha: percentual grande + delta + label. Rs opcional a direita."""
+        pct_str = f"{pct:.2f}".replace(".", ",")
+        _delta = _delta_html(delta_pp) if delta_pp is not None else ""
+        _direita = ""
+        if rs is not None:
+            _rs_fmt = _fmt_rs(rs)
+            _direita = (
+                f'<span style="margin-left:auto;font-size:14px;color:#f87171;'
+                f'font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums">'
+                f'R$ {_rs_fmt}</span>'
             )
-            _npl_html_parts.append(_analise_receita_html)
+        return (
+            f'<div style="display:flex;align-items:baseline;gap:8px">'
+            f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
+            f'letter-spacing:-0.4px;font-variant-numeric:tabular-nums">{pct_str}%</span>'
+            f'{_delta}'
+            f'<span style="font-size:11px;color:#9ca3af;font-weight:700;'
+            f'letter-spacing:1px;text-transform:uppercase">{palavra}</span>'
+            f'{_direita}'
+            f'</div>'
+        )
+
+    # Por receita (janela rolante em R$, sem overlay)
+    _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao, dia=carimbo_dia_cache()) or {}
+    _linhas_receita = []
+    if _rolling:
+        _linhas_receita.append(_linha_analise(
+            _rolling["d30_pct"], "Inadimplência mensal",
+            _rolling.get("delta_d30_pp"),
+            _rolling.get("d30_aberto"),
+        ))
+        _linhas_receita.append(_linha_analise(
+            _rolling["d90_pct"], "Inadimplência trimestral",
+            _rolling.get("delta_d90_pp"),
+            _rolling.get("d90_aberto"),
+        ))
+
+    # Wrapper SEM min-height — deixa altura natural. Card com 2 linhas
+    # + 1 divisor + sub-header alinha visualmente perto do 2o separador
+    # do card Visao Geral (feedback do user: nao precisa ter mesma
+    # altura que o operacional).
+    _card_wrapper = (
+        'background:#181c26;border:1px solid #2a2f42;'
+        'border-radius:10px;padding:14px 18px;'
+        'display:flex;flex-direction:column;align-self:flex-start'
+    )
+
+    if _linhas_receita:
+        _analise_receita_html = (
+            f'<div style="{_card_wrapper}">'
+            f'<div style="{_sublabel_css}">Análise da carteira por receita</div>'
+            + _divisor_a.join(_linhas_receita)
+            + '</div>'
+        )
+        _npl_html_parts.append(_analise_receita_html)
+
 
     # ═══════════════ ORDEM DE RENDER ═══════════════
     # 1. Bem-vindo (saudação personalizada)
@@ -817,7 +741,7 @@ def _render_atividades(store, clientes, role):
             # Carteira TOTAL da atendente — SEM filtro de tipo (1.2.1/1.2.2)
             # porque a tela mostra QUALQUER cobrança inadimplente, não só
             # assinatura. fetch_carteira_count conta direto em splgc-grupo.
-            lote_carteira_n = fetch_carteira_count(_atendente_nome, _fs_lote.lower(), _dia=carimbo_dia_cache())
+            lote_carteira_n = fetch_carteira_count(_atendente_nome, _fs_lote.lower(), dia=carimbo_dia_cache())
             # Reg + Parc: só do lote do dia (mérito do trabalho do atendente).
             # strict_hoje=False — cliente em lote é trabalho do dia mesmo se
             # liquidação foi ontem (BQ não viu, overlay detectou).
@@ -878,7 +802,7 @@ def _render_atividades(store, clientes, role):
                 _ctx_atend = _fg
             else:
                 _ctx_atend = None
-            total_carteira_n = fetch_carteira_count(_ctx_atend, _fs.lower(), _dia=carimbo_dia_cache())
+            total_carteira_n = fetch_carteira_count(_ctx_atend, _fs.lower(), dia=carimbo_dia_cache())
 
         def _palavra(n, sing, plur):
             return sing if n == 1 else plur
@@ -1000,7 +924,7 @@ def _render_atividades(store, clientes, role):
             _fs_ref = st.session_state.get("atv_filtro_inativo", "Todos").lower()
             _ate_ref = locals().get("_atendente_nome") or _atendente_sel
             _lote_ref_n = fetch_inadimplentes_snapshot_ref30d(
-                _ate_ref, _fs_ref, _dia=carimbo_dia_cache()
+                _ate_ref, _fs_ref, dia=carimbo_dia_cache()
             )
 
         _total_ref_n = None
@@ -1008,7 +932,7 @@ def _render_atividades(store, clientes, role):
             _fs_ref = st.session_state.get("atv_filtro_inativo", "Todos").lower()
             _ctx_ref = locals().get("_ctx_atend")
             _total_ref_n = fetch_inadimplentes_snapshot_ref30d(
-                _ctx_ref, _fs_ref, _dia=carimbo_dia_cache()
+                _ctx_ref, _fs_ref, dia=carimbo_dia_cache()
             )
 
         # Monta linha horizontal — 1 card por contexto (lote ou total).
@@ -1105,14 +1029,11 @@ def _render_atividades(store, clientes, role):
         busca          = st.session_state.get("atv_busca", "") or ""
 
         # ── Métricas dos cards do topo (contagem direta de painel_tarefas_diarias) ─
-        # Conta TODOS os clientes do lote com bool=TRUE no painel — sem filtro de
-        # bucket. Cliente que recebeu pré-ligação (lig=T) conta em "Realizadas",
-        # cliente atendido (atend=T) conta em "Atendidas", cliente com msg conta
-        # em "Mensagens" — independente do bucket onde foi colocado de manhã.
-        
-        
-        
-        
+        # No lote (atendente logada ou admin em 'Lote do dia'), cada card conta
+        # só a coluna dele: "Mensagens" = clientes da coluna Mensagem com msg;
+        # "Realizadas"/"Atendidas" = clientes da coluna Ligação com lig/atend.
+        # Mensagem mandada pra cliente da coluna Ligação não conta aqui (mas
+        # vale pro cooldown). Em 'Todos os clientes' não há filtro de coluna.
         def _metricas_lote_painel(ids_lote=None, buckets_map=None):
             acoes = st.session_state.get("_painel_acoes_hoje", {})
             buckets_norm = None

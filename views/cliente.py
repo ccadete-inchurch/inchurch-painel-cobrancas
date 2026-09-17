@@ -43,7 +43,6 @@ def _render_cliente(_store, clientes):
     # Filtra clientes que regularizaram hoje via overlay da API — não devem
     # aparecer na lista de inadimplentes pra evitar contato repetido.
     base = [c for c in clientes if not c.get("_regularizado_hoje")]
-    _reg_hoje = len(clientes) - len(base)
 
     pool = base
     if busca:
@@ -74,11 +73,10 @@ def _render_cliente(_store, clientes):
         return nome
 
     opcoes = {c["id"]: _label_dropdown(c) for c in sorted(pool, key=lambda x: x["nome"])}
-    # Label: total restante + nota de quantos regularizaram hoje (se > 0)
-    _label_topo = f"Cliente ({len(opcoes)} {'encontrado' if len(opcoes) == 1 else 'encontrados'}"
-    if _reg_hoje > 0:
-        _label_topo += f" · {_reg_hoje} regularizou hoje" if _reg_hoje == 1 else f" · {_reg_hoje} regularizaram hoje"
-    _label_topo += ")"
+    # Label: só o total restante (já sem os regularizados do overlay). A nota
+    # "X regularizaram hoje" saiu: o overlay cobre liquidações de até 10-15
+    # dias, então contava pagamento antigo como se fosse de hoje.
+    _label_topo = f"Cliente ({len(opcoes)} {'encontrado' if len(opcoes) == 1 else 'encontrados'})"
     with f2:
         cid = st.selectbox(
             _label_topo,
@@ -143,7 +141,7 @@ def _render_cliente(_store, clientes):
     )
 
     with st.spinner("Calculando evolução do saldo..."):
-        df_evol = fetch_evolucao_saldo_mensal(cid, _dia=carimbo_dia_cache())
+        df_evol = fetch_evolucao_saldo_mensal(cid, dia=carimbo_dia_cache())
 
     if df_evol.empty:
         st.markdown(

@@ -23,7 +23,7 @@ def _build_regularizados_fresh(store) -> list:
     Aqui fazemos fresh: BQ tem nome/cnpj/inativo, overlay adiciona limbos
     (liquidados últimos 3d, crédito vindo). Sem persistência → sem acúmulo.
     """
-    df_liq = fetch_cobrancas_liquidacao(_dia=carimbo_dia_cache())
+    df_liq = fetch_cobrancas_liquidacao(dia=carimbo_dia_cache())
     regs = []
     if not df_liq.empty:
         for _, row in df_liq.iterrows():

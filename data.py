@@ -757,7 +757,7 @@ def get_bq_client():
 
 
 @st.cache_data(ttl=86400)
-def fetch_cobrancas_competencia(_dia: str | None = None):
+def fetch_cobrancas_competencia(dia: str | None = None):
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
@@ -836,7 +836,7 @@ def fetch_cobrancas_competencia(_dia: str | None = None):
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def fetch_evolucao_saldo_mensal(cliente_id: str, _dia: str | None = None) -> pd.DataFrame:
+def fetch_evolucao_saldo_mensal(cliente_id: str, dia: str | None = None) -> pd.DataFrame:
     """Saldo devedor ao FIM DE CADA MÊS nos últimos 12 meses.
 
     Reconstrói o saldo a partir das tabelas de competência + liquidação:
@@ -946,7 +946,7 @@ def fetch_historico_atrasos(cliente_id: str) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=86400)
-def fetch_proximas_cobracas(days: int = 30, _dia: str | None = None) -> pd.DataFrame:
+def fetch_proximas_cobracas(days: int = 30, dia: str | None = None) -> pd.DataFrame:
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
@@ -993,7 +993,7 @@ def fetch_proximas_cobracas(days: int = 30, _dia: str | None = None) -> pd.DataF
 
 
 @st.cache_data(ttl=86400)
-def fetch_historico_meses_bulk(_dia: str | None = None) -> pd.DataFrame:
+def fetch_historico_meses_bulk(dia: str | None = None) -> pd.DataFrame:
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
@@ -1044,7 +1044,7 @@ _PIPELINES_CRITICOS_INAD = (
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
-def diagnosticar_bq_saude(_dia: str | None = None) -> dict:
+def diagnosticar_bq_saude(dia: str | None = None) -> dict:
     """Diagnostica se pipelines Splgc criticos rodaram hoje.
 
     Fonte da verdade: tabela `public.splgc_validacoes` no Postgres N8N
@@ -1369,7 +1369,7 @@ def resetar_status_reincidentes(clientes_hoje: list) -> int:
 
 
 @st.cache_data(ttl=86400)
-def fetch_snapshot_inicio_mes(_dia: str | None = None) -> set:
+def fetch_snapshot_inicio_mes(dia: str | None = None) -> set:
     """IDs dos clientes do PRIMEIRO snapshot do mês atual.
     Usado pra calcular NOVOS no mês: atuais − inicio = entraram no mês.
     """
@@ -1403,7 +1403,7 @@ def fetch_snapshot_inicio_mes(_dia: str | None = None) -> set:
 
 
 @st.cache_data(ttl=86400)
-def fetch_inadimplentes_uniao_mes(_dia: str | None = None) -> set:
+def fetch_inadimplentes_uniao_mes(dia: str | None = None) -> set:
     """IDs DISTINTOS de clientes que estiveram inadimplentes em ALGUM dia
     do mês atual — UNIÃO de todos os snapshots desde 01/mês até hoje.
 
@@ -1429,7 +1429,7 @@ def fetch_inadimplentes_uniao_mes(_dia: str | None = None) -> set:
 
 
 @st.cache_data(ttl=86400)
-def fetch_snapshot_inicio_semana(_dia: str | None = None) -> set:
+def fetch_snapshot_inicio_semana(dia: str | None = None) -> set:
     """IDs do snapshot no INÍCIO DA SEMANA ATUAL (segunda-feira), com cap
     no início do mês — baseline = MAX(seg da semana, dia 1 do mês).
 
@@ -1476,7 +1476,7 @@ def fetch_snapshot_inicio_semana(_dia: str | None = None) -> set:
 
 
 @st.cache_data(ttl=86400)
-def fetch_inadimplentes_uniao_esta_semana(_dia: str | None = None) -> set:
+def fetch_inadimplentes_uniao_esta_semana(dia: str | None = None) -> set:
     """IDs DISTINTOS de clientes inadimplentes em ALGUM dia desta semana
     (segunda → hoje), capada no início do mês.
 
@@ -1505,7 +1505,7 @@ def fetch_inadimplentes_uniao_esta_semana(_dia: str | None = None) -> set:
 
 
 @st.cache_data(ttl=86400)
-def fetch_snapshot_ontem(_dia: str | None = None) -> set:
+def fetch_snapshot_ontem(dia: str | None = None) -> set:
     """IDs do snapshot MAIS RECENTE disponível antes de hoje. Usado pra
     calcular novos/regularizados comparando com a referência mais próxima.
 
@@ -1547,209 +1547,8 @@ def fetch_snapshot_ontem(_dia: str | None = None) -> set:
         return set()
 
 
-@st.cache_data(ttl=86400)
-def fetch_npl_metrics(atendente: str = None, situacao: str = "todos", _dia: str | None = None) -> dict:
-    """Métricas NPL da carteira (Non-Performing Loans), com buckets exclusivos:
-    - TOTAL: % clientes com qualquer cobrança vencida (atraso >= 1 dia)
-    - 30d:   % com atraso ENTRE 1 e 30 dias (bucket recente)
-    - 90d:   % com atraso >= 90 dias (bucket crítico / NPL ratio)
-
-    Buckets 30d e 90d são EXCLUSIVOS (não cumulativos). A faixa de 30-89 dias
-    fica oculta entre os dois — convenção padrão de dashboards de cobrança.
-
-    Para cada uma: % da carteira, n. clientes, R$ em aberto, delta p.p. vs 30d.
-
-    Denominador: clientes únicos. Inclui desativados por padrão (a
-    inadimplência antiga é passivo real, mesmo do cliente já saído do
-    produto — sem isso, 90D+ fica zerado porque o Splgc desativa
-    automaticamente atrasos longos).
-
-    Numerador: só clientes que já pagaram pelo menos 1 boleto na história
-    (`EXISTS dt_liquidacao_recb IS NOT NULL`). Exclui novos em onboarding/
-    disputa comercial — esses são CS/vendas, não cobrança operacional.
-
-    Parâmetros:
-        atendente:  Nome do grupo (ex: 'Ana Carolina'). Filtra via splgc-grupo.
-                    "__SEM_ESPECIALISTA__" para clientes sem grupo atribuído.
-                    None para carteira global.
-        situacao:   'todos' (default), 'ativos' (dt_desativacao_sac IS NULL),
-                    ou 'inativos' (dt_desativacao_sac IS NOT NULL).
-
-    Delta: mesma fórmula aplicada ao "snapshot virtual" de 30 DIAS atrás
-    (cobrança estava aberta em D-30 se status='0' agora OU paga depois de D-30).
-    Janela MoM (Month over Month) — padrão da indústria financeira, alinha
-    com o ciclo mensal de assinatura inChurch e dá deltas mais legíveis
-    (2-4 p.p. típicos vs 0-0,5 p.p. de WoW em carteiras pequenas).
-    """
-    client = get_bq_client()
-    if not client:
-        return {}
-
-    # Usar BRT, não UTC — date.today() do servidor pode adiantar 1 dia
-    # (UTC 02:00 = BRT 23:00 do dia anterior), inflando inadimplência.
-    today_str = hoje_brt()
-    today_dt  = date.fromisoformat(today_str)
-    ref_str   = (today_dt - timedelta(days=30)).isoformat()
-
-    # ── Filtro de atendente (via splgc-grupo) ─────────────────────────────
-    contacts_cte = ""
-    cond_carteira_atend = ""
-    cond_cobrs_atend = ""
-    if atendente == "__SEM_ESPECIALISTA__":
-        contacts_cte = """contacts AS (
-          SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
-          FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
-          WHERE CAST(id_sacado_sac AS STRING) NOT IN (
-            SELECT DISTINCT CAST(id_sacado_sac AS STRING)
-            FROM `business-intelligence-467516.Splgc.splgc-grupo`
-            WHERE grupo IS NOT NULL
-          )
-        ),
-        """
-        cond_carteira_atend = "CAST(id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
-        cond_cobrs_atend = "CAST(c.id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
-    elif atendente:
-        ate_safe = atendente.replace("'", "''")
-        contacts_cte = f"""contacts AS (
-          SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
-          FROM `business-intelligence-467516.Splgc.splgc-grupo`
-          WHERE grupo = '{ate_safe}'
-        ),
-        """
-        cond_carteira_atend = "CAST(id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
-        cond_cobrs_atend = "CAST(c.id_sacado_sac AS STRING) IN (SELECT cid FROM contacts)"
-
-    # ── Filtro de situação (dt_desativacao_sac) ───────────────────────────
-    cond_carteira_sit = ""
-    cond_cobrs_sit = ""
-    if situacao == "ativos":
-        cond_carteira_sit = "dt_desativacao_sac IS NULL"
-        cond_cobrs_sit = "c.dt_desativacao_sac IS NULL"
-    elif situacao == "inativos":
-        cond_carteira_sit = "dt_desativacao_sac IS NOT NULL"
-        cond_cobrs_sit = "c.dt_desativacao_sac IS NOT NULL"
-
-    # ── Combina condições em WHERE ────────────────────────────────────────
-    # Filtro de tipo: só Setup (1.2.1) + Mensalidade (1.2.2). Alinhamento
-    # com a metodologia "por receita" do outro dashboard. SQL level apenas.
-    cond_carteira_tipo = "comp_st_conta_cont IN ('1.2.1', '1.2.2')"
-    cond_cobrs_tipo    = "c.comp_st_conta_cont IN ('1.2.1', '1.2.2')"
-
-    # Filtro #4 no DENOMINADOR (carteira): exclui onboarding. Quem nunca
-    # pagou nao e' inadimplente — e' cliente novo / disputa. Sem isso, o
-    # % saia subestimado (denom inflado por onboarding).
-    cond_carteira_jp = (
-        "CAST(id_sacado_sac AS STRING) "
-        "IN (SELECT cid FROM clientes_com_pagamento)"
-    )
-
-    conds_c = [c for c in [cond_carteira_atend, cond_carteira_sit, cond_carteira_tipo, cond_carteira_jp] if c]
-    conds_b = [c for c in [cond_cobrs_atend,    cond_cobrs_sit,    cond_cobrs_tipo]    if c]
-    carteira_filter = "WHERE " + " AND ".join(conds_c) if conds_c else ""
-    cobrs_filter    = "WHERE " + " AND ".join(conds_b) if conds_b else ""
-
-    query = f"""
-    WITH {contacts_cte}
-    -- Clientes que já pagaram pelo menos 1 boleto na história — exclui
-    -- novos em onboarding / disputa comercial sem pagamento prévio.
-    -- Inadimplência "operacional": só conta quem já pagou antes e agora
-    -- parou. Cliente novo com primeiro boleto vencido NÃO é inadimplência
-    -- da régua de cobrança, é onboarding/CS.
-    clientes_com_pagamento AS (
-      SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
-      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
-      WHERE dt_liquidacao_recb IS NOT NULL
-    ),
-    -- Denominador: exclui onboarding (clientes que nunca pagaram).
-    -- Razão: quem nunca pagou não pode ser considerado inadimplente — é
-    -- cliente novo / disputa comercial, escopo de CS, não da cobrança.
-    -- Sem essa exclusão, o numerador (que tem ja_pagou=1) e o denominador
-    -- (que incluía todos) divergiam — % saía subestimada.
-    -- Filtro de ja_pagou ja vem dentro do {carteira_filter}.
-    carteira AS (
-      SELECT COUNT(DISTINCT id_sacado_sac) AS n
-      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
-      {carteira_filter}
-    ),
-    cobrs AS (
-      SELECT
-        c.id_sacado_sac                  AS cid,
-        c.id_recebimento_recb            AS rid,
-        DATE(MAX(c.dt_vencimento_recb))  AS venc,
-        SUM(c.comp_valor)                AS valor,
-        MAX(c.fl_status_recb)            AS status,
-        DATE(MAX(l.dt_liquidacao_recb))  AS liq,
-        MAX(IF(jp.cid IS NOT NULL, 1, 0)) AS ja_pagou
-      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
-      LEFT JOIN `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` l
-        ON c.id_recebimento_recb = l.id_recebimento_recb
-      LEFT JOIN clientes_com_pagamento jp
-        ON CAST(c.id_sacado_sac AS STRING) = jp.cid
-      {cobrs_filter}
-      GROUP BY c.id_sacado_sac, c.id_recebimento_recb
-    ),
-    hoje AS (
-      SELECT
-        COUNT(DISTINCT IF(status = '0' AND venc < DATE('{today_str}') AND ja_pagou = 1, cid, NULL)) AS total_n,
-        COUNT(DISTINCT IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) BETWEEN 1 AND 30 AND ja_pagou = 1, cid, NULL)) AS d30_n,
-        COUNT(DISTINCT IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 90 AND ja_pagou = 1, cid, NULL)) AS d90_n,
-        SUM(IF(status = '0' AND venc < DATE('{today_str}') AND ja_pagou = 1, valor, 0)) AS total_r,
-        SUM(IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) BETWEEN 1 AND 30 AND ja_pagou = 1, valor, 0)) AS d30_r,
-        SUM(IF(status = '0' AND DATE_DIFF(DATE('{today_str}'), venc, DAY) >= 90 AND ja_pagou = 1, valor, 0)) AS d90_r
-      FROM cobrs
-    ),
-    ref AS (
-      SELECT
-        COUNT(DISTINCT IF(venc < DATE('{ref_str}') AND (status = '0' OR liq >= DATE('{ref_str}')) AND ja_pagou = 1, cid, NULL)) AS total_n,
-        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) BETWEEN 1 AND 30 AND (status = '0' OR liq >= DATE('{ref_str}')) AND ja_pagou = 1, cid, NULL)) AS d30_n,
-        COUNT(DISTINCT IF(DATE_DIFF(DATE('{ref_str}'), venc, DAY) >= 90 AND (status = '0' OR liq >= DATE('{ref_str}')) AND ja_pagou = 1, cid, NULL)) AS d90_n
-      FROM cobrs
-    )
-    SELECT
-      c.n AS carteira,
-      h.total_n, h.d30_n, h.d90_n,
-      h.total_r, h.d30_r, h.d90_r,
-      r.total_n AS r_total_n, r.d30_n AS r_d30_n, r.d90_n AS r_d90_n
-    FROM carteira c, hoje h, ref r
-    """
-    try:
-        df = client.query(query).to_dataframe()
-    except Exception:
-        return {}
-    if df.empty:
-        return {}
-
-    r = df.iloc[0]
-    carteira = int(r["carteira"]) or 1
-    return {
-        "carteira": carteira,
-        # Hoje (BQ snapshot — pode estar 1 dia atrasado, replicação 04:00 BRT).
-        # Pra valores "live" (overlay aplicado), usar compute_npl_today_overlay
-        # em atividades.py e sobrescrever total_n/d30_n/d90_n/total_r/d30_r/d90_r.
-        "total_pct":   float(r["total_n"]) / carteira * 100,
-        "total_n":     int(r["total_n"]),
-        "total_r":     float(r["total_r"] or 0),
-        "d30_pct":     float(r["d30_n"]) / carteira * 100,
-        "d30_n":       int(r["d30_n"]),
-        "d30_r":       float(r["d30_r"] or 0),
-        "d90_pct":     float(r["d90_n"]) / carteira * 100,
-        "d90_n":       int(r["d90_n"]),
-        "d90_r":       float(r["d90_r"] or 0),
-        # D-30 reference (sempre BQ — 30 dias atrás já tem todas liquidações
-        # replicadas). Não precisa de overlay aqui.
-        "r_total_n":   int(r["r_total_n"]),
-        "r_d30_n":     int(r["r_d30_n"]),
-        "r_d90_n":     int(r["r_d90_n"]),
-        # Delta MoM com base no BQ snapshot. Caso queira "delta live", recalcule
-        # em atividades.py usando (overlay.total_n - r_total_n) / carteira.
-        "delta_total": (float(r["total_n"]) - float(r["r_total_n"])) / carteira * 100,
-        "delta_d30":   (float(r["d30_n"])   - float(r["r_d30_n"]))   / carteira * 100,
-        "delta_d90":   (float(r["d90_n"])   - float(r["r_d90_n"]))   / carteira * 100,
-    }
-
-
 @st.cache_data(ttl=86400, show_spinner=False)
-def fetch_inadimplentes_snapshot_ref30d(atendente: str = None, situacao: str = "todos", _dia: str | None = None) -> int:
+def fetch_inadimplentes_snapshot_ref30d(atendente: str = None, situacao: str = "todos", dia: str | None = None) -> int:
     """Conta clientes inadimplentes 30 dias atras usando a tabela
     cobrancas_snapshot_diario (populada pelo cron 08:30 BRT via
     salvar_snapshot_inadimplentes_hoje).
@@ -1824,13 +1623,12 @@ def fetch_inadimplentes_snapshot_ref30d(atendente: str = None, situacao: str = "
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def fetch_carteira_count(atendente: str = None, situacao: str = "todos", _dia: str | None = None) -> int:
+def fetch_carteira_count(atendente: str = None, situacao: str = "todos", dia: str | None = None) -> int:
     """Total de clientes da carteira SEM filtro de tipo (1.2.1/1.2.2).
 
-    Usado pelo card 'X CLIENTES' do indicador — diferente de _npl['carteira']
-    que aplica filtro Setup+Mensalidade. Aqui contamos TODOS os clientes do
+    Usado pelo card 'X CLIENTES' do indicador. Conta TODOS os clientes do
     atendente, refletindo o universo que aparece no kanban/painel (qualquer
-    tipo de cobrança).
+    tipo de cobrança) — só os cards "por receita" filtram Setup+Mensalidade.
 
     Args:
         atendente: nome do grupo (ex: 'Ana Carolina'), '__SEM_ESPECIALISTA__'
@@ -1892,145 +1690,8 @@ def fetch_carteira_count(atendente: str = None, situacao: str = "todos", _dia: s
         return 0
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
-def fetch_clientes_com_pagamento_set(_dia: str | None = None) -> frozenset:
-    """Set frozenset de cids (string) que já pagaram pelo menos 1 boleto.
-    Usado pelo filtro #4 do NPL — exclui clientes em onboarding sem pagamento prévio.
-
-    Retorna frozenset (em vez de set) pra ser hashable, importante pro
-    @st.cache_data não dar erro de serialização.
-    """
-    client = get_bq_client()
-    if not client:
-        return frozenset()
-    try:
-        df = client.query("""
-            SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
-            FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
-            WHERE dt_liquidacao_recb IS NOT NULL
-        """).to_dataframe()
-        return frozenset(str(row["cid"]) for _, row in df.iterrows())
-    except Exception:
-        return frozenset()
-
-
-def compute_npl_today_overlay(
-    clientes_full: list,
-    atendente: str = None,
-    situacao: str = "todos",
-    ja_pagou_set: frozenset = None,
-) -> dict:
-    """Computa métricas NPL de HOJE a partir de store['clientes'] (overlay aplicado).
-
-    Por que existe: fetch_npl_metrics consulta BQ direto, que tem replicação
-    diária às 04:00 BRT. Entre BQ sync e agora, pagamentos confirmados na API
-    Superlógica não estão no BQ ainda — o overlay (em aplicar_pagamentos_hoje_no_store)
-    marca esses clientes com _regularizado_hoje=True. Esta função usa essa
-    informação pra dar contagens "live" em vez do snapshot BQ stale.
-
-    Aplicação:
-        - Pula clientes com _regularizado_hoje=True (já pagou TODOS atrasos)
-        - Mantém clientes com _pago_parcial_hoje=True (ainda tem cobrança vencida)
-        - Soma R$ apenas das cobranças com dias_atraso > 0 (vencidas mesmo)
-
-    Buckets (aging exclusivo):
-        - d30: cobranças com atraso BETWEEN 1 AND 30 dias
-        - d90: cobranças com atraso >= 90 dias
-        - faixa 31-89 fica oculta (não tem card próprio)
-
-    Args:
-        clientes_full:  store['clientes'] já com overlay aplicado
-        atendente:      nome do grupo (ex: 'Ana Carolina'), '__SEM_ESPECIALISTA__'
-                        ou None (todos)
-        situacao:       'todos', 'ativos' (_inativo=False) ou 'inativos'
-        ja_pagou_set:   frozenset de cids com pagamento prévio (filtro #4).
-                        Se None, não aplica filtro #4.
-
-    Returns:
-        dict {total_n, d30_n, d90_n, total_r, d30_r, d90_r}
-        Contagens são de CLIENTES distintos por bucket (cliente pode estar em
-        múltiplos buckets se tiver cobranças em faixas diferentes).
-        Valores R$ são soma das cobranças por bucket.
-    """
-    # ── Filtro de atendente ────────────────────────────────────────────────
-    if atendente == "__SEM_ESPECIALISTA__":
-        filtered = [
-            c for c in clientes_full
-            if not c.get("_grupo") or str(c.get("_grupo")) in ("—", "", "nan", "NaN")
-        ]
-    elif atendente:
-        filtered = [c for c in clientes_full if c.get("_grupo") == atendente]
-    else:
-        filtered = list(clientes_full)
-
-    # ── Filtro de situação (ativos/inativos) ───────────────────────────────
-    if situacao == "ativos":
-        filtered = [c for c in filtered if not c.get("_inativo")]
-    elif situacao == "inativos":
-        filtered = [c for c in filtered if c.get("_inativo")]
-
-    # ── Filtro #4: cliente já pagou alguma vez ─────────────────────────────
-    if ja_pagou_set is not None:
-        filtered = [c for c in filtered if str(c.get("id") or "") in ja_pagou_set]
-
-    # ── Overlay: pula clientes que pagaram tudo nos últimos 3 dias ─────────
-    filtered = [c for c in filtered if not c.get("_regularizado_hoje")]
-
-    # ── Agrega buckets ─────────────────────────────────────────────────────
-    total_n = d30_n = d90_n = 0
-    total_r = d30_r = d90_r = 0.0
-
-    # Tipos válidos pra alinhar com SQL: só Setup (1.2.1) + Mensalidade (1.2.2).
-    # PERMISSIVO: se a cobrança não tem tipo populado (cache stale do store
-    # carregado antes do deploy desta feature), inclui mesmo assim. Quando
-    # store recarregar com tipo (TTL 1h), filtro fica estrito.
-    _TIPOS_VALIDOS = {"1.2.1", "1.2.2"}
-
-    def _tipo_ok(cob):
-        t = str(cob.get("tipo") or "")
-        return (not t) or (t in _TIPOS_VALIDOS)
-
-    for c in filtered:
-        cobr_vencidas = [
-            cob for cob in (c.get("_cobracas") or [])
-            if (cob.get("dias_atraso") or 0) > 0
-            and float(cob.get("valor") or 0) > 0
-            and _tipo_ok(cob)
-        ]
-        if not cobr_vencidas:
-            continue
-
-        total_n += 1
-        has_1_30 = has_90 = False
-
-        for cob in cobr_vencidas:
-            dias = cob.get("dias_atraso") or 0
-            valor = float(cob.get("valor") or 0)
-            total_r += valor
-            if 1 <= dias <= 30:
-                d30_r += valor
-                has_1_30 = True
-            if dias >= 90:
-                d90_r += valor
-                has_90 = True
-
-        if has_1_30:
-            d30_n += 1
-        if has_90:
-            d90_n += 1
-
-    return {
-        "total_n": total_n,
-        "d30_n":   d30_n,
-        "d90_n":   d90_n,
-        "total_r": total_r,
-        "d30_r":   d30_r,
-        "d90_r":   d90_r,
-    }
-
-
 @st.cache_data(ttl=86400)
-def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", _dia: str | None = None) -> dict:
+def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str | None = None) -> dict:
     """Métricas NPL "por receita" — % por R$ com janela rolante.
 
     Espelha 100% a metodologia da Página 4 do outro dashboard:
@@ -2253,7 +1914,7 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", _dia: str 
 
 
 @st.cache_data(ttl=86400)
-def fetch_regularizados_mes_atual(_dia: str | None = None) -> set:
+def fetch_regularizados_mes_atual(dia: str | None = None) -> set:
     """IDs distintos de clientes que pagaram pelo menos uma cobrança EM ATRASO
     no mês atual. Filtra dt_liquidacao_recb > dt_vencimento_recb pra capturar
     só os que estavam de fato em inadimplência quando quitaram.
@@ -2620,7 +2281,7 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str, versao: str
 
 
 @st.cache_data(ttl=86400)
-def fetch_cobrancas_liquidacao(_dia: str | None = None):
+def fetch_cobrancas_liquidacao(dia: str | None = None):
     """Pagamentos com atraso (dt_liquidacao > dt_vencimento).
 
     Filtro intencional pra alinhar com o conceito da tela 'Pagamentos':
@@ -4132,9 +3793,9 @@ def processar_dados_bigquery():
     fetch_historico_meses_bulk.clear()
     store          = get_store()
     _dia = carimbo_dia_cache()
-    df_competencia = fetch_cobrancas_competencia(_dia=_dia)
-    df_liquidacao  = fetch_cobrancas_liquidacao(_dia=_dia)
-    df_hist_meses  = fetch_historico_meses_bulk(_dia=_dia)
+    df_competencia = fetch_cobrancas_competencia(dia=_dia)
+    df_liquidacao  = fetch_cobrancas_liquidacao(dia=_dia)
+    df_hist_meses  = fetch_historico_meses_bulk(dia=_dia)
     hist_meses = {}
     if not df_hist_meses.empty:
         for _, row in df_hist_meses.iterrows():
