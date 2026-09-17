@@ -929,10 +929,8 @@ def _render_especialista(store, clientes, role):
                 '</div>',
                 unsafe_allow_html=True,
             )
-            chart_vol = (
-                alt.Chart(pd.DataFrame(_vol))
-                .mark_bar(cornerRadiusEnd=2)
-                .encode(
+            _df_vol = pd.DataFrame(_vol)
+            _base_vol = alt.Chart(_df_vol).encode(
                     x=alt.X("mes:O", title="MÊS", sort=_ordem_lbl, axis=alt.Axis(labelAngle=0)),
                     y=alt.Y("clientes:Q", title="CLIENTES"),
                     color=alt.Color(
@@ -946,9 +944,13 @@ def _render_especialista(store, clientes, role):
                         alt.Tooltip("serie:N", title="Origem"),
                         alt.Tooltip("clientes:Q", title="Clientes"),
                     ],
-                )
-                .properties(height=320)
             )
+            _rot_vol = _base_vol.mark_text(dy=12, fontSize=11, fontWeight=700).encode(
+                text=alt.Text("clientes:Q"), color=alt.value("#0f1117")
+            )
+            chart_vol = (
+                _base_vol.mark_bar(cornerRadiusEnd=2) + _rot_vol
+            ).properties(height=320)
             st.altair_chart(chart_vol, use_container_width=True)
 
         with g_tx:
@@ -964,23 +966,43 @@ def _render_especialista(store, clientes, role):
                 unsafe_allow_html=True,
             )
             _ordem_tx = ["Cobertura", "Conversão com contato", "Conversão sem contato"]
-            base_tx = alt.Chart(pd.DataFrame(_taxas)).encode(
-                x=alt.X("mes:O", title="MÊS", sort=_ordem_lbl, axis=alt.Axis(labelAngle=0)),
-                y=alt.Y("pct:Q", title="% DOS CLIENTES"),
-                color=alt.Color(
-                    "serie:N", title=None, sort=_ordem_tx,
-                    scale=alt.Scale(domain=_ordem_tx, range=["#5fa3ff", "#22c55e", "#f59e0b"]),
-                    legend=alt.Legend(orient="top"),
-                ),
+            _df_tx = pd.DataFrame(_taxas)
+            _df_tx["pct_lbl"] = _df_tx["pct"].round(0).astype(int).astype(str) + "%"
+            # Rótulo da série no último mês (dispensa legenda) + valor em cada
+            # ponto: antes eram 3 linhas coloridas sem nome nem número.
+            _ultimo_mes = _ordem_lbl[-1]
+            _df_tx["serie_lbl"] = _df_tx.apply(
+                lambda r: r["serie"] if r["mes"] == _ultimo_mes else "", axis=1
+            )
+            _cor_tx = alt.Color(
+                "serie:N", title=None, sort=_ordem_tx,
+                scale=alt.Scale(domain=_ordem_tx, range=["#5fa3ff", "#22c55e", "#f59e0b"]),
+                legend=None,
+            )
+            base_tx = alt.Chart(_df_tx).encode(
+                x=alt.X("mes:O", title="MÊS", sort=_ordem_lbl,
+                        axis=alt.Axis(labelAngle=0),
+                        scale=alt.Scale(padding=0.22)),
+                y=alt.Y("pct:Q", title="% DOS CLIENTES",
+                        scale=alt.Scale(domainMin=0, nice=True)),
+                color=_cor_tx,
                 tooltip=[
                     alt.Tooltip("mes:N", title="Mês"),
                     alt.Tooltip("serie:N", title="Taxa"),
                     alt.Tooltip("pct:Q", title="%", format=".2f"),
                 ],
             )
+            _valores_tx = base_tx.mark_text(dy=-14, fontSize=11, fontWeight=600).encode(
+                text=alt.Text("pct_lbl:N")
+            )
+            _nomes_tx = base_tx.mark_text(
+                align="right", dx=-8, dy=-28, fontSize=11, fontWeight=700
+            ).encode(text=alt.Text("serie_lbl:N"))
             chart_tx = (
                 base_tx.mark_line(strokeWidth=2.5, interpolate="monotone")
                 + base_tx.mark_circle(size=80, stroke="#0f1117", strokeWidth=2)
+                + _valores_tx
+                + _nomes_tx
             ).properties(height=320)
             st.altair_chart(chart_tx, use_container_width=True)
     else:
