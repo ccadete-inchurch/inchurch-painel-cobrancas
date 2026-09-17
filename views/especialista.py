@@ -755,20 +755,17 @@ def _render_especialista(store, clientes, role):
         'text-transform:uppercase;letter-spacing:1.5px;'
         'margin-bottom:4px">Evolução Mensal de Pagamentos</div>'
         '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-        'Últimos 6 meses — independente do filtro de período. Mostra '
-        'tendência do time ao longo do tempo.'
+        'Desde mai/26, início do registro de contatos — independente do '
+        'filtro de período. Mostra tendência do time ao longo do tempo.'
         '</div>',
         unsafe_allow_html=True,
     )
-    # Calcula primeiro dia há 6 meses (1º dia do mês há 5 meses pra trás)
-    # Usa BRT pra consistência com o resto da tela.
+    # Começa em mai/2026 e cresce um ponto por mês. Antes eram 6 meses fixos,
+    # que traziam abril: mês sem nenhum contato registrado, em que TODO
+    # pagamento era creditado pelo grupo atual do cliente — trabalho que não
+    # aconteceu. mai/26 é o mesmo início do filtro mensal da tela.
     _hoje_trend = date.fromisoformat(hoje_brt())
-    _ano = _hoje_trend.year
-    _mes = _hoje_trend.month - 5
-    while _mes <= 0:
-        _mes += 12
-        _ano -= 1
-    _trend_inicio = date(_ano, _mes, 1)
+    _trend_inicio = date(2026, 5, 1)
     # Trend sempre inclui o mês corrente, então usa o carimbo do dia.
     df_trend = fetch_pagamentos_creditados(
         _trend_inicio.isoformat(), _hoje_trend.isoformat(), f"dia-{carimbo_dia_cache()}"

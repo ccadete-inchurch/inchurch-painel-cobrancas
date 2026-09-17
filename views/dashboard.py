@@ -124,6 +124,10 @@ def _render_dashboard(store, clientes, role):
         _ul = df["id"].apply(get_ultimo_login)
         df["_ultimoLogin"]      = _ul.apply(lambda r: r["curto"])
         df["_ultimoLoginOrdem"] = _ul.apply(lambda r: r["ordem"])
+        # Dias e data crus vao pro CSV: numero ordena/filtra em planilha, o
+        # rotulo curto ("+853d", "—") nao.
+        df["_ultimoLoginDias"]  = _ul.apply(lambda r: r["dias"])
+        df["_ultimoLoginData"]  = _ul.apply(lambda r: r["data"])
         df["_atendente"]   = df["id"].apply(get_effective_atendente)
         df["_notes"]       = df["id"].apply(lambda i: get_hist(i).get("notes", ""))
         # get_hist_unificado une historicos das atendentes pro admin —
@@ -602,15 +606,30 @@ def _render_dashboard(store, clientes, role):
         if not df.empty:
             # Usa STATUS_LABELS direto pra reutilizar a fonte canonica
             # (inclui automaticamente 'Telefone errado' e 'Igreja fechada')
+            # Colunas novas entram DEPOIS das antigas: planilha que ja usa o
+            # arquivo continua lendo as mesmas posicoes.
             rows = []
             for _, c in df.iterrows():
+                _dt_login = c.get("_ultimoLoginData")
                 rows.append([
                     c.get("_grupo", "") or "", c["nome"], c.get("cnpj", ""), c["valor"],
                     c.get("parcelas", ""), c.get("vencimento", ""), c.get("dias_atraso", ""),
                     STATUS_LABELS.get(c.get("_status", "pending"), ""), c.get("_lastContact", ""), c.get("_notes", ""),
                     "Sim" if c.get("_tem_acordo") else "Não",
+                    c.get("id", ""), c.get("_atendente", "") or "",
+                    c.get("telefone", "") or "", "Sim" if c.get("_tel_fixo") else "Não",
+                    "Inativo" if c.get("_inativo") else "Ativo",
+                    c.get("_score", ""),
+                    c.get("_ultimoLoginDias") if c.get("_ultimoLoginDias") is not None else "",
+                    _dt_login.strftime("%d/%m/%Y") if hasattr(_dt_login, "strftime") else (_dt_login or ""),
+                    int(c.get("_meses_atraso") or 0),
                 ])
-            df_exp = pd.DataFrame(rows, columns=["Grupo","Nome","CNPJ","Saldo","Competências","Vencimento","Dias Atraso","Status","Último Contato","Observações","Acordo"])
+            df_exp = pd.DataFrame(rows, columns=[
+                "Grupo","Nome","CNPJ","Saldo","Competências","Vencimento","Dias Atraso","Status",
+                "Último Contato","Observações","Acordo",
+                "ID","Especialista","Telefone","Telefone fixo","Situação","Score",
+                "Dias sem login","Data último login","Meses com atraso",
+            ])
             st.download_button(
                 "⬇ CSV",
                 df_exp.to_csv(index=False, sep=";").encode("utf-8-sig"),
