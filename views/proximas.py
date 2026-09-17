@@ -158,20 +158,17 @@ def _render_proximas(_store, clientes):
     # ── Métricas ──────────────────────────────────────────────────────────────
     total_valor = sum(r["valor"] for r in rows)
     # Clientes por ID (não CNPJ: há clientes sem CNPJ e CNPJ com mais de um
-    # cliente). Em "Todos", o número é de ativos e os inativos vão no subtítulo
-    # — inativo com cobrança futura tende a virar inadimplência.
+    # cliente). Número = todos com cobrança no período (mesma base do % de
+    # Já Inadimplentes); subtítulo abre ativos/inativos — inativo com cobrança
+    # futura tende a virar inadimplência. Filtro Situação já restringe rows.
     ids_ativos   = {r["id"] for r in rows if not r.get("inativo")}
     ids_inativos = {r["id"] for r in rows if r.get("inativo")}
-    if filtro_situacao == "Apenas inativos":
-        n_clientes, sub_clientes = len(ids_inativos), "inativos com vencimentos"
-    elif filtro_situacao == "Apenas ativos":
-        n_clientes, sub_clientes = len(ids_ativos), "ativos com vencimentos"
-    else:
-        n_clientes = len(ids_ativos)
-        sub_clientes = (
-            f"ativos · + {len(ids_inativos)} inativo{'s' if len(ids_inativos) != 1 else ''}"
-            if ids_inativos else "ativos com vencimentos"
-        )
+    n_clientes = len(ids_ativos) + len(ids_inativos)
+    _fmt_n = lambda n: f"{n:,}".replace(",", ".")
+    sub_clientes = (
+        f"{_fmt_n(len(ids_ativos))} ativo{'s' if len(ids_ativos) != 1 else ''} · "
+        f"{_fmt_n(len(ids_inativos))} inativo{'s' if len(ids_inativos) != 1 else ''}"
+    )
 
     # Já inadimplentes: clientes com cobrança a vencer no período que HOJE já
     # têm atraso (mesma base da lista de inadimplentes, com overlay do dia).
@@ -183,14 +180,19 @@ def _render_proximas(_store, clientes):
     rows_inad = [r for r in rows if r["id"] in ids_inad]
     n_ja_inad = len({r["id"] for r in rows_inad})
     valor_ja_inad = sum(r["valor"] for r in rows_inad)
+    # % sobre o card Clientes (todos com cobrança no período).
+    pct_ja_inad = (n_ja_inad / n_clientes * 100) if n_clientes else 0.0
+    pct_ja_inad_str = f"{pct_ja_inad:.2f}".replace(".", ",")
 
     m1, m2, m3, m4 = st.columns(4)
     # Mesmo padrão visual da tela Pagamentos: padding, font-sizes, peso.
     for col, label, val, sub, cor in [
         (m1, "Total a Receber",   fmt_moeda_plain(total_valor), periodo_lbl,     "#2dd36f"),
-        (m2, "Cobranças",         str(len(rows)),               "faturas a vencer", "#e8eaf0"),
-        (m3, "Clientes",          str(n_clientes),              sub_clientes,    "#e8eaf0"),
-        (m4, "Já Inadimplentes",  str(n_ja_inad),               f"{fmt_moeda_plain(valor_ja_inad)} a vencer", "#f87171"),
+        (m2, "Cobranças",         _fmt_n(len(rows)),               "faturas a vencer", "#e8eaf0"),
+        (m3, "Clientes",          _fmt_n(n_clientes),              sub_clientes,    "#e8eaf0"),
+        (m4, "Já Inadimplentes",
+             f'{_fmt_n(n_ja_inad)}<span style="font-size:18px;color:#8b94a5;font-weight:600;margin-left:6px">({pct_ja_inad_str}%)</span>',
+             f"{fmt_moeda_plain(valor_ja_inad)} a vencer", "#f87171"),
     ]:
         with col:
             st.markdown(
