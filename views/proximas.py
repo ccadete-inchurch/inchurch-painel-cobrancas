@@ -173,13 +173,18 @@ def _render_proximas(_store, clientes):
     # Já inadimplentes: clientes com cobrança a vencer no período que HOJE já
     # têm atraso (mesma base da lista de inadimplentes, com overlay do dia).
     # São os que mais podem acumular dívida — prioridade da cobrança preventiva.
-    ids_inad = {
-        str(c.get("id")) for c in (clientes or [])
+    # "vencido" = saldo em atraso deles hoje (c["valor"], já com overlay);
+    # "a vencer" = boletos deles dentro do período. Ambos somam o boleto
+    # inteiro (todas as contas), igual à tela de Inadimplência.
+    vencido_por_id = {
+        str(c.get("id")): float(c.get("valor") or 0) for c in (clientes or [])
         if float(c.get("valor") or 0) > 0 and not c.get("_regularizado_hoje")
     }
-    rows_inad = [r for r in rows if r["id"] in ids_inad]
-    n_ja_inad = len({r["id"] for r in rows_inad})
+    rows_inad = [r for r in rows if r["id"] in vencido_por_id]
+    ids_ja_inad = {r["id"] for r in rows_inad}
+    n_ja_inad = len(ids_ja_inad)
     valor_ja_inad = sum(r["valor"] for r in rows_inad)
+    vencido_ja_inad = sum(vencido_por_id[i] for i in ids_ja_inad)
     # % sobre o card Clientes (todos com cobrança no período).
     pct_ja_inad = (n_ja_inad / n_clientes * 100) if n_clientes else 0.0
     pct_ja_inad_str = f"{pct_ja_inad:.2f}".replace(".", ",")
@@ -191,8 +196,8 @@ def _render_proximas(_store, clientes):
         (m2, "Cobranças",         _fmt_n(len(rows)),               "faturas a vencer", "#e8eaf0"),
         (m3, "Clientes",          _fmt_n(n_clientes),              sub_clientes,    "#e8eaf0"),
         (m4, "Já Inadimplentes",
-             f'{_fmt_n(n_ja_inad)}<span style="font-size:18px;color:#8b94a5;font-weight:600;margin-left:6px">({pct_ja_inad_str}%)</span>',
-             f"{fmt_moeda_plain(valor_ja_inad)} a vencer", "#f87171"),
+             f'{_fmt_n(n_ja_inad)} ({pct_ja_inad_str}%)',
+             f"{fmt_moeda_plain(vencido_ja_inad)} vencido · {fmt_moeda_plain(valor_ja_inad)} a vencer", "#f87171"),
     ]:
         with col:
             st.markdown(
@@ -242,6 +247,9 @@ def _render_proximas(_store, clientes):
     for i, row in enumerate(rows_page):
         d = row["dias_restantes"]
         cor_d = "#ef4444" if d <= 7 else ("#f59e0b" if d <= 15 else "#2dd36f")
+        # Vencimento é só data (sem hora) — "Hoje" em vez de "0d"; horas seria
+        # precisão falsa, o cliente pode pagar até o fim do dia.
+        d_lbl = "Hoje" if d == 0 else f"{d}d"
 
         rcols = st.columns(col_w)
         with rcols[0]:
@@ -262,7 +270,7 @@ def _render_proximas(_store, clientes):
             st.markdown(
                 f'<div style="padding:12px 14px">'
                 f'<span style="border:1px solid {cor_d};color:{cor_d};'
-                f'padding:3px 9px;border-radius:6px;font-size:12px;font-weight:700">{d}d</span>'
+                f'padding:3px 9px;border-radius:6px;font-size:12px;font-weight:700">{d_lbl}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
