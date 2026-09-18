@@ -1018,7 +1018,10 @@ def _render_atividades(store, clientes, role):
                         options=list(_rotulo_excluir.keys()),
                         format_func=lambda i: _rotulo_excluir.get(i, i),
                         key="atv_excluir_receita",
-                        placeholder="Nenhuma igreja excluída",
+                        # Sem título visível (fica alinhado ao topo da Visão
+                        # Geral); o texto do campo vazio explica pra que serve.
+                        label_visibility="collapsed",
+                        placeholder="Excluir igrejas da análise por receita",
                         help="Tira a igreja do cálculo de inadimplência mensal e trimestral "
                              "por receita. Útil quando um cliente com valor muito alto "
                              "distorce o percentual da carteira. Não muda nada no lote.",
