@@ -1005,11 +1005,14 @@ def _render_atividades(store, clientes, role):
                 _col_widths = [1, 1]
             else:
                 _col_widths = [1, 2]
-            # Filtro numa linha própria acima dos cards: a coluna da esquerda
-            # fica vazia pra Visão Geral e Análise continuarem alinhadas no topo.
-            if _cards_analise:
-                _fcols = st.columns(_col_widths)
-                with _fcols[1]:
+            # Filtro no topo da coluna da Análise, na mesma altura do card
+            # Visão Geral (antes ficava numa linha própria acima dos dois
+            # cards e saía mais alto que a Visão Geral).
+            ind_cols = st.columns(_col_widths)
+            with ind_cols[0]:
+                st.markdown(cards_html[0], unsafe_allow_html=True)
+            for i, _h in enumerate(_cards_analise, start=1):
+                with ind_cols[i]:
                     st.multiselect(
                         "Excluir da análise por receita",
                         options=list(_rotulo_excluir.keys()),
@@ -1020,11 +1023,6 @@ def _render_atividades(store, clientes, role):
                              "por receita. Útil quando um cliente com valor muito alto "
                              "distorce o percentual da carteira. Não muda nada no lote.",
                     )
-            ind_cols = st.columns(_col_widths)
-            with ind_cols[0]:
-                st.markdown(cards_html[0], unsafe_allow_html=True)
-            for i, _h in enumerate(_cards_analise, start=1):
-                with ind_cols[i]:
                     st.markdown(_h, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
