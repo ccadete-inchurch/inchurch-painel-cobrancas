@@ -550,9 +550,6 @@ def _render_atividades(store, clientes, role):
     _sit_map = {"Ativos": "ativos", "Inativos": "inativos"}
     _npl_situacao = _sit_map.get(_filtro_inativo, "todos")
 
-    # Acumula HTML pra renderizar DEPOIS (após Bem-vindo + Indicadores).
-    _npl_html_parts = []
-
     def _delta_html(v: float) -> str:
         if abs(v) < 0.005:
             return '<span style="color:#9ca3af;font-size:11px">— 0,00 p.p.</span>'
@@ -598,10 +595,19 @@ def _render_atividades(store, clientes, role):
             f'</div>'
         )
 
-    # Por receita (janela rolante em R$, sem overlay)
-    _rolling = fetch_npl_rolling(_npl_atendente, _npl_situacao, dia=carimbo_dia_cache()) or {}
-    _linhas_receita = []
-    if _rolling:
+    # Por receita (janela rolante em R$, sem overlay). Vira função porque o
+    # multi-select de exclusão fica DENTRO do fragment dos indicadores: mexer
+    # nele só re-roda o fragment, então o card precisa ser montado lá.
+    def _montar_analise_receita(excluir: tuple = ()):
+        _rolling = fetch_npl_rolling(
+            _npl_atendente, _npl_situacao, dia=carimbo_dia_cache(), excluir=excluir
+        ) or {}
+        return _html_analise_receita(_rolling, len(excluir))
+
+    def _html_analise_receita(_rolling, n_excluidos):
+        _linhas_receita = []
+        if not _rolling:
+            return None
         _linhas_receita.append(_linha_analise(
             _rolling["d30_pct"], "Inadimplência mensal",
             _rolling.get("delta_d30_pp"),
@@ -612,6 +618,18 @@ def _render_atividades(store, clientes, role):
             _rolling.get("delta_d90_pp"),
             _rolling.get("d90_aberto"),
         ))
+        _nota_excl = (
+            f' <span style="text-transform:none;letter-spacing:0;color:#f59e0b;'
+            f'font-weight:600">· {n_excluidos} '
+            f'{"igreja excluída" if n_excluidos == 1 else "igrejas excluídas"}</span>'
+            if n_excluidos else ""
+        )
+        return (
+            f'<div style="{_card_wrapper}">'
+            f'<div style="{_sublabel_css}">Análise da carteira por receita{_nota_excl}</div>'
+            + _divisor_a.join(_linhas_receita)
+            + '</div>'
+        )
 
     # Wrapper SEM min-height — deixa altura natural. Card com 2 linhas
     # + 1 divisor + sub-header alinha visualmente perto do 2o separador
@@ -623,14 +641,29 @@ def _render_atividades(store, clientes, role):
         'display:flex;flex-direction:column;align-self:flex-start'
     )
 
-    if _linhas_receita:
-        _analise_receita_html = (
-            f'<div style="{_card_wrapper}">'
-            f'<div style="{_sublabel_css}">Análise da carteira por receita</div>'
-            + _divisor_a.join(_linhas_receita)
-            + '</div>'
-        )
-        _npl_html_parts.append(_analise_receita_html)
+    # Opções do multi-select: inadimplentes do mesmo recorte do card (grupo e
+    # situação), maior saldo primeiro — os que mais pesam no % aparecem no topo.
+    def _no_recorte(c):
+        g = c.get("_grupo")
+        if _npl_atendente == "__SEM_ESPECIALISTA__":
+            if g and str(g) not in ("—", "", "nan", "NaN"):
+                return False
+        elif _npl_atendente and g != _npl_atendente:
+            return False
+        if _npl_situacao == "ativos" and c.get("_inativo"):
+            return False
+        if _npl_situacao == "inativos" and not c.get("_inativo"):
+            return False
+        return float(c.get("valor") or 0) > 0
+
+    _opcoes_excluir = sorted(
+        (c for c in (store.get("clientes", []) or []) if _no_recorte(c)),
+        key=lambda c: -float(c.get("valor") or 0),
+    )
+    _rotulo_excluir = {
+        str(c["id"]): f'{c.get("nome", "")} · {fmt_moeda_plain(float(c.get("valor") or 0))}'
+        for c in _opcoes_excluir
+    }
 
 
     # ═══════════════ ORDEM DE RENDER ═══════════════
@@ -958,12 +991,35 @@ def _render_atividades(store, clientes, role):
             # Layout: [Visao geral | Analise Por receita]
             # 2 cards de 50% cada. Se nao houver analise (fetch NPL falhou),
             # so mostra Visao geral em largura maior.
-            _cards_analise = _npl_html_parts[:1] if _npl_html_parts else []
+            # Seleção atual (pode incluir id que saiu do recorte ao trocar o
+            # filtro Grupo — descarta pra não quebrar o multi-select).
+            _sel_excl = [
+                i for i in (st.session_state.get("atv_excluir_receita") or [])
+                if i in _rotulo_excluir
+            ]
+            st.session_state["atv_excluir_receita"] = _sel_excl
+            _html_receita = _montar_analise_receita(tuple(sorted(_sel_excl)))
+            _cards_analise = [_html_receita] if _html_receita else []
             _n_cards = 1 + len(_cards_analise)
             if _n_cards == 2:
                 _col_widths = [1, 1]
             else:
                 _col_widths = [1, 2]
+            # Filtro numa linha própria acima dos cards: a coluna da esquerda
+            # fica vazia pra Visão Geral e Análise continuarem alinhadas no topo.
+            if _cards_analise:
+                _fcols = st.columns(_col_widths)
+                with _fcols[1]:
+                    st.multiselect(
+                        "Excluir da análise por receita",
+                        options=list(_rotulo_excluir.keys()),
+                        format_func=lambda i: _rotulo_excluir.get(i, i),
+                        key="atv_excluir_receita",
+                        placeholder="Nenhuma igreja excluída",
+                        help="Tira a igreja do cálculo de inadimplência mensal e trimestral "
+                             "por receita. Útil quando um cliente com valor muito alto "
+                             "distorce o percentual da carteira. Não muda nada no lote.",
+                    )
             ind_cols = st.columns(_col_widths)
             with ind_cols[0]:
                 st.markdown(cards_html[0], unsafe_allow_html=True)

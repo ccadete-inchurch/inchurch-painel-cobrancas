@@ -1709,7 +1709,8 @@ def fetch_carteira_count(atendente: str = None, situacao: str = "todos", dia: st
 
 
 @st.cache_data(ttl=86400)
-def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str | None = None) -> dict:
+def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str | None = None,
+                      excluir: tuple = ()) -> dict:
     """Métricas NPL "por receita" — % por R$ com janela rolante.
 
     Espelha 100% a metodologia da Página 4 do outro dashboard:
@@ -1796,8 +1797,16 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
     # nao mais aqui (era 'jp.cid IS NOT NULL', mas jp nao existe em boletos_agg).
     cond_tipo = "c.comp_st_conta_cont IN ('1.2.1', '1.2.2')"
 
+    # Igrejas excluídas manualmente na tela (multi-select acima do card):
+    # um cliente com boleto muito alto distorce o % da carteira inteira.
+    # Tupla (hashable) entra na chave do cache — cada combinação cacheia.
+    cond_excl = ""
+    if excluir:
+        _ids = ", ".join("'" + str(i).replace("'", "") + "'" for i in excluir)
+        cond_excl = f"CAST(c.id_sacado_sac AS STRING) NOT IN ({_ids})"
+
     # Combina as condições aplicáveis em boletos_agg (sem referência a jp.cid)
-    conds = [c for c in [cond_atend, cond_sit, cond_tipo] if c]
+    conds = [c for c in [cond_atend, cond_sit, cond_tipo, cond_excl] if c]
     where_clause = "WHERE " + " AND ".join(conds) if conds else ""
 
     # Espelhar 100% a metodologia da Pagina 4:
