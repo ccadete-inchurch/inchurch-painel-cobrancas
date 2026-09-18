@@ -1787,10 +1787,13 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
 
     # ── Filtro de situação ─────────────────────────────────────────────────
     cond_sit = ""
+    # Desativação vem da tabela MESTRE de clientes (1 linha por cliente). A
+    # competência repete a data em cada item do boleto e já teve linhas
+    # conflitantes; ela fica só de reserva pra cliente fora da mestre.
     if situacao == "ativos":
-        cond_sit = "c.dt_desativacao_sac IS NULL"
+        cond_sit = "COALESCE(m.desat, DATE(c.dt_desativacao_sac)) IS NULL"
     elif situacao == "inativos":
-        cond_sit = "c.dt_desativacao_sac IS NOT NULL"
+        cond_sit = "COALESCE(m.desat, DATE(c.dt_desativacao_sac)) IS NOT NULL"
 
     # ── Filtro de tipo (Setup/Mensalidade) ─────────────────────────────────
     # Filtro #4 (ja pagou) agora e' aplicado no CTE 'boletos' apos a agregacao,
@@ -1828,6 +1831,11 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
       WHERE dt_liquidacao_recb IS NOT NULL
     ),
+    mestre AS (
+      SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(dt_desativacao_sac) AS desat
+      FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
+      GROUP BY 1
+    ),
     liquidacao_agg AS (
       SELECT
         id_recebimento_recb,
@@ -1841,9 +1849,10 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
         CAST(c.id_sacado_sac AS STRING) AS cid,
         c.id_recebimento_recb AS rid,
         DATE(MAX(c.dt_vencimento_recb)) AS venc,
-        DATE(MAX(c.dt_desativacao_sac)) AS desat,
+        COALESCE(MAX(m.desat), DATE(MAX(c.dt_desativacao_sac))) AS desat,
         SUM(c.comp_valor) AS valor
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
+      LEFT JOIN mestre m ON m.cid = CAST(c.id_sacado_sac AS STRING)
       {where_clause}
       GROUP BY c.id_sacado_sac, c.id_recebimento_recb
     ),
