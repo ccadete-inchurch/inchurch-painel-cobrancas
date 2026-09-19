@@ -1817,13 +1817,9 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
     #    (NAO usa fl_status_recb, que reflete estado atual e nao historico)
     # 2) Filtro de desativacao por DATA DO VENCIMENTO de cada boleto:
     #    dt_desativacao_sac IS NULL OR dt_desativacao_sac > venc
-    # 3) AGREGAR liquidacao ANTES do JOIN pra evitar fan-out:
-    #    A tabela liquidacao-all tem ~4.3 linhas por boleto (pagamentos
-    #    parciais, refundos, etc). Fazer LEFT JOIN direto inflava o SUM
-    #    de comp_valor em 4-5x, gerando denominador errado e % falsa.
-    #    Mesma logica pra cobrancas_competencia-all (~3 linhas/boleto):
-    #    cada linha e' uma rubrica (Setup, Mensalidade, modulos).
-    #    Agregamos cada uma 1x antes de juntar.
+    # 3) AGREGAR por boleto ANTES de somar: cobrancas_competencia-all tem
+    #    ~3 linhas por boleto (cada linha e' uma rubrica: Setup, Mensalidade,
+    #    modulos). Sem o GROUP BY o SUM inflaria.
     query = f"""
     WITH {contacts_cte}
     clientes_com_pagamento AS (
@@ -1836,20 +1832,16 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
       FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
       GROUP BY 1
     ),
-    liquidacao_agg AS (
-      SELECT
-        id_recebimento_recb,
-        MAX(DATE(dt_liquidacao_recb)) AS liq
-      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
-      WHERE dt_liquidacao_recb IS NOT NULL
-      GROUP BY id_recebimento_recb
-    ),
     boletos_agg AS (
       SELECT
         CAST(c.id_sacado_sac AS STRING) AS cid,
         c.id_recebimento_recb AS rid,
         DATE(MAX(c.dt_vencimento_recb)) AS venc,
         COALESCE(MAX(m.desat), DATE(MAX(c.dt_desativacao_sac))) AS desat,
+        -- Data de pagamento da propria competencia (mesma fonte do outro
+        -- dashboard). Conferido em 18/09/2026: nos 3.739 boletos pagos dos
+        -- ultimos 90 dias a data e identica a da tabela de liquidacoes.
+        MAX(DATE(c.dt_liquidacao_recb)) AS liq,
         SUM(c.comp_valor) AS valor
       FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
       LEFT JOIN mestre m ON m.cid = CAST(c.id_sacado_sac AS STRING)
@@ -1858,10 +1850,11 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
     ),
     boletos AS (
       SELECT
-        b.cid, b.rid, b.venc, b.desat, b.valor,
-        la.liq
+        b.cid, b.rid, b.venc, b.desat, b.valor, b.liq
       FROM boletos_agg b
-      LEFT JOIN liquidacao_agg la ON b.rid = la.id_recebimento_recb
+      -- 'Ja pagou algum boleto na vida' continua vindo da tabela de
+      -- liquidacoes: ela conhece 4.993 clientes contra 2.535 da competencia,
+      -- entao trocar aqui tiraria metade da carteira da conta.
       LEFT JOIN clientes_com_pagamento jp ON b.cid = jp.cid
       WHERE jp.cid IS NOT NULL
     )
