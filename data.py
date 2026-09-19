@@ -1827,11 +1827,11 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
     # Espelhar 100% a metodologia da Pagina 4:
     # 1) 'Aberto' usa puro dt_liquidacao_recb IS NULL OR > D
     #    (NAO usa fl_status_recb, que reflete estado atual e nao historico)
-    # 1b) Janela termina em D-1: boleto que vence HOJE ainda esta no prazo
-    #    (pode ser pago ate o fim do dia) — contar como aberto inflava o card
-    #    nos dias de vencimento em massa (15/09: R$ 711 mil de uma vez) e
-    #    divergia do resto do painel, onde inadimplente e' quem tem boleto
-    #    vencido ANTES de hoje. Mesma regra do outro dashboard.
+    # 1b) Janela termina no PROPRIO D (inclusive). D e' um dia ja fechado
+    #    (D-2 uteis), entao boleto que venceu nele e nao foi pago ate o fim do
+    #    dia estava atrasado. Nas telas operacionais a regra e' outra de
+    #    proposito: la a medicao e' "agora", no meio do dia, e quem vence hoje
+    #    ainda esta no prazo. Mesma regra do outro dashboard.
     # 2) Filtro de desativacao por DATA DO VENCIMENTO de cada boleto:
     #    dt_desativacao_sac IS NULL OR dt_desativacao_sac > venc
     # 3) AGREGAR por boleto ANTES de somar: cobrancas_competencia-all tem
@@ -1878,44 +1878,44 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
     )
     SELECT
       -- HOJE: Total TTM (12 meses) — boletos vencidos em [D-365, D]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 365 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 1 DAY)
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 365 DAY) AND DATE('{today_str}')
              AND (desat IS NULL OR desat > venc), valor, 0)) AS total_emitido_hoje,
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 365 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 1 DAY)
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 365 DAY) AND DATE('{today_str}')
              AND (desat IS NULL OR desat > venc)
              AND (liq IS NULL OR liq > DATE('{today_str}')), valor, 0)) AS total_aberto_hoje,
 
       -- HOJE: 30d — boletos vencidos em [D-30, D]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 1 DAY)
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY) AND DATE('{today_str}')
              AND (desat IS NULL OR desat > venc), valor, 0)) AS d30_emitido_hoje,
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 1 DAY)
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY) AND DATE('{today_str}')
              AND (desat IS NULL OR desat > venc)
              AND (liq IS NULL OR liq > DATE('{today_str}')), valor, 0)) AS d30_aberto_hoje,
 
       -- HOJE: 90d — boletos vencidos em [D-90, D]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 90 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 1 DAY)
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 90 DAY) AND DATE('{today_str}')
              AND (desat IS NULL OR desat > venc), valor, 0)) AS d90_emitido_hoje,
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 90 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 1 DAY)
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 90 DAY) AND DATE('{today_str}')
              AND (desat IS NULL OR desat > venc)
              AND (liq IS NULL OR liq > DATE('{today_str}')), valor, 0)) AS d90_aberto_hoje,
 
       -- D-30 REF: Total TTM [D-395, D-30]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 395 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 31 DAY)
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 395 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
              AND (desat IS NULL OR desat > venc), valor, 0)) AS total_emitido_ref,
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 395 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 31 DAY)
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 395 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
              AND (desat IS NULL OR desat > venc)
              AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS total_aberto_ref,
 
       -- D-30 REF: 30d [D-60, D-30]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 60 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 31 DAY)
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 60 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
              AND (desat IS NULL OR desat > venc), valor, 0)) AS d30_emitido_ref,
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 60 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 31 DAY)
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 60 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
              AND (desat IS NULL OR desat > venc)
              AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS d30_aberto_ref,
 
       -- D-30 REF: 90d [D-120, D-30]
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 120 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 31 DAY)
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 120 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
              AND (desat IS NULL OR desat > venc), valor, 0)) AS d90_emitido_ref,
-      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 120 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 31 DAY)
+      SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 120 DAY) AND DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)
              AND (desat IS NULL OR desat > venc)
              AND (liq IS NULL OR liq > DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY)), valor, 0)) AS d90_aberto_ref
     FROM boletos
@@ -1958,7 +1958,7 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
         "d90_emitido":      float(r["d90_emitido_hoje"] or 0),
         "delta_d90_pp":     d90_pct_hoje - d90_pct_ref,
         # Ultimo dia contado (janela termina em D-1) — card mostra "ate dd/mm"
-        "data_ref":         (today_dt - timedelta(days=1)).strftime("%d/%m"),
+        "data_ref":         today_dt.strftime("%d/%m"),
     }
 
 
