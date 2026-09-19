@@ -1839,9 +1839,13 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
     #    modulos). Sem o GROUP BY o SUM inflaria.
     query = f"""
     WITH {contacts_cte}
+    -- 'Ja pagou algum boleto' pela COMPETENCIA, mesma fonte do outro
+    -- dashboard (ele conhece 2.535 clientes; a liquidacao, 4.993 — os a mais
+    -- sao antigos, sem boleto nas janelas de 30/90 dias, entao o resultado e
+    -- o mesmo: 34,13% pelos dois caminhos em 18/09/2026).
     clientes_com_pagamento AS (
       SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid
-      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+      FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
       WHERE dt_liquidacao_recb IS NOT NULL
     ),
     mestre AS (
@@ -1869,9 +1873,6 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
       SELECT
         b.cid, b.rid, b.venc, b.desat, b.valor, b.liq
       FROM boletos_agg b
-      -- 'Ja pagou algum boleto na vida' continua vindo da tabela de
-      -- liquidacoes: ela conhece 4.993 clientes contra 2.535 da competencia,
-      -- entao trocar aqui tiraria metade da carteira da conta.
       LEFT JOIN clientes_com_pagamento jp ON b.cid = jp.cid
       WHERE jp.cid IS NOT NULL
     )
