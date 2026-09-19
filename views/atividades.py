@@ -604,6 +604,7 @@ def _render_atividades(store, clientes, role):
         ) or {}
         return _html_analise_receita(_rolling, len(excluir))
 
+
     def _html_analise_receita(_rolling, n_excluidos):
         _linhas_receita = []
         if not _rolling:
@@ -618,6 +619,13 @@ def _render_atividades(store, clientes, role):
             _rolling.get("delta_d90_pp"),
             _rolling.get("d90_aberto"),
         ))
+        # "até dd/mm": o card corta em D-2 dias úteis, esperando o retorno do
+        # banco. Sem isso parece número de hoje e nunca bate com o dia a dia.
+        _ate = _rolling.get("data_ref")
+        _nota_ate = (
+            f' <span style="text-transform:none;letter-spacing:0;color:#6b7280;'
+            f'font-weight:600">· até {_ate}</span>' if _ate else ""
+        )
         _nota_excl = (
             f' <span style="text-transform:none;letter-spacing:0;color:#f59e0b;'
             f'font-weight:600">· {n_excluidos} '
@@ -626,7 +634,7 @@ def _render_atividades(store, clientes, role):
         )
         return (
             f'<div style="{_card_wrapper}">'
-            f'<div style="{_sublabel_css}">Análise da carteira por receita{_nota_excl}</div>'
+            f'<div style="{_sublabel_css}">Análise da carteira por receita{_nota_ate}{_nota_excl}</div>'
             + _divisor_a.join(_linhas_receita)
             + '</div>'
         )

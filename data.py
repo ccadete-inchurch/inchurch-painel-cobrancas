@@ -1757,8 +1757,20 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
     if not client:
         return {}
 
-    today_str = hoje_brt()
-    today_dt = date.fromisoformat(today_str)
+    # Corte em D-2 dias UTEIS, nao hoje: o pagamento de boleto so entra na
+    # base quando o retorno do banco chega (1-2 dias uteis), entao o numero de
+    # HOJE nasce inflado e cai sozinho depois — medido em 2026: o dia 17/09
+    # valia 45,68% no proprio dia e 33,94% dois dias depois. A consulta ao
+    # vivo da API nao resolve (tirava 0,68 p.p.): o SL tambem so sabe do
+    # pagamento depois do retorno do banco.
+    _d = date.fromisoformat(hoje_brt())
+    _uteis = 0
+    while _uteis < 2:
+        _d -= timedelta(days=1)
+        if _d.weekday() < 5 and not eh_feriado(_d):
+            _uteis += 1
+    today_str = _d.isoformat()
+    today_dt = _d
 
     # ── Filtro de atendente ────────────────────────────────────────────────
     contacts_cte = ""
@@ -1944,6 +1956,8 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
         "d90_aberto":       float(r["d90_aberto_hoje"] or 0),
         "d90_emitido":      float(r["d90_emitido_hoje"] or 0),
         "delta_d90_pp":     d90_pct_hoje - d90_pct_ref,
+        # Ultimo dia contado (janela termina em D-1) — card mostra "ate dd/mm"
+        "data_ref":         (today_dt - timedelta(days=1)).strftime("%d/%m"),
     }
 
 
