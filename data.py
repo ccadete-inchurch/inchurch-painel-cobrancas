@@ -2070,7 +2070,11 @@ def fetch_eficacia_base(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -
                 WHERE fl_status_recb = '1'
                   AND dt_liquidacao_recb > dt_vencimento_recb
                   AND DATE(dt_liquidacao_recb) >= DATE('{dt_inicio_iso}')
-                  AND DATE(dt_liquidacao_recb) <= DATE('{dt_fim_iso}')
+                  -- Ate 30 dias DEPOIS do fim do periodo: quem foi contatado em
+                  -- 28/08 e regularizou em 03/09 e' sucesso do contato de
+                  -- agosto. Cortar no fim do mes fazia esse resultado sumir
+                  -- (nao contava em agosto nem em setembro).
+                  AND DATE(dt_liquidacao_recb) <= DATE_ADD(DATE('{dt_fim_iso}'), INTERVAL 30 DAY)
                 GROUP BY 1, 2
             ),
             -- Mesma regra da atribuicao (fetch_pagamentos_creditados): o
@@ -2195,19 +2199,31 @@ def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str, versao
             -- algum snapshot. Com 1-4 dias o lote nem pode pegar o cliente
             -- (msg a partir de 5, ligacao de 7): conta-los derrubava a
             -- cobertura (set/26: Ana 62% -> 81% sobre a base alcancavel).
+            grupos AS (
+                SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(grupo) AS grupo
+                FROM `business-intelligence-467516.Splgc.splgc-grupo`
+                WHERE grupo IN ('Ana Carolina', 'Priscila Oliveira')
+                GROUP BY id_sacado_sac
+            ),
             inad_cli AS (
                 SELECT g.grupo AS atendente, s.id_sacado_sac AS cid
                 FROM `{_SNAPSHOT_TABLE}` s
-                JOIN (
-                    SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(grupo) AS grupo
-                    FROM `business-intelligence-467516.Splgc.splgc-grupo`
-                    WHERE grupo IN ('Ana Carolina', 'Priscila Oliveira')
-                    GROUP BY id_sacado_sac
-                ) g ON g.cid = s.id_sacado_sac
+                JOIN grupos g ON g.cid = s.id_sacado_sac
                 WHERE s.data_snapshot >= DATE('{dt_inicio_iso}')
                   AND s.data_snapshot <= DATE('{dt_fim_iso}')
                 GROUP BY 1, 2
                 HAVING MAX(s.dias_atraso) >= 5
+                -- Quem foi contatado ja estava com 5+ dias (regra do lote).
+                -- Entra na base mesmo sem aparecer no snapshot: dia sem foto
+                -- (15/09/2026) tirava da base quem foi contatado e pagou antes
+                -- da foto seguinte.
+                UNION DISTINCT
+                SELECT g.grupo, CAST(t.id_sacado_sac AS STRING)
+                FROM `{_TAREFAS_TABLE}` t
+                JOIN grupos g ON g.cid = CAST(t.id_sacado_sac AS STRING)
+                WHERE t.data_tarefa >= DATE('{dt_inicio_iso}')
+                  AND t.data_tarefa <= DATE('{dt_fim_iso}')
+                  AND (t.mensagem_enviada OR t.ligacao_feita OR t.ligacao_atendida)
             ),
             inad AS (
                 SELECT atendente, COUNT(*) AS inadimplentes_periodo
@@ -2302,6 +2318,12 @@ def fetch_serie_carteira_mensal(dt_inicio_iso: str, dt_fim_iso: str, versao: str
                   AND s.data_snapshot <= DATE('{dt_fim_iso}')
                 GROUP BY 1, 2, 3
                 HAVING MAX(s.dias_atraso) >= 5
+                -- Contatado = ja estava com 5+ (regra do lote); entra na base
+                -- mesmo em dia sem snapshot. Mesma regra da Cobertura.
+                UNION DISTINCT
+                SELECT c.mes, g.atendente, c.cid
+                FROM contatos_cli c
+                JOIN grupos g ON g.cid = c.cid
             ),
             contatos AS (
                 SELECT mes, atendente, COUNT(*) AS contatados FROM contatos_cli GROUP BY 1, 2
