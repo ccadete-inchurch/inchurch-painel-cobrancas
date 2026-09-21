@@ -1149,6 +1149,11 @@ def _render_especialista(store, clientes, role):
         )
         .reset_index()
     )
+    # Quem regularizou com até 4 dias (margem de erro, fora da régua): é o
+    # que falta pra com + sem contato fechar o total de Regularizações.
+    rank_agg["reg_ate_4d"] = (
+        rank_agg["regularizacoes"] - rank_agg["reg_via_contato"] - rank_agg["reg_sem_contato"]
+    ).clip(lower=0)
     # Eficácia REAL = dos clientes contactados no mês, % que pagou depois do
     # contato. Usa _eficacia_com_overlay (BQ + API), mesmo dado da matriz.
     df_ef_real = _eficacia_com_overlay(clientes, dt_inicio, dt_fim, _versao_cache)
@@ -1211,7 +1216,7 @@ def _render_especialista(store, clientes, role):
     # quando merges com floats convertem o tipo silenciosamente.
     # Eficácia mantém como float (duas casas decimais); demais são int.
     for col in ("pagamentos", "regularizacoes", "parciais", "reg_via_contato",
-                "reg_sem_contato", "carteira_atual", "cob_contactados", "cob_base"):
+                "reg_sem_contato", "reg_ate_4d", "carteira_atual", "cob_contactados", "cob_base"):
         if col in ranking.columns:
             ranking[col] = ranking[col].astype(int)
     # Eficácia e cobertura ficam float (duas casas) — percentuais pequenos
@@ -1232,7 +1237,7 @@ def _render_especialista(store, clientes, role):
     # o que tocou (contatados), o que voltou (pagamentos e regularizações) e
     # só então os percentuais e o valor. As colunas de pagamento são por
     # CLIENTE — o mesmo cliente pode pagar várias vezes no mês.
-    _col_widths = [0.6, 1.7, 1.05, 1.0, 1.2, 1.2, 1.2, 1.1, 0.95, 1.0, 1.25]
+    _col_widths = [0.55, 1.6, 1.0, 0.95, 1.1, 1.1, 1.0, 1.1, 1.0, 0.9, 0.95, 1.2]
     _carteira_tip = (
         "Clientes inadimplentes HOJE sob esse especialista."
         if _mes_corrente else
@@ -1247,7 +1252,8 @@ def _render_especialista(store, clientes, role):
         ("Contatados", "Clientes distintos que receberam mensagem ou ligação no mês. É a base da Eficácia e da Cobertura."),
         ("Reg. com contato", "Clientes com 5+ dias de atraso que zeraram o atraso no mês tendo recebido msg ou ligação DURANTE esse atraso (e nos 30 dias antes do pagamento). Crédito vai pra quem fez o contato mais recente — pode ser contato do mês anterior, por isso difere do numerador da Eficácia."),
         ("Reg. sem contato", "Clientes com 5+ dias de atraso que zeraram o atraso sem contato da cobrança durante esse atraso. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
-        ("Regularizações", "Total de clientes que zeraram o atraso no mês. Inclui quem pagou com até 4 dias de atraso (margem de erro: antes de poder entrar no lote), por isso é maior que com + sem contato."),
+        ("Reg. até 4 dias", "Zeraram o atraso pagando com até 4 dias de atraso — antes de poder entrar no lote (mensagem a partir de 5 dias). Margem de erro: não é mérito nem falha da cobrança."),
+        ("Regularizações", "Total de clientes que zeraram o atraso no mês = Reg. com contato + Reg. sem contato + Reg. até 4 dias."),
         ("% da carteira", "Regularizações ÷ carteira inadimplente do mês. Ordena o ranking: compara carteiras de tamanhos diferentes. Inclui quem pagou sem contato."),
         ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que REGULARIZARAM (zeraram o atraso, 5+ dias) com contato durante esse atraso, até 30 dias antes do pagamento. Pagamento parcial não conta."),
         ("Cobertura", "Dos clientes da carteira que chegaram a 5+ dias de atraso no mês (quem o lote pode alcançar), % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
@@ -1298,6 +1304,11 @@ def _render_especialista(store, clientes, role):
             unsafe_allow_html=True,
         )
         rcols[6].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#6b7280;font-weight:600">'
+            f'{int(row.get("reg_ate_4d", 0) or 0)}</div>',
+            unsafe_allow_html=True,
+        )
+        rcols[7].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
             unsafe_allow_html=True,
         )
@@ -1307,7 +1318,7 @@ def _render_especialista(store, clientes, role):
             f'{int(row["regularizacoes"])} de {int(row["carteira_atual"])} '
             f'inadimplentes do período'
         )
-        rcols[7].markdown(
+        rcols[8].markdown(
             f'<div title="{_pct_cart_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
             f'color:#22c55e;font-weight:700">{_pct_cart:.2f}%</div>',
             unsafe_allow_html=True,
@@ -1321,7 +1332,7 @@ def _render_especialista(store, clientes, role):
         _ef_reg = int(row.get("ef_regularizaram", 0) or 0)
         _ef_cont = int(row.get("ef_contatados", 0) or 0)
         _ef_tip = f"{_ef_reg} de {_ef_cont} clientes contactados no mês regularizaram com contato durante o atraso"
-        rcols[8].markdown(
+        rcols[9].markdown(
             f'<div title="{_ef_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
             f'color:{_ef_cor};font-weight:700">{_ef:.2f}%</div>',
             unsafe_allow_html=True,
@@ -1336,12 +1347,12 @@ def _render_especialista(store, clientes, role):
             f"{_cob_cont} de {_cob_base} inadimplentes do período foram contactados"
             if _cob_base else "Sem snapshot diário no período"
         )
-        rcols[9].markdown(
+        rcols[10].markdown(
             f'<div title="{_cob_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
             f'color:#9ca3af;font-weight:600">{_cob_txt}</div>',
             unsafe_allow_html=True,
         )
-        rcols[10].markdown(
+        rcols[11].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
             unsafe_allow_html=True,
         )
