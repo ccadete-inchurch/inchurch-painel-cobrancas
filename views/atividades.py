@@ -655,17 +655,26 @@ def _render_atividades(store, clientes, role):
         _npl_atendente, _npl_situacao, dia=carimbo_dia_cache()
     ) or {}).get("peso_clientes") or []
 
-    def _rs_curto(v: float) -> str:
-        if v >= 1_000_000:
-            return f"R$ {v / 1_000_000:.1f} mi".replace(".", ",")
-        if v >= 1_000:
-            return f"R$ {v / 1_000:.0f} mil"
-        return fmt_moeda_plain(v)
-
-    _rotulo_excluir = {
-        cid: f'{_nomes_store.get(cid) or "ID " + cid} · {_rs_curto(peso)} na análise'
-        for cid, peso in _peso_receita
-    }
+    def _rotulos_exclusao():
+        """Opções da lista de exclusão, ordenadas pela janela escolhida
+        (Mensal = 30d, Trimestral = 90d). Função chamada DENTRO do fragment:
+        trocar a janela só re-roda o fragment, e a ordem tem que acompanhar.
+        A exclusão em si vale pras duas janelas; só a ordem e o rótulo mudam.
+        Opções = todas com valor em aberto em 90d (inclui as de 30d), então
+        trocar a janela não descarta uma igreja já selecionada."""
+        _janela = st.session_state.get("atv_peso_janela") or "Mensal"
+        _idx = 1 if _janela == "Mensal" else 2
+        _ord = sorted(_peso_receita, key=lambda t: t[_idx], reverse=True)
+        _tot = sum(t[_idx] for t in _peso_receita) or 1.0
+        # Rótulo: nome · peso (% do valor em aberto da janela) · valor
+        # inteiro. O "21 mil" abreviado escondia o valor; centavos deixavam a
+        # etiqueta longa demais quando a igreja é selecionada.
+        return {
+            t[0]: (f'{_nomes_store.get(t[0]) or "ID " + t[0]} · '
+                   + f'{t[_idx] / _tot * 100:.1f}% · '.replace(".", ",")
+                   + f'R$ {t[_idx]:,.0f}'.replace(",", "."))
+            for t in _ord
+        }
 
 
     # ═══════════════ ORDEM DE RENDER ═══════════════
@@ -995,6 +1004,7 @@ def _render_atividades(store, clientes, role):
             # so mostra Visao geral em largura maior.
             # Seleção atual (pode incluir id que saiu do recorte ao trocar o
             # filtro Grupo — descarta pra não quebrar o multi-select).
+            _rotulo_excluir = _rotulos_exclusao()
             _sel_excl = [
                 i for i in (st.session_state.get("atv_excluir_receita") or [])
                 if i in _rotulo_excluir
@@ -1015,21 +1025,31 @@ def _render_atividades(store, clientes, role):
                 st.markdown(cards_html[0], unsafe_allow_html=True)
             for i, _h in enumerate(_cards_analise, start=1):
                 with ind_cols[i]:
-                    st.multiselect(
-                        "Excluir da análise por receita",
-                        options=list(_rotulo_excluir.keys()),
-                        format_func=lambda i: _rotulo_excluir.get(i, i),
-                        key="atv_excluir_receita",
-                        # Sem título visível (fica alinhado ao topo da Visão
-                        # Geral); o texto do campo vazio explica pra que serve.
-                        label_visibility="collapsed",
-                        placeholder="Excluir igrejas da análise",
-                        help="Tira a igreja do cálculo de inadimplência mensal e trimestral "
-                             "por receita. Útil quando um cliente com valor muito alto "
-                             "distorce o percentual da carteira. Não muda nada no lote. "
-                             "Ordenada pelo peso de cada igreja na análise (valor em aberto "
-                             "nos últimos 90 dias), do maior para o menor.",
-                    )
+                    # Janela que ordena a lista + a lista. Selectbox (e não
+                    # botões): cabe no notebook sem quebrar em duas linhas.
+                    _c_jan, _c_excl = st.columns([1, 3])
+                    with _c_jan:
+                        st.selectbox(
+                            "Ordenar por", ["Mensal", "Trimestral"], key="atv_peso_janela",
+                            label_visibility="collapsed",
+                        )
+                    with _c_excl:
+                        st.multiselect(
+                            "Excluir da análise por receita",
+                            options=list(_rotulo_excluir.keys()),
+                            format_func=lambda i: _rotulo_excluir.get(i, i),
+                            key="atv_excluir_receita",
+                            # Sem título visível (fica alinhado ao topo da Visão
+                            # Geral); o texto do campo vazio explica pra que serve.
+                            label_visibility="collapsed",
+                            placeholder="Excluir igrejas da análise",
+                            help="Tira a igreja do cálculo de inadimplência mensal e "
+                                 "trimestral por receita. Útil quando um cliente com valor "
+                                 "muito alto distorce o percentual da carteira. Não muda nada "
+                                 "no lote. Ordenada pelo peso de cada igreja (% do valor em "
+                                 "aberto) na janela escolhida ao lado: mensal (30 dias) ou "
+                                 "trimestral (90 dias).",
+                        )
                     st.markdown(_h, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 

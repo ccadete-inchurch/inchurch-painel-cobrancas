@@ -1933,8 +1933,9 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
     if df.empty:
         return {}
 
-    # Peso de cada cliente no card: valor em aberto na janela de 90 dias no
-    # dia medido. Alimenta o multi-select de exclusão (ordem + rótulo). Usa
+    # Peso de cada cliente no card: valor em aberto nas janelas de 30 e 90
+    # dias no dia medido. Alimenta o multi-select de exclusão (ordem +
+    # rótulo), que a tela ordena pela janela escolhida (mensal/trimestral). Usa
     # os MESMOS CTEs da query acima (corte, contas, desativação, grupo,
     # situação), então o valor mostrado é exatamente o que sai do card ao
     # excluir. Só na chamada sem exclusão — as opções não dependem dela.
@@ -1943,15 +1944,22 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
         _ctes = query[:query.index("\n    SELECT\n      -- HOJE")]
         try:
             _df_peso = client.query(_ctes + f"""
-    SELECT cid, SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 90 DAY) AND DATE('{today_str}')
-                       AND (desat IS NULL OR desat > venc)
-                       AND (liq IS NULL OR liq > DATE('{today_str}')), valor, 0)) AS aberto_90d
+    SELECT cid,
+           SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 30 DAY) AND DATE('{today_str}')
+                  AND (desat IS NULL OR desat > venc)
+                  AND (liq IS NULL OR liq > DATE('{today_str}')), valor, 0)) AS aberto_30d,
+           SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 90 DAY) AND DATE('{today_str}')
+                  AND (desat IS NULL OR desat > venc)
+                  AND (liq IS NULL OR liq > DATE('{today_str}')), valor, 0)) AS aberto_90d
     FROM boletos
     GROUP BY cid
     HAVING aberto_90d > 0
     ORDER BY aberto_90d DESC
     """).to_dataframe()
-            peso_clientes = [(str(a), float(b)) for a, b in zip(_df_peso["cid"], _df_peso["aberto_90d"])]
+            peso_clientes = [
+                (str(a), float(b), float(c))
+                for a, b, c in zip(_df_peso["cid"], _df_peso["aberto_30d"], _df_peso["aberto_90d"])
+            ]
         except Exception:
             peso_clientes = []
 
