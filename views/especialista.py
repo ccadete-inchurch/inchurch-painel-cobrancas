@@ -788,19 +788,11 @@ def _render_especialista(store, clientes, role):
 
     st.markdown(_DIVIDER, unsafe_allow_html=True)
 
-    # ── Evolução Mensal de Pagamentos (últimos 6 meses) ───────────────────
-    # Trend histórico — independente do filtro de período (sempre 6 meses).
-    # Mostra se o time tá melhorando ou piorando ao longo do tempo.
-    st.markdown(
-        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
-        'text-transform:uppercase;letter-spacing:1.5px;'
-        'margin-bottom:4px">Evolução Mensal de Pagamentos</div>'
-        '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-        'Desde jun/26, primeiro mês completo de operação — independente do '
-        'filtro de período. Mostra tendência do time ao longo do tempo.'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    # ── Base mensal de pagamentos (desde jun/26) ──────────────────────────
+    # Alimenta o "Regularizações por Mês" e as Taxas Mensais. O gráfico
+    # "Evolução Mensal de Pagamentos" que usava esta base foi removido:
+    # contava todo pagamento (parcial, até 4 dias, sem contato) e repetia
+    # o "Regularizações por Mês" (~97% de quem paga regulariza).
     # Começa em jun/2026 e cresce um ponto por mês. Antes eram 6 meses fixos,
     # que traziam abril (nenhum contato registrado: todo pagamento creditado
     # pelo grupo atual — trabalho que não aconteceu). Maio também fica fora:
@@ -836,53 +828,6 @@ def _render_especialista(store, clientes, role):
         # ninguém. Filtra DEPOIS do overlay porque as linhas do overlay também
         # podem vir com esse rótulo. Mesma exclusão do ranking e da matriz.
         df_trend = df_trend[df_trend["atendente"] != "Sem especialista"]
-        df_trend["mes_dt"] = df_trend["data_dt"].dt.to_period("M").dt.to_timestamp()
-        df_trend["mes_label"] = df_trend["mes_dt"].dt.strftime("%b/%y").str.capitalize()
-        df_mensal = (
-            df_trend.groupby(["mes_dt", "mes_label", "atendente"])
-            .agg(pagamentos=("id", "nunique"))
-            .reset_index()
-        )
-        # Filtra por especialista se selecionado (só na visualização — base
-        # da média da equipe permanece todos os atendentes)
-        df_mensal_show = df_mensal.copy()
-        if filtro_esp:
-            df_mensal_show = df_mensal_show[df_mensal_show["atendente"].isin(filtro_esp)]
-
-        if not df_mensal_show.empty:
-            _meses_ordem = (
-                df_mensal[["mes_dt", "mes_label"]]
-                .drop_duplicates()
-                .sort_values("mes_dt")["mes_label"]
-                .tolist()
-            )
-            base_trend = alt.Chart(df_mensal_show).encode(
-                x=alt.X("mes_label:O", title="MÊS", sort=_meses_ordem, axis=alt.Axis(labelAngle=0)),
-                y=alt.Y("pagamentos:Q", title="PAGAMENTOS"),
-                # Sem legenda — o donut "Distribuição da Carteira" acima é a
-                # referência única pra mapeamento cor→especialista.
-                color=alt.Color(
-                    "atendente:N",
-                    scale=alt.Scale(range=_CHART_PALETTE),
-                    legend=None,
-                ),
-                tooltip=[
-                    alt.Tooltip("mes_label:N", title="Mês"),
-                    alt.Tooltip("atendente:N", title="Especialista"),
-                    alt.Tooltip("pagamentos:Q", title="Pagamentos"),
-                ],
-            )
-            linha_trend = base_trend.mark_line(strokeWidth=2.5, interpolate="monotone")
-            pontos_trend = base_trend.mark_circle(size=90, stroke="#0f1117", strokeWidth=2)
-
-            chart_trend = (linha_trend + pontos_trend).properties(height=280)
-            st.altair_chart(chart_trend, use_container_width=True)
-        else:
-            st.info("Sem pagamentos do especialista selecionado nos últimos 6 meses.")
-    else:
-        st.info("Sem dados históricos de pagamentos.")
-
-    st.markdown(_DIVIDER, unsafe_allow_html=True)
 
     # ── Recuperação mensal: volume (barras) + taxas (linhas) ──────────────
     # Antes eram 5 linhas de volume no mesmo eixo: inadimplentes e contatados
