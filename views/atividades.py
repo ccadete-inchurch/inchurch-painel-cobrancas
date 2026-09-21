@@ -1023,10 +1023,12 @@ def _render_atividades(store, clientes, role):
                         # Sem título visível (fica alinhado ao topo da Visão
                         # Geral); o texto do campo vazio explica pra que serve.
                         label_visibility="collapsed",
-                        placeholder="Excluir igrejas da análise por receita",
+                        placeholder="Excluir igrejas da análise",
                         help="Tira a igreja do cálculo de inadimplência mensal e trimestral "
                              "por receita. Útil quando um cliente com valor muito alto "
-                             "distorce o percentual da carteira. Não muda nada no lote.",
+                             "distorce o percentual da carteira. Não muda nada no lote. "
+                             "Ordenada pelo peso de cada igreja na análise (valor em aberto "
+                             "nos últimos 90 dias), do maior para o menor.",
                     )
                     st.markdown(_h, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)

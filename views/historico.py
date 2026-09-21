@@ -430,7 +430,7 @@ def _render_historico(store):
                 f'há {int(_cli_atual.get("dias_atraso") or 0)} dias'
             )
             reg_badge += (
-                f'<span title="{_deve_tip}" style="cursor:help;border:1px solid rgba(248,113,113,.6);'
+                f'<span title="{_deve_tip}" style="cursor:help;border:1px solid rgba(248,113,113,.35);'
                 'color:#f87171;font-size:10px;font-weight:700;padding:1px 7px;'
                 'border-radius:4px;margin-right:4px">↻ DEVE DE NOVO</span>'
             )
