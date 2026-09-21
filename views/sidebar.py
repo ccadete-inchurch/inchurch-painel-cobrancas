@@ -61,9 +61,10 @@ def render_sidebar():
     nav_item("Pagamentos em Atraso", "historico")
     nav_item("Próximas Cobranças", "proximas")
     nav_item("Cliente Devedor",    "cliente")
-    # Especialista: análise por atendente (gráficos) — admin only
+    # Resultados da Cobrança (page key "especialista"): análise por
+    # atendente — admin only
     if current_role() == "admin":
-        nav_item("Especialista",   "especialista")
+        nav_item("Resultados da Cobrança", "especialista")
 
     # Spacer pra não esconder último nav atrás do botão Sair (fixed bottom)
     st.sidebar.markdown('<div style="height:70px"></div>', unsafe_allow_html=True)

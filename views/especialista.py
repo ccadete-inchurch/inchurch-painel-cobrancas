@@ -196,7 +196,7 @@ def _render_especialista(store, clientes, role):
     st.markdown(
         '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:36px;'
         'font-weight:800;color:#e8eaf0;margin-top:24px;margin-bottom:24px;letter-spacing:-1px;line-height:1.1">'
-        'Especialista</div>',
+        'Resultados da Cobrança</div>',
         unsafe_allow_html=True,
     )
 
@@ -491,20 +491,19 @@ def _render_especialista(store, clientes, role):
 
     # Tooltips dos cards
     _tt_inad = (
-        "Carteira total atual das especialistas (1+ dia de atraso). "
-        "Número absoluto: a coluna Carteira inad. do ranking usa só quem chegou "
-        "a 5+ dias no mês, que é quem o lote pode alcançar."
+        "Carteira total atual das especialistas. A coluna Carteira inad. do "
+        "ranking é diferente: conta quem entrou na cobrança no mês."
         if _mes_corrente else
-        f"Clientes das especialistas devendo (1+ dia de atraso) no último dia de "
-        f"{_mes_label}. Número absoluto: a coluna Carteira inad. do ranking usa só "
-        "quem chegou a 5+ dias no mês, que é quem o lote pode alcançar."
+        f"Carteira das especialistas no último dia de {_mes_label}. A coluna "
+        "Carteira inad. do ranking é diferente: conta quem entrou na cobrança no mês."
     )
     _tt_pag = (
-        "Clientes únicos que pagaram cobrança com 5+ dias de atraso no período. "
-        "Pagamento em dia ou com 1 a 4 dias de atraso não entra."
+        "Clientes que pagaram cobrança em atraso no período, já na fase de "
+        "cobrança. Quem paga nos primeiros dias de atraso, antes de poder "
+        "entrar no lote, não entra."
     )
     _tt_reg = (
-        "Clientes que pagaram com 5+ dias de atraso e zeraram tudo que estava vencido. "
+        "Clientes que pagaram e zeraram tudo que estava vencido, já na fase de cobrança. "
         "Conta SÓ pagamentos efetivos — não inclui baixas administrativas, "
         "parcelamentos ou desativações. Pra ver toda saída da carteira "
         "(incluindo esses motivos), ver 'Regularizados' da tela Inadimplência."
@@ -513,7 +512,7 @@ def _render_especialista(store, clientes, role):
         "Pagou cobrança atrasada mas ainda está inadimplente hoje "
         "(pagou só parte ou voltou a ter cobrança vencida)."
     )
-    _tt_val = "Soma dos pagamentos feitos com 5+ dias de atraso no período."
+    _tt_val = "Soma dos pagamentos em atraso feitos já na fase de cobrança."
 
     # 5 cards — Valor Recuperado (último) tem coluna mais larga porque
     # "R$ 130.121,84" não cabe na largura das demais sem quebrar linha.
@@ -694,12 +693,18 @@ def _render_especialista(store, clientes, role):
     for col in ("eficacia", "cobertura"):
         if col in ranking.columns:
             ranking[col] = ranking[col].astype(float)
-    # % da carteira regularizada: ordena o ranking. Volume puro premiava
-    # quem tem carteira maior (Priscila tem mais clientes que Ana).
+    # % da carteira regularizada (informativo: inclui quem pagou sozinho).
     ranking["pct_carteira"] = (
         ranking["regularizacoes"] / ranking["carteira_atual"].replace(0, pd.NA) * 100
     ).fillna(0).astype(float)
-    ranking = ranking.sort_values("pct_carteira", ascending=False).reset_index(drop=True)
+    # Resultado do contato = Reg. com contato ÷ Carteira inad. = Cobertura ×
+    # Eficácia. Ordena o ranking: só conta o que veio do contato e ajusta pelo
+    # tamanho da carteira. O % da carteira premiava quem teve mais cliente
+    # pagando sozinho.
+    ranking["res_contato"] = (
+        ranking["reg_via_contato"] / ranking["carteira_atual"].replace(0, pd.NA) * 100
+    ).fillna(0).astype(float)
+    ranking = ranking.sort_values("res_contato", ascending=False).reset_index(drop=True)
     ranking["rank"] = ranking.index + 1
     ranking["valor_fmt"] = ranking["valor"].apply(fmt_moeda_plain)
 
@@ -707,10 +712,12 @@ def _render_especialista(store, clientes, role):
     # o que tocou (contatados), o que voltou (pagamentos e regularizações) e
     # só então os percentuais e o valor. As colunas de pagamento são por
     # CLIENTE — o mesmo cliente pode pagar várias vezes no mês.
-    _col_widths = [0.55, 1.6, 1.0, 0.95, 1.1, 1.1, 1.0, 1.0, 0.9, 0.95, 1.2]
+    _col_widths = [0.5, 1.5, 0.95, 0.95, 1.0, 1.0, 0.85, 1.05, 0.95, 0.9, 0.95, 1.2]
     _carteira_tip = (
-        f"Clientes que chegaram a 5+ dias de atraso em algum dia de {_mes_label}, "
-        "mesmo que já tenham pago. É o denominador da Cobertura."
+        f"Clientes que entraram na cobrança (já podiam entrar no lote) em algum "
+        f"dia de {_mes_label}, mesmo que já tenham pago. Quem paga nos primeiros "
+        "dias de atraso, antes do lote, não entra. É a base da Cobertura e do "
+        "Resultado do contato."
     )
     hdr_cols = st.columns(_col_widths)
     _hdr_labels = [
@@ -718,12 +725,13 @@ def _render_especialista(store, clientes, role):
         ("Especialista", ""),
         ("Carteira<br>inad.", _carteira_tip),
         ("Contatados", "Clientes distintos que receberam mensagem ou ligação no mês. É a base da Eficácia e da Cobertura."),
-        ("Reg. com<br>contato", "Clientes com 5+ dias de atraso que zeraram o atraso no mês tendo recebido msg ou ligação DURANTE esse atraso (e nos 30 dias antes do pagamento). Crédito vai pra quem fez o contato mais recente. É o numerador da Eficácia."),
-        ("Reg. sem<br>contato", "Clientes com 5+ dias de atraso que zeraram o atraso sem contato da cobrança durante esse atraso. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
-        ("Reg.<br>total", "Reg. com contato + Reg. sem contato. Quem pagou com 1 a 4 dias de atraso fica fora da tela (ainda não podia ser cobrado)."),
-        ("% da<br>carteira", "Reg. total ÷ carteira inad. (as duas só com 5+ dias). Ordena o ranking: compara carteiras de tamanhos diferentes. Inclui quem pagou sem contato."),
+        ("Reg. com<br>contato", "Clientes que zeraram o atraso no mês tendo recebido msg ou ligação durante esse atraso (até 30 dias antes do pagamento). Crédito vai pra quem fez o contato mais recente. É o numerador da Eficácia."),
+        ("Reg. sem<br>contato", "Clientes que zeraram o atraso sem contato da cobrança durante esse atraso. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
+        ("Reg.<br>total", "Reg. com contato + Reg. sem contato."),
+        ("Resultado<br>do contato", "Reg. com contato ÷ Carteira inad. — é a Cobertura × a Eficácia. Ordena o ranking: mede só o que veio do contato, ajustado ao tamanho da carteira."),
+        ("% da<br>carteira", "Reg. total ÷ Carteira inad. Inclui quem pagou sem contato."),
         ("Eficácia", "Reg. com contato ÷ Contatados. Cada regularização conta uma vez, no mês do pagamento. Pagamento parcial não conta."),
-        ("Cobertura", "Dos clientes da carteira que chegaram a 5+ dias de atraso no mês (quem o lote pode alcançar), % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
+        ("Cobertura", "Contatados ÷ Carteira inad.: quanto da carteira o especialista alcançou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
         ("Valor<br>recuperado", ""),
     ]
     for col, (h, tip) in zip(hdr_cols, _hdr_labels):
@@ -778,15 +786,26 @@ def _render_especialista(store, clientes, role):
             f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
             unsafe_allow_html=True,
         )
-        # % da carteira regularizada — critério de ordenação do ranking.
+        # Resultado do contato — critério de ordenação do ranking.
+        _res = float(row.get("res_contato", 0) or 0)
+        _res_tip = (
+            f'{int(row.get("reg_via_contato", 0) or 0)} regularizações com contato ÷ '
+            f'{int(row["carteira_atual"])} da carteira'
+        )
+        rcols[7].markdown(
+            f'<div title="{_res_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
+            f'color:#22c55e;font-weight:700">{_res:.2f}%</div>',
+            unsafe_allow_html=True,
+        )
+        # % da carteira regularizada — informativo (inclui quem pagou sozinho).
         _pct_cart = float(row.get("pct_carteira", 0) or 0)
         _pct_cart_tip = (
             f'{int(row["regularizacoes"])} de {int(row["carteira_atual"])} '
-            f'inadimplentes do período'
+            f'da carteira'
         )
-        rcols[7].markdown(
+        rcols[8].markdown(
             f'<div title="{_pct_cart_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
-            f'color:#22c55e;font-weight:700">{_pct_cart:.2f}%</div>',
+            f'color:#9ca3af;font-weight:600">{_pct_cart:.2f}%</div>',
             unsafe_allow_html=True,
         )
         # Eficácia REAL — faixas ajustadas (cobrança é trabalho difícil,
@@ -798,7 +817,7 @@ def _render_especialista(store, clientes, role):
         _ef_reg = int(row.get("ef_regularizaram", 0) or 0)
         _ef_cont = int(row.get("ef_contatados", 0) or 0)
         _ef_tip = f"{_ef_reg} regularizações com contato ÷ {_ef_cont} contatados no mês"
-        rcols[8].markdown(
+        rcols[9].markdown(
             f'<div title="{_ef_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
             f'color:{_ef_cor};font-weight:700">{_ef:.2f}%</div>',
             unsafe_allow_html=True,
@@ -813,12 +832,12 @@ def _render_especialista(store, clientes, role):
             f"{_cob_cont} de {_cob_base} inadimplentes do período foram contactados"
             if _cob_base else "Sem snapshot diário no período"
         )
-        rcols[9].markdown(
+        rcols[10].markdown(
             f'<div title="{_cob_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
             f'color:#9ca3af;font-weight:600">{_cob_txt}</div>',
             unsafe_allow_html=True,
         )
-        rcols[10].markdown(
+        rcols[11].markdown(
             f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
             unsafe_allow_html=True,
         )
@@ -891,7 +910,7 @@ def _render_especialista(store, clientes, role):
         ),
         y=alt.Y(
             "reg_com_contato:Q",
-            title="REGULARIZAÇÕES COM CONTATO (5+ DIAS)",
+            title="REGULARIZAÇÕES COM CONTATO",
             scale=alt.Scale(domain=[0, _max_pag * 1.25]),
         ),
     )
@@ -1285,7 +1304,7 @@ def _render_especialista(store, clientes, role):
                 tooltip=[
                     alt.Tooltip("mes:N", title="Mês"),
                     alt.Tooltip("total:Q", title="Regularizações"),
-                    alt.Tooltip("inad:Q", title="Carteira inad. (5+ dias)"),
+                    alt.Tooltip("inad:Q", title="Carteira inad."),
                     alt.Tooltip("pct:Q", title="% da carteira", format=".2f"),
                 ],
             )
@@ -1308,7 +1327,7 @@ def _render_especialista(store, clientes, role):
                 'text-transform:uppercase;letter-spacing:1.5px;'
                 'margin-bottom:4px">Taxas Mensais</div>'
                 '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-                'Cobertura = contatados ÷ inadimplentes com 5+ dias no mês.<br>'
+                'Cobertura = contatados ÷ carteira inadimplente do mês.<br>'
                 'Eficácia = regularizações com contato ÷ contatados no mês.'
                 '</div>',
                 unsafe_allow_html=True,
