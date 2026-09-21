@@ -462,30 +462,19 @@ def _render_especialista(store, clientes, role):
         total_pgto = 0
         total_reg = 0
         total_parc = 0
-    inadimplentes_atual = sum(
-        1 for c in clientes
-        if not c.get("_regularizado_hoje")
-        and _na_regua_hoje(c)
-        and _eh_grupo_match(c)
-        and _eh_situacao_match(c)
-    )
     taxa_reg = (total_reg / total_pgto * 100) if total_pgto else 0
 
-    # Card de inadimplentes: mês corrente mostra a carteira de HOJE; mês
-    # fechado mostra quantos clientes ESTIVERAM inadimplentes naquele mês
-    # (mesma base da Cobertura). Antes mostrava "hoje" em qualquer mês, o que
-    # deixava o card falando de setembro enquanto o resto da tela era agosto.
-    if _mes_corrente:
-        _card_inad_valor = inadimplentes_atual
-        _card_inad_sub = "carteira hoje (5+ dias)"
-    else:
-        _cob_card = df_cob
-        if filtro_esp and not _cob_card.empty:
-            _cob_card = _cob_card[_cob_card["atendente"].isin(filtro_esp)]
-        _card_inad_valor = (
-            int(_cob_card["inadimplentes_periodo"].sum()) if not _cob_card.empty else 0
-        )
-        _card_inad_sub = f"carteira {_mes_label}"
+    # Card de inadimplentes: quantos clientes ESTIVERAM com 5+ dias de atraso
+    # em algum dia do mês (mesma base da Cobertura), inclusive no mês
+    # corrente. A foto de hoje escondia quem entrou e já pagou no mês, e o
+    # card não batia com o denominador da Cobertura.
+    _cob_card = df_cob
+    if filtro_esp and not _cob_card.empty:
+        _cob_card = _cob_card[_cob_card["atendente"].isin(filtro_esp)]
+    _card_inad_valor = (
+        int(_cob_card["inadimplentes_periodo"].sum()) if not _cob_card.empty else 0
+    )
+    _card_inad_sub = f"carteira {_mes_label} (5+ dias)"
 
     # Sub-texto contextual no 'Pagamentos' — se filtrando por 1 especialista,
     # mostra comparativo com a média da equipe.
@@ -514,12 +503,10 @@ def _render_especialista(store, clientes, role):
 
     # Tooltips dos cards
     _tt_inad = (
-        "Clientes inadimplentes HOJE com 5+ dias de atraso (quem o lote pode "
-        "alcançar). Quem está com 1 a 4 dias fica de fora — por isso é menor "
-        "que o 'Total Clientes' da tela Inadimplência."
-        if _mes_corrente else
         f"Clientes que chegaram a 5+ dias de atraso em algum dia de {_mes_label} "
-        "(snapshots diários do mês). Mesma base da Cobertura."
+        "(quem o lote pode alcançar), mesmo que já tenham pago. Mesma base da "
+        "Cobertura. Quem ficou só com 1 a 4 dias fica de fora — por isso difere "
+        "do 'Total Clientes' da tela Inadimplência."
     )
     _tt_pag = (
         "Clientes únicos que pagaram cobrança com 5+ dias de atraso no período. "
@@ -689,23 +676,13 @@ def _render_especialista(store, clientes, role):
         rank_agg["cob_contactados"] = rank_agg["contactados"].fillna(0).astype(int)
         rank_agg["cob_base"] = rank_agg["inadimplentes_periodo"].fillna(0).astype(int)
         rank_agg = rank_agg.drop(columns=["cobertura_pct", "contactados", "inadimplentes_periodo"])
-    # Junta com carteira atual
-    # Carteira: mês corrente usa a foto de HOJE (store, já carregado); mês
-    # fechado usa quantos clientes ESTIVERAM inadimplentes naquele mês — mesma
-    # base da Cobertura, então a linha fica autoexplicativa:
+    # Carteira: quantos clientes ESTIVERAM com 5+ dias de atraso no mês
+    # (inclusive o corrente) — mesma base da Cobertura, então a linha fica
+    # autoexplicativa:
     # Contatados ÷ Carteira inad. = Cobertura.
     # Fim do mês esconderia quem entrou e saiu no meio: em ago/2026 a Ana
     # terminou com 243, mas passaram 525 pelas mãos dela.
-    if _mes_corrente:
-        carteira_count = (
-            pd.DataFrame([{"atendente": _norm_atendente_raw(c.get("_grupo"))}
-                          for c in clientes
-                          if not c.get("_regularizado_hoje") and _na_regua_hoje(c)])
-            .groupby("atendente").size().reset_index(name="carteira_atual")
-            if any(_na_regua_hoje(c) for c in clientes)
-            else pd.DataFrame(columns=["atendente", "carteira_atual"])
-        )
-    elif df_cob.empty:
+    if df_cob.empty:
         carteira_count = pd.DataFrame(columns=["atendente", "carteira_atual"])
     else:
         carteira_count = (
@@ -744,10 +721,8 @@ def _render_especialista(store, clientes, role):
     # CLIENTE — o mesmo cliente pode pagar várias vezes no mês.
     _col_widths = [0.55, 1.6, 1.0, 0.95, 1.1, 1.1, 1.0, 1.0, 0.9, 0.95, 1.2]
     _carteira_tip = (
-        "Clientes inadimplentes HOJE com 5+ dias de atraso sob esse especialista."
-        if _mes_corrente else
-        f"Clientes que chegaram a 5+ dias de atraso em algum dia de {_mes_label}. "
-        "É o denominador da Cobertura."
+        f"Clientes que chegaram a 5+ dias de atraso em algum dia de {_mes_label}, "
+        "mesmo que já tenham pago. É o denominador da Cobertura."
     )
     hdr_cols = st.columns(_col_widths)
     _hdr_labels = [
