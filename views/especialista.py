@@ -532,8 +532,10 @@ def _render_especialista(store, clientes, role):
         )
     with c4:
         st.markdown(
-            _card_fmt("Resultado do contato", _pct_br(resultado_equipe),
-                      "cobertura × eficácia", "#22c55e", _tt_res),
+            # Título curto: "RESULTADO DO CONTATO" não cabia na largura do
+            # card e o CSS corta com reticências. A fórmula fica no tooltip.
+            _card_fmt("Resultado", _pct_br(resultado_equipe),
+                      "do contato", "#22c55e", _tt_res),
             unsafe_allow_html=True,
         )
     with c5:
