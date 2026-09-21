@@ -401,8 +401,12 @@ def _render_historico(store):
             and not _cli_atual.get("_regularizado_hoje")
             and (_cli_atual.get("dias_atraso") or 0) > 0
         )
+        # Voltou a atrasar: selo em cinza (o verde passava "resolvido", mas
+        # o cliente deve de novo). O fato da data continua registrado.
+        _reg_cor = ("background:rgba(156,163,175,.18);color:#9ca3af;" if voltou_atrasar
+                    else "background:rgba(45,211,111,.18);color:#2dd36f;")
         reg_badge = (
-            '<span style="background:rgba(45,211,111,.18);color:#2dd36f;'
+            f'<span style="{_reg_cor}'
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
             'margin-right:4px">✓ REGULARIZADO</span>' if eh_regularizado else ""
         )
