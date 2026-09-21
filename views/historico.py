@@ -181,8 +181,8 @@ def _render_historico(store):
         # linha (parecia conversão do dia), mas dá pra achar esses clientes.
         # Selectbox (igual a Situação): o segmented_control quebrava em duas
         # linhas no notebook.
-        _lote_sel = st.selectbox("Lote", ["Todos", "No lote hoje"], key="reg_lote")
-    filtro_lote = _lote_sel == "No lote hoje"
+        _lote_sel = st.selectbox("Mostrar", ["Todos", "Só do lote de hoje"], key="reg_lote")
+    filtro_lote = _lote_sel == "Só do lote de hoje"
 
     if busca:
         b = busca.lower()
@@ -413,7 +413,7 @@ def _render_historico(store):
         if voltou_atrasar:
             reg_badge += (
                 '<span style="color:#f59e0b;font-size:11px;font-style:italic;'
-                'margin-right:6px">· voltou a atrasar</span>'
+                'margin-right:6px">· deve de novo</span>'
             )
         # Badge PAGAMENTO PARCIAL (azul) — pagou algo mas não zerou a dívida.
         # Mutuamente exclusivo com REGULARIZADO.
