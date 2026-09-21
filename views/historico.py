@@ -155,7 +155,7 @@ def _render_historico(store):
     # Default: mês corrente (1º dia → hoje)
     _ini_default = hoje_br_pre.replace(day=1)
 
-    fb, fp, fs, fa, fl = st.columns([2.2, 2.0, 1.2, 1.4, 1.6])
+    fb, fp, fs, fa, fl = st.columns([2.2, 2.0, 1.3, 1.4, 1.3])
     with fb:
         busca = st.text_input("Buscar", placeholder="Nome, CNPJ ou ID sacado...", key="reg_busca")
     with fp:
@@ -179,9 +179,9 @@ def _render_historico(store):
         # Só quem está no lote de hoje (qualquer atendente). Filtro em vez de
         # selo: pagamento antigo de quem voltou ao lote não ganha marca na
         # linha (parecia conversão do dia), mas dá pra achar esses clientes.
-        _lote_sel = st.segmented_control(
-            "Lote", ["Todos", "No lote hoje"], default="Todos", key="reg_lote",
-        )
+        # Selectbox (igual a Situação): o segmented_control quebrava em duas
+        # linhas no notebook.
+        _lote_sel = st.selectbox("Lote", ["Todos", "No lote hoje"], key="reg_lote")
     filtro_lote = _lote_sel == "No lote hoje"
 
     if busca:
@@ -393,11 +393,24 @@ def _render_historico(store):
         _rdt = str(row.get("data") or "")
         _cli_atual = _clientes_lookup.get(_rid)
         eh_regularizado = _eh_reg(row)
+        # Regularizou naquela data, mas hoje deve de novo (boleto novo
+        # venceu depois). Sem o aviso, "REGULARIZADO" + "no lote hoje"
+        # parecia contradição.
+        voltou_atrasar = bool(
+            eh_regularizado and _cli_atual
+            and not _cli_atual.get("_regularizado_hoje")
+            and (_cli_atual.get("dias_atraso") or 0) > 0
+        )
         reg_badge = (
             '<span style="background:rgba(45,211,111,.18);color:#2dd36f;'
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
             'margin-right:4px">✓ REGULARIZADO</span>' if eh_regularizado else ""
         )
+        if voltou_atrasar:
+            reg_badge += (
+                '<span style="color:#f59e0b;font-size:11px;font-style:italic;'
+                'margin-right:6px">· voltou a atrasar</span>'
+            )
         # Badge PAGAMENTO PARCIAL (azul) — pagou algo mas não zerou a dívida.
         # Mutuamente exclusivo com REGULARIZADO.
         parcial_badge = (
