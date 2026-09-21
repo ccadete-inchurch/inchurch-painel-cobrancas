@@ -147,6 +147,9 @@ def _render_historico(store):
     if not df.empty and "data" in df.columns:
         df["_data_dt"] = pd.to_datetime(df["data"], format="%d/%m/%Y", errors="coerce")
         df = df.sort_values("_data_dt", ascending=False, na_position="last").drop(columns=["_data_dt"])
+    # Cópia antes dos filtros: a "última regularização" do cliente é olhada
+    # em todo o histórico, não só no período/filtros escolhidos.
+    df_base = df.copy()
 
     # ── Filtros ───────────────────────────────────────────────────────────────
     atendentes_disp = sorted({a for a in df["atendente"].unique() if a and a != "—"}) if not df.empty else []
@@ -291,6 +294,14 @@ def _render_historico(store):
             return False
 
         df_reg_periodo = df[df.apply(_eh_reg, axis=1)]
+        # Data da ÚLTIMA regularização de cada cliente (histórico todo): o
+        # aviso "deve de novo" só vai nela — nas anteriores seria ruído.
+        _ultima_reg = {}
+        for _, _r in df_base[df_base.apply(_eh_reg, axis=1)].iterrows():
+            _d = datetime.strptime(str(_r["data"]), "%d/%m/%Y").date()
+            _k = str(_r["id"])
+            if _k not in _ultima_reg or _d > _ultima_reg[_k]:
+                _ultima_reg[_k] = _d
         n_reg = int(df_reg_periodo["id"].astype(str).nunique()) if not df_reg_periodo.empty else 0
         v_reg = float(df_reg_periodo["valor"].sum()) if not df_reg_periodo.empty else 0.0
     else:
@@ -400,6 +411,7 @@ def _render_historico(store):
             eh_regularizado and _cli_atual
             and not _cli_atual.get("_regularizado_hoje")
             and (_cli_atual.get("dias_atraso") or 0) > 0
+            and _ultima_reg.get(_rid) == datetime.strptime(_rdt, "%d/%m/%Y").date()
         )
         # Selo sempre verde: diz o que aconteceu NAQUELE pagamento. Quem deve
         # de novo hoje ganha o fundo da linha em cinza (lá embaixo).
@@ -410,9 +422,17 @@ def _render_historico(store):
             'margin-right:4px">✓ REGULARIZADO</span>' if eh_regularizado else ""
         )
         if voltou_atrasar:
+            # Selo no padrão dos outros, só com contorno vermelho (atraso),
+            # pra não confundir com o ACORDO (laranja cheio). Valor e dias
+            # ficam no tooltip, pra linha não carregar.
+            _deve_tip = (
+                f'Deve {fmt_moeda_plain(float(_cli_atual.get("valor") or 0))} '
+                f'há {int(_cli_atual.get("dias_atraso") or 0)} dias'
+            )
             reg_badge += (
-                '<span style="color:#f59e0b;font-size:11px;font-style:italic;'
-                'margin-right:6px">· deve de novo</span>'
+                f'<span title="{_deve_tip}" style="cursor:help;border:1px solid rgba(248,113,113,.6);'
+                'color:#f87171;font-size:10px;font-weight:700;padding:1px 7px;'
+                'border-radius:4px;margin-right:4px">↻ DEVE DE NOVO</span>'
             )
         # Badge PAGAMENTO PARCIAL (azul) — pagou algo mas não zerou a dívida.
         # Mutuamente exclusivo com REGULARIZADO.
