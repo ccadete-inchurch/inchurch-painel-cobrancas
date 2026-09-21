@@ -481,7 +481,7 @@ def _render_especialista(store, clientes, role):
         sinal = "+" if diff_pct >= 0 else ""
         cor_diff = "#22c55e" if diff_pct >= 0 else "#ef4444"
         sub_pag = (
-            f'<span style="color:{cor_diff};font-weight:600">{sinal}{diff_pct:.0f}%</span> '
+            f'<span style="color:{cor_diff};font-weight:600">{sinal}{diff_pct:.2f}%</span> '
             f'<span style="color:#8b94a5">vs média</span>'
         )
     else:
@@ -984,7 +984,7 @@ def _render_especialista(store, clientes, role):
             # Sem contato = base que NÃO foi contatada no mês.
             _sem_contato = max(d["inad"] - d.get("cont_base", 0), 0)
             if d["inad"]:
-                _taxas.append({"mes": lbl, "serie": "Cobertura",
+                _taxas.append({"mes": lbl, "serie": "Cobertura (%)",
                                "pct": d["cont"] / d["inad"] * 100})
             # Conversão com contato = EFICÁCIA do mês (mesma conta da tabela:
             # dos contatados no mês, % que regularizaram com contato durante o
@@ -993,7 +993,7 @@ def _render_especialista(store, clientes, role):
             # concluir que o contato não adianta.
             _ef_mes = _eficacia_mes.get(_m_key)
             if _ef_mes is not None:
-                _taxas.append({"mes": lbl, "serie": "Eficácia (conversão com contato)",
+                _taxas.append({"mes": lbl, "serie": "Eficácia do contato (%)",
                                "pct": _ef_mes})
 
         g_vol, g_tx = st.columns(2)
@@ -1059,19 +1059,14 @@ def _render_especialista(store, clientes, role):
                 '</div>',
                 unsafe_allow_html=True,
             )
-            _ordem_tx = ["Cobertura", "Eficácia (conversão com contato)"]
+            _ordem_tx = ["Cobertura (%)", "Eficácia do contato (%)"]
             _df_tx = pd.DataFrame(_taxas)
-            _df_tx["pct_lbl"] = _df_tx["pct"].round(0).astype(int).astype(str) + "%"
-            # Rótulo da série no último mês (dispensa legenda) + valor em cada
-            # ponto: antes eram 3 linhas coloridas sem nome nem número.
-            _ultimo_mes = _ordem_lbl[-1]
-            _df_tx["serie_lbl"] = _df_tx.apply(
-                lambda r: r["serie"] if r["mes"] == _ultimo_mes else "", axis=1
-            )
+            # Percentual sempre com 2 casas (padrão da tela), vírgula decimal
+            _df_tx["pct_lbl"] = _df_tx["pct"].map(lambda v: f"{v:.2f}%".replace(".", ","))
             _cor_tx = alt.Color(
                 "serie:N", title=None, sort=_ordem_tx,
                 scale=alt.Scale(domain=_ordem_tx, range=["#5fa3ff", "#22c55e"]),
-                legend=None,
+                legend=alt.Legend(orient="top"),
             )
             base_tx = alt.Chart(_df_tx).encode(
                 x=alt.X("mes:O", title="MÊS", sort=_ordem_lbl,
@@ -1089,14 +1084,10 @@ def _render_especialista(store, clientes, role):
             _valores_tx = base_tx.mark_text(dy=-14, fontSize=11, fontWeight=600).encode(
                 text=alt.Text("pct_lbl:N")
             )
-            _nomes_tx = base_tx.mark_text(
-                align="right", dx=-8, dy=-28, fontSize=11, fontWeight=700
-            ).encode(text=alt.Text("serie_lbl:N"))
             chart_tx = (
                 base_tx.mark_line(strokeWidth=2.5, interpolate="monotone")
                 + base_tx.mark_circle(size=80, stroke="#0f1117", strokeWidth=2)
                 + _valores_tx
-                + _nomes_tx
             ).properties(height=320)
             st.altair_chart(chart_tx, use_container_width=True)
     else:
@@ -1266,25 +1257,29 @@ def _render_especialista(store, clientes, role):
     )
     hdr_cols = st.columns(_col_widths)
     _hdr_labels = [
-        ("Posição", ""),
+        ("Pos.", ""),
         ("Especialista", ""),
-        ("Carteira inad.", _carteira_tip),
+        ("Carteira<br>inad.", _carteira_tip),
         ("Contatados", "Clientes distintos que receberam mensagem ou ligação no mês. É a base da Eficácia e da Cobertura."),
-        ("Reg. com contato", "Clientes com 5+ dias de atraso que zeraram o atraso no mês tendo recebido msg ou ligação DURANTE esse atraso (e nos 30 dias antes do pagamento). Crédito vai pra quem fez o contato mais recente — pode ser contato do mês anterior, por isso difere do numerador da Eficácia."),
-        ("Reg. sem contato", "Clientes com 5+ dias de atraso que zeraram o atraso sem contato da cobrança durante esse atraso. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
-        ("Reg. até 4 dias", "Zeraram o atraso pagando com até 4 dias de atraso — antes de poder entrar no lote (mensagem a partir de 5 dias). Margem de erro: não é mérito nem falha da cobrança."),
-        ("Regularizações", "Total de clientes que zeraram o atraso no mês = Reg. com contato + Reg. sem contato + Reg. até 4 dias."),
-        ("% da carteira", "Regularizações ÷ carteira inadimplente do mês. Ordena o ranking: compara carteiras de tamanhos diferentes. Inclui quem pagou sem contato."),
+        ("Reg. com<br>contato", "Clientes com 5+ dias de atraso que zeraram o atraso no mês tendo recebido msg ou ligação DURANTE esse atraso (e nos 30 dias antes do pagamento). Crédito vai pra quem fez o contato mais recente — pode ser contato do mês anterior, por isso difere do numerador da Eficácia."),
+        ("Reg. sem<br>contato", "Clientes com 5+ dias de atraso que zeraram o atraso sem contato da cobrança durante esse atraso. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
+        ("Reg. até<br>4 dias", "Zeraram o atraso pagando com até 4 dias de atraso — antes de poder entrar no lote (mensagem a partir de 5 dias). Margem de erro: não é mérito nem falha da cobrança."),
+        ("Reg.<br>total", "Total de clientes que zeraram o atraso no mês = Reg. com contato + Reg. sem contato + Reg. até 4 dias."),
+        ("% da<br>carteira", "Reg. total ÷ carteira inadimplente do mês. Ordena o ranking: compara carteiras de tamanhos diferentes. Inclui quem pagou sem contato."),
         ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que REGULARIZARAM (zeraram o atraso, 5+ dias) com contato durante esse atraso, até 30 dias antes do pagamento. Pagamento parcial não conta."),
         ("Cobertura", "Dos clientes da carteira que chegaram a 5+ dias de atraso no mês (quem o lote pode alcançar), % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
-        ("Valor Recuperado", ""),
+        ("Valor<br>recuperado", ""),
     ]
     for col, (h, tip) in zip(hdr_cols, _hdr_labels):
         title_attr = f' title="{tip}"' if tip else ""
         cursor = "help" if tip else "default"
         col.markdown(
-            f'<div{title_attr} style="cursor:{cursor};padding:8px 0;font-size:11px;'
-            f'text-transform:uppercase;letter-spacing:1px;color:#8b94a5;font-weight:700">{h}</div>',
+            # Quebra só onde tem <br> (entre palavras): white-space:nowrap em
+            # cada linha. Antes o navegador partia no meio ("POSI/ÇÃO",
+            # "CONTATADO/S", "REGULARIZAÇÕ/ES") em monitores menores.
+            f'<div{title_attr} style="cursor:{cursor};padding:8px 0;font-size:10.5px;'
+            f'text-transform:uppercase;letter-spacing:0.6px;color:#8b94a5;font-weight:700;'
+            f'white-space:nowrap;line-height:1.3">{h}</div>',
             unsafe_allow_html=True,
         )
 
