@@ -115,6 +115,20 @@ def _render_historico(store):
         return
 
     df = pd.DataFrame(reg)
+    # Uma linha por cliente e dia: a consulta vem por BOLETO, então quem
+    # pagou dois boletos no mesmo dia aparecia duas vezes (Mevam Almada em
+    # 04/09/2026: R$ 1.029,90 + R$ 394,97). O overlay só entra quando o
+    # (cliente, dia) ainda não veio do BQ, então não mistura as duas fontes.
+    if not df.empty:
+        df = df.groupby(["id", "data"], as_index=False, sort=False).agg(
+            nome=("nome", "first"),
+            cnpj=("cnpj", "first"),
+            valor=("valor", "sum"),
+            atendente=("atendente", "first"),
+            tipo=("tipo", "first"),
+            inativo=("inativo", "max"),
+            n_boletos=("valor", "size"),
+        )
 
     # Resolve atendente: grupo (splgc-grupo) primeiro, painel_tarefas_diarias
     # como fallback. get_effective_atendente já encapsula essa lógica.
@@ -141,7 +155,7 @@ def _render_historico(store):
     # Default: mês corrente (1º dia → hoje)
     _ini_default = hoje_br_pre.replace(day=1)
 
-    fb, fp, fs, fa = st.columns([2.4, 2.2, 1.3, 1.5])
+    fb, fp, fs, fa, fl = st.columns([2.2, 2.0, 1.2, 1.4, 1.6])
     with fb:
         busca = st.text_input("Buscar", placeholder="Nome, CNPJ ou ID sacado...", key="reg_busca")
     with fp:
@@ -161,10 +175,14 @@ def _render_historico(store):
             key="reg_atd",
             placeholder="Todos",
         )
-    # Só quem está no lote de hoje (qualquer atendente). Filtro em vez de
-    # selo: pagamento antigo de quem voltou ao lote não ganha marca na linha
-    # (parecia conversão do dia), mas dá pra achar esses clientes aqui.
-    filtro_lote = st.checkbox("No lote hoje", key="reg_no_lote")
+    with fl:
+        # Só quem está no lote de hoje (qualquer atendente). Filtro em vez de
+        # selo: pagamento antigo de quem voltou ao lote não ganha marca na
+        # linha (parecia conversão do dia), mas dá pra achar esses clientes.
+        _lote_sel = st.segmented_control(
+            "Lote", ["Todos", "No lote hoje"], default="Todos", key="reg_lote",
+        )
+    filtro_lote = _lote_sel == "No lote hoje"
 
     if busca:
         b = busca.lower()
@@ -282,9 +300,6 @@ def _render_historico(store):
     # Taxa de regularização (% pagantes que zeraram tudo)
     taxa_reg = (n_reg / n_periodo * 100) if n_periodo > 0 else 0.0
 
-    # IDs reg do dia (pra badge na tabela) — mantém compat com o restante
-    ids_reg_hoje = ids_reg_hoje_all
-
     m1, m2, m3 = st.columns(3)
     _tooltip_pag = (
         f"Pagamentos de cobranças em atraso feitos por clientes inadimplentes "
@@ -369,20 +384,15 @@ def _render_historico(store):
 
     for i, row in enumerate(rows):
         inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("inativo") else ""
-        # Badge "REGULARIZADO" — 2 fontes simples:
-        # 1) HOJE via overlay API (real-time)
-        # 2) Cliente NÃO está na carteira atual (sem saldo pendente)
-        # Trade-off aceito: re-inadimplência (cliente paga, volta a inad)
-        # perde o badge na linha antiga. Acceito pra ganhar simplicidade.
+        # Badge "REGULARIZADO" — mesma regra dos cards (_eh_reg): o pagamento
+        # zerou tudo que estava vencido NAQUELE dia (evento), com o overlay da
+        # API pros últimos 10 dias. Antes olhava se o cliente estava na
+        # carteira HOJE: quem regularizou e voltou a atrasar via o pagamento
+        # antigo virar "PAGAMENTO PARCIAL".
         _rid = str(row.get("id") or "")
         _rdt = str(row.get("data") or "")
         _cli_atual = _clientes_lookup.get(_rid)
-        # Overlay tem janela de 3 dias — se cliente foi marcado como
-        # _regularizado_hoje, a liquidação que disparou isso pode ser de
-        # ontem ou anteontem (creditada hoje). Não exigir _rdt==hoje_str.
-        eh_reg_hoje = _rid in ids_reg_hoje
-        eh_reg_sem_saldo = _cli_atual is None  # saiu da carteira → regularizou
-        eh_regularizado = eh_reg_hoje or eh_reg_sem_saldo
+        eh_regularizado = _eh_reg(row)
         reg_badge = (
             '<span style="background:rgba(45,211,111,.18);color:#2dd36f;'
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
@@ -435,7 +445,11 @@ def _render_historico(store):
             # fmt_moeda_plain (não fmt_moeda) — fmt_moeda colore valores altos
             # em vermelho/âmbar como ALERTA (desenhado pra dívidas em
             # Inadimplência). Aqui é PAGAMENTO recebido → tudo verde.
-            st.markdown(f'<div style="padding:12px 14px;font-size:14px;font-weight:600;color:#2dd36f">{fmt_moeda_plain(row.get("valor",0))}</div>', unsafe_allow_html=True)
+            # "· N boletos" só quando o cliente pagou mais de um no mesmo dia
+            _nb = int(row.get("n_boletos") or 1)
+            _nb_html = (f'<div style="font-size:11px;color:#8b94a5;font-weight:500;margin-top:2px">'
+                        f'{_nb} boletos</div>') if _nb > 1 else ""
+            st.markdown(f'<div style="padding:12px 14px;font-size:14px;font-weight:600;color:#2dd36f">{fmt_moeda_plain(row.get("valor",0))}{_nb_html}</div>', unsafe_allow_html=True)
         with rcols[4]:
             _at_txt = str(row.get("atendente") or "—")
             st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{_at_txt}</div>', unsafe_allow_html=True)
