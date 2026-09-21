@@ -642,28 +642,29 @@ def _render_atividades(store, clientes, role):
         'display:flex;flex-direction:column;align-self:flex-start'
     )
 
-    # Opções do multi-select: inadimplentes do mesmo recorte do card (grupo e
-    # situação), maior saldo primeiro — os que mais pesam no % aparecem no topo.
-    def _no_recorte(c):
-        g = c.get("_grupo")
-        if _npl_atendente == "__SEM_ESPECIALISTA__":
-            if g and str(g) not in ("—", "", "nan", "NaN"):
-                return False
-        elif _npl_atendente and g != _npl_atendente:
-            return False
-        if _npl_situacao == "ativos" and c.get("_inativo"):
-            return False
-        if _npl_situacao == "inativos" and not c.get("_inativo"):
-            return False
-        return float(c.get("valor") or 0) > 0
+    # Opções do multi-select: igrejas com peso no card, na ordem do peso
+    # (valor em aberto na janela de 90 dias no dia medido). Antes a lista era
+    # ordenada pela dívida TOTAL: 7 das 10 primeiras não mexiam no card
+    # (dívida antiga ou de outras contas) e quem pesava de verdade ficava na
+    # posição 44, 88, 102... Mesmo recorte de grupo/situação e mesma data de
+    # corte do card, porque vem da mesma query (fetch_npl_rolling sem exclusão).
+    _nomes_store = {
+        str(c.get("id")): c.get("nome", "") for c in (store.get("clientes", []) or [])
+    }
+    _peso_receita = (fetch_npl_rolling(
+        _npl_atendente, _npl_situacao, dia=carimbo_dia_cache()
+    ) or {}).get("peso_clientes") or []
 
-    _opcoes_excluir = sorted(
-        (c for c in (store.get("clientes", []) or []) if _no_recorte(c)),
-        key=lambda c: -float(c.get("valor") or 0),
-    )
+    def _rs_curto(v: float) -> str:
+        if v >= 1_000_000:
+            return f"R$ {v / 1_000_000:.1f} mi".replace(".", ",")
+        if v >= 1_000:
+            return f"R$ {v / 1_000:.0f} mil"
+        return fmt_moeda_plain(v)
+
     _rotulo_excluir = {
-        str(c["id"]): f'{c.get("nome", "")} · {fmt_moeda_plain(float(c.get("valor") or 0))}'
-        for c in _opcoes_excluir
+        cid: f'{_nomes_store.get(cid) or "ID " + cid} · {_rs_curto(peso)} na análise'
+        for cid, peso in _peso_receita
     }
 
 

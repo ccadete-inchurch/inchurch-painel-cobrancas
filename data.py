@@ -1927,6 +1927,28 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
     if df.empty:
         return {}
 
+    # Peso de cada cliente no card: valor em aberto na janela de 90 dias no
+    # dia medido. Alimenta o multi-select de exclusão (ordem + rótulo). Usa
+    # os MESMOS CTEs da query acima (corte, contas, desativação, grupo,
+    # situação), então o valor mostrado é exatamente o que sai do card ao
+    # excluir. Só na chamada sem exclusão — as opções não dependem dela.
+    peso_clientes = []
+    if not excluir:
+        _ctes = query[:query.index("\n    SELECT\n      -- HOJE")]
+        try:
+            _df_peso = client.query(_ctes + f"""
+    SELECT cid, SUM(IF(venc BETWEEN DATE_SUB(DATE('{today_str}'), INTERVAL 90 DAY) AND DATE('{today_str}')
+                       AND (desat IS NULL OR desat > venc)
+                       AND (liq IS NULL OR liq > DATE('{today_str}')), valor, 0)) AS aberto_90d
+    FROM boletos
+    GROUP BY cid
+    HAVING aberto_90d > 0
+    ORDER BY aberto_90d DESC
+    """).to_dataframe()
+            peso_clientes = [(str(a), float(b)) for a, b in zip(_df_peso["cid"], _df_peso["aberto_90d"])]
+        except Exception:
+            peso_clientes = []
+
     r = df.iloc[0]
 
     def _pct(aberto, emitido):
@@ -1957,8 +1979,10 @@ def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str |
         "d90_aberto":       float(r["d90_aberto_hoje"] or 0),
         "d90_emitido":      float(r["d90_emitido_hoje"] or 0),
         "delta_d90_pp":     d90_pct_hoje - d90_pct_ref,
-        # Ultimo dia contado (janela termina em D-1) — card mostra "ate dd/mm"
+        # Dia medido (D-2 uteis; janela termina nele, inclusive)
         "data_ref":         today_dt.strftime("%d/%m"),
+        # [(cid, aberto_90d)] em ordem decrescente — só sem exclusão
+        "peso_clientes":    peso_clientes,
     }
 
 
