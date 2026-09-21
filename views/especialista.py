@@ -1075,17 +1075,26 @@ def _render_especialista(store, clientes, role):
                 ],
             )
             _centro = alt.Chart(pd.DataFrame({"t": [f"{_tot_cart:,}".replace(",", ".")]})).mark_text(
-                fontSize=22, fontWeight=800, color="#e8eaf0", dy=-6,
+                fontSize=34, fontWeight=800, color="#e8eaf0", dy=-8,
             ).encode(text="t:N")
-            _centro_sub = alt.Chart(pd.DataFrame({"t": ["clientes"]})).mark_text(
-                fontSize=11, color="#8b94a5", dy=14,
+            _centro_sub = alt.Chart(pd.DataFrame({"t": ["igrejas"]})).mark_text(
+                fontSize=14, fontWeight=600, color="#8b94a5", dy=18,
             ).encode(text="t:N")
             chart_donut = (
                 _base_donut.mark_arc(innerRadius=60, outerRadius=110)
-                + _base_donut.mark_text(radius=138, fontSize=12, fontWeight=700)
-                .encode(text="rotulo:N")
+                # Rótulo com cor própria por especialista: a cor da fatia
+                # (verde escuro) sumia no fundo escuro.
+                + _base_donut.mark_text(radius=145, fontSize=16, fontWeight=800)
+                .encode(
+                    text="rotulo:N",
+                    color=alt.Color(
+                        "atendente:N", legend=None,
+                        scale=alt.Scale(domain=["Ana Carolina", "Priscila Oliveira"],
+                                        range=["#5cb82e", "#b5e38a"]),
+                    ),
+                )
                 + _centro + _centro_sub
-            ).properties(height=320)
+            ).resolve_scale(color="independent").properties(height=320)
             st.altair_chart(chart_donut, use_container_width=True)
         else:
             st.info("Sem carteira atual pra mostrar distribuição.")
