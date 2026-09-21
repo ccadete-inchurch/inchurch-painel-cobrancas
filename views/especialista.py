@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from auth import current_role
-from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_base, agregar_eficacia, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_inadimplentes_fim_periodo, fetch_contatos_janela, fetch_serie_carteira_mensal
+from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_inadimplentes_fim_periodo, fetch_contatos_janela, fetch_serie_carteira_mensal
 from helpers import fmt_moeda_plain, hoje_brt, carimbo_dia_cache
 
 
@@ -117,73 +117,6 @@ def _build_overlay_rows(clientes, df_bq, dt_inicio, dt_fim):
             "atraso_dias": (dt_real - _inicio).days if _inicio else None,
         })
     return rows
-
-
-def _versao_eficacia(dt_fim, hoje, ano_mes):
-    """Chave de cache da eficácia: a do dia enquanto ainda pode entrar
-    regularização (até 30 dias depois do fim do período), fixa depois."""
-    if dt_fim + timedelta(days=30) >= hoje:
-        return f"dia-{carimbo_dia_cache()}"
-    return f"mes-{ano_mes[0]:04d}-{ano_mes[1]:02d}"
-
-
-def _eficacia_com_overlay(clientes, dt_inicio, dt_fim, versao):
-    """Eficácia por especialista somando o overlay da API ao BigQuery.
-
-    O BQ replica 1x/dia, então no mês corrente faltam os pagamentos mais
-    recentes: em 16/09/2026 eram 133 pagamentos de setembro (129 clientes) que
-    a API já tinha e o BQ não. O ranking enxergava (usa BQ + overlay) e a
-    eficácia não — daí a coluna aparecer sempre atrás.
-
-    Aqui a base vem por cliente, o overlay marca quem pagou depois do primeiro
-    contato, e só então agrega. Marcar antes de agregar evita contar duas
-    vezes quem já estava no BQ.
-    """
-    base = fetch_eficacia_base(dt_inicio.isoformat(), dt_fim.isoformat(), versao)
-    if base.empty:
-        return pd.DataFrame()
-    base = base.copy()
-    base["cid"] = base["cid"].astype(str)
-    primeiro = dict(zip(base["cid"], base["primeiro_contato"]))
-    # Dias de contato no período, por cliente — pra aplicar a mesma regra do
-    # BQ: contato DURANTE o atraso quitado e até 30 dias antes do pagamento.
-    # Enxerga até 30 dias depois do fim pra achar o contato MAIS RECENTE
-    # antes do pagamento: a regularização só conta no mês dele.
-    _dias_contato = {}
-    _fim_busca = min(dt_fim + timedelta(days=30), date.fromisoformat(hoje_brt()))
-    _df_c = fetch_contatos_janela(dt_inicio.isoformat(), _fim_busca.isoformat())
-    if not _df_c.empty:
-        for _cid, _d in zip(_df_c["cid"].astype(str), _df_c["data_tarefa"]):
-            _d = _d.date() if hasattr(_d, "date") else _d
-            if _d >= dt_inicio:
-                _dias_contato.setdefault(_cid, []).append(_d)
-    pagos_overlay = set()
-    for c in clientes or []:
-        # Só regularização conta na eficácia (parcial não)
-        if not c.get("_regularizado_hoje"):
-            continue
-        # Data do pagamento ATRASADO — mesma régua do BQ nesta tela. Com a data
-        # do pagamento total, quem só pagou em dia entraria como conversão.
-        dt_real = c.get("_dt_liquidacao_atraso")
-        cid = str(c.get("id") or "")
-        if dt_real is None or cid not in primeiro:
-            continue
-        # Até 30 dias depois do fim do período (mesma janela do BQ)
-        if not (dt_inicio <= dt_real <= dt_fim + timedelta(days=30)):
-            continue
-        _inicio = c.get("_venc_atraso")
-        if _inicio is not None and (dt_real - _inicio).days < 5:
-            continue  # até 4 dias de atraso: margem de erro, fora da régua
-        _validos = [
-            d for d in _dias_contato.get(cid, [])
-            if d <= dt_real and (dt_real - d).days <= 30 and (_inicio is None or d >= _inicio)
-        ]
-        # Conta uma vez só: no mês do contato mais recente antes do pagamento
-        if _validos and dt_inicio <= max(_validos) <= dt_fim:
-            pagos_overlay.add(cid)
-    if pagos_overlay:
-        base["pagou_apos_contato"] = base["pagou_apos_contato"].astype(bool) | base["cid"].isin(pagos_overlay)
-    return agregar_eficacia(base)
 
 
 # Carência de 4 dias: a tela do Especialista só olha quem chegou a 5+ dias de
@@ -315,9 +248,6 @@ def _render_especialista(store, clientes, role):
         f"dia-{carimbo_dia_cache()}" if _mes_corrente
         else f"mes-{_mes_sel[0]:04d}-{_mes_sel[1]:02d}"
     )
-    # Eficácia conta regularização até 30 dias depois do contato, então o
-    # mês anterior ainda muda até 30 dias após fechar: fica na chave do dia.
-    _versao_ef = _versao_eficacia(dt_fim, hoje, _mes_sel)
 
     # Cobertura vem cedo porque alimenta DOIS lugares: o card de inadimplentes
     # (mês fechado) e a coluna Carteira inad. do ranking. Uma consulta só.
@@ -446,6 +376,20 @@ def _render_especialista(store, clientes, role):
         ids_situacao_ok = {
             str(c.get("id") or "") for c in clientes if _eh_situacao_match(c)
         }
+
+    def _contatados_por_atendente(ini, fim):
+        """Clientes distintos com msg/ligação no período, por atendente —
+        denominador da Eficácia (mesmo filtro de Situação dos pagamentos)."""
+        _c = fetch_contatos_janela(ini.isoformat(), fim.isoformat())
+        if _c.empty:
+            return pd.DataFrame(columns=["atendente", "contatados"])
+        _c = _c.copy()
+        _c["cid"] = _c["cid"].astype(str)
+        _d = pd.to_datetime(_c["data_tarefa"]).dt.date
+        _c = _c[(_d >= ini) & (_d <= fim)]
+        if ids_situacao_ok is not None:
+            _c = _c[_c["cid"].isin(ids_situacao_ok)]
+        return _c.groupby("atendente")["cid"].nunique().rename("contatados").reset_index()
 
     # df_per_all: período inteiro (BQ já filtrou por data) — média da equipe.
     # Aplica filtro de Situação cruzando com IDs da carteira atual.
@@ -675,22 +619,19 @@ def _render_especialista(store, clientes, role):
         )
         .reset_index()
     )
-    # Eficácia REAL = dos clientes contactados no mês, % que pagou depois do
-    # contato. Usa _eficacia_com_overlay (BQ + API), mesmo dado da matriz.
-    df_ef_real = _eficacia_com_overlay(clientes, dt_inicio, dt_fim, _versao_ef)
-    if df_ef_real.empty:
-        rank_agg["eficacia"] = 0
-        rank_agg["ef_regularizaram"] = 0
-        rank_agg["ef_contatados"] = 0
-    else:
-        rank_agg = rank_agg.merge(
-            df_ef_real[["atendente", "eficacia_real", "regularizaram", "clientes_contactados"]],
-            on="atendente", how="left",
-        )
-        rank_agg["eficacia"] = rank_agg["eficacia_real"].fillna(0).astype(float)
-        rank_agg["ef_regularizaram"] = rank_agg["regularizaram"].fillna(0).astype(int)
-        rank_agg["ef_contatados"] = rank_agg["clientes_contactados"].fillna(0).astype(int)
-        rank_agg = rank_agg.drop(columns=["eficacia_real", "regularizaram", "clientes_contactados"])
+    # Eficácia = Reg. com contato ÷ Contatados do mês — as duas colunas da
+    # própria linha, então a conta se confere na tabela. A regularização
+    # conta no mês do PAGAMENTO (uma vez só), igual a Reg. total e % da
+    # carteira. Antes contava no mês do contato e nunca batia com a coluna.
+    rank_agg = rank_agg.merge(
+        _contatados_por_atendente(dt_inicio, dt_fim), on="atendente", how="left"
+    )
+    rank_agg["ef_contatados"] = rank_agg["contatados"].fillna(0).astype(int)
+    rank_agg["ef_regularizaram"] = rank_agg["reg_via_contato"].fillna(0).astype(int)
+    rank_agg["eficacia"] = (
+        rank_agg["ef_regularizaram"] / rank_agg["ef_contatados"].replace(0, pd.NA) * 100
+    ).fillna(0).astype(float)
+    rank_agg = rank_agg.drop(columns=["contatados"])
     # Cobertura = quanto da propria carteira inadimplente o especialista tocou
     # no periodo. Complementa a eficacia: quem tem carteira maior recebe o
     # mesmo lote de 80/dia e por isso cobre uma fatia menor.
@@ -762,11 +703,11 @@ def _render_especialista(store, clientes, role):
         ("Especialista", ""),
         ("Carteira<br>inad.", _carteira_tip),
         ("Contatados", "Clientes distintos que receberam mensagem ou ligação no mês. É a base da Eficácia e da Cobertura."),
-        ("Reg. com<br>contato", "Clientes com 5+ dias de atraso que zeraram o atraso no mês tendo recebido msg ou ligação DURANTE esse atraso (e nos 30 dias antes do pagamento). Crédito vai pra quem fez o contato mais recente — pode ser contato do mês anterior, por isso difere do numerador da Eficácia."),
+        ("Reg. com<br>contato", "Clientes com 5+ dias de atraso que zeraram o atraso no mês tendo recebido msg ou ligação DURANTE esse atraso (e nos 30 dias antes do pagamento). Crédito vai pra quem fez o contato mais recente. É o numerador da Eficácia."),
         ("Reg. sem<br>contato", "Clientes com 5+ dias de atraso que zeraram o atraso sem contato da cobrança durante esse atraso. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
         ("Reg.<br>total", "Reg. com contato + Reg. sem contato. Quem pagou com 1 a 4 dias de atraso fica fora da tela (ainda não podia ser cobrado)."),
         ("% da<br>carteira", "Reg. total ÷ carteira inad. (as duas só com 5+ dias). Ordena o ranking: compara carteiras de tamanhos diferentes. Inclui quem pagou sem contato."),
-        ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que REGULARIZARAM (zeraram o atraso, 5+ dias) em até 30 dias depois do contato, mesmo que no mês seguinte. O contato precisa ter sido durante esse atraso. Pagamento parcial não conta."),
+        ("Eficácia", "Reg. com contato ÷ Contatados. Cada regularização conta uma vez, no mês do pagamento. Pagamento parcial não conta."),
         ("Cobertura", "Dos clientes da carteira que chegaram a 5+ dias de atraso no mês (quem o lote pode alcançar), % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
         ("Valor<br>recuperado", ""),
     ]
@@ -841,7 +782,7 @@ def _render_especialista(store, clientes, role):
         _ef_cor = "#22c55e" if _ef >= 30 else ("#f59e0b" if _ef >= 15 else "#ef4444")
         _ef_reg = int(row.get("ef_regularizaram", 0) or 0)
         _ef_cont = int(row.get("ef_contatados", 0) or 0)
-        _ef_tip = f"{_ef_reg} de {_ef_cont} clientes contactados no mês regularizaram com contato durante o atraso"
+        _ef_tip = f"{_ef_reg} regularizações com contato ÷ {_ef_cont} contatados no mês"
         rcols[8].markdown(
             f'<div title="{_ef_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
             f'color:{_ef_cor};font-weight:700">{_ef:.2f}%</div>',
@@ -898,18 +839,17 @@ def _render_especialista(store, clientes, role):
     )
     agg_esp = agg_esp.merge(_reg_com_esp, on="atendente", how="left")
     agg_esp["reg_com_contato"] = agg_esp["reg_com_contato"].fillna(0).astype(int)
-    df_ef = _eficacia_com_overlay(clientes, dt_inicio, dt_fim, _versao_ef)
-    if filtro_esp and not df_ef.empty:
-        df_ef = df_ef[df_ef["atendente"].isin(filtro_esp)]
-    if not df_ef.empty:
-        agg_esp = agg_esp.merge(
-            df_ef[["atendente", "eficacia_real", "clientes_contactados", "regularizaram"]],
-            on="atendente", how="left",
-        ).fillna({"eficacia_real": 0, "clientes_contactados": 0, "regularizaram": 0})
-    else:
-        agg_esp["eficacia_real"] = 0
-        agg_esp["clientes_contactados"] = 0
-        agg_esp["regularizaram"] = 0
+    # Eficácia = Reg. com contato ÷ Contatados, mesma conta da tabela
+    agg_esp = agg_esp.merge(
+        _contatados_por_atendente(dt_inicio, dt_fim)
+        .rename(columns={"contatados": "clientes_contactados"}),
+        on="atendente", how="left",
+    )
+    agg_esp["clientes_contactados"] = agg_esp["clientes_contactados"].fillna(0).astype(int)
+    agg_esp["regularizaram"] = agg_esp["reg_com_contato"]
+    agg_esp["eficacia_real"] = (
+        agg_esp["reg_com_contato"] / agg_esp["clientes_contactados"].replace(0, pd.NA) * 100
+    ).fillna(0).astype(float)
 
     # ── Matriz de Desempenho (scatter Volume × Eficácia) ──────────────────
     # Cada atendente vira um ponto. Quadrante superior direito = star
@@ -1231,25 +1171,6 @@ def _render_especialista(store, clientes, role):
 
     if _meses_funil:
         _vol, _taxas, _topo = [], [], []
-        # Eficácia por mês, com a mesma função da tabela (overlay só no mês
-        # corrente, que é o único com pagamentos que o BQ ainda não tem).
-        _eficacia_mes = {}
-        for _m_key in _meses_funil:
-            _a, _mm = (int(x) for x in _m_key.split("-"))
-            _ini_m = date(_a, _mm, 1)
-            _prox = date(_a + 1, 1, 1) if _mm == 12 else date(_a, _mm + 1, 1)
-            _fim_m = min(_prox - timedelta(days=1), _hoje_trend)
-            # Mesma função da tabela em todo mês: o overlay da API também
-            # alimenta o mês anterior (regularização até 30 dias depois).
-            _ver = _versao_eficacia(_fim_m, _hoje_trend, (_a, _mm))
-            _df_e = _eficacia_com_overlay(clientes, _ini_m, _fim_m, _ver)
-            if _df_e is None or _df_e.empty:
-                continue
-            if filtro_esp:
-                _df_e = _df_e[_df_e["atendente"].isin(filtro_esp)]
-            _den = int(_df_e["clientes_contactados"].sum())
-            if _den:
-                _eficacia_mes[_m_key] = int(_df_e["regularizaram"].sum()) / _den * 100
         for _m_key in _meses_funil:
             d = _serie_mes[_m_key]
             lbl = _mes_label_pt(_m_key)
@@ -1276,7 +1197,9 @@ def _render_especialista(store, clientes, role):
             # atraso). A linha "sem contato" saiu: o lote prioriza os piores
             # casos, então comparar com quem não foi contatado induzia a
             # concluir que o contato não adianta.
-            _ef_mes = _eficacia_mes.get(_m_key)
+            # Eficácia do mês = Reg. com contato ÷ contatados (mesma conta da
+            # tabela), com as regularizações no mês do pagamento.
+            _ef_mes = (d["reg_via"] / d["cont"] * 100) if d["cont"] else None
             if _ef_mes is not None:
                 _taxas.append({"mes": lbl, "serie": "Eficácia do contato (%)",
                                "pct": _ef_mes})
@@ -1350,7 +1273,7 @@ def _render_especialista(store, clientes, role):
                 'margin-bottom:4px">Taxas Mensais</div>'
                 '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
                 'Cobertura = contatados ÷ inadimplentes com 5+ dias no mês.<br>'
-                'Eficácia = dos contatados no mês, % que regularizaram com contato durante o atraso.'
+                'Eficácia = regularizações com contato ÷ contatados no mês.'
                 '</div>',
                 unsafe_allow_html=True,
             )
