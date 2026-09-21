@@ -733,8 +733,8 @@ def _render_especialista(store, clientes, role):
         ("Contatados", "Clientes distintos que receberam mensagem ou ligação no mês. É a base da Eficácia e da Cobertura."),
         ("Reg. com<br>contato", "Clientes com 5+ dias de atraso que zeraram o atraso no mês tendo recebido msg ou ligação DURANTE esse atraso (e nos 30 dias antes do pagamento). Crédito vai pra quem fez o contato mais recente — pode ser contato do mês anterior, por isso difere do numerador da Eficácia."),
         ("Reg. sem<br>contato", "Clientes com 5+ dias de atraso que zeraram o atraso sem contato da cobrança durante esse atraso. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
-        ("Reg. até<br>4 dias", "Zeraram o atraso pagando com até 4 dias de atraso — antes de poder entrar no lote (mensagem a partir de 5 dias). Margem de erro: não é mérito nem falha da cobrança."),
-        ("Reg.<br>total", "Total de clientes que zeraram o atraso no mês = Reg. com contato + Reg. sem contato + Reg. até 4 dias."),
+        ("Reg. antes<br>da cobrança", "Pagou com até 4 dias de atraso, antes de poder entrar no lote (mensagem a partir de 5 dias). Não é mérito nem falha da cobrança."),
+        ("Reg.<br>total", "Total de clientes que zeraram o atraso no mês = Reg. com contato + Reg. sem contato + Reg. antes da cobrança."),
         ("% da<br>carteira", "Reg. total ÷ carteira inadimplente do mês. Ordena o ranking: compara carteiras de tamanhos diferentes. Inclui quem pagou sem contato."),
         ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que REGULARIZARAM (zeraram o atraso, 5+ dias) com contato durante esse atraso, até 30 dias antes do pagamento. Pagamento parcial não conta."),
         ("Cobertura", "Dos clientes da carteira que chegaram a 5+ dias de atraso no mês (quem o lote pode alcançar), % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
@@ -896,7 +896,7 @@ def _render_especialista(store, clientes, role):
         '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
         'Regularizações com contato × Eficácia por especialista. Só conta regularização com contato '
         'durante o atraso (5+ dias) — quem pagou com até 4 dias fica de fora por não ter podido ser '
-        'cobrado (ver a coluna "Reg. até 4 dias" na tabela). Superior direito = melhor desempenho.'
+        'cobrado (ver a coluna "Reg. antes da cobrança" na tabela). Superior direito = melhor desempenho.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -955,6 +955,38 @@ def _render_especialista(store, clientes, role):
         f'Linhas pontilhadas = média da equipe (eficácia {_avg_ef:.2f}%, '
         f'regularizações com contato {_avg_vol:.0f}).'
         f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Glossário das três origens de regularização (tabela, gráficos, Matriz)
+    _g_css_th = ("padding:8px 12px;text-align:left;font-size:11px;font-weight:700;"
+                 "color:#8b94a5;text-transform:uppercase;letter-spacing:0.6px;"
+                 "border-bottom:1px solid #2a2f42")
+    _g_css_td = "padding:8px 12px;font-size:13px;color:#cbd5e1;border-bottom:1px solid #1e2333"
+    _g_linhas = [
+        ("Antes da cobrança", "#6b7280", "1 a 4 dias",
+         "Não — o lote só pega a partir de 5 dias", "Pagou antes de entrar na régua"),
+        ("Sem contato", "#9ca3af", "5 dias ou mais",
+         "Sim — já podia estar no lote",
+         "Estava na régua, não foi contatado durante o atraso e pagou sozinho "
+         "(não coube no lote, estava em bloqueio ou a atendente não chegou nele)"),
+        ("Com contato", "#22c55e", "5 dias ou mais",
+         "Sim — e agiu", "Recebeu msg/ligação durante o atraso e pagou"),
+    ]
+    _g_rows = "".join(
+        f'<tr><td style="{_g_css_td};color:{cor};font-weight:700;white-space:nowrap">{nome}</td>'
+        f'<td style="{_g_css_td};white-space:nowrap">{atraso}</td>'
+        f'<td style="{_g_css_td}">{podia}</td><td style="{_g_css_td}">{oque}</td></tr>'
+        for nome, cor, atraso, podia, oque in _g_linhas
+    )
+    st.markdown(
+        '<div style="font-size:12px;font-weight:700;color:#8b94a5;text-transform:uppercase;'
+        'letter-spacing:1.2px;margin:20px 0 8px">Como ler as regularizações</div>'
+        '<table style="width:100%;border-collapse:collapse;background:#181c26;'
+        'border:1px solid #2a2f42;border-radius:8px">'
+        f'<tr><th style="{_g_css_th}">Origem</th><th style="{_g_css_th}">Atraso quando pagou</th>'
+        f'<th style="{_g_css_th}">A cobrança podia agir?</th><th style="{_g_css_th}">O que aconteceu</th></tr>'
+        f'{_g_rows}</table>',
         unsafe_allow_html=True,
     )
 
@@ -1019,8 +1051,8 @@ def _render_especialista(store, clientes, role):
                 y=alt.Y("clientes:Q", title="CLIENTES"),
                 color=alt.Color(
                     "serie:N", title=None,
-                    scale=alt.Scale(domain=["Com contato", "Sem contato"],
-                                    range=["#22c55e", "#9ca3af"]),
+                    scale=alt.Scale(domain=["Com contato", "Sem contato", "Total (inclui antes da cobrança)"],
+                                    range=["#22c55e", "#9ca3af", "#e8eaf0"]),
                     legend=alt.Legend(orient="top", labelLimit=0),
                 ),
                 opacity=alt.condition(alt.datum.eh_hoje, alt.value(0.45), alt.value(1.0)),
@@ -1030,9 +1062,10 @@ def _render_especialista(store, clientes, role):
                     alt.Tooltip("clientes:Q", title="Clientes"),
                 ],
             )
-            _base_tot_dia = alt.Chart(_por_dia).encode(
+            _base_tot_dia = alt.Chart(_por_dia.assign(serie="Total (inclui antes da cobrança)")).encode(
                 x=_x_dia,
                 y=alt.Y("total:Q"),
+                color=alt.Color("serie:N", legend=None),
                 tooltip=[
                     alt.Tooltip("data_str:O", title="Dia"),
                     alt.Tooltip("total:Q", title="Total de regularizações"),
@@ -1042,8 +1075,8 @@ def _render_especialista(store, clientes, role):
             )
             chart_dia = (
                 _bar_dia
-                + _base_tot_dia.mark_line(color="#e8eaf0", strokeDash=[4, 3], strokeWidth=1.5)
-                + _base_tot_dia.mark_circle(color="#e8eaf0", size=35)
+                + _base_tot_dia.mark_line(strokeDash=[4, 3], strokeWidth=1.5)
+                + _base_tot_dia.mark_circle(size=35)
             ).properties(height=320)
             st.altair_chart(chart_dia, use_container_width=True)
 
@@ -1230,7 +1263,7 @@ def _render_especialista(store, clientes, role):
             lbl = _mes_label_pt(_m_key)
             _vol.append({"mes": lbl, "serie": "Com contato", "clientes": d["reg_via"]})
             _vol.append({"mes": lbl, "serie": "Sem contato", "clientes": d["reg_esp"]})
-            _tot.append({"mes": lbl, "serie": "Total (inclui até 4 dias)", "clientes": d.get("reg_total", 0)})
+            _tot.append({"mes": lbl, "serie": "Total (inclui antes da cobrança)", "clientes": d.get("reg_total", 0)})
             # Taxas na mesma base da tabela: inadimplentes com 5+ dias.
             # Sem contato = base que NÃO foi contatada no mês.
             _sem_contato = max(d["inad"] - d.get("cont_base", 0), 0)
@@ -1265,8 +1298,8 @@ def _render_especialista(store, clientes, role):
                     y=alt.Y("clientes:Q", title="CLIENTES"),
                     color=alt.Color(
                         "serie:N", title=None,
-                        scale=alt.Scale(domain=["Com contato", "Sem contato"],
-                                        range=["#22c55e", "#9ca3af"]),
+                        scale=alt.Scale(domain=["Com contato", "Sem contato", "Total (inclui antes da cobrança)"],
+                                        range=["#22c55e", "#9ca3af", "#e8eaf0"]),
                         legend=alt.Legend(orient="top", labelLimit=0),
                     ),
                     tooltip=[
@@ -1281,14 +1314,15 @@ def _render_especialista(store, clientes, role):
             _base_tot = alt.Chart(pd.DataFrame(_tot)).encode(
                 x=alt.X("mes:O", sort=_ordem_lbl),
                 y=alt.Y("clientes:Q"),
+                color=alt.Color("serie:N", legend=None),
                 tooltip=[
                     alt.Tooltip("mes:N", title="Mês"),
                     alt.Tooltip("clientes:Q", title="Total de regularizações"),
                 ],
             )
             _linha_tot = (
-                _base_tot.mark_line(color="#e8eaf0", strokeDash=[4, 3], strokeWidth=1.5)
-                + _base_tot.mark_circle(color="#e8eaf0", size=45)
+                _base_tot.mark_line(strokeDash=[4, 3], strokeWidth=1.5)
+                + _base_tot.mark_circle(size=45)
                 + _base_tot.mark_text(dy=-10, fontSize=11, fontWeight=700, color="#e8eaf0")
                 .encode(text=alt.Text("clientes:Q"))
             )
