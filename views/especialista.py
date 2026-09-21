@@ -1059,11 +1059,14 @@ def _render_especialista(store, clientes, role):
             )
             _tot_cart = int(carteira_agg["clientes"].sum())
             carteira_agg["pct"] = carteira_agg["clientes"] / _tot_cart * 100
-            # Rótulo fora da fatia: quantidade · % da carteira das duas
-            carteira_agg["rotulo"] = [
-                f"{n} · {p:.2f}%".replace(".", ",")
-                for n, p in zip(carteira_agg["clientes"], carteira_agg["pct"])
-            ]
+            # Quantidade dentro da fatia, % da carteira das duas do lado de fora
+            carteira_agg["qtd_lbl"] = carteira_agg["clientes"].map(lambda n: f"{n:,}".replace(",", "."))
+            carteira_agg["pct_lbl"] = carteira_agg["pct"].map(lambda v: f"{v:.2f}%".replace(".", ","))
+            # Cor do número interno por fatia: escuro na fatia verde clara,
+            # branco na verde escura (mesma ordem que a escala das fatias usa).
+            _dom_cart = sorted(carteira_agg["atendente"].unique())
+            _cor_interna = ["#0f1117" if c in ("#7cc243", "#a3d672") else "#ffffff"
+                            for c in _CHART_PALETTE[:len(_dom_cart)]]
             _base_donut = alt.Chart(carteira_agg).encode(
                 theta=alt.Theta("clientes:Q", title="Clientes", stack=True),
                 color=alt.Color(
@@ -1081,17 +1084,24 @@ def _render_especialista(store, clientes, role):
             _centro = alt.Chart(pd.DataFrame({"t": [f"{_tot_cart:,}".replace(",", ".")]})).mark_text(
                 fontSize=34, fontWeight=800, color="#e8eaf0", dy=-8,
             ).encode(text="t:N")
-            _centro_sub = alt.Chart(pd.DataFrame({"t": ["IGREJAS"]})).mark_text(
+            _centro_sub = alt.Chart(pd.DataFrame({"t": ["CLIENTES"]})).mark_text(
                 fontSize=14, fontWeight=700, color="#8b94a5", dy=18,
             ).encode(text="t:N")
             chart_donut = (
-                _base_donut.mark_arc(innerRadius=60, outerRadius=110)
-                # Rótulo em branco, fora da fatia: com a cor da fatia ele
-                # sumia no verde escuro e no fundo.
-                + _base_donut.mark_text(radius=155, fontSize=19, fontWeight=800)
-                .encode(text="rotulo:N", color=alt.value("#ffffff"))
+                _base_donut.mark_arc(innerRadius=62, outerRadius=122,
+                                     stroke="#0f1117", strokeWidth=3)
+                # Quantidade no meio da fatia
+                + _base_donut.mark_text(radius=92, fontSize=20, fontWeight=800)
+                .encode(
+                    text="qtd_lbl:N",
+                    color=alt.Color("atendente:N", legend=None,
+                                    scale=alt.Scale(domain=_dom_cart, range=_cor_interna)),
+                )
+                # Percentual do lado de fora
+                + _base_donut.mark_text(radius=152, fontSize=15, fontWeight=700)
+                .encode(text="pct_lbl:N", color=alt.value("#cbd5e1"))
                 + _centro + _centro_sub
-            ).properties(height=320)
+            ).resolve_scale(color="independent").properties(height=320)
             st.altair_chart(chart_donut, use_container_width=True)
         else:
             st.info("Sem carteira atual pra mostrar distribuição.")
