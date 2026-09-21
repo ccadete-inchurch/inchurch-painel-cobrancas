@@ -172,49 +172,6 @@ def _eficacia_com_overlay(clientes, dt_inicio, dt_fim, versao):
     return agregar_eficacia(base)
 
 
-_ORIGENS_REG = ["Com contato", "Sem contato", "Pagou em até 4 dias"]
-_CORES_REG = ["#22c55e", "#9ca3af", "#4b5563"]
-
-
-def _chart_regularizacoes_empilhado(df, x_campo, x_titulo, x_ordem, destacar_hoje=False):
-    """df: uma linha por período com colunas com, sem, rapido, total (+ eh_hoje).
-    Verde na base (trabalho da cobrança, comparável entre períodos), cinza no
-    meio e cinza escuro em cima (quem pagou antes de poder ser cobrado).
-    Total escrito em cima da barra."""
-    linhas = []
-    for ordem, (serie, col) in enumerate(zip(_ORIGENS_REG, ["com", "sem", "rapido"])):
-        parte = df[[x_campo, col, "total"] + (["eh_hoje"] if destacar_hoje else [])].copy()
-        parte = parte.rename(columns={col: "clientes"})
-        parte["serie"] = serie
-        parte["ordem"] = ordem
-        linhas.append(parte)
-    longo = pd.concat(linhas, ignore_index=True)
-    x = alt.X(f"{x_campo}:O", title=x_titulo, sort=x_ordem, axis=alt.Axis(labelAngle=0))
-    enc = dict(
-        x=x,
-        y=alt.Y("clientes:Q", title="CLIENTES", stack="zero"),
-        color=alt.Color(
-            "serie:N", title=None, sort=_ORIGENS_REG,
-            scale=alt.Scale(domain=_ORIGENS_REG, range=_CORES_REG),
-            legend=alt.Legend(orient="top", labelLimit=0),
-        ),
-        order=alt.Order("ordem:Q", sort="ascending"),
-        tooltip=[
-            alt.Tooltip(f"{x_campo}:O", title="Período"),
-            alt.Tooltip("serie:N", title="Origem"),
-            alt.Tooltip("clientes:Q", title="Clientes"),
-            alt.Tooltip("total:Q", title="Total de regularizações"),
-        ],
-    )
-    if destacar_hoje:
-        enc["opacity"] = alt.condition(alt.datum.eh_hoje, alt.value(0.45), alt.value(1.0))
-    barras = alt.Chart(longo).mark_bar().encode(**enc)
-    total = alt.Chart(df).mark_text(dy=-8, fontSize=11, fontWeight=700, color="#e8eaf0").encode(
-        x=x, y=alt.Y("total:Q"), text=alt.Text("total:Q"),
-    )
-    return (barras + total).properties(height=320)
-
-
 def _altair_theme():
     """Tema escuro pros gráficos Altair — combina com o painel."""
     return {
@@ -1015,9 +972,8 @@ def _render_especialista(store, clientes, role):
     with g_esq:
         _tem_hoje_no_df = any(d == hoje for d in df_per["data_dt"].dt.date.unique())
         _sub_dia = (
-            'Altura da barra = total do dia. "Pagou em até 4 dias" pagou antes de '
-            'poder entrar no lote, então não tinha como ser cobrado; com e sem '
-            'contato valem pra quem já estava na cobrança.'
+            'Barras: 5+ dias de atraso, com ou sem contato durante o atraso. '
+            'Linha: total do dia, incluindo quem pagou em até 4 dias.'
             + (' Hoje aparece mais claro — dia em andamento.' if _tem_hoje_no_df else '')
         )
         st.markdown(
@@ -1053,10 +1009,42 @@ def _render_especialista(store, clientes, role):
             _por_dia["data_str"] = _por_dia["data"].apply(lambda d: d.strftime("%d/%m"))
             _por_dia["eh_hoje"] = _por_dia["data"].apply(lambda d: d == hoje)
             _datas_ordem = _por_dia.sort_values("data")["data_str"].tolist()
-            _por_dia["rapido"] = (_por_dia["total"] - _por_dia["com"] - _por_dia["sem"]).clip(lower=0)
-            chart_dia = _chart_regularizacoes_empilhado(
-                _por_dia, "data_str", "DIA", _datas_ordem, destacar_hoje=True
+            _barras = pd.concat([
+                _por_dia.assign(serie="Com contato", clientes=_por_dia["com"]),
+                _por_dia.assign(serie="Sem contato", clientes=_por_dia["sem"]),
+            ])[["data_str", "eh_hoje", "serie", "clientes"]]
+            _x_dia = alt.X("data_str:O", title="DIA", sort=_datas_ordem, axis=alt.Axis(labelAngle=0))
+            _bar_dia = alt.Chart(_barras).mark_bar(cornerRadiusEnd=2).encode(
+                x=_x_dia,
+                y=alt.Y("clientes:Q", title="CLIENTES"),
+                color=alt.Color(
+                    "serie:N", title=None,
+                    scale=alt.Scale(domain=["Com contato", "Sem contato"],
+                                    range=["#22c55e", "#9ca3af"]),
+                    legend=alt.Legend(orient="top", labelLimit=0),
+                ),
+                opacity=alt.condition(alt.datum.eh_hoje, alt.value(0.45), alt.value(1.0)),
+                tooltip=[
+                    alt.Tooltip("data_str:O", title="Dia"),
+                    alt.Tooltip("serie:N", title="Origem"),
+                    alt.Tooltip("clientes:Q", title="Clientes"),
+                ],
             )
+            _base_tot_dia = alt.Chart(_por_dia).encode(
+                x=_x_dia,
+                y=alt.Y("total:Q"),
+                tooltip=[
+                    alt.Tooltip("data_str:O", title="Dia"),
+                    alt.Tooltip("total:Q", title="Total de regularizações"),
+                    alt.Tooltip("com:Q", title="Com contato (5+ dias)"),
+                    alt.Tooltip("sem:Q", title="Sem contato (5+ dias)"),
+                ],
+            )
+            chart_dia = (
+                _bar_dia
+                + _base_tot_dia.mark_line(color="#e8eaf0", strokeDash=[4, 3], strokeWidth=1.5)
+                + _base_tot_dia.mark_circle(color="#e8eaf0", size=35)
+            ).properties(height=320)
             st.altair_chart(chart_dia, use_container_width=True)
 
     # ── Distribuição da Carteira (Donut) ──────────────────────────────────
@@ -1266,21 +1254,48 @@ def _render_especialista(store, clientes, role):
                 'text-transform:uppercase;letter-spacing:1.5px;'
                 'margin-bottom:4px">Regularizações por Mês</div>'
                 '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-                'Altura da barra = total do mês. "Pagou em até 4 dias" pagou antes de '
-                'poder entrar no lote; com e sem contato valem pra quem já estava '
-                'na cobrança.'
+                'Barras: clientes com 5+ dias de atraso que zeraram o atraso, com ou '
+                'sem contato durante o atraso. Linha: total de regularizações, '
+                'incluindo quem pagou em até 4 dias (antes de poder entrar no lote).'
                 '</div>',
                 unsafe_allow_html=True,
             )
-            _df_mes_reg = pd.DataFrame([
-                {"mes": _mes_label_pt(k), "com": _serie_mes[k]["reg_via"],
-                 "sem": _serie_mes[k]["reg_esp"],
-                 "rapido": max(_serie_mes[k].get("reg_total", 0)
-                               - _serie_mes[k]["reg_via"] - _serie_mes[k]["reg_esp"], 0),
-                 "total": _serie_mes[k].get("reg_total", 0)}
-                for k in _meses_funil
-            ])
-            chart_vol = _chart_regularizacoes_empilhado(_df_mes_reg, "mes", "MÊS", _ordem_lbl)
+            _df_vol = pd.DataFrame(_vol)
+            _base_vol = alt.Chart(_df_vol).encode(
+                    x=alt.X("mes:O", title="MÊS", sort=_ordem_lbl, axis=alt.Axis(labelAngle=0)),
+                    y=alt.Y("clientes:Q", title="CLIENTES"),
+                    color=alt.Color(
+                        "serie:N", title=None,
+                        scale=alt.Scale(domain=["Com contato", "Sem contato"],
+                                        range=["#22c55e", "#9ca3af"]),
+                        legend=alt.Legend(orient="top", labelLimit=0),
+                    ),
+                    tooltip=[
+                        alt.Tooltip("mes:N", title="Mês"),
+                        alt.Tooltip("serie:N", title="Origem"),
+                        alt.Tooltip("clientes:Q", title="Clientes"),
+                    ],
+            )
+            _rot_vol = _base_vol.mark_text(dy=12, fontSize=11, fontWeight=700).encode(
+                text=alt.Text("clientes:Q"), color=alt.value("#0f1117")
+            )
+            _base_tot = alt.Chart(pd.DataFrame(_tot)).encode(
+                x=alt.X("mes:O", sort=_ordem_lbl),
+                y=alt.Y("clientes:Q"),
+                tooltip=[
+                    alt.Tooltip("mes:N", title="Mês"),
+                    alt.Tooltip("clientes:Q", title="Total de regularizações"),
+                ],
+            )
+            _linha_tot = (
+                _base_tot.mark_line(color="#e8eaf0", strokeDash=[4, 3], strokeWidth=1.5)
+                + _base_tot.mark_circle(color="#e8eaf0", size=45)
+                + _base_tot.mark_text(dy=-10, fontSize=11, fontWeight=700, color="#e8eaf0")
+                .encode(text=alt.Text("clientes:Q"))
+            )
+            chart_vol = (
+                _base_vol.mark_bar(cornerRadiusEnd=2) + _rot_vol + _linha_tot
+            ).properties(height=320)
             st.altair_chart(chart_vol, use_container_width=True)
 
         with g_tx:
