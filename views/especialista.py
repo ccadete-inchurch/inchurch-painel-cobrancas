@@ -522,7 +522,9 @@ def _render_especialista(store, clientes, role):
         f'<div style="font-size:38px;font-weight:800;color:{cor};margin-top:6px;'
         f'line-height:1.05;font-variant-numeric:tabular-nums;'
         f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{valor}</div>'
-        f'<div class="metric-sub" style="font-size:15px;margin-top:8px">{sub}</div>'
+        # nowrap: em notebook o subtítulo quebrava ("93.78 dos / pagamentos")
+        f'<div class="metric-sub" style="font-size:13.5px;margin-top:8px;white-space:nowrap;'
+        f'overflow:hidden;text-overflow:ellipsis">{sub}</div>'
         f'</div>'
     )
     with c1:
@@ -539,7 +541,7 @@ def _render_especialista(store, clientes, role):
     with c3:
         st.markdown(
             _card_fmt("Regularizações", f"{total_reg:,}",
-                      f"{taxa_reg:.2f}% dos pagamentos", "#22c55e", _tt_reg),
+                      f"{taxa_reg:.2f}% dos pagantes".replace(".", ","), "#22c55e", _tt_reg),
             unsafe_allow_html=True,
         )
     with c4:
@@ -563,6 +565,285 @@ def _render_especialista(store, clientes, role):
     if df_per.empty:
         st.info("Nenhum pagamento no período selecionado.")
         return
+
+    # ── Tabela ranking detalhado ──────────────────────────────────────────
+    st.markdown(
+        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+        'text-transform:uppercase;letter-spacing:1.5px;'
+        'margin-bottom:12px">Ranking Detalhado</div>',
+        unsafe_allow_html=True,
+    )
+    # Agregado por especialista — pagamentos, regularizações, parciais, valor,
+    # contagem via contato direto vs espontâneo.
+    # IMPORTANTE: dedup POR CLIENTE antes de agregar, senão Sara (com 2
+    # linhas: BQ + overlay) conta duas vezes em reg/parc — mesma raiz do
+    # bug dos cards. Aplica regra de prioridade REG > PARC (estado final).
+    # Com/sem contato só compara quem estava 5+ dias atrasado ao pagar. Com
+    # até 4 dias é margem de erro (compensação, esquecimento): o lote só pega
+    # cliente com 5+ dias, então ninguém poderia ter cobrado. Esses entram só
+    # no total de Regularizações. Atraso desconhecido (overlay sem vencimento)
+    # conta como 5+, que era o comportamento anterior.
+    _atraso = (pd.to_numeric(df_per["atraso_dias"], errors="coerce").fillna(99)
+               if "atraso_dias" in df_per.columns else pd.Series(99, index=df_per.index))
+    _na_regua = _atraso >= 5
+    _eh_reg = df_per["eh_regularizacao"].astype(bool)
+    _via = df_per["tipo_atribuicao"] == "via_contato"
+    df_per["reg_via_contato"] = _eh_reg & _via & _na_regua
+    df_per["reg_sem_contato"] = _eh_reg & ~_via & _na_regua
+    # Fora do ranking: "Sem especialista" não é pessoa, é o balde de clientes
+    # sem grupo. Ele nunca entra no lote, então aparecia com 0 contatados,
+    # 0% de eficácia e 100% espontâneos — linha que só polui a comparação.
+    # Mesma exclusão já feita na Matriz de Desempenho e na média da equipe.
+    df_rank = df_per[df_per["atendente"] != "Sem especialista"]
+    # Passo 1: classifica cada cliente UMA vez (qualquer linha reg → reg;
+    # qualquer via_contato → via_contato; valor total)
+    per_cli_rank = (
+        df_rank.groupby(["id", "atendente"])
+        .agg(
+            tem_reg=("eh_regularizacao", "any"),
+            tem_parc=("eh_parcial", "any"),
+            tem_via_contato=("tipo_atribuicao", lambda s: (s == "via_contato").any()),
+            tem_reg_via_contato=("reg_via_contato", "any"),
+            tem_reg_sem_contato=("reg_sem_contato", "any"),
+            valor=("valor", "sum"),
+        )
+        .reset_index()
+    )
+    # Cliente que teve as duas coisas no mês conta como COM contato
+    per_cli_rank["tem_reg_sem_contato"] = (
+        per_cli_rank["tem_reg_sem_contato"] & ~per_cli_rank["tem_reg_via_contato"]
+    )
+    # Aplica prioridade REG > PARC
+    per_cli_rank["eh_reg_final"] = per_cli_rank["tem_reg"]
+    per_cli_rank["eh_parc_final"] = per_cli_rank["tem_parc"] & ~per_cli_rank["tem_reg"]
+    # Passo 2: agrega por atendente (cada linha já é 1 cliente)
+    rank_agg = (
+        per_cli_rank.groupby("atendente")
+        .agg(
+            pagamentos=("id", "size"),
+            regularizacoes=("eh_reg_final", "sum"),
+            parciais=("eh_parc_final", "sum"),
+            via_contato=("tem_via_contato", "sum"),
+            reg_via_contato=("tem_reg_via_contato", "sum"),
+            reg_sem_contato=("tem_reg_sem_contato", "sum"),
+            valor=("valor", "sum"),
+        )
+        .reset_index()
+    )
+    # Quem regularizou com até 4 dias (margem de erro, fora da régua): é o
+    # que falta pra com + sem contato fechar o total de Regularizações.
+    rank_agg["reg_ate_4d"] = (
+        rank_agg["regularizacoes"] - rank_agg["reg_via_contato"] - rank_agg["reg_sem_contato"]
+    ).clip(lower=0)
+    # Eficácia REAL = dos clientes contactados no mês, % que pagou depois do
+    # contato. Usa _eficacia_com_overlay (BQ + API), mesmo dado da matriz.
+    df_ef_real = _eficacia_com_overlay(clientes, dt_inicio, dt_fim, _versao_cache)
+    if df_ef_real.empty:
+        rank_agg["eficacia"] = 0
+        rank_agg["ef_regularizaram"] = 0
+        rank_agg["ef_contatados"] = 0
+    else:
+        rank_agg = rank_agg.merge(
+            df_ef_real[["atendente", "eficacia_real", "regularizaram", "clientes_contactados"]],
+            on="atendente", how="left",
+        )
+        rank_agg["eficacia"] = rank_agg["eficacia_real"].fillna(0).astype(float)
+        rank_agg["ef_regularizaram"] = rank_agg["regularizaram"].fillna(0).astype(int)
+        rank_agg["ef_contatados"] = rank_agg["clientes_contactados"].fillna(0).astype(int)
+        rank_agg = rank_agg.drop(columns=["eficacia_real", "regularizaram", "clientes_contactados"])
+    # Cobertura = quanto da propria carteira inadimplente o especialista tocou
+    # no periodo. Complementa a eficacia: quem tem carteira maior recebe o
+    # mesmo lote de 80/dia e por isso cobre uma fatia menor.
+    # df_cob já veio lá de cima (uma consulta só pro card e pro ranking).
+    if df_cob.empty:
+        rank_agg["cobertura"] = 0
+        rank_agg["cob_contactados"] = 0
+        rank_agg["cob_base"] = 0
+    else:
+        rank_agg = rank_agg.merge(
+            df_cob[["atendente", "cobertura_pct", "contactados", "inadimplentes_periodo"]],
+            on="atendente", how="left",
+        )
+        rank_agg["cobertura"] = rank_agg["cobertura_pct"].fillna(0).astype(float)
+        rank_agg["cob_contactados"] = rank_agg["contactados"].fillna(0).astype(int)
+        rank_agg["cob_base"] = rank_agg["inadimplentes_periodo"].fillna(0).astype(int)
+        rank_agg = rank_agg.drop(columns=["cobertura_pct", "contactados", "inadimplentes_periodo"])
+    # Junta com carteira atual
+    # Carteira: mês corrente usa a foto de HOJE (store, já carregado); mês
+    # fechado usa quantos clientes ESTIVERAM inadimplentes naquele mês — mesma
+    # base da Cobertura, então a linha fica autoexplicativa:
+    # Contatados ÷ Carteira inad. = Cobertura.
+    # Fim do mês esconderia quem entrou e saiu no meio: em ago/2026 a Ana
+    # terminou com 243, mas passaram 525 pelas mãos dela.
+    if _mes_corrente:
+        carteira_count = (
+            pd.DataFrame([{"atendente": _norm_atendente_raw(c.get("_grupo"))} for c in clientes])
+            .groupby("atendente").size().reset_index(name="carteira_atual")
+            if clientes else pd.DataFrame(columns=["atendente", "carteira_atual"])
+        )
+    elif df_cob.empty:
+        carteira_count = pd.DataFrame(columns=["atendente", "carteira_atual"])
+    else:
+        carteira_count = (
+            df_cob.rename(columns={"inadimplentes_periodo": "carteira_atual"})
+            [["atendente", "carteira_atual"]]
+        )
+    # Sem o filtro aqui, o merge outer traria "Sem especialista" de volta só
+    # com a carteira preenchida e o resto zerado.
+    if not carteira_count.empty:
+        carteira_count = carteira_count[carteira_count["atendente"] != "Sem especialista"]
+    ranking = rank_agg.merge(carteira_count, on="atendente", how="outer").fillna(0)
+    # Força int em todas as colunas numéricas inteiras — evita exibir '16.0'
+    # quando merges com floats convertem o tipo silenciosamente.
+    # Eficácia mantém como float (duas casas decimais); demais são int.
+    for col in ("pagamentos", "regularizacoes", "parciais", "reg_via_contato",
+                "reg_sem_contato", "reg_ate_4d", "carteira_atual", "cob_contactados", "cob_base"):
+        if col in ranking.columns:
+            ranking[col] = ranking[col].astype(int)
+    # Eficácia e cobertura ficam float (duas casas) — percentuais pequenos
+    # arredondados pra inteiro escondem diferença entre as especialistas.
+    for col in ("eficacia", "cobertura"):
+        if col in ranking.columns:
+            ranking[col] = ranking[col].astype(float)
+    # % da carteira regularizada: ordena o ranking. Volume puro premiava
+    # quem tem carteira maior (Priscila tem mais clientes que Ana).
+    ranking["pct_carteira"] = (
+        ranking["regularizacoes"] / ranking["carteira_atual"].replace(0, pd.NA) * 100
+    ).fillna(0).astype(float)
+    ranking = ranking.sort_values("pct_carteira", ascending=False).reset_index(drop=True)
+    ranking["rank"] = ranking.index + 1
+    ranking["valor_fmt"] = ranking["valor"].apply(fmt_moeda_plain)
+
+    # Headers — 11 colunas, na ordem do funil: o que tem na mão (carteira),
+    # o que tocou (contatados), o que voltou (pagamentos e regularizações) e
+    # só então os percentuais e o valor. As colunas de pagamento são por
+    # CLIENTE — o mesmo cliente pode pagar várias vezes no mês.
+    _col_widths = [0.55, 1.6, 1.0, 0.95, 1.1, 1.1, 1.0, 1.1, 1.0, 0.9, 0.95, 1.2]
+    _carteira_tip = (
+        "Clientes inadimplentes HOJE sob esse especialista."
+        if _mes_corrente else
+        f"Clientes que chegaram a 5+ dias de atraso em algum dia de {_mes_label}. "
+        "É o denominador da Cobertura."
+    )
+    hdr_cols = st.columns(_col_widths)
+    _hdr_labels = [
+        ("Pos.", ""),
+        ("Especialista", ""),
+        ("Carteira<br>inad.", _carteira_tip),
+        ("Contatados", "Clientes distintos que receberam mensagem ou ligação no mês. É a base da Eficácia e da Cobertura."),
+        ("Reg. com<br>contato", "Clientes com 5+ dias de atraso que zeraram o atraso no mês tendo recebido msg ou ligação DURANTE esse atraso (e nos 30 dias antes do pagamento). Crédito vai pra quem fez o contato mais recente — pode ser contato do mês anterior, por isso difere do numerador da Eficácia."),
+        ("Reg. sem<br>contato", "Clientes com 5+ dias de atraso que zeraram o atraso sem contato da cobrança durante esse atraso. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
+        ("Reg. até<br>4 dias", "Zeraram o atraso pagando com até 4 dias de atraso — antes de poder entrar no lote (mensagem a partir de 5 dias). Margem de erro: não é mérito nem falha da cobrança."),
+        ("Reg.<br>total", "Total de clientes que zeraram o atraso no mês = Reg. com contato + Reg. sem contato + Reg. até 4 dias."),
+        ("% da<br>carteira", "Reg. total ÷ carteira inadimplente do mês. Ordena o ranking: compara carteiras de tamanhos diferentes. Inclui quem pagou sem contato."),
+        ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que REGULARIZARAM (zeraram o atraso, 5+ dias) com contato durante esse atraso, até 30 dias antes do pagamento. Pagamento parcial não conta."),
+        ("Cobertura", "Dos clientes da carteira que chegaram a 5+ dias de atraso no mês (quem o lote pode alcançar), % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
+        ("Valor<br>recuperado", ""),
+    ]
+    for col, (h, tip) in zip(hdr_cols, _hdr_labels):
+        title_attr = f' title="{tip}"' if tip else ""
+        cursor = "help" if tip else "default"
+        col.markdown(
+            # Quebra só onde tem <br> (entre palavras): white-space:nowrap em
+            # cada linha. Antes o navegador partia no meio ("POSI/ÇÃO",
+            # "CONTATADO/S", "REGULARIZAÇÕ/ES") em monitores menores.
+            f'<div{title_attr} style="cursor:{cursor};padding:8px 0;font-size:10.5px;'
+            f'text-transform:uppercase;letter-spacing:0.6px;color:#8b94a5;font-weight:700;'
+            f'white-space:nowrap;line-height:1.3">{h}</div>',
+            unsafe_allow_html=True,
+        )
+
+    for _, row in ranking.iterrows():
+        rcols = st.columns(_col_widths)
+        # Posição numérica (1, 2, 3...) em vez das medalhas de emoji.
+        rcols[0].markdown(
+            f'<div style="padding:10px 0;font-size:16px;color:#e8eaf0;font-weight:700">{row["rank"]}</div>',
+            unsafe_allow_html=True,
+        )
+        rcols[1].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{row["atendente"]}</div>',
+            unsafe_allow_html=True,
+        )
+        # Carteira inadimplente de hoje — contexto pra ler o resto da linha.
+        rcols[2].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["carteira_atual"]}</div>',
+            unsafe_allow_html=True,
+        )
+        # Contatados — base dos dois percentuais mais à direita.
+        _contatados = int(row.get("ef_contatados", 0) or 0) or int(row.get("cob_contactados", 0) or 0)
+        rcols[3].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{_contatados}</div>',
+            unsafe_allow_html=True,
+        )
+        # Regularizações separadas por origem. As colunas de pagamento
+        # (clientes com pag., pag. via contato, pag. espontâneos) saíram: ~97%
+        # de quem paga regulariza, então repetiam estas duas.
+        rcols[4].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">'
+            f'{int(row.get("reg_via_contato", 0) or 0)}</div>',
+            unsafe_allow_html=True,
+        )
+        rcols[5].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#9ca3af;font-weight:600">'
+            f'{int(row.get("reg_sem_contato", 0) or 0)}</div>',
+            unsafe_allow_html=True,
+        )
+        rcols[6].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#6b7280;font-weight:600">'
+            f'{int(row.get("reg_ate_4d", 0) or 0)}</div>',
+            unsafe_allow_html=True,
+        )
+        rcols[7].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
+            unsafe_allow_html=True,
+        )
+        # % da carteira regularizada — critério de ordenação do ranking.
+        _pct_cart = float(row.get("pct_carteira", 0) or 0)
+        _pct_cart_tip = (
+            f'{int(row["regularizacoes"])} de {int(row["carteira_atual"])} '
+            f'inadimplentes do período'
+        )
+        rcols[8].markdown(
+            f'<div title="{_pct_cart_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
+            f'color:#22c55e;font-weight:700">{_pct_cart:.2f}%</div>',
+            unsafe_allow_html=True,
+        )
+        # Eficácia REAL — faixas ajustadas (cobrança é trabalho difícil,
+        # taxa típica de conversão é 10-20% em operação saudável).
+        # Tooltip mostra a fração explícita pra transparência: X de Y
+        # contatados regularizaram. Antes só dava pra ver o percentual.
+        _ef = row["eficacia"]
+        _ef_cor = "#22c55e" if _ef >= 30 else ("#f59e0b" if _ef >= 15 else "#ef4444")
+        _ef_reg = int(row.get("ef_regularizaram", 0) or 0)
+        _ef_cont = int(row.get("ef_contatados", 0) or 0)
+        _ef_tip = f"{_ef_reg} de {_ef_cont} clientes contactados no mês regularizaram com contato durante o atraso"
+        rcols[9].markdown(
+            f'<div title="{_ef_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
+            f'color:{_ef_cor};font-weight:700">{_ef:.2f}%</div>',
+            unsafe_allow_html=True,
+        )
+        # Cobertura — sem faixa de cor "boa/ruim": depende do tamanho da
+        # carteira, entao e' contexto pra ler a eficacia, nao nota.
+        _cob = float(row.get("cobertura", 0) or 0)
+        _cob_cont = int(row.get("cob_contactados", 0) or 0)
+        _cob_base = int(row.get("cob_base", 0) or 0)
+        _cob_txt = f"{_cob:.2f}%" if _cob_base else "—"
+        _cob_tip = (
+            f"{_cob_cont} de {_cob_base} inadimplentes do período foram contactados"
+            if _cob_base else "Sem snapshot diário no período"
+        )
+        rcols[10].markdown(
+            f'<div title="{_cob_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
+            f'color:#9ca3af;font-weight:600">{_cob_txt}</div>',
+            unsafe_allow_html=True,
+        )
+        rcols[11].markdown(
+            f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(_DIVIDER, unsafe_allow_html=True)
+
 
     # ── Agregado por especialista — Volume + Eficácia (base pra matriz) ───
     # Exclui "Sem especialista" da comparação: não é uma pessoa pra comparar
@@ -1062,282 +1343,3 @@ def _render_especialista(store, clientes, role):
             st.altair_chart(chart_tx, use_container_width=True)
     else:
         st.info("Sem dados mensais de recuperação.")
-
-
-    st.markdown(_DIVIDER, unsafe_allow_html=True)
-
-    # ── Tabela ranking detalhado ──────────────────────────────────────────
-    st.markdown(
-        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
-        'text-transform:uppercase;letter-spacing:1.5px;'
-        'margin-bottom:12px">Ranking Detalhado</div>',
-        unsafe_allow_html=True,
-    )
-    # Agregado por especialista — pagamentos, regularizações, parciais, valor,
-    # contagem via contato direto vs espontâneo.
-    # IMPORTANTE: dedup POR CLIENTE antes de agregar, senão Sara (com 2
-    # linhas: BQ + overlay) conta duas vezes em reg/parc — mesma raiz do
-    # bug dos cards. Aplica regra de prioridade REG > PARC (estado final).
-    # Com/sem contato só compara quem estava 5+ dias atrasado ao pagar. Com
-    # até 4 dias é margem de erro (compensação, esquecimento): o lote só pega
-    # cliente com 5+ dias, então ninguém poderia ter cobrado. Esses entram só
-    # no total de Regularizações. Atraso desconhecido (overlay sem vencimento)
-    # conta como 5+, que era o comportamento anterior.
-    _atraso = (pd.to_numeric(df_per["atraso_dias"], errors="coerce").fillna(99)
-               if "atraso_dias" in df_per.columns else pd.Series(99, index=df_per.index))
-    _na_regua = _atraso >= 5
-    _eh_reg = df_per["eh_regularizacao"].astype(bool)
-    _via = df_per["tipo_atribuicao"] == "via_contato"
-    df_per["reg_via_contato"] = _eh_reg & _via & _na_regua
-    df_per["reg_sem_contato"] = _eh_reg & ~_via & _na_regua
-    # Fora do ranking: "Sem especialista" não é pessoa, é o balde de clientes
-    # sem grupo. Ele nunca entra no lote, então aparecia com 0 contatados,
-    # 0% de eficácia e 100% espontâneos — linha que só polui a comparação.
-    # Mesma exclusão já feita na Matriz de Desempenho e na média da equipe.
-    df_rank = df_per[df_per["atendente"] != "Sem especialista"]
-    # Passo 1: classifica cada cliente UMA vez (qualquer linha reg → reg;
-    # qualquer via_contato → via_contato; valor total)
-    per_cli_rank = (
-        df_rank.groupby(["id", "atendente"])
-        .agg(
-            tem_reg=("eh_regularizacao", "any"),
-            tem_parc=("eh_parcial", "any"),
-            tem_via_contato=("tipo_atribuicao", lambda s: (s == "via_contato").any()),
-            tem_reg_via_contato=("reg_via_contato", "any"),
-            tem_reg_sem_contato=("reg_sem_contato", "any"),
-            valor=("valor", "sum"),
-        )
-        .reset_index()
-    )
-    # Cliente que teve as duas coisas no mês conta como COM contato
-    per_cli_rank["tem_reg_sem_contato"] = (
-        per_cli_rank["tem_reg_sem_contato"] & ~per_cli_rank["tem_reg_via_contato"]
-    )
-    # Aplica prioridade REG > PARC
-    per_cli_rank["eh_reg_final"] = per_cli_rank["tem_reg"]
-    per_cli_rank["eh_parc_final"] = per_cli_rank["tem_parc"] & ~per_cli_rank["tem_reg"]
-    # Passo 2: agrega por atendente (cada linha já é 1 cliente)
-    rank_agg = (
-        per_cli_rank.groupby("atendente")
-        .agg(
-            pagamentos=("id", "size"),
-            regularizacoes=("eh_reg_final", "sum"),
-            parciais=("eh_parc_final", "sum"),
-            via_contato=("tem_via_contato", "sum"),
-            reg_via_contato=("tem_reg_via_contato", "sum"),
-            reg_sem_contato=("tem_reg_sem_contato", "sum"),
-            valor=("valor", "sum"),
-        )
-        .reset_index()
-    )
-    # Quem regularizou com até 4 dias (margem de erro, fora da régua): é o
-    # que falta pra com + sem contato fechar o total de Regularizações.
-    rank_agg["reg_ate_4d"] = (
-        rank_agg["regularizacoes"] - rank_agg["reg_via_contato"] - rank_agg["reg_sem_contato"]
-    ).clip(lower=0)
-    # Eficácia REAL = dos clientes contactados no mês, % que pagou depois do
-    # contato. Usa _eficacia_com_overlay (BQ + API), mesmo dado da matriz.
-    df_ef_real = _eficacia_com_overlay(clientes, dt_inicio, dt_fim, _versao_cache)
-    if df_ef_real.empty:
-        rank_agg["eficacia"] = 0
-        rank_agg["ef_regularizaram"] = 0
-        rank_agg["ef_contatados"] = 0
-    else:
-        rank_agg = rank_agg.merge(
-            df_ef_real[["atendente", "eficacia_real", "regularizaram", "clientes_contactados"]],
-            on="atendente", how="left",
-        )
-        rank_agg["eficacia"] = rank_agg["eficacia_real"].fillna(0).astype(float)
-        rank_agg["ef_regularizaram"] = rank_agg["regularizaram"].fillna(0).astype(int)
-        rank_agg["ef_contatados"] = rank_agg["clientes_contactados"].fillna(0).astype(int)
-        rank_agg = rank_agg.drop(columns=["eficacia_real", "regularizaram", "clientes_contactados"])
-    # Cobertura = quanto da propria carteira inadimplente o especialista tocou
-    # no periodo. Complementa a eficacia: quem tem carteira maior recebe o
-    # mesmo lote de 80/dia e por isso cobre uma fatia menor.
-    # df_cob já veio lá de cima (uma consulta só pro card e pro ranking).
-    if df_cob.empty:
-        rank_agg["cobertura"] = 0
-        rank_agg["cob_contactados"] = 0
-        rank_agg["cob_base"] = 0
-    else:
-        rank_agg = rank_agg.merge(
-            df_cob[["atendente", "cobertura_pct", "contactados", "inadimplentes_periodo"]],
-            on="atendente", how="left",
-        )
-        rank_agg["cobertura"] = rank_agg["cobertura_pct"].fillna(0).astype(float)
-        rank_agg["cob_contactados"] = rank_agg["contactados"].fillna(0).astype(int)
-        rank_agg["cob_base"] = rank_agg["inadimplentes_periodo"].fillna(0).astype(int)
-        rank_agg = rank_agg.drop(columns=["cobertura_pct", "contactados", "inadimplentes_periodo"])
-    # Junta com carteira atual
-    # Carteira: mês corrente usa a foto de HOJE (store, já carregado); mês
-    # fechado usa quantos clientes ESTIVERAM inadimplentes naquele mês — mesma
-    # base da Cobertura, então a linha fica autoexplicativa:
-    # Contatados ÷ Carteira inad. = Cobertura.
-    # Fim do mês esconderia quem entrou e saiu no meio: em ago/2026 a Ana
-    # terminou com 243, mas passaram 525 pelas mãos dela.
-    if _mes_corrente:
-        carteira_count = (
-            pd.DataFrame([{"atendente": _norm_atendente_raw(c.get("_grupo"))} for c in clientes])
-            .groupby("atendente").size().reset_index(name="carteira_atual")
-            if clientes else pd.DataFrame(columns=["atendente", "carteira_atual"])
-        )
-    elif df_cob.empty:
-        carteira_count = pd.DataFrame(columns=["atendente", "carteira_atual"])
-    else:
-        carteira_count = (
-            df_cob.rename(columns={"inadimplentes_periodo": "carteira_atual"})
-            [["atendente", "carteira_atual"]]
-        )
-    # Sem o filtro aqui, o merge outer traria "Sem especialista" de volta só
-    # com a carteira preenchida e o resto zerado.
-    if not carteira_count.empty:
-        carteira_count = carteira_count[carteira_count["atendente"] != "Sem especialista"]
-    ranking = rank_agg.merge(carteira_count, on="atendente", how="outer").fillna(0)
-    # Força int em todas as colunas numéricas inteiras — evita exibir '16.0'
-    # quando merges com floats convertem o tipo silenciosamente.
-    # Eficácia mantém como float (duas casas decimais); demais são int.
-    for col in ("pagamentos", "regularizacoes", "parciais", "reg_via_contato",
-                "reg_sem_contato", "reg_ate_4d", "carteira_atual", "cob_contactados", "cob_base"):
-        if col in ranking.columns:
-            ranking[col] = ranking[col].astype(int)
-    # Eficácia e cobertura ficam float (duas casas) — percentuais pequenos
-    # arredondados pra inteiro escondem diferença entre as especialistas.
-    for col in ("eficacia", "cobertura"):
-        if col in ranking.columns:
-            ranking[col] = ranking[col].astype(float)
-    # % da carteira regularizada: ordena o ranking. Volume puro premiava
-    # quem tem carteira maior (Priscila tem mais clientes que Ana).
-    ranking["pct_carteira"] = (
-        ranking["regularizacoes"] / ranking["carteira_atual"].replace(0, pd.NA) * 100
-    ).fillna(0).astype(float)
-    ranking = ranking.sort_values("pct_carteira", ascending=False).reset_index(drop=True)
-    ranking["rank"] = ranking.index + 1
-    ranking["valor_fmt"] = ranking["valor"].apply(fmt_moeda_plain)
-
-    # Headers — 11 colunas, na ordem do funil: o que tem na mão (carteira),
-    # o que tocou (contatados), o que voltou (pagamentos e regularizações) e
-    # só então os percentuais e o valor. As colunas de pagamento são por
-    # CLIENTE — o mesmo cliente pode pagar várias vezes no mês.
-    _col_widths = [0.55, 1.6, 1.0, 0.95, 1.1, 1.1, 1.0, 1.1, 1.0, 0.9, 0.95, 1.2]
-    _carteira_tip = (
-        "Clientes inadimplentes HOJE sob esse especialista."
-        if _mes_corrente else
-        f"Clientes que chegaram a 5+ dias de atraso em algum dia de {_mes_label}. "
-        "É o denominador da Cobertura."
-    )
-    hdr_cols = st.columns(_col_widths)
-    _hdr_labels = [
-        ("Pos.", ""),
-        ("Especialista", ""),
-        ("Carteira<br>inad.", _carteira_tip),
-        ("Contatados", "Clientes distintos que receberam mensagem ou ligação no mês. É a base da Eficácia e da Cobertura."),
-        ("Reg. com<br>contato", "Clientes com 5+ dias de atraso que zeraram o atraso no mês tendo recebido msg ou ligação DURANTE esse atraso (e nos 30 dias antes do pagamento). Crédito vai pra quem fez o contato mais recente — pode ser contato do mês anterior, por isso difere do numerador da Eficácia."),
-        ("Reg. sem<br>contato", "Clientes com 5+ dias de atraso que zeraram o atraso sem contato da cobrança durante esse atraso. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
-        ("Reg. até<br>4 dias", "Zeraram o atraso pagando com até 4 dias de atraso — antes de poder entrar no lote (mensagem a partir de 5 dias). Margem de erro: não é mérito nem falha da cobrança."),
-        ("Reg.<br>total", "Total de clientes que zeraram o atraso no mês = Reg. com contato + Reg. sem contato + Reg. até 4 dias."),
-        ("% da<br>carteira", "Reg. total ÷ carteira inadimplente do mês. Ordena o ranking: compara carteiras de tamanhos diferentes. Inclui quem pagou sem contato."),
-        ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que REGULARIZARAM (zeraram o atraso, 5+ dias) com contato durante esse atraso, até 30 dias antes do pagamento. Pagamento parcial não conta."),
-        ("Cobertura", "Dos clientes da carteira que chegaram a 5+ dias de atraso no mês (quem o lote pode alcançar), % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
-        ("Valor<br>recuperado", ""),
-    ]
-    for col, (h, tip) in zip(hdr_cols, _hdr_labels):
-        title_attr = f' title="{tip}"' if tip else ""
-        cursor = "help" if tip else "default"
-        col.markdown(
-            # Quebra só onde tem <br> (entre palavras): white-space:nowrap em
-            # cada linha. Antes o navegador partia no meio ("POSI/ÇÃO",
-            # "CONTATADO/S", "REGULARIZAÇÕ/ES") em monitores menores.
-            f'<div{title_attr} style="cursor:{cursor};padding:8px 0;font-size:10.5px;'
-            f'text-transform:uppercase;letter-spacing:0.6px;color:#8b94a5;font-weight:700;'
-            f'white-space:nowrap;line-height:1.3">{h}</div>',
-            unsafe_allow_html=True,
-        )
-
-    for _, row in ranking.iterrows():
-        rcols = st.columns(_col_widths)
-        # Posição numérica (1, 2, 3...) em vez das medalhas de emoji.
-        rcols[0].markdown(
-            f'<div style="padding:10px 0;font-size:16px;color:#e8eaf0;font-weight:700">{row["rank"]}</div>',
-            unsafe_allow_html=True,
-        )
-        rcols[1].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{row["atendente"]}</div>',
-            unsafe_allow_html=True,
-        )
-        # Carteira inadimplente de hoje — contexto pra ler o resto da linha.
-        rcols[2].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["carteira_atual"]}</div>',
-            unsafe_allow_html=True,
-        )
-        # Contatados — base dos dois percentuais mais à direita.
-        _contatados = int(row.get("ef_contatados", 0) or 0) or int(row.get("cob_contactados", 0) or 0)
-        rcols[3].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{_contatados}</div>',
-            unsafe_allow_html=True,
-        )
-        # Regularizações separadas por origem. As colunas de pagamento
-        # (clientes com pag., pag. via contato, pag. espontâneos) saíram: ~97%
-        # de quem paga regulariza, então repetiam estas duas.
-        rcols[4].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">'
-            f'{int(row.get("reg_via_contato", 0) or 0)}</div>',
-            unsafe_allow_html=True,
-        )
-        rcols[5].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#9ca3af;font-weight:600">'
-            f'{int(row.get("reg_sem_contato", 0) or 0)}</div>',
-            unsafe_allow_html=True,
-        )
-        rcols[6].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#6b7280;font-weight:600">'
-            f'{int(row.get("reg_ate_4d", 0) or 0)}</div>',
-            unsafe_allow_html=True,
-        )
-        rcols[7].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
-            unsafe_allow_html=True,
-        )
-        # % da carteira regularizada — critério de ordenação do ranking.
-        _pct_cart = float(row.get("pct_carteira", 0) or 0)
-        _pct_cart_tip = (
-            f'{int(row["regularizacoes"])} de {int(row["carteira_atual"])} '
-            f'inadimplentes do período'
-        )
-        rcols[8].markdown(
-            f'<div title="{_pct_cart_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
-            f'color:#22c55e;font-weight:700">{_pct_cart:.2f}%</div>',
-            unsafe_allow_html=True,
-        )
-        # Eficácia REAL — faixas ajustadas (cobrança é trabalho difícil,
-        # taxa típica de conversão é 10-20% em operação saudável).
-        # Tooltip mostra a fração explícita pra transparência: X de Y
-        # contatados regularizaram. Antes só dava pra ver o percentual.
-        _ef = row["eficacia"]
-        _ef_cor = "#22c55e" if _ef >= 30 else ("#f59e0b" if _ef >= 15 else "#ef4444")
-        _ef_reg = int(row.get("ef_regularizaram", 0) or 0)
-        _ef_cont = int(row.get("ef_contatados", 0) or 0)
-        _ef_tip = f"{_ef_reg} de {_ef_cont} clientes contactados no mês regularizaram com contato durante o atraso"
-        rcols[9].markdown(
-            f'<div title="{_ef_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
-            f'color:{_ef_cor};font-weight:700">{_ef:.2f}%</div>',
-            unsafe_allow_html=True,
-        )
-        # Cobertura — sem faixa de cor "boa/ruim": depende do tamanho da
-        # carteira, entao e' contexto pra ler a eficacia, nao nota.
-        _cob = float(row.get("cobertura", 0) or 0)
-        _cob_cont = int(row.get("cob_contactados", 0) or 0)
-        _cob_base = int(row.get("cob_base", 0) or 0)
-        _cob_txt = f"{_cob:.2f}%" if _cob_base else "—"
-        _cob_tip = (
-            f"{_cob_cont} de {_cob_base} inadimplentes do período foram contactados"
-            if _cob_base else "Sem snapshot diário no período"
-        )
-        rcols[10].markdown(
-            f'<div title="{_cob_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
-            f'color:#9ca3af;font-weight:600">{_cob_txt}</div>',
-            unsafe_allow_html=True,
-        )
-        rcols[11].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
-            unsafe_allow_html=True,
-        )
