@@ -417,28 +417,34 @@ def _render_especialista(store, clientes, role):
         df_per = df_per[df_per["atendente"].isin(filtro_esp)]
 
     # ── Cards agregados ───────────────────────────────────────────────────
-    # Cliente é classificado UMA vez só pra evitar double-count quando BQ
-    # snapshot (defasado) e overlay (real-time) discordam. Cenário típico:
-    # cliente paga 15/06, crédito chega 17/06 — BQ snapshot ainda tem ele
-    # → marca como PARC; overlay vê pagamento na API → marca como REG.
-    # Antes: cliente aparecia em REG E PARC, soma divergia do total.
-    # Agora: prioriza REG > PARC (REG é estado final, PARC é intermediário).
+    # Resumo da equipe na mesma lógica do ranking: carteira → contatados →
+    # regularizações → resultado do contato → valor. Pagamentos e Parciais
+    # saíram: parcial é pouco (cliente continua devendo) e "pagamentos"
+    # só somava regularizações + parciais.
+    # Cliente é classificado UMA vez (REG > PARC): BQ defasado e overlay da
+    # API podiam discordar e contar o mesmo cliente nos dois.
     total_valor = float(df_per["valor"].sum()) if not df_per.empty else 0.0
     if not df_per.empty:
-        df_per_str = df_per.copy()
-        df_per_str["id"] = df_per_str["id"].astype(str)
-        df_cli = df_per_str.groupby("id").agg(
-            tem_reg=("eh_regularizacao", "any"),
-            tem_parc=("eh_parcial", "any"),
-        )
-        total_pgto = len(df_cli)
-        total_reg = int(df_cli["tem_reg"].sum())
-        total_parc = int((df_cli["tem_parc"] & ~df_cli["tem_reg"]).sum())
+        _ids = df_per["id"].astype(str)
+        _reg = df_per["eh_regularizacao"].astype(bool)
+        total_reg = int(_ids[_reg].nunique())
+        total_reg_com = int(_ids[_reg & (df_per["tipo_atribuicao"] == "via_contato")].nunique())
     else:
-        total_pgto = 0
         total_reg = 0
-        total_parc = 0
-    taxa_reg = (total_reg / total_pgto * 100) if total_pgto else 0
+        total_reg_com = 0
+    pct_reg_com = (total_reg_com / total_reg * 100) if total_reg else 0.0
+
+    # Carteira da cobrança no mês (base do ranking) e contatados da equipe
+    _cob_card = df_cob
+    if filtro_esp and not _cob_card.empty:
+        _cob_card = _cob_card[_cob_card["atendente"].isin(filtro_esp)]
+    _base_cart = int(_cob_card["inadimplentes_periodo"].sum()) if not _cob_card.empty else 0
+    _cont_card = _contatados_por_atendente(dt_inicio, dt_fim)
+    if filtro_esp and not _cont_card.empty:
+        _cont_card = _cont_card[_cont_card["atendente"].isin(filtro_esp)]
+    total_contatados = int(_cont_card["contatados"].sum()) if not _cont_card.empty else 0
+    cobertura_equipe = (total_contatados / _base_cart * 100) if _base_cart else 0.0
+    resultado_equipe = (total_reg_com / _base_cart * 100) if _base_cart else 0.0
 
     # Card de inadimplentes: número ABSOLUTO (1+ dia devendo), sem a carência
     # de 4 dias das métricas — é o tamanho da carteira, não a base da
@@ -464,30 +470,8 @@ def _render_especialista(store, clientes, role):
             if not _fim_p.empty else f"carteira {_mes_label}"
         )
 
-    # Sub-texto contextual no 'Pagamentos' — se filtrando por 1 especialista,
-    # mostra comparativo com a média da equipe.
-    # Exclui 'Sem especialista' do cálculo: não é uma pessoa real, é o
-    # bucket de clientes não atribuídos a Ana/Priscila. Incluir enviesa a
-    # média (Ana/Priscila parecem 95% acima quando na verdade é só a divisão).
-    df_team = df_per_all[df_per_all["atendente"] != "Sem especialista"] if not df_per_all.empty else df_per_all
-    team_especialistas = int(df_team["atendente"].nunique()) if not df_team.empty else 0
-    team_total_pgto = int(df_team["id"].astype(str).nunique()) if not df_team.empty else 0
-    media_por_esp = (team_total_pgto / team_especialistas) if team_especialistas else 0
-    # Não mostra "vs média" pra 'Sem especialista' — ele não é uma pessoa
-    # real (é o bucket de clientes não atribuídos), comparar não faz sentido.
-    # "vs media" so faz sentido pra filtro em 1 especialista real. Nao mostra
-    # pra "Sem especialista" (nao e pessoa) nem pra multi-select > 1 (media pesa).
-    _esp_valid = len(filtro_esp) == 1 and filtro_esp[0] != "Sem especialista"
-    if _esp_valid and team_especialistas:
-        diff_pct = ((total_pgto - media_por_esp) / media_por_esp * 100) if media_por_esp else 0
-        sinal = "+" if diff_pct >= 0 else ""
-        cor_diff = "#22c55e" if diff_pct >= 0 else "#ef4444"
-        sub_pag = (
-            f'<span style="color:{cor_diff};font-weight:600">{sinal}{diff_pct:.2f}%</span> '
-            f'<span style="color:#8b94a5">vs média</span>'
-        )
-    else:
-        sub_pag = "no período"
+    def _pct_br(v):
+        return f"{v:.2f}%".replace(".", ",")
 
     # Tooltips dos cards
     _tt_inad = (
@@ -497,20 +481,18 @@ def _render_especialista(store, clientes, role):
         f"Carteira das especialistas no último dia de {_mes_label}. A coluna "
         "Carteira inad. do ranking é diferente: conta quem entrou na cobrança no mês."
     )
-    _tt_pag = (
-        "Clientes que pagaram cobrança em atraso no período, já na fase de "
-        "cobrança. Quem paga nos primeiros dias de atraso, antes de poder "
-        "entrar no lote, não entra."
+    _tt_cont = (
+        f"Clientes distintos que receberam mensagem ou ligação no mês. Cobertura = "
+        f"contatados ÷ carteira inad. do ranking ({total_contatados} ÷ {_base_cart})."
     )
     _tt_reg = (
-        "Clientes que pagaram e zeraram tudo que estava vencido, já na fase de cobrança. "
-        "Conta SÓ pagamentos efetivos — não inclui baixas administrativas, "
-        "parcelamentos ou desativações. Pra ver toda saída da carteira "
-        "(incluindo esses motivos), ver 'Regularizados' da tela Inadimplência."
+        f"Clientes que pagaram e zeraram tudo que estava vencido, já na fase de "
+        f"cobrança: {total_reg_com} com contato e {total_reg - total_reg_com} sem "
+        "contato. Não inclui baixas administrativas, parcelamentos ou desativações."
     )
-    _tt_parc = (
-        "Pagou cobrança atrasada mas ainda está inadimplente hoje "
-        "(pagou só parte ou voltou a ter cobrança vencida)."
+    _tt_res = (
+        f"Regularizações com contato ÷ carteira inad. do ranking ({total_reg_com} ÷ "
+        f"{_base_cart}). É a Cobertura × a Eficácia e o critério do ranking."
     )
     _tt_val = "Soma dos pagamentos em atraso feitos já na fase de cobrança."
 
@@ -525,7 +507,7 @@ def _render_especialista(store, clientes, role):
         f'<div style="font-size:38px;font-weight:800;color:{cor};margin-top:6px;'
         f'line-height:1.05;font-variant-numeric:tabular-nums;'
         f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{valor}</div>'
-        # nowrap: em notebook o subtítulo quebrava ("93.78 dos / pagamentos")
+        # nowrap: em notebook o subtítulo quebrava em duas linhas
         f'<div class="metric-sub" style="font-size:13.5px;margin-top:8px;white-space:nowrap;'
         f'overflow:hidden;text-overflow:ellipsis">{sub}</div>'
         f'</div>'
@@ -538,19 +520,20 @@ def _render_especialista(store, clientes, role):
         )
     with c2:
         st.markdown(
-            _card_fmt("Pagamentos", f"{total_pgto:,}", sub_pag, "#e8eaf0", _tt_pag),
+            _card_fmt("Contatados", f"{total_contatados:,}",
+                      f"cobertura {_pct_br(cobertura_equipe)}", "#e8eaf0", _tt_cont),
             unsafe_allow_html=True,
         )
     with c3:
         st.markdown(
             _card_fmt("Regularizações", f"{total_reg:,}",
-                      f"{taxa_reg:.2f}% dos pagantes".replace(".", ","), "#22c55e", _tt_reg),
+                      f"{_pct_br(pct_reg_com)} com contato", "#22c55e", _tt_reg),
             unsafe_allow_html=True,
         )
     with c4:
         st.markdown(
-            _card_fmt("Parciais", f"{total_parc:,}",
-                      "ainda devem algo", "#f59e0b", _tt_parc),
+            _card_fmt("Resultado do contato", _pct_br(resultado_equipe),
+                      "cobertura × eficácia", "#22c55e", _tt_res),
             unsafe_allow_html=True,
         )
     with c5:

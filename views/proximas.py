@@ -280,10 +280,10 @@ def _render_proximas(_store, clientes):
         # Vencimento é só data (sem hora) — "Hoje" em vez de "0d"; horas seria
         # precisão falsa, o cliente pode pagar até o fim do dia.
         d_lbl = "HOJE" if d == 0 else f"{d}d"
-        # HOJE: selo preenchido (vermelho vivo + texto branco) pra destacar dos
-        # 1-7d, que ficam só com borda vermelha.
+        # HOJE: fundo vermelho bem suave + texto vermelho, pra destacar dos
+        # 1-7d (só borda) sem gritar. O preenchido forte chamava atenção demais.
         _selo_css = (
-            "background:rgba(255,45,45,.72);border:1px solid rgba(255,45,45,.72);color:#ffffff;letter-spacing:0.5px;"
+            "background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.5);color:#ef4444;letter-spacing:0.5px;"
             if d == 0 else f"border:1px solid {cor_d};color:{cor_d};"
         )
 
