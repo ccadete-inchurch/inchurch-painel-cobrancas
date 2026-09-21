@@ -972,8 +972,8 @@ def _render_especialista(store, clientes, role):
     with g_esq:
         _tem_hoje_no_df = any(d == hoje for d in df_per["data_dt"].dt.date.unique())
         _sub_dia = (
-            'Barras: 5+ dias de atraso, com ou sem contato durante o atraso. '
-            'Linha: total do dia, incluindo quem pagou em até 4 dias.'
+            'Barras: quem já estava na cobrança, com ou sem contato. '
+            'Linha: total do dia, incluindo quem pagou antes de poder ser cobrado (até 4 dias de atraso).'
             + (' Hoje aparece mais claro — dia em andamento.' if _tem_hoje_no_df else '')
         )
         st.markdown(
@@ -1036,8 +1036,8 @@ def _render_especialista(store, clientes, role):
                 tooltip=[
                     alt.Tooltip("data_str:O", title="Dia"),
                     alt.Tooltip("total:Q", title="Total de regularizações"),
-                    alt.Tooltip("com:Q", title="Com contato (5+ dias)"),
-                    alt.Tooltip("sem:Q", title="Sem contato (5+ dias)"),
+                    alt.Tooltip("com:Q", title="Com contato"),
+                    alt.Tooltip("sem:Q", title="Sem contato"),
                 ],
             )
             chart_dia = (
@@ -1254,9 +1254,8 @@ def _render_especialista(store, clientes, role):
                 'text-transform:uppercase;letter-spacing:1.5px;'
                 'margin-bottom:4px">Regularizações por Mês</div>'
                 '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-                'Barras: clientes com 5+ dias de atraso que zeraram o atraso, com ou '
-                'sem contato durante o atraso. Linha: total de regularizações, '
-                'incluindo quem pagou em até 4 dias (antes de poder entrar no lote).'
+                'Barras: quem já estava na cobrança, com ou sem contato. Linha: total '
+                'do mês, incluindo quem pagou antes de poder ser cobrado (até 4 dias de atraso).'
                 '</div>',
                 unsafe_allow_html=True,
             )
