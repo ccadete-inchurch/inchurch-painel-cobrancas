@@ -90,9 +90,14 @@ def _build_overlay_rows(clientes, df_bq, dt_inicio, dt_fim):
         # (janela de 30 dias) credita quem fez o contato; sem contato, vai
         # pelo grupo (espontâneo). Antes todo cliente com grupo virava
         # via_contato, inflando "Pag. via contato" do mês corrente.
+        # Inicio do atraso quitado (vencimento do boleto mais antigo pago com
+        # atraso). Contato so vale se foi DURANTE esse atraso — mesma regra
+        # de fetch_pagamentos_creditados.
+        _inicio = c.get("_venc_atraso")
         contato = next(
             (at for d, at in contatos_por_cid.get(cid, [])
-             if d <= dt_real and (dt_real - d).days <= 30),
+             if d <= dt_real and (dt_real - d).days <= 30
+             and (_inicio is None or d >= _inicio)),
             None,
         )
         if contato:
@@ -109,6 +114,7 @@ def _build_overlay_rows(clientes, df_bq, dt_inicio, dt_fim):
             "eh_regularizacao": eh_reg,
             "eh_parcial": eh_parc,
             "tipo_atribuicao": tipo_atrib,
+            "atraso_dias": (dt_real - _inicio).days if _inicio else None,
         })
     return rows
 
@@ -861,7 +867,7 @@ def _render_especialista(store, clientes, role):
             inad=("inadimplentes", "sum"), cont=("contatados", "sum")
         ).reset_index().iterrows():
             _serie_mes[r["mes"]] = {"inad": int(r["inad"]), "cont": int(r["cont"]),
-                                    "reg_via": 0, "reg_esp": 0}
+                                    "reg_via": 0, "reg_esp": 0, "reg_rapido": 0}
 
     if not df_trend.empty:
         _pag = df_trend.copy()
@@ -875,21 +881,31 @@ def _render_especialista(store, clientes, role):
                 lambda r: (r["id"], r["data_dt"].strftime("%d/%m/%Y")) in _ev, axis=1
             )
             _pag["via"] = _pag["tipo_atribuicao"] == "via_contato"
+            _pag["regua"] = (
+                pd.to_numeric(_pag["atraso_dias"], errors="coerce").fillna(99)
+                if "atraso_dias" in _pag.columns else pd.Series(99, index=_pag.index)
+            ) >= 5
+            _pag["r_via"] = _pag["eh_reg_ev"] & _pag["via"] & _pag["regua"]
+            _pag["r_esp"] = _pag["eh_reg_ev"] & ~_pag["via"] & _pag["regua"]
             _cli_mes = (
                 _pag.groupby(["mes", "id"])
-                .agg(via=("via", "any"), reg=("eh_reg_ev", "any"))
+                .agg(reg=("eh_reg_ev", "any"), r_via=("r_via", "any"), r_esp=("r_esp", "any"))
                 .reset_index()
             )
-            _cli_mes["reg_via"] = _cli_mes["reg"] & _cli_mes["via"]
-            _cli_mes["reg_esp"] = _cli_mes["reg"] & ~_cli_mes["via"]
+            # Prioridade: com contato > sem contato > pagou rápido (até 4 dias)
+            _cli_mes["reg_via"] = _cli_mes["r_via"]
+            _cli_mes["reg_esp"] = _cli_mes["r_esp"] & ~_cli_mes["r_via"]
+            _cli_mes["reg_rapido"] = _cli_mes["reg"] & ~_cli_mes["r_via"] & ~_cli_mes["r_esp"]
             for _, r in _cli_mes.groupby("mes").agg(
-                reg_via=("reg_via", "sum"), reg_esp=("reg_esp", "sum")
+                reg_via=("reg_via", "sum"), reg_esp=("reg_esp", "sum"),
+                reg_rapido=("reg_rapido", "sum"),
             ).reset_index().iterrows():
                 _d = _serie_mes.setdefault(
-                    r["mes"], {"inad": 0, "cont": 0, "reg_via": 0, "reg_esp": 0}
+                    r["mes"], {"inad": 0, "cont": 0, "reg_via": 0, "reg_esp": 0, "reg_rapido": 0}
                 )
                 _d["reg_via"] = int(r["reg_via"])
                 _d["reg_esp"] = int(r["reg_esp"])
+                _d["reg_rapido"] = int(r["reg_rapido"])
 
     def _mes_label_pt(ym):
         _a, _m = ym.split("-")
@@ -905,6 +921,7 @@ def _render_especialista(store, clientes, role):
             lbl = _mes_label_pt(_m_key)
             _vol.append({"mes": lbl, "serie": "Com contato", "clientes": d["reg_via"]})
             _vol.append({"mes": lbl, "serie": "Sem contato", "clientes": d["reg_esp"]})
+            _vol.append({"mes": lbl, "serie": "Até 4 dias", "clientes": d.get("reg_rapido", 0)})
             _sem_contato = max(d["inad"] - d["cont"], 0)
             if d["inad"]:
                 _taxas.append({"mes": lbl, "serie": "Cobertura",
@@ -923,9 +940,9 @@ def _render_especialista(store, clientes, role):
                 'text-transform:uppercase;letter-spacing:1.5px;'
                 'margin-bottom:4px">Regularizações por Mês</div>'
                 '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-                'Clientes que zeraram o atraso, por origem. Sem contato = nenhuma '
-                'msg/ligação da cobrança nos 30 dias antes (pode ter havido régua '
-                'automática ou chatbot).'
+                'Clientes que zeraram o atraso, por origem. Com/sem contato = '
+                'atraso de 5+ dias (contato durante o atraso ou não). Até 4 dias = '
+                'margem de erro, pagou antes de poder entrar no lote.'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -935,8 +952,8 @@ def _render_especialista(store, clientes, role):
                     y=alt.Y("clientes:Q", title="CLIENTES"),
                     color=alt.Color(
                         "serie:N", title=None,
-                        scale=alt.Scale(domain=["Com contato", "Sem contato"],
-                                        range=["#22c55e", "#9ca3af"]),
+                        scale=alt.Scale(domain=["Com contato", "Sem contato", "Até 4 dias"],
+                                        range=["#22c55e", "#9ca3af", "#4b5563"]),
                         legend=alt.Legend(orient="top"),
                     ),
                     tooltip=[
@@ -1023,10 +1040,18 @@ def _render_especialista(store, clientes, role):
     # IMPORTANTE: dedup POR CLIENTE antes de agregar, senão Sara (com 2
     # linhas: BQ + overlay) conta duas vezes em reg/parc — mesma raiz do
     # bug dos cards. Aplica regra de prioridade REG > PARC (estado final).
-    df_per["reg_via_contato"] = (
-        df_per["eh_regularizacao"].astype(bool)
-        & (df_per["tipo_atribuicao"] == "via_contato")
-    )
+    # Com/sem contato só compara quem estava 5+ dias atrasado ao pagar. Com
+    # até 4 dias é margem de erro (compensação, esquecimento): o lote só pega
+    # cliente com 5+ dias, então ninguém poderia ter cobrado. Esses entram só
+    # no total de Regularizações. Atraso desconhecido (overlay sem vencimento)
+    # conta como 5+, que era o comportamento anterior.
+    _atraso = (pd.to_numeric(df_per["atraso_dias"], errors="coerce").fillna(99)
+               if "atraso_dias" in df_per.columns else pd.Series(99, index=df_per.index))
+    _na_regua = _atraso >= 5
+    _eh_reg = df_per["eh_regularizacao"].astype(bool)
+    _via = df_per["tipo_atribuicao"] == "via_contato"
+    df_per["reg_via_contato"] = _eh_reg & _via & _na_regua
+    df_per["reg_sem_contato"] = _eh_reg & ~_via & _na_regua
     # Fora do ranking: "Sem especialista" não é pessoa, é o balde de clientes
     # sem grupo. Ele nunca entra no lote, então aparecia com 0 contatados,
     # 0% de eficácia e 100% espontâneos — linha que só polui a comparação.
@@ -1041,9 +1066,14 @@ def _render_especialista(store, clientes, role):
             tem_parc=("eh_parcial", "any"),
             tem_via_contato=("tipo_atribuicao", lambda s: (s == "via_contato").any()),
             tem_reg_via_contato=("reg_via_contato", "any"),
+            tem_reg_sem_contato=("reg_sem_contato", "any"),
             valor=("valor", "sum"),
         )
         .reset_index()
+    )
+    # Cliente que teve as duas coisas no mês conta como COM contato
+    per_cli_rank["tem_reg_sem_contato"] = (
+        per_cli_rank["tem_reg_sem_contato"] & ~per_cli_rank["tem_reg_via_contato"]
     )
     # Aplica prioridade REG > PARC
     per_cli_rank["eh_reg_final"] = per_cli_rank["tem_reg"]
@@ -1057,11 +1087,11 @@ def _render_especialista(store, clientes, role):
             parciais=("eh_parc_final", "sum"),
             via_contato=("tem_via_contato", "sum"),
             reg_via_contato=("tem_reg_via_contato", "sum"),
+            reg_sem_contato=("tem_reg_sem_contato", "sum"),
             valor=("valor", "sum"),
         )
         .reset_index()
     )
-    rank_agg["reg_sem_contato"] = rank_agg["regularizacoes"] - rank_agg["reg_via_contato"]
     # Eficácia REAL = dos clientes contactados no mês, % que pagou depois do
     # contato. Usa _eficacia_com_overlay (BQ + API), mesmo dado da matriz.
     df_ef_real = _eficacia_com_overlay(clientes, dt_inicio, dt_fim, _versao_cache)
@@ -1158,9 +1188,9 @@ def _render_especialista(store, clientes, role):
         ("Especialista", ""),
         ("Carteira inad.", _carteira_tip),
         ("Contatados", "Clientes distintos que receberam mensagem ou ligação no mês. É a base da Eficácia e da Cobertura."),
-        ("Reg. com contato", "Clientes que zeraram o atraso no mês tendo recebido msg ou ligação nos 30 dias antes do pagamento. Crédito vai pra quem fez o contato mais recente."),
-        ("Reg. sem contato", "Clientes que zeraram o atraso no mês SEM contato da cobrança nos 30 dias antes. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
-        ("Regularizações", "Total de clientes que zeraram tudo que estava vencido no mês. É a soma de Reg. com contato + Reg. sem contato."),
+        ("Reg. com contato", "Clientes com 5+ dias de atraso que zeraram o atraso no mês tendo recebido msg ou ligação DURANTE esse atraso (e nos 30 dias antes do pagamento). Crédito vai pra quem fez o contato mais recente."),
+        ("Reg. sem contato", "Clientes com 5+ dias de atraso que zeraram o atraso sem contato da cobrança durante esse atraso. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
+        ("Regularizações", "Total de clientes que zeraram o atraso no mês. Inclui quem pagou com até 4 dias de atraso (margem de erro: antes de poder entrar no lote), por isso é maior que com + sem contato."),
         ("% da carteira", "Regularizações ÷ carteira inadimplente do mês. Ordena o ranking: compara carteiras de tamanhos diferentes. Inclui quem pagou sem contato."),
         ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que pagaram algo em atraso depois do primeiro contato."),
         ("Cobertura", "Dos clientes que estiveram inadimplentes no mês, % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),

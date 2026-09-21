@@ -286,6 +286,8 @@ def fetch_pagamentos_hoje_api() -> dict:
                     agg[cid]["valor_atraso"] += valor
                     if (agg[cid]["dt_atraso"] is None) or (dt_liq > agg[cid]["dt_atraso"]):
                         agg[cid]["dt_atraso"] = dt_liq
+                    if (agg[cid]["venc_atraso"] is None) or (dt_venc < agg[cid]["venc_atraso"]):
+                        agg[cid]["venc_atraso"] = dt_venc
                 if id_receb:
                     agg[cid]["cobrancas_ids"].append(id_receb)
                 # Se alguma liquidação foi hoje, marca foi_hoje=True
@@ -302,6 +304,9 @@ def fetch_pagamentos_hoje_api() -> dict:
                     "valor_total":        valor,
                     "valor_atraso":       valor if em_atraso else 0.0,
                     "dt_atraso":          dt_liq if em_atraso else None,
+                    # Vencimento do boleto mais antigo pago com atraso = inicio
+                    # do atraso (mesma regra de fetch_pagamentos_creditados).
+                    "venc_atraso":        dt_venc if em_atraso else None,
                     "nome":               str(item.get("st_nome_sac") or ""),
                     "cnpj":               str(item.get("st_cgc_sac") or ""),
                     "dt_liquidacao":      dt_liq_str,
@@ -363,6 +368,7 @@ def aplicar_pagamentos_hoje_no_store():
         c["_valor_pago_atraso"] = float(info.get("valor_atraso") or 0)
         c["_pagou_em_atraso"] = c["_valor_pago_atraso"] > 0
         c["_dt_liquidacao_atraso"] = info.get("dt_atraso")
+        c["_venc_atraso"] = info.get("venc_atraso")
         # Data da liquidação pro badge "PAGOU R$ X EM dd/mm" quando não foi hoje
         # E pra atribuir o pagamento ao dia REAL nos gráficos do Especialista
         # (em vez de "hoje" pra todos, que enviesa a barra do dia atual).
@@ -2350,7 +2356,11 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str, versao: str
                 SELECT
                     CAST(id_sacado_sac AS STRING) AS id_sacado_sac,
                     DATE(dt_liquidacao_recb) AS dt_pagamento,
-                    SUM(comp_valor) AS valor
+                    SUM(comp_valor) AS valor,
+                    -- Inicio do atraso que esse pagamento quitou: vencimento
+                    -- do boleto mais antigo pago com atraso naquele dia.
+                    -- Vencimentos novos no meio do caminho NAO reiniciam.
+                    MIN(DATE(dt_vencimento_recb)) AS inicio_atraso
                 FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
                 WHERE fl_status_recb = '1'
                   AND dt_liquidacao_recb > dt_vencimento_recb
@@ -2381,6 +2391,11 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str, versao: str
                   ON c.cid = liq.id_sacado_sac
                   AND c.data_tarefa <= liq.dt_pagamento
                   AND DATE_DIFF(liq.dt_pagamento, c.data_tarefa, DAY) <= 30
+                  -- So vale contato DURANTE esse atraso. Sem isso, a cobranca
+                  -- da mensalidade de agosto era creditada ao pagamento de
+                  -- setembro (9 casos em set/2026, todos contatados antes do
+                  -- boleto pago sequer vencer).
+                  AND c.data_tarefa >= liq.inicio_atraso
             ),
             grupos AS (
                 -- Grupo atual do cliente (Ana/Priscila). Fallback se sem contato.
@@ -2411,7 +2426,13 @@ def fetch_pagamentos_creditados(dt_inicio_iso: str, dt_fim_iso: str, versao: str
                   ELSE 'sem_atribuicao'
                 END AS tipo_atribuicao,
                 (i.cid IS NULL) AS eh_regularizacao,
-                (i.cid IS NOT NULL) AS eh_parcial
+                (i.cid IS NOT NULL) AS eh_parcial,
+                liq.inicio_atraso,
+                -- Dias de atraso no pagamento (do boleto mais antigo quitado).
+                -- Ate 4 dias = margem de erro (compensacao/esquecimento): o
+                -- lote so pega cliente com 5+ dias, entao ninguem poderia ter
+                -- cobrado. A tela Especialista separa esses do com/sem contato.
+                DATE_DIFF(liq.dt_pagamento, liq.inicio_atraso, DAY) AS atraso_dias
             FROM liq
             -- Janela de 30 dias: contato precisa ter sido nos 30 dias antes
             -- do pagamento. Era 60, mas a distribuição real (jul-set/2026)
