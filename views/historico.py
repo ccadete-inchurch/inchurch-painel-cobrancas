@@ -401,7 +401,11 @@ def _render_historico(store):
         # Cliente — espelha o TOP em Inadimplentes (.04 bg, .6 border).
         # Sem badge LOTE: tint verde já comunica "veio do lote", e badge
         # competia com REGULARIZADO/PARCIAL ali do lado.
-        em_lote_hoje = _rid in ids_lote_hoje
+        # Só a linha do pagamento de HOJE: antes pintava qualquer pagamento
+        # antigo de quem voltou ao lote, e o verde parecia conversão do dia.
+        # Pagamento com data de ontem que só chegou hoje pela API foi ANTES
+        # do lote de hoje, então também não conta.
+        em_lote_hoje = _rid in ids_lote_hoje and _rdt == hoje_str
         cli_bg = "background:rgba(45,211,111,.04);" if em_lote_hoje else ""
         cli_bl = "border-left:4px solid rgba(45,211,111,.6);" if em_lote_hoje else ""
         rcols = st.columns(col_w)
