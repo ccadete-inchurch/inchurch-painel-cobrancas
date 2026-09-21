@@ -574,6 +574,24 @@ def _render_especialista(store, clientes, role):
         .agg(pagamentos=("id", "nunique"), valor=("valor", "sum"))
         .reset_index()
     )
+    # Volume da Matriz = Reg. com contato (mesma regra da coluna da tabela:
+    # regularizou, 5+ dias de atraso, contato durante o atraso). Antes era
+    # "todos os pagamentos", que creditava parcial e quem pagou em até 4
+    # dias — sobe no gráfico sem trabalho de cobrança por trás.
+    _m = df_per_matriz.copy()
+    _atr_m = (pd.to_numeric(_m["atraso_dias"], errors="coerce").fillna(99)
+              if "atraso_dias" in _m.columns else pd.Series(99, index=_m.index))
+    _m["_reg_com"] = (
+        _m["eh_regularizacao"].astype(bool)
+        & (_m["tipo_atribuicao"] == "via_contato")
+        & (_atr_m >= 5)
+    )
+    _reg_com_esp = (
+        _m[_m["_reg_com"]].groupby("atendente")["id"].nunique()
+        .rename("reg_com_contato").reset_index()
+    )
+    agg_esp = agg_esp.merge(_reg_com_esp, on="atendente", how="left")
+    agg_esp["reg_com_contato"] = agg_esp["reg_com_contato"].fillna(0).astype(int)
     df_ef = _eficacia_com_overlay(clientes, dt_inicio, dt_fim, _versao_cache)
     if filtro_esp and not df_ef.empty:
         df_ef = df_ef[df_ef["atendente"].isin(filtro_esp)]
@@ -595,13 +613,15 @@ def _render_especialista(store, clientes, role):
         'text-transform:uppercase;letter-spacing:1.5px;'
         'margin-top:8px;margin-bottom:4px">Matriz de Desempenho</div>'
         '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-        'Volume × Eficácia por especialista. Quadrante superior direito = melhor performance (muitos pagamentos + alta conversão).'
+        'Regularizações com contato × Eficácia por especialista. Só conta regularização com contato '
+        'durante o atraso (5+ dias) — quem pagou com até 4 dias fica de fora por não ter podido ser '
+        'cobrado (ver a coluna "Reg. até 4 dias" na tabela). Superior direito = melhor desempenho.'
         '</div>',
         unsafe_allow_html=True,
     )
 
     # Cap dos eixos: deixa margem visual nos extremos pra texto não sair
-    _max_pag = max(agg_esp["pagamentos"].max() if not agg_esp.empty else 1, 1)
+    _max_pag = max(agg_esp["reg_com_contato"].max() if not agg_esp.empty else 1, 1)
     _max_ef = max(agg_esp["eficacia_real"].max() if not agg_esp.empty else 1, 30)
 
     base_scatter = alt.Chart(agg_esp).encode(
@@ -611,8 +631,8 @@ def _render_especialista(store, clientes, role):
             scale=alt.Scale(domain=[0, max(_max_ef * 1.2, 100)]),
         ),
         y=alt.Y(
-            "pagamentos:Q",
-            title="VOLUME DE PAGAMENTOS",
+            "reg_com_contato:Q",
+            title="REGULARIZAÇÕES COM CONTATO (5+ DIAS)",
             scale=alt.Scale(domain=[0, _max_pag * 1.25]),
         ),
     )
@@ -624,7 +644,7 @@ def _render_especialista(store, clientes, role):
         ),
         tooltip=[
             alt.Tooltip("atendente:N", title="Especialista"),
-            alt.Tooltip("pagamentos:Q", title="Pagamentos"),
+            alt.Tooltip("reg_com_contato:Q", title="Reg. com contato"),
             alt.Tooltip("eficacia_real:Q", title="Eficácia (%)", format=".2f"),
             alt.Tooltip("clientes_contactados:Q", title="Contatados"),
             alt.Tooltip("valor:Q", title="Valor recuperado", format=",.2f"),
@@ -639,7 +659,7 @@ def _render_especialista(store, clientes, role):
     # = volume). Atendente acima da linha horizontal = volume acima da média;
     # à direita da vertical = eficácia acima da média.
     _avg_ef = float(agg_esp["eficacia_real"].mean()) if not agg_esp.empty else 0
-    _avg_vol = float(agg_esp["pagamentos"].mean()) if not agg_esp.empty else 0
+    _avg_vol = float(agg_esp["reg_com_contato"].mean()) if not agg_esp.empty else 0
     vline = alt.Chart(pd.DataFrame({"x": [_avg_ef]})).mark_rule(
         color="#cbd5e1", strokeDash=[6, 4], opacity=0.45, strokeWidth=1.5,
     ).encode(x="x:Q")
@@ -652,7 +672,7 @@ def _render_especialista(store, clientes, role):
     st.markdown(
         f'<div style="font-size:11px;color:#6b7280;margin-top:-8px">'
         f'Linhas pontilhadas = média da equipe (eficácia {_avg_ef:.2f}%, '
-        f'volume {_avg_vol:.0f}). Superior direito = melhor desempenho.'
+        f'regularizações com contato {_avg_vol:.0f}).'
         f'</div>',
         unsafe_allow_html=True,
     )
