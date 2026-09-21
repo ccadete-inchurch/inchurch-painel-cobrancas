@@ -1017,7 +1017,7 @@ def _render_especialista(store, clientes, role):
                         "serie:N", title=None,
                         scale=alt.Scale(domain=["Com contato", "Sem contato"],
                                         range=["#22c55e", "#9ca3af"]),
-                        legend=alt.Legend(orient="top"),
+                        legend=alt.Legend(orient="top", labelLimit=0),
                     ),
                     tooltip=[
                         alt.Tooltip("mes:N", title="Mês"),
@@ -1066,7 +1066,7 @@ def _render_especialista(store, clientes, role):
             _cor_tx = alt.Color(
                 "serie:N", title=None, sort=_ordem_tx,
                 scale=alt.Scale(domain=_ordem_tx, range=["#5fa3ff", "#22c55e"]),
-                legend=alt.Legend(orient="top"),
+                legend=alt.Legend(orient="top", labelLimit=0),
             )
             base_tx = alt.Chart(_df_tx).encode(
                 x=alt.X("mes:O", title="MÊS", sort=_ordem_lbl,
