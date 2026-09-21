@@ -142,6 +142,26 @@ def _na_regua_hoje(c):
     return (c.get("dias_atraso") or 0) >= _CARENCIA_DIAS
 
 
+def _legenda_html(itens):
+    """Legenda própria em cima do gráfico: quadrado pra barra, traço
+    pontilhado pra linha. A legenda do Altair desenha tudo com o mesmo
+    símbolo, e a linha do total parecia uma terceira barra (branca)."""
+    partes = []
+    for rotulo, cor, tipo in itens:
+        if tipo == "linha":
+            simbolo = (f'<span style="display:inline-block;width:18px;height:0;'
+                       f'border-top:2px dashed {cor};vertical-align:middle"></span>')
+        else:
+            simbolo = (f'<span style="display:inline-block;width:10px;height:10px;'
+                       f'border-radius:2px;background:{cor};vertical-align:middle"></span>')
+        partes.append(
+            f'<span style="display:inline-flex;align-items:center;gap:6px;'
+            f'margin-right:16px">{simbolo}<span>{rotulo}</span></span>'
+        )
+    return (f'<div style="font-size:12px;color:#9ca3af;margin-bottom:6px">'
+            f'{"".join(partes)}</div>')
+
+
 def _altair_theme():
     """Tema escuro pros gráficos Altair — combina com o painel."""
     return {
@@ -859,9 +879,7 @@ def _render_especialista(store, clientes, role):
         'text-transform:uppercase;letter-spacing:1.5px;'
         'margin-top:8px;margin-bottom:4px">Matriz de Desempenho</div>'
         '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-        'Regularizações com contato × Eficácia por especialista.<br>'
-        'Contagem de regularização com contato durante o atraso.<br>'
-        'Superior direito = melhor desempenho do especialista.'
+        'Regularizações com contato × Eficácia por especialista.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -942,7 +960,10 @@ def _render_especialista(store, clientes, role):
             '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
             'text-transform:uppercase;letter-spacing:1.5px;'
             'margin-top:24px;margin-bottom:4px">Regularizações por Dia</div>'
-            f'<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">{_sub_dia}</div>',
+            f'<div style="font-size:11px;color:#8b94a5;margin-bottom:8px">{_sub_dia}</div>'
+            + _legenda_html([("Com contato", "#22c55e", "barra"),
+                             ("Sem contato", "#9ca3af", "barra"),
+                             ("Total do dia", "#e8eaf0", "linha")]),
             unsafe_allow_html=True,
         )
         _dd = df_per.copy()
@@ -984,7 +1005,7 @@ def _render_especialista(store, clientes, role):
                     "serie:N", title=None,
                     scale=alt.Scale(domain=["Com contato", "Sem contato", "Total do dia"],
                                     range=["#22c55e", "#9ca3af", "#e8eaf0"]),
-                    legend=alt.Legend(orient="top", labelLimit=0),
+                    legend=None,
                 ),
                 opacity=alt.condition(alt.datum.eh_hoje, alt.value(0.45), alt.value(1.0)),
                 tooltip=[
@@ -1210,9 +1231,12 @@ def _render_especialista(store, clientes, role):
                 '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
                 'text-transform:uppercase;letter-spacing:1.5px;'
                 'margin-bottom:4px">Regularizações por Mês</div>'
-                '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
+                '<div style="font-size:11px;color:#8b94a5;margin-bottom:8px">'
                 'Clientes que regularizaram o atraso no mês, com ou sem contato durante o atraso.'
-                '</div>',
+                '</div>'
+                + _legenda_html([("Com contato", "#22c55e", "barra"),
+                                 ("Sem contato", "#9ca3af", "barra"),
+                                 ("% da carteira", "#e8eaf0", "linha")]),
                 unsafe_allow_html=True,
             )
             _df_vol = pd.DataFrame(_vol)
@@ -1223,7 +1247,7 @@ def _render_especialista(store, clientes, role):
                         "serie:N", title=None,
                         scale=alt.Scale(domain=["Com contato", "Sem contato", "% da carteira"],
                                         range=["#22c55e", "#9ca3af", "#e8eaf0"]),
-                        legend=alt.Legend(orient="top", labelLimit=0),
+                        legend=None,
                     ),
                     tooltip=[
                         alt.Tooltip("mes:N", title="Mês"),
