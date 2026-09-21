@@ -143,9 +143,11 @@ def _legenda_html(itens):
     símbolo, e a linha do total parecia uma terceira barra (branca)."""
     partes = []
     for rotulo, cor, tipo in itens:
-        if tipo == "linha":
+        if tipo in ("linha", "linha_cheia"):
+            _estilo = "dashed" if tipo == "linha" else "solid"
             simbolo = (f'<span style="display:inline-block;width:18px;height:0;'
-                       f'border-top:2px dashed {cor};vertical-align:middle"></span>')
+                       f'border-top:{"2px" if tipo == "linha" else "3px"} {_estilo} {cor};'
+                       f'vertical-align:middle"></span>')
         else:
             simbolo = (f'<span style="display:inline-block;width:10px;height:10px;'
                        f'border-radius:2px;background:{cor};vertical-align:middle"></span>')
@@ -188,9 +190,7 @@ alt.themes.enable("inchurch_dark")
 
 
 def _render_especialista(store, clientes, role):
-    if role != "admin":
-        st.error("Acesso restrito — apenas Admin.")
-        return
+    # Liberada pra todos os perfis (admin e atendente)
 
     # ── Header ────────────────────────────────────────────────────────────
     st.markdown(
@@ -457,7 +457,7 @@ def _render_especialista(store, clientes, role):
             if _eh_grupo_match(c)
             and _eh_situacao_match(c)
         )
-        _card_inad_sub = "carteira hoje"
+        _card_inad_sub = "hoje · carteira atual"
     else:
         _fim_p = fetch_inadimplentes_fim_periodo(
             dt_inicio.isoformat(), dt_fim.isoformat(), _versao_cache
@@ -466,7 +466,7 @@ def _render_especialista(store, clientes, role):
             _fim_p = _fim_p[_fim_p["atendente"].isin(filtro_esp)]
         _card_inad_valor = int(_fim_p["clientes"].sum()) if not _fim_p.empty else 0
         _card_inad_sub = (
-            f'carteira em {pd.Timestamp(_fim_p["data_snapshot"].iloc[0]).strftime("%d/%m")}'
+            f'em {pd.Timestamp(_fim_p["data_snapshot"].iloc[0]).strftime("%d/%m")} · fim do mês'
             if not _fim_p.empty else f"carteira {_mes_label}"
         )
 
@@ -475,15 +475,15 @@ def _render_especialista(store, clientes, role):
 
     # Tooltips dos cards
     _tt_inad = (
-        "Carteira total atual das especialistas. A coluna Carteira inad. do "
-        "ranking é diferente: conta quem entrou na cobrança no mês."
+        "Carteira total atual das especialistas. A coluna Carteira do mês do "
+        "ranking é diferente: conta quem entrou na cobrança no mês, mesmo que já tenha pago."
         if _mes_corrente else
         f"Carteira das especialistas no último dia de {_mes_label}. A coluna "
-        "Carteira inad. do ranking é diferente: conta quem entrou na cobrança no mês."
+        "Carteira do mês do ranking é diferente: conta quem entrou na cobrança no mês."
     )
     _tt_cont = (
         f"Clientes distintos que receberam mensagem ou ligação no mês. Cobertura = "
-        f"contatados ÷ carteira inad. do ranking ({total_contatados} ÷ {_base_cart})."
+        f"contatados ÷ carteira do mês ({total_contatados} ÷ {_base_cart})."
     )
     _tt_reg = (
         f"Clientes que pagaram e zeraram tudo que estava vencido, já na fase de "
@@ -491,7 +491,7 @@ def _render_especialista(store, clientes, role):
         "contato. Não inclui baixas administrativas, parcelamentos ou desativações."
     )
     _tt_res = (
-        f"Regularizações com contato ÷ carteira inad. do ranking ({total_reg_com} ÷ "
+        f"Regularizações com contato ÷ carteira do mês ({total_reg_com} ÷ "
         f"{_base_cart}). É a Cobertura × a Eficácia e o critério do ranking."
     )
     _tt_val = "Soma dos pagamentos em atraso feitos já na fase de cobrança."
@@ -708,15 +708,15 @@ def _render_especialista(store, clientes, role):
     _hdr_labels = [
         ("Pos.", ""),
         ("Especialista", ""),
-        ("Carteira<br>inad.", _carteira_tip),
+        ("Carteira<br>do mês", _carteira_tip),
         ("Contatados", "Clientes distintos que receberam mensagem ou ligação no mês. É a base da Eficácia e da Cobertura."),
         ("Reg. com<br>contato", "Clientes que zeraram o atraso no mês tendo recebido msg ou ligação durante esse atraso (até 30 dias antes do pagamento). Crédito vai pra quem fez o contato mais recente. É o numerador da Eficácia."),
         ("Reg. sem<br>contato", "Clientes que zeraram o atraso sem contato da cobrança durante esse atraso. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
         ("Reg.<br>total", "Reg. com contato + Reg. sem contato."),
-        ("Resultado<br>do contato", "Reg. com contato ÷ Carteira inad. — é a Cobertura × a Eficácia. Ordena o ranking: mede só o que veio do contato, ajustado ao tamanho da carteira."),
-        ("% da<br>carteira", "Reg. total ÷ Carteira inad. Inclui quem pagou sem contato."),
+        ("Resultado<br>do contato", "Reg. com contato ÷ Carteira do mês — é a Cobertura × a Eficácia. Ordena o ranking: mede só o que veio do contato, ajustado ao tamanho da carteira."),
+        ("% da<br>carteira", "Reg. total ÷ Carteira do mês. Inclui quem pagou sem contato."),
         ("Eficácia", "Reg. com contato ÷ Contatados. Cada regularização conta uma vez, no mês do pagamento. Pagamento parcial não conta."),
-        ("Cobertura", "Contatados ÷ Carteira inad.: quanto da carteira o especialista alcançou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
+        ("Cobertura", "Contatados ÷ Carteira do mês: quanto da carteira o especialista alcançou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
         ("Valor<br>recuperado", ""),
     ]
     for col, (h, tip) in zip(hdr_cols, _hdr_labels):
@@ -1289,7 +1289,7 @@ def _render_especialista(store, clientes, role):
                 tooltip=[
                     alt.Tooltip("mes:N", title="Mês"),
                     alt.Tooltip("total:Q", title="Regularizações"),
-                    alt.Tooltip("inad:Q", title="Carteira inad."),
+                    alt.Tooltip("inad:Q", title="Carteira do mês"),
                     alt.Tooltip("pct:Q", title="% da carteira", format=".2f"),
                 ],
             )
@@ -1312,9 +1312,11 @@ def _render_especialista(store, clientes, role):
                 'text-transform:uppercase;letter-spacing:1.5px;'
                 'margin-bottom:4px">Taxas Mensais</div>'
                 '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-                'Cobertura = contatados ÷ carteira inadimplente do mês.<br>'
+                'Cobertura = contatados ÷ carteira do mês.<br>'
                 'Eficácia = regularizações com contato ÷ contatados no mês.'
-                '</div>',
+                '</div>'
+                + _legenda_html([("Cobertura", "#9ca3af", "linha_cheia"),
+                                 ("Eficácia do contato", "#22c55e", "linha_cheia")]),
                 unsafe_allow_html=True,
             )
             _ordem_tx = ["Cobertura (%)", "Eficácia do contato (%)"]
@@ -1323,8 +1325,8 @@ def _render_especialista(store, clientes, role):
             _df_tx["pct_lbl"] = _df_tx["pct"].map(lambda v: f"{v:.2f}%".replace(".", ","))
             _cor_tx = alt.Color(
                 "serie:N", title=None, sort=_ordem_tx,
-                scale=alt.Scale(domain=_ordem_tx, range=["#5fa3ff", "#22c55e"]),
-                legend=alt.Legend(orient="top", labelLimit=0),
+                scale=alt.Scale(domain=_ordem_tx, range=["#9ca3af", "#22c55e"]),
+                legend=None,
             )
             base_tx = alt.Chart(_df_tx).encode(
                 x=alt.X("mes:O", title="MÊS", sort=_ordem_lbl,

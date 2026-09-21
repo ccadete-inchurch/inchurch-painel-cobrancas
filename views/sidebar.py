@@ -1,7 +1,7 @@
 import streamlit as st
 
 from config import LOGO_SRC
-from auth import is_logged, current_role
+from auth import is_logged
 
 
 def render_sidebar():
@@ -56,15 +56,14 @@ def render_sidebar():
             st.session_state["page"] = key_page
             st.rerun()
 
-    nav_item("Atividades",          "atividades")
+    nav_item("Lote do Dia",         "atividades")
     nav_item("Inadimplência",      "dashboard")
     nav_item("Pagamentos em Atraso", "historico")
     nav_item("Próximas Cobranças", "proximas")
-    nav_item("Cliente Devedor",    "cliente")
-    # Resultados da Cobrança (page key "especialista"): análise por
-    # atendente — admin only
-    if current_role() == "admin":
-        nav_item("Resultados da Cobrança", "especialista")
+    nav_item("Ficha do Cliente",   "cliente")
+    # Resultados da Cobrança (page key "especialista"): liberada pra todos
+    # os perfis — as atendentes veem a equipe inteira, não só a si mesmas.
+    nav_item("Resultados da Cobrança", "especialista")
 
     # Spacer pra não esconder último nav atrás do botão Sair (fixed bottom)
     st.sidebar.markdown('<div style="height:70px"></div>', unsafe_allow_html=True)

@@ -24,7 +24,7 @@ def _render_cliente(_store, clientes):
     st.markdown(
         '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:36px;'
         'font-weight:800;color:#e8eaf0;margin-top:24px;margin-bottom:24px;letter-spacing:-1px;line-height:1.1">'
-        'Cliente Devedor</div>',
+        'Ficha do Cliente</div>',
         unsafe_allow_html=True,
     )
 
