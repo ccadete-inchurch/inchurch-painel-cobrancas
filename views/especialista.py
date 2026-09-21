@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from auth import current_role
-from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_base, agregar_eficacia, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_contatos_janela, fetch_serie_carteira_mensal
+from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eficacia_base, agregar_eficacia, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_inadimplentes_fim_periodo, fetch_contatos_janela, fetch_serie_carteira_mensal
 from helpers import fmt_moeda_plain, hoje_brt, carimbo_dia_cache
 
 
@@ -464,17 +464,29 @@ def _render_especialista(store, clientes, role):
         total_parc = 0
     taxa_reg = (total_reg / total_pgto * 100) if total_pgto else 0
 
-    # Card de inadimplentes: quantos clientes ESTIVERAM com 5+ dias de atraso
-    # em algum dia do mês (mesma base da Cobertura), inclusive no mês
-    # corrente. A foto de hoje escondia quem entrou e já pagou no mês, e o
-    # card não batia com o denominador da Cobertura.
-    _cob_card = df_cob
-    if filtro_esp and not _cob_card.empty:
-        _cob_card = _cob_card[_cob_card["atendente"].isin(filtro_esp)]
-    _card_inad_valor = (
-        int(_cob_card["inadimplentes_periodo"].sum()) if not _cob_card.empty else 0
-    )
-    _card_inad_sub = f"carteira {_mes_label} (5+ dias)"
+    # Card de inadimplentes: número ABSOLUTO (1+ dia devendo), sem a carência
+    # de 4 dias das métricas — é o tamanho da carteira, não a base da
+    # Cobertura. Mês corrente = carteira total atual das especialistas (mesma
+    # contagem por atendente da tela Inadimplência); mês fechado = foto do
+    # último snapshot do mês.
+    if _mes_corrente:
+        _card_inad_valor = sum(
+            1 for c in clientes
+            if _eh_grupo_match(c)
+            and _eh_situacao_match(c)
+        )
+        _card_inad_sub = "carteira hoje"
+    else:
+        _fim_p = fetch_inadimplentes_fim_periodo(
+            dt_inicio.isoformat(), dt_fim.isoformat(), _versao_cache
+        )
+        if filtro_esp and not _fim_p.empty:
+            _fim_p = _fim_p[_fim_p["atendente"].isin(filtro_esp)]
+        _card_inad_valor = int(_fim_p["clientes"].sum()) if not _fim_p.empty else 0
+        _card_inad_sub = (
+            f'carteira em {pd.Timestamp(_fim_p["data_snapshot"].iloc[0]).strftime("%d/%m")}'
+            if not _fim_p.empty else f"carteira {_mes_label}"
+        )
 
     # Sub-texto contextual no 'Pagamentos' — se filtrando por 1 especialista,
     # mostra comparativo com a média da equipe.
@@ -503,10 +515,13 @@ def _render_especialista(store, clientes, role):
 
     # Tooltips dos cards
     _tt_inad = (
-        f"Clientes que chegaram a 5+ dias de atraso em algum dia de {_mes_label} "
-        "(quem o lote pode alcançar), mesmo que já tenham pago. Mesma base da "
-        "Cobertura. Quem ficou só com 1 a 4 dias fica de fora — por isso difere "
-        "do 'Total Clientes' da tela Inadimplência."
+        "Carteira total atual das especialistas (1+ dia de atraso). "
+        "Número absoluto: a coluna Carteira inad. do ranking usa só quem chegou "
+        "a 5+ dias no mês, que é quem o lote pode alcançar."
+        if _mes_corrente else
+        f"Clientes das especialistas devendo (1+ dia de atraso) no último dia de "
+        f"{_mes_label}. Número absoluto: a coluna Carteira inad. do ranking usa só "
+        "quem chegou a 5+ dias no mês, que é quem o lote pode alcançar."
     )
     _tt_pag = (
         "Clientes únicos que pagaram cobrança com 5+ dias de atraso no período. "
@@ -1213,7 +1228,7 @@ def _render_especialista(store, clientes, role):
     _ordem_lbl = [_mes_label_pt(m) for m in _meses_funil]
 
     if _meses_funil:
-        _vol, _taxas = [], []
+        _vol, _taxas, _topo = [], [], []
         # Eficácia por mês, com a mesma função da tabela (overlay só no mês
         # corrente, que é o único com pagamentos que o BQ ainda não tem).
         _eficacia_mes = {}
@@ -1238,6 +1253,16 @@ def _render_especialista(store, clientes, role):
             lbl = _mes_label_pt(_m_key)
             _vol.append({"mes": lbl, "serie": "Com contato", "clientes": d["reg_via"]})
             _vol.append({"mes": lbl, "serie": "Sem contato", "clientes": d["reg_esp"]})
+            # Rótulo em cima da barra: total e % da carteira (mesma conta da
+            # coluna "% da carteira": Reg. total ÷ inadimplentes 5+ do mês).
+            _tot_m = d["reg_via"] + d["reg_esp"]
+            _pct_m = (_tot_m / d["inad"] * 100) if d["inad"] else None
+            _topo.append({
+                "mes": lbl, "total": _tot_m, "inad": d["inad"],
+                "pct": _pct_m if _pct_m is not None else 0.0,
+                "rotulo": (f"{_tot_m} · {_pct_m:.2f}%".replace(".", ",")
+                           if _pct_m is not None else str(_tot_m)),
+            })
             # Taxas na mesma base da tabela: inadimplentes com 5+ dias.
             # Sem contato = base que NÃO foi contatada no mês.
             _sem_contato = max(d["inad"] - d.get("cont_base", 0), 0)
@@ -1261,7 +1286,8 @@ def _render_especialista(store, clientes, role):
                 'text-transform:uppercase;letter-spacing:1.5px;'
                 'margin-bottom:4px">Regularizações por Mês</div>'
                 '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-                'Clientes que zeraram o atraso no mês, com ou sem contato durante o atraso.'
+                'Clientes que zeraram o atraso no mês, com ou sem contato durante o atraso. '
+                'Em cima: total e % da carteira (total ÷ inadimplentes com 5+ dias no mês).'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -1284,8 +1310,21 @@ def _render_especialista(store, clientes, role):
             _rot_vol = _base_vol.mark_text(dy=12, fontSize=11, fontWeight=700).encode(
                 text=alt.Text("clientes:Q"), color=alt.value("#0f1117")
             )
+            _rot_topo = alt.Chart(pd.DataFrame(_topo)).mark_text(
+                dy=-10, fontSize=12, fontWeight=700, color="#e8eaf0",
+            ).encode(
+                x=alt.X("mes:O", sort=_ordem_lbl),
+                y=alt.Y("total:Q"),
+                text=alt.Text("rotulo:N"),
+                tooltip=[
+                    alt.Tooltip("mes:N", title="Mês"),
+                    alt.Tooltip("total:Q", title="Regularizações"),
+                    alt.Tooltip("inad:Q", title="Carteira inad. (5+ dias)"),
+                    alt.Tooltip("pct:Q", title="% da carteira", format=".2f"),
+                ],
+            )
             chart_vol = (
-                _base_vol.mark_bar(cornerRadiusEnd=2) + _rot_vol
+                _base_vol.mark_bar(cornerRadiusEnd=2) + _rot_vol + _rot_topo
             ).properties(height=320)
             st.altair_chart(chart_vol, use_container_width=True)
 
