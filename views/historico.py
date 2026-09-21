@@ -161,6 +161,10 @@ def _render_historico(store):
             key="reg_atd",
             placeholder="Todos",
         )
+    # Só quem está no lote de hoje (qualquer atendente). Filtro em vez de
+    # selo: pagamento antigo de quem voltou ao lote não ganha marca na linha
+    # (parecia conversão do dia), mas dá pra achar esses clientes aqui.
+    filtro_lote = st.checkbox("No lote hoje", key="reg_no_lote")
 
     if busca:
         b = busca.lower()
@@ -176,6 +180,11 @@ def _render_historico(store):
         _mask_sem = (df["atendente"] == "—") if _sem_esp_sel else pd.Series(False, index=df.index)
         _mask_grp = df["atendente"].isin(_grupos_sel) if _grupos_sel else pd.Series(False, index=df.index)
         df = df[_mask_sem | _mask_grp]
+
+    # IDs do lote de hoje: usados no checkbox e no destaque verde da tabela
+    ids_lote_hoje = fetch_ids_em_qualquer_lote_hoje()
+    if filtro_lote and not df.empty:
+        df = df[df["id"].astype(str).isin(ids_lote_hoje)]
 
     # Filtro temporal via date range picker — orquestra cards + tabela.
     # st.date_input com value tupla retorna tupla (dt_ini, dt_fim) quando
@@ -355,9 +364,8 @@ def _render_historico(store):
     rows      = df.iloc[(page - 1) * PAGE_SIZE : page * PAGE_SIZE].to_dict("records")
     n = len(rows)
 
-    # IDs do lote de hoje (qualquer atendente). Marca linhas verde pra
-    # destacar conversão: cliente foi trabalhado no lote E pagou hoje.
-    ids_lote_hoje = fetch_ids_em_qualquer_lote_hoje()
+    # ids_lote_hoje (lá em cima): marca verde a conversão do dia — cliente
+    # trabalhado no lote E pagou hoje.
 
     for i, row in enumerate(rows):
         inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("inativo") else ""
