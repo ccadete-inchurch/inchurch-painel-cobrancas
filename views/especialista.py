@@ -679,67 +679,92 @@ def _render_especialista(store, clientes, role):
 
     st.markdown(_DIVIDER, unsafe_allow_html=True)
 
-    # ── Layout 2 colunas: Pagamentos por Dia | Distribuição da Carteira ──
-    # Time series (esquerda, sem legenda) + Donut (direita, com legenda
-    # única que serve de referência pros dois gráficos via cor compartilhada).
+    # ── Layout 2 colunas: Regularizações por Dia | Distribuição da Carteira ──
     g_esq, g_dir = st.columns(2)
 
-    # ── Pagamentos por Dia ────────────────────────────────────────────────
+    # ── Regularizações por Dia ────────────────────────────────────────────
+    # Mesmo formato do "Regularizações por Mês": barras = quem tinha 5+ dias
+    # de atraso, com x sem contato durante o atraso; linha = total do dia
+    # (inclui quem pagou em até 4 dias). Antes eram "Pagamentos por Dia" por
+    # atendente, contando tudo — o pico depois dos vencimentos em massa
+    # (dias 15/17) parecia resultado, mas era margem de erro.
     with g_esq:
         _tem_hoje_no_df = any(d == hoje for d in df_per["data_dt"].dt.date.unique())
-        _sub_hoje = (
-            '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-            'Hoje aparece com a opacidade reduzida — dia em andamento.'
-            '</div>' if _tem_hoje_no_df else '<div style="height:12px"></div>'
+        _sub_dia = (
+            'Barras: 5+ dias de atraso, com ou sem contato durante o atraso. '
+            'Linha: total do dia, incluindo quem pagou em até 4 dias.'
+            + (' Hoje aparece mais claro — dia em andamento.' if _tem_hoje_no_df else '')
         )
         st.markdown(
             '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
             'text-transform:uppercase;letter-spacing:1.5px;'
-            'margin-top:24px;margin-bottom:4px">Pagamentos por Dia</div>'
-            f'{_sub_hoje}',
+            'margin-top:24px;margin-bottom:4px">Regularizações por Dia</div>'
+            f'<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">{_sub_dia}</div>',
             unsafe_allow_html=True,
         )
-        df_diario = (
-            df_per.groupby([df_per["data_dt"].dt.date, "atendente"])
-            .size()
-            .reset_index(name="pagamentos")
-            .rename(columns={"data_dt": "data"})
+        _dd = df_per.copy()
+        _dd["id"] = _dd["id"].astype(str)
+        _dd["data"] = _dd["data_dt"].dt.date
+        _atr_d = (pd.to_numeric(_dd["atraso_dias"], errors="coerce").fillna(99)
+                  if "atraso_dias" in _dd.columns else pd.Series(99, index=_dd.index))
+        _dd["reg"] = _dd["eh_regularizacao"].astype(bool)
+        _dd["r_via"] = _dd["reg"] & (_dd["tipo_atribuicao"] == "via_contato") & (_atr_d >= 5)
+        _dd["r_esp"] = _dd["reg"] & (_dd["tipo_atribuicao"] != "via_contato") & (_atr_d >= 5)
+        _cli_dia = (
+            _dd.groupby(["data", "id"])
+            .agg(reg=("reg", "any"), r_via=("r_via", "any"), r_esp=("r_esp", "any"))
+            .reset_index()
         )
-        df_diario["eh_hoje"] = df_diario["data"].apply(lambda d: d == hoje)
-        df_diario["data_str"] = df_diario["data"].apply(lambda d: d.strftime("%d/%m"))
-        _datas_ordem = (
-            df_diario[["data", "data_str"]]
-            .drop_duplicates()
-            .sort_values("data")["data_str"]
-            .tolist()
+        _cli_dia["r_esp"] = _cli_dia["r_esp"] & ~_cli_dia["r_via"]
+        _por_dia = (
+            _cli_dia.groupby("data")
+            .agg(com=("r_via", "sum"), sem=("r_esp", "sum"), total=("reg", "sum"))
+            .reset_index()
         )
-        chart_dia = (
-            alt.Chart(df_diario)
-            .mark_bar(cornerRadiusEnd=2)
-            .encode(
-                x=alt.X("data_str:O", title="DATA", sort=_datas_ordem, axis=alt.Axis(labelAngle=0)),
-                y=alt.Y("pagamentos:Q", title="PAGAMENTOS"),
-                # Sem legenda — o donut à direita serve de referência única
-                # pra cor → atendente em toda a tela.
+        _por_dia = _por_dia[_por_dia["total"] > 0]
+        if _por_dia.empty:
+            st.info("Sem regularizações no período.")
+        else:
+            _por_dia["data_str"] = _por_dia["data"].apply(lambda d: d.strftime("%d/%m"))
+            _por_dia["eh_hoje"] = _por_dia["data"].apply(lambda d: d == hoje)
+            _datas_ordem = _por_dia.sort_values("data")["data_str"].tolist()
+            _barras = pd.concat([
+                _por_dia.assign(serie="Com contato", clientes=_por_dia["com"]),
+                _por_dia.assign(serie="Sem contato", clientes=_por_dia["sem"]),
+            ])[["data_str", "eh_hoje", "serie", "clientes"]]
+            _x_dia = alt.X("data_str:O", title="DIA", sort=_datas_ordem, axis=alt.Axis(labelAngle=0))
+            _bar_dia = alt.Chart(_barras).mark_bar(cornerRadiusEnd=2).encode(
+                x=_x_dia,
+                y=alt.Y("clientes:Q", title="CLIENTES"),
                 color=alt.Color(
-                    "atendente:N",
-                    scale=alt.Scale(range=_CHART_PALETTE),
-                    legend=None,
+                    "serie:N", title=None,
+                    scale=alt.Scale(domain=["Com contato", "Sem contato"],
+                                    range=["#22c55e", "#9ca3af"]),
+                    legend=alt.Legend(orient="top", labelLimit=0),
                 ),
-                opacity=alt.condition(
-                    alt.datum.eh_hoje,
-                    alt.value(0.45),
-                    alt.value(1.0),
-                ),
+                opacity=alt.condition(alt.datum.eh_hoje, alt.value(0.45), alt.value(1.0)),
                 tooltip=[
                     alt.Tooltip("data_str:O", title="Dia"),
-                    alt.Tooltip("atendente:N", title="Especialista"),
-                    alt.Tooltip("pagamentos:Q", title="Pagamentos"),
+                    alt.Tooltip("serie:N", title="Origem"),
+                    alt.Tooltip("clientes:Q", title="Clientes"),
                 ],
             )
-            .properties(height=320)
-        )
-        st.altair_chart(chart_dia, use_container_width=True)
+            _base_tot_dia = alt.Chart(_por_dia).encode(
+                x=_x_dia,
+                y=alt.Y("total:Q"),
+                tooltip=[
+                    alt.Tooltip("data_str:O", title="Dia"),
+                    alt.Tooltip("total:Q", title="Total de regularizações"),
+                    alt.Tooltip("com:Q", title="Com contato (5+ dias)"),
+                    alt.Tooltip("sem:Q", title="Sem contato (5+ dias)"),
+                ],
+            )
+            chart_dia = (
+                _bar_dia
+                + _base_tot_dia.mark_line(color="#e8eaf0", strokeDash=[4, 3], strokeWidth=1.5)
+                + _base_tot_dia.mark_circle(color="#e8eaf0", size=35)
+            ).properties(height=320)
+            st.altair_chart(chart_dia, use_container_width=True)
 
     # ── Distribuição da Carteira (Donut) ──────────────────────────────────
     with g_dir:
