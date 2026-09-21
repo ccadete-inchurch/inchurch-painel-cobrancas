@@ -2038,7 +2038,7 @@ def fetch_eficacia_base(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -
     if not client:
         return pd.DataFrame()
     try:
-        return client.query(f"""
+        df = client.query(f"""
             WITH contatos_periodo AS (
                 SELECT
                     CAST(id_sacado_sac AS STRING) AS cid,
@@ -2079,21 +2079,34 @@ def fetch_eficacia_base(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -
             -- contato do mes, e o boleto NOVO (que venceu depois do contato)
             -- contava como resultado do contato.
             pagamentos_apos_contato AS (
-                SELECT DISTINCT p.cid
+                SELECT p.cid,
+                       ARRAY_AGG(DISTINCT FORMAT_DATE('%d/%m/%Y', p.dt_pag)) AS datas
                 FROM pagamentos p
                 JOIN contatos_dias c
                   ON c.cid = p.cid
                   AND c.data_tarefa <= p.dt_pag
                   AND c.data_tarefa >= p.inicio_atraso
                   AND DATE_DIFF(p.dt_pag, c.data_tarefa, DAY) <= 30
+                -- 5+ dias de atraso, mesma regua das colunas Reg. com/sem contato
+                WHERE DATE_DIFF(p.dt_pag, p.inicio_atraso, DAY) >= 5
+                GROUP BY p.cid
             )
-            SELECT c.cid, c.atendente, c.primeiro_contato,
-                   (p.cid IS NOT NULL) AS pagou_apos_contato
+            SELECT c.cid, c.atendente, c.primeiro_contato, p.datas
             FROM contatos_periodo c
             LEFT JOIN pagamentos_apos_contato p ON p.cid = c.cid
         """).to_dataframe()
     except Exception:
         return pd.DataFrame()
+    # Numerador = REGULARIZOU (zerou tudo que estava vencido), nao "pagou
+    # algo": pagamento parcial nao conta. O evento de regularizacao vem de
+    # fetch_eventos_regularizacao (mesma regra da tabela e do grafico).
+    ev = fetch_eventos_regularizacao()
+    df["cid"] = df["cid"].astype(str)
+    df["pagou_apos_contato"] = [
+        bool(datas is not None and len(datas) and any((cid, d) in ev for d in datas))
+        for cid, datas in zip(df["cid"], df["datas"])
+    ]
+    return df.drop(columns=["datas"])
 
 
 def agregar_eficacia(df_base: pd.DataFrame) -> pd.DataFrame:
