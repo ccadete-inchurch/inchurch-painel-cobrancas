@@ -875,10 +875,12 @@ def _render_especialista(store, clientes, role):
         if filtro_esp:
             _serie = _serie[_serie["atendente"].isin(filtro_esp)]
         for _, r in _serie.groupby("mes").agg(
-            inad=("inadimplentes", "sum"), cont=("contatados", "sum")
+            inad=("inadimplentes", "sum"), cont=("contatados", "sum"),
+            cont_base=("contatados_na_base", "sum"),
         ).reset_index().iterrows():
             _serie_mes[r["mes"]] = {"inad": int(r["inad"]), "cont": int(r["cont"]),
-                                    "reg_via": 0, "reg_esp": 0, "reg_rapido": 0}
+                                    "cont_base": int(r["cont_base"]),
+                                    "reg_via": 0, "reg_esp": 0, "reg_total": 0}
 
     if not df_trend.empty:
         _pag = df_trend.copy()
@@ -903,25 +905,23 @@ def _render_especialista(store, clientes, role):
                 .agg(reg=("eh_reg_ev", "any"), r_via=("r_via", "any"), r_esp=("r_esp", "any"))
                 .reset_index()
             )
-            # Gráfico sem a faixa de "até 4 dias" (decisão do usuário): barra =
-            # total. Com contato = contato durante o atraso (qualquer atraso);
-            # o resto é sem contato — inclui quem pagou em até 4 dias, que nem
-            # podia ter sido cobrado. A TABELA segue separando (5+ dias).
-            _cli_via = _pag.groupby(["mes", "id"])["via"].any().reset_index(name="c_via")
-            _cli_mes = _cli_mes.merge(_cli_via, on=["mes", "id"], how="left")
-            _cli_mes["reg_via"] = _cli_mes["reg"] & _cli_mes["c_via"].fillna(False).astype(bool)
-            _cli_mes["reg_esp"] = _cli_mes["reg"] & ~_cli_mes["reg_via"]
-            _cli_mes["reg_rapido"] = False
+            # Barras = só quem estava na régua (5+ dias), igual às colunas da
+            # tabela: com contato x sem contato. Linha = total de
+            # regularizações do mês (inclui quem pagou em até 4 dias) — a
+            # distância entre a barra e a linha são os que pagaram rápido.
+            _cli_mes["reg_via"] = _cli_mes["r_via"]
+            _cli_mes["reg_esp"] = _cli_mes["r_esp"] & ~_cli_mes["r_via"]
             for _, r in _cli_mes.groupby("mes").agg(
                 reg_via=("reg_via", "sum"), reg_esp=("reg_esp", "sum"),
-                reg_rapido=("reg_rapido", "sum"),
+                reg_total=("reg", "sum"),
             ).reset_index().iterrows():
                 _d = _serie_mes.setdefault(
-                    r["mes"], {"inad": 0, "cont": 0, "reg_via": 0, "reg_esp": 0, "reg_rapido": 0}
+                    r["mes"], {"inad": 0, "cont": 0, "cont_base": 0,
+                               "reg_via": 0, "reg_esp": 0, "reg_total": 0}
                 )
                 _d["reg_via"] = int(r["reg_via"])
                 _d["reg_esp"] = int(r["reg_esp"])
-                _d["reg_rapido"] = int(r["reg_rapido"])
+                _d["reg_total"] = int(r["reg_total"])
 
     def _mes_label_pt(ym):
         _a, _m = ym.split("-")
@@ -931,13 +931,16 @@ def _render_especialista(store, clientes, role):
     _ordem_lbl = [_mes_label_pt(m) for m in _meses_funil]
 
     if _meses_funil:
-        _vol, _taxas = [], []
+        _vol, _tot, _taxas = [], [], []
         for _m_key in _meses_funil:
             d = _serie_mes[_m_key]
             lbl = _mes_label_pt(_m_key)
             _vol.append({"mes": lbl, "serie": "Com contato", "clientes": d["reg_via"]})
             _vol.append({"mes": lbl, "serie": "Sem contato", "clientes": d["reg_esp"]})
-            _sem_contato = max(d["inad"] - d["cont"], 0)
+            _tot.append({"mes": lbl, "serie": "Total (inclui até 4 dias)", "clientes": d.get("reg_total", 0)})
+            # Taxas na mesma base da tabela: inadimplentes com 5+ dias.
+            # Sem contato = base que NÃO foi contatada no mês.
+            _sem_contato = max(d["inad"] - d.get("cont_base", 0), 0)
             if d["inad"]:
                 _taxas.append({"mes": lbl, "serie": "Cobertura",
                                "pct": d["cont"] / d["inad"] * 100})
@@ -955,9 +958,9 @@ def _render_especialista(store, clientes, role):
                 'text-transform:uppercase;letter-spacing:1.5px;'
                 'margin-bottom:4px">Regularizações por Mês</div>'
                 '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-                'Clientes que zeraram o atraso, por origem. Com contato = msg ou '
-                'ligação durante o atraso, até 30 dias antes do pagamento. Sem '
-                'contato inclui quem pagou em até 4 dias, antes de poder entrar no lote.'
+                'Barras: clientes com 5+ dias de atraso que zeraram o atraso, com ou '
+                'sem contato durante o atraso. Linha: total de regularizações, '
+                'incluindo quem pagou em até 4 dias (antes de poder entrar no lote).'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -980,8 +983,22 @@ def _render_especialista(store, clientes, role):
             _rot_vol = _base_vol.mark_text(dy=12, fontSize=11, fontWeight=700).encode(
                 text=alt.Text("clientes:Q"), color=alt.value("#0f1117")
             )
+            _base_tot = alt.Chart(pd.DataFrame(_tot)).encode(
+                x=alt.X("mes:O", sort=_ordem_lbl),
+                y=alt.Y("clientes:Q"),
+                tooltip=[
+                    alt.Tooltip("mes:N", title="Mês"),
+                    alt.Tooltip("clientes:Q", title="Total de regularizações"),
+                ],
+            )
+            _linha_tot = (
+                _base_tot.mark_line(color="#e8eaf0", strokeDash=[4, 3], strokeWidth=1.5)
+                + _base_tot.mark_circle(color="#e8eaf0", size=45)
+                + _base_tot.mark_text(dy=-10, fontSize=11, fontWeight=700, color="#e8eaf0")
+                .encode(text=alt.Text("clientes:Q"))
+            )
             chart_vol = (
-                _base_vol.mark_bar(cornerRadiusEnd=2) + _rot_vol
+                _base_vol.mark_bar(cornerRadiusEnd=2) + _rot_vol + _linha_tot
             ).properties(height=320)
             st.altair_chart(chart_vol, use_container_width=True)
 
@@ -991,9 +1008,10 @@ def _render_especialista(store, clientes, role):
                 'text-transform:uppercase;letter-spacing:1.5px;'
                 'margin-bottom:4px">Taxas Mensais</div>'
                 '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-                'Cobertura = contatados ÷ inadimplentes do mês. Conversão = '
-                'regularizados ÷ base. As duas conversões não são comparáveis '
-                'direto: o lote prioriza os piores casos por score.'
+                'Base = inadimplentes com 5+ dias no mês. Cobertura = contatados ÷ '
+                'base. Conversão = regularizados (5+ dias) ÷ contatados ou ÷ não '
+                'contatados. O lote prioriza os piores casos, então as duas '
+                'conversões não se comparam direto.'
                 '</div>',
                 unsafe_allow_html=True,
             )

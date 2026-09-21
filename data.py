@@ -2234,28 +2234,42 @@ def fetch_serie_carteira_mensal(dt_inicio_iso: str, dt_fim_iso: str, versao: str
                 WHERE grupo IN ('Ana Carolina', 'Priscila Oliveira')
                 GROUP BY id_sacado_sac
             ),
-            contatos AS (
-                SELECT FORMAT_DATE('%Y-%m', data_tarefa) AS mes, atendente,
-                       COUNT(DISTINCT CAST(id_sacado_sac AS STRING)) AS contatados
+            contatos_cli AS (
+                SELECT DISTINCT FORMAT_DATE('%Y-%m', data_tarefa) AS mes, atendente,
+                       CAST(id_sacado_sac AS STRING) AS cid
                 FROM `{_TAREFAS_TABLE}`
                 WHERE data_tarefa >= DATE('{dt_inicio_iso}')
                   AND data_tarefa <= DATE('{dt_fim_iso}')
                   AND (mensagem_enviada OR ligacao_feita OR ligacao_atendida)
-                GROUP BY mes, atendente
             ),
-            inad AS (
+            -- Base = inadimplentes do mes que chegaram a 5+ dias de atraso
+            -- (quem o lote pode alcancar) — mesma base da Cobertura da tabela.
+            inad_cli AS (
                 SELECT FORMAT_DATE('%Y-%m', s.data_snapshot) AS mes, g.atendente,
-                       COUNT(DISTINCT s.id_sacado_sac) AS inadimplentes
+                       s.id_sacado_sac AS cid
                 FROM `{_SNAPSHOT_TABLE}` s
                 JOIN grupos g ON g.cid = s.id_sacado_sac
                 WHERE s.data_snapshot >= DATE('{dt_inicio_iso}')
                   AND s.data_snapshot <= DATE('{dt_fim_iso}')
-                GROUP BY mes, g.atendente
+                GROUP BY 1, 2, 3
+                HAVING MAX(s.dias_atraso) >= 5
+            ),
+            contatos AS (
+                SELECT mes, atendente, COUNT(*) AS contatados FROM contatos_cli GROUP BY 1, 2
+            ),
+            inad AS (
+                SELECT i.mes, i.atendente, COUNT(*) AS inadimplentes,
+                       COUNTIF(c.cid IS NOT NULL) AS contatados_na_base
+                FROM inad_cli i
+                LEFT JOIN contatos_cli c
+                  ON c.mes = i.mes AND c.atendente = i.atendente AND c.cid = i.cid
+                GROUP BY 1, 2
             )
             SELECT COALESCE(c.mes, i.mes) AS mes,
                    COALESCE(c.atendente, i.atendente) AS atendente,
                    IFNULL(c.contatados, 0) AS contatados,
-                   IFNULL(i.inadimplentes, 0) AS inadimplentes
+                   IFNULL(i.inadimplentes, 0) AS inadimplentes,
+                   IFNULL(i.contatados_na_base, 0) AS contatados_na_base
             FROM contatos c
             FULL OUTER JOIN inad i ON i.mes = c.mes AND i.atendente = c.atendente
         """).to_dataframe()
