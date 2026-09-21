@@ -137,6 +137,15 @@ def _eficacia_com_overlay(clientes, dt_inicio, dt_fim, versao):
     base = base.copy()
     base["cid"] = base["cid"].astype(str)
     primeiro = dict(zip(base["cid"], base["primeiro_contato"]))
+    # Dias de contato no período, por cliente — pra aplicar a mesma regra do
+    # BQ: contato DURANTE o atraso quitado e até 30 dias antes do pagamento.
+    _dias_contato = {}
+    _df_c = fetch_contatos_janela(dt_inicio.isoformat(), dt_fim.isoformat())
+    if not _df_c.empty:
+        for _cid, _d in zip(_df_c["cid"].astype(str), _df_c["data_tarefa"]):
+            _d = _d.date() if hasattr(_d, "date") else _d
+            if dt_inicio <= _d <= dt_fim:
+                _dias_contato.setdefault(_cid, []).append(_d)
     pagos_overlay = set()
     for c in clientes or []:
         if not (c.get("_regularizado_hoje") or c.get("_pago_parcial_hoje")):
@@ -149,9 +158,11 @@ def _eficacia_com_overlay(clientes, dt_inicio, dt_fim, versao):
             continue
         if not (dt_inicio <= dt_real <= dt_fim):
             continue
-        _pc = primeiro[cid]
-        _pc = _pc.date() if hasattr(_pc, "date") else _pc
-        if dt_real >= _pc:
+        _inicio = c.get("_venc_atraso")
+        if any(
+            d <= dt_real and (dt_real - d).days <= 30 and (_inicio is None or d >= _inicio)
+            for d in _dias_contato.get(cid, [])
+        ):
             pagos_overlay.add(cid)
     if pagos_overlay:
         base["pagou_apos_contato"] = base["pagou_apos_contato"].astype(bool) | base["cid"].isin(pagos_overlay)
@@ -478,7 +489,7 @@ def _render_especialista(store, clientes, role):
         "Total de clientes inadimplentes na carteira HOJE (snapshot atual). "
         "Equivale ao 'Total Clientes' da tela Inadimplência."
         if _mes_corrente else
-        f"Clientes que estiveram inadimplentes em algum dia de {_mes_label} "
+        f"Clientes que chegaram a 5+ dias de atraso em algum dia de {_mes_label} "
         "(snapshots diários do mês). Mesma base da Cobertura."
     )
     _tt_pag = (
@@ -892,10 +903,15 @@ def _render_especialista(store, clientes, role):
                 .agg(reg=("eh_reg_ev", "any"), r_via=("r_via", "any"), r_esp=("r_esp", "any"))
                 .reset_index()
             )
-            # Prioridade: com contato > sem contato > pagou rápido (até 4 dias)
-            _cli_mes["reg_via"] = _cli_mes["r_via"]
-            _cli_mes["reg_esp"] = _cli_mes["r_esp"] & ~_cli_mes["r_via"]
-            _cli_mes["reg_rapido"] = _cli_mes["reg"] & ~_cli_mes["r_via"] & ~_cli_mes["r_esp"]
+            # Gráfico sem a faixa de "até 4 dias" (decisão do usuário): barra =
+            # total. Com contato = contato durante o atraso (qualquer atraso);
+            # o resto é sem contato — inclui quem pagou em até 4 dias, que nem
+            # podia ter sido cobrado. A TABELA segue separando (5+ dias).
+            _cli_via = _pag.groupby(["mes", "id"])["via"].any().reset_index(name="c_via")
+            _cli_mes = _cli_mes.merge(_cli_via, on=["mes", "id"], how="left")
+            _cli_mes["reg_via"] = _cli_mes["reg"] & _cli_mes["c_via"].fillna(False).astype(bool)
+            _cli_mes["reg_esp"] = _cli_mes["reg"] & ~_cli_mes["reg_via"]
+            _cli_mes["reg_rapido"] = False
             for _, r in _cli_mes.groupby("mes").agg(
                 reg_via=("reg_via", "sum"), reg_esp=("reg_esp", "sum"),
                 reg_rapido=("reg_rapido", "sum"),
@@ -921,7 +937,6 @@ def _render_especialista(store, clientes, role):
             lbl = _mes_label_pt(_m_key)
             _vol.append({"mes": lbl, "serie": "Com contato", "clientes": d["reg_via"]})
             _vol.append({"mes": lbl, "serie": "Sem contato", "clientes": d["reg_esp"]})
-            _vol.append({"mes": lbl, "serie": "Até 4 dias", "clientes": d.get("reg_rapido", 0)})
             _sem_contato = max(d["inad"] - d["cont"], 0)
             if d["inad"]:
                 _taxas.append({"mes": lbl, "serie": "Cobertura",
@@ -940,9 +955,9 @@ def _render_especialista(store, clientes, role):
                 'text-transform:uppercase;letter-spacing:1.5px;'
                 'margin-bottom:4px">Regularizações por Mês</div>'
                 '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
-                'Clientes que zeraram o atraso, por origem. Com/sem contato = '
-                'atraso de 5+ dias (contato durante o atraso ou não). Até 4 dias = '
-                'margem de erro, pagou antes de poder entrar no lote.'
+                'Clientes que zeraram o atraso, por origem. Com contato = msg ou '
+                'ligação durante o atraso, até 30 dias antes do pagamento. Sem '
+                'contato inclui quem pagou em até 4 dias, antes de poder entrar no lote.'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -952,8 +967,8 @@ def _render_especialista(store, clientes, role):
                     y=alt.Y("clientes:Q", title="CLIENTES"),
                     color=alt.Color(
                         "serie:N", title=None,
-                        scale=alt.Scale(domain=["Com contato", "Sem contato", "Até 4 dias"],
-                                        range=["#22c55e", "#9ca3af", "#4b5563"]),
+                        scale=alt.Scale(domain=["Com contato", "Sem contato"],
+                                        range=["#22c55e", "#9ca3af"]),
                         legend=alt.Legend(orient="top"),
                     ),
                     tooltip=[
@@ -1179,7 +1194,7 @@ def _render_especialista(store, clientes, role):
     _carteira_tip = (
         "Clientes inadimplentes HOJE sob esse especialista."
         if _mes_corrente else
-        f"Clientes que estiveram inadimplentes em algum dia de {_mes_label}. "
+        f"Clientes que chegaram a 5+ dias de atraso em algum dia de {_mes_label}. "
         "É o denominador da Cobertura."
     )
     hdr_cols = st.columns(_col_widths)
@@ -1192,8 +1207,8 @@ def _render_especialista(store, clientes, role):
         ("Reg. sem contato", "Clientes com 5+ dias de atraso que zeraram o atraso sem contato da cobrança durante esse atraso. Pode ter havido régua automática ou chatbot — o painel só registra contato do lote."),
         ("Regularizações", "Total de clientes que zeraram o atraso no mês. Inclui quem pagou com até 4 dias de atraso (margem de erro: antes de poder entrar no lote), por isso é maior que com + sem contato."),
         ("% da carteira", "Regularizações ÷ carteira inadimplente do mês. Ordena o ranking: compara carteiras de tamanhos diferentes. Inclui quem pagou sem contato."),
-        ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que pagaram algo em atraso depois do primeiro contato."),
-        ("Cobertura", "Dos clientes que estiveram inadimplentes no mês, % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
+        ("Eficácia", "Dos clientes contactados no mês (msg/ligação), % que pagaram algo em atraso com contato durante esse atraso (até 30 dias antes do pagamento)."),
+        ("Cobertura", "Dos clientes da carteira que chegaram a 5+ dias de atraso no mês (quem o lote pode alcançar), % que o especialista tocou (msg/ligação). Carteira maior com o mesmo lote de 80/dia = cobertura menor."),
         ("Valor Recuperado", ""),
     ]
     for col, (h, tip) in zip(hdr_cols, _hdr_labels):

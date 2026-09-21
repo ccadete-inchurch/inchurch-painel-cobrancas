@@ -2054,16 +2054,38 @@ def fetch_eficacia_base(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -
                   )
                 GROUP BY cid, atendente
             ),
+            contatos_dias AS (
+                SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid, data_tarefa
+                FROM `{_TAREFAS_TABLE}`
+                WHERE data_tarefa >= DATE('{dt_inicio_iso}')
+                  AND data_tarefa <= DATE('{dt_fim_iso}')
+                  AND (mensagem_enviada OR ligacao_feita OR ligacao_atendida)
+            ),
+            pagamentos AS (
+                SELECT CAST(id_sacado_sac AS STRING) AS cid,
+                       DATE(dt_liquidacao_recb) AS dt_pag,
+                       -- inicio do atraso quitado: vencimento mais antigo pago
+                       MIN(DATE(dt_vencimento_recb)) AS inicio_atraso
+                FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all`
+                WHERE fl_status_recb = '1'
+                  AND dt_liquidacao_recb > dt_vencimento_recb
+                  AND DATE(dt_liquidacao_recb) >= DATE('{dt_inicio_iso}')
+                  AND DATE(dt_liquidacao_recb) <= DATE('{dt_fim_iso}')
+                GROUP BY 1, 2
+            ),
+            -- Mesma regra da atribuicao (fetch_pagamentos_creditados): o
+            -- contato tem que ter sido DURANTE o atraso que o pagamento quitou
+            -- e ate 30 dias antes dele. Antes bastava pagar depois do 1o
+            -- contato do mes, e o boleto NOVO (que venceu depois do contato)
+            -- contava como resultado do contato.
             pagamentos_apos_contato AS (
-                SELECT DISTINCT CAST(p.id_sacado_sac AS STRING) AS cid
-                FROM `business-intelligence-467516.Splgc.splgc-cobrancas_liquidacao-all` p
-                JOIN contatos_periodo c
-                  ON CAST(p.id_sacado_sac AS STRING) = c.cid
-                WHERE p.fl_status_recb = '1'
-                  AND p.dt_liquidacao_recb > p.dt_vencimento_recb
-                  AND DATE(p.dt_liquidacao_recb) >= DATE('{dt_inicio_iso}')
-                  AND DATE(p.dt_liquidacao_recb) <= DATE('{dt_fim_iso}')
-                  AND DATE(p.dt_liquidacao_recb) >= c.primeiro_contato
+                SELECT DISTINCT p.cid
+                FROM pagamentos p
+                JOIN contatos_dias c
+                  ON c.cid = p.cid
+                  AND c.data_tarefa <= p.dt_pag
+                  AND c.data_tarefa >= p.inicio_atraso
+                  AND DATE_DIFF(p.dt_pag, c.data_tarefa, DAY) <= 30
             )
             SELECT c.cid, c.atendente, c.primeiro_contato,
                    (p.cid IS NOT NULL) AS pagou_apos_contato
@@ -2156,9 +2178,12 @@ def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str, versao
                   AND (mensagem_enviada OR ligacao_feita OR ligacao_atendida)
                 GROUP BY atendente
             ),
-            inad AS (
-                SELECT g.grupo AS atendente,
-                       COUNT(DISTINCT s.id_sacado_sac) AS inadimplentes_periodo
+            -- Base = inadimplentes do mes que chegaram a 5+ dias de atraso em
+            -- algum snapshot. Com 1-4 dias o lote nem pode pegar o cliente
+            -- (msg a partir de 5, ligacao de 7): conta-los derrubava a
+            -- cobertura (set/26: Ana 62% -> 81% sobre a base alcancavel).
+            inad_cli AS (
+                SELECT g.grupo AS atendente, s.id_sacado_sac AS cid
                 FROM `{_SNAPSHOT_TABLE}` s
                 JOIN (
                     SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(grupo) AS grupo
@@ -2168,7 +2193,12 @@ def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str, versao
                 ) g ON g.cid = s.id_sacado_sac
                 WHERE s.data_snapshot >= DATE('{dt_inicio_iso}')
                   AND s.data_snapshot <= DATE('{dt_fim_iso}')
-                GROUP BY g.grupo
+                GROUP BY 1, 2
+                HAVING MAX(s.dias_atraso) >= 5
+            ),
+            inad AS (
+                SELECT atendente, COUNT(*) AS inadimplentes_periodo
+                FROM inad_cli GROUP BY atendente
             )
             SELECT c.atendente, c.contactados, i.inadimplentes_periodo
             FROM contatos c
