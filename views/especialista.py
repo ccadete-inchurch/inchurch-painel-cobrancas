@@ -137,11 +137,6 @@ def _so_regua(df):
     return df[_atr >= _CARENCIA_DIAS]
 
 
-def _na_regua_hoje(c):
-    """Cliente da carteira de hoje com 5+ dias de atraso."""
-    return (c.get("dias_atraso") or 0) >= _CARENCIA_DIAS
-
-
 def _legenda_html(itens):
     """Legenda própria em cima do gráfico: quadrado pra barra, traço
     pontilhado pra linha. A legenda do Altair desenha tudo com o mesmo
@@ -1031,6 +1026,8 @@ def _render_especialista(store, clientes, role):
                 _bar_dia
                 + _base_tot_dia.mark_line(strokeDash=[4, 3], strokeWidth=1.5)
                 + _base_tot_dia.mark_circle(size=35)
+                + _base_tot_dia.mark_text(dy=-10, fontSize=10, fontWeight=700)
+                .encode(text=alt.Text("total:Q"))
             ).properties(height=320)
             st.altair_chart(chart_dia, use_container_width=True)
 
@@ -1042,14 +1039,12 @@ def _render_especialista(store, clientes, role):
             'margin-top:24px;margin-bottom:12px">Distribuição da Carteira</div>',
             unsafe_allow_html=True,
         )
-        # Filtra: exclui regularizados de hoje (real-time) + aplica filtros
-        # de Especialista e Situação.
+        # Mesma carteira do card Inadimplentes: total atual das duas
+        # especialistas (filtros de Especialista e Situação aplicados).
         carteira = pd.DataFrame([
             {"atendente": _norm_atendente_raw(c.get("_grupo")), "valor": float(c.get("valor") or 0)}
             for c in clientes
-            if not c.get("_regularizado_hoje")
-            and _na_regua_hoje(c)
-            and _eh_grupo_match(c)
+            if _eh_grupo_match(c)
             and _eh_situacao_match(c)
         ])
         if not carteira.empty:
@@ -1058,24 +1053,39 @@ def _render_especialista(store, clientes, role):
                 .agg(clientes=("valor", "count"), valor=("valor", "sum"))
                 .reset_index()
             )
-            chart_donut = (
-                alt.Chart(carteira_agg)
-                .mark_arc(innerRadius=60, outerRadius=110)
-                .encode(
-                    theta=alt.Theta("clientes:Q", title="Clientes"),
-                    color=alt.Color(
-                        "atendente:N",
-                        scale=alt.Scale(range=_CHART_PALETTE),
-                        title="Especialista",
-                    ),
-                    tooltip=[
-                        alt.Tooltip("atendente:N", title="Especialista"),
-                        alt.Tooltip("clientes:Q", title="Clientes"),
-                        alt.Tooltip("valor:Q", title="R$ em aberto", format=",.2f"),
-                    ],
-                )
-                .properties(height=320)
+            _tot_cart = int(carteira_agg["clientes"].sum())
+            carteira_agg["pct"] = carteira_agg["clientes"] / _tot_cart * 100
+            # Rótulo fora da fatia: quantidade · % da carteira das duas
+            carteira_agg["rotulo"] = [
+                f"{n} · {p:.2f}%".replace(".", ",")
+                for n, p in zip(carteira_agg["clientes"], carteira_agg["pct"])
+            ]
+            _base_donut = alt.Chart(carteira_agg).encode(
+                theta=alt.Theta("clientes:Q", title="Clientes", stack=True),
+                color=alt.Color(
+                    "atendente:N",
+                    scale=alt.Scale(range=_CHART_PALETTE),
+                    title="Especialista",
+                ),
+                tooltip=[
+                    alt.Tooltip("atendente:N", title="Especialista"),
+                    alt.Tooltip("clientes:Q", title="Clientes"),
+                    alt.Tooltip("pct:Q", title="% da carteira", format=".2f"),
+                    alt.Tooltip("valor:Q", title="R$ em aberto", format=",.2f"),
+                ],
             )
+            _centro = alt.Chart(pd.DataFrame({"t": [f"{_tot_cart:,}".replace(",", ".")]})).mark_text(
+                fontSize=22, fontWeight=800, color="#e8eaf0", dy=-6,
+            ).encode(text="t:N")
+            _centro_sub = alt.Chart(pd.DataFrame({"t": ["clientes"]})).mark_text(
+                fontSize=11, color="#8b94a5", dy=14,
+            ).encode(text="t:N")
+            chart_donut = (
+                _base_donut.mark_arc(innerRadius=60, outerRadius=110)
+                + _base_donut.mark_text(radius=138, fontSize=12, fontWeight=700)
+                .encode(text="rotulo:N")
+                + _centro + _centro_sub
+            ).properties(height=320)
             st.altair_chart(chart_donut, use_container_width=True)
         else:
             st.info("Sem carteira atual pra mostrar distribuição.")
