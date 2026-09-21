@@ -181,8 +181,8 @@ def _render_historico(store):
         # linha (parecia conversão do dia), mas dá pra achar esses clientes.
         # Selectbox (igual a Situação): o segmented_control quebrava em duas
         # linhas no notebook.
-        _lote_sel = st.selectbox("Mostrar", ["Todos", "Só do lote de hoje"], key="reg_lote")
-    filtro_lote = _lote_sel == "Só do lote de hoje"
+        _lote_sel = st.selectbox("Mostrar", ["Todos", "Lote do Dia"], key="reg_lote")
+    filtro_lote = _lote_sel == "Lote do Dia"
 
     if busca:
         b = busca.lower()
@@ -401,10 +401,9 @@ def _render_historico(store):
             and not _cli_atual.get("_regularizado_hoje")
             and (_cli_atual.get("dias_atraso") or 0) > 0
         )
-        # Voltou a atrasar: selo em cinza (o verde passava "resolvido", mas
-        # o cliente deve de novo). O fato da data continua registrado.
-        _reg_cor = ("background:rgba(156,163,175,.18);color:#9ca3af;" if voltou_atrasar
-                    else "background:rgba(45,211,111,.18);color:#2dd36f;")
+        # Selo sempre verde: diz o que aconteceu NAQUELE pagamento. Quem deve
+        # de novo hoje ganha o fundo da linha em cinza (lá embaixo).
+        _reg_cor = "background:rgba(45,211,111,.18);color:#2dd36f;"
         reg_badge = (
             f'<span style="{_reg_cor}'
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
@@ -443,6 +442,11 @@ def _render_historico(store):
         em_lote_hoje = _rid in ids_lote_hoje and _rdt == hoje_str
         cli_bg = "background:rgba(45,211,111,.04);" if em_lote_hoje else ""
         cli_bl = "border-left:4px solid rgba(45,211,111,.6);" if em_lote_hoje else ""
+        # Regularizou naquela data mas deve de novo hoje: fundo cinza (não
+        # coincide com o verde, que é só pagamento de hoje).
+        if voltou_atrasar:
+            cli_bg = "background:rgba(156,163,175,.08);"
+            cli_bl = "border-left:4px solid rgba(156,163,175,.5);"
         rcols = st.columns(col_w)
         with rcols[0]:
             badges_html = f'{reg_badge}{parcial_badge}{acordo_badge}{inativo_badge}'
@@ -477,7 +481,10 @@ def _render_historico(store):
     st.markdown(
         f'<div style="background:#1e2333;border:1px solid #2a2f42;border-top:none;'
         f'border-radius:0 0 12px 12px;padding:10px 16px;display:flex;justify-content:space-between;font-size:12px;color:#6b7280">'
-        f'<span>Mostrando {(page-1)*PAGE_SIZE+1}–{min(page*PAGE_SIZE, total_f)} de {total_f} pagamentos</span>'
+        # Linhas = cliente por dia; quem pagou em dias diferentes aparece
+        # mais de uma vez, por isso o total de clientes (o dos cards) ao lado.
+        f'<span>Mostrando {(page-1)*PAGE_SIZE+1}–{min(page*PAGE_SIZE, total_f)} de {total_f} pagamentos '
+        f'({df["id"].astype(str).nunique()} clientes)</span>'
         f'<span>Página {page} de {total_pg}</span></div>',
         unsafe_allow_html=True,
     )
