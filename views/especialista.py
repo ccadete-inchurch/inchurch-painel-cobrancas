@@ -147,12 +147,15 @@ def _eficacia_com_overlay(clientes, dt_inicio, dt_fim, versao):
     primeiro = dict(zip(base["cid"], base["primeiro_contato"]))
     # Dias de contato no período, por cliente — pra aplicar a mesma regra do
     # BQ: contato DURANTE o atraso quitado e até 30 dias antes do pagamento.
+    # Enxerga até 30 dias depois do fim pra achar o contato MAIS RECENTE
+    # antes do pagamento: a regularização só conta no mês dele.
     _dias_contato = {}
-    _df_c = fetch_contatos_janela(dt_inicio.isoformat(), dt_fim.isoformat())
+    _fim_busca = min(dt_fim + timedelta(days=30), date.fromisoformat(hoje_brt()))
+    _df_c = fetch_contatos_janela(dt_inicio.isoformat(), _fim_busca.isoformat())
     if not _df_c.empty:
         for _cid, _d in zip(_df_c["cid"].astype(str), _df_c["data_tarefa"]):
             _d = _d.date() if hasattr(_d, "date") else _d
-            if dt_inicio <= _d <= dt_fim:
+            if _d >= dt_inicio:
                 _dias_contato.setdefault(_cid, []).append(_d)
     pagos_overlay = set()
     for c in clientes or []:
@@ -171,10 +174,12 @@ def _eficacia_com_overlay(clientes, dt_inicio, dt_fim, versao):
         _inicio = c.get("_venc_atraso")
         if _inicio is not None and (dt_real - _inicio).days < 5:
             continue  # até 4 dias de atraso: margem de erro, fora da régua
-        if any(
-            d <= dt_real and (dt_real - d).days <= 30 and (_inicio is None or d >= _inicio)
-            for d in _dias_contato.get(cid, [])
-        ):
+        _validos = [
+            d for d in _dias_contato.get(cid, [])
+            if d <= dt_real and (dt_real - d).days <= 30 and (_inicio is None or d >= _inicio)
+        ]
+        # Conta uma vez só: no mês do contato mais recente antes do pagamento
+        if _validos and dt_inicio <= max(_validos) <= dt_fim:
             pagos_overlay.add(cid)
     if pagos_overlay:
         base["pagou_apos_contato"] = base["pagou_apos_contato"].astype(bool) | base["cid"].isin(pagos_overlay)

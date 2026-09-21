@@ -2058,7 +2058,7 @@ def fetch_eficacia_base(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -
                 SELECT DISTINCT CAST(id_sacado_sac AS STRING) AS cid, data_tarefa
                 FROM `{_TAREFAS_TABLE}`
                 WHERE data_tarefa >= DATE('{dt_inicio_iso}')
-                  AND data_tarefa <= DATE('{dt_fim_iso}')
+                  AND data_tarefa <= DATE_ADD(DATE('{dt_fim_iso}'), INTERVAL 30 DAY)
                   AND (mensagem_enviada OR ligacao_feita OR ligacao_atendida)
             ),
             pagamentos AS (
@@ -2082,9 +2082,8 @@ def fetch_eficacia_base(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -
             -- e ate 30 dias antes dele. Antes bastava pagar depois do 1o
             -- contato do mes, e o boleto NOVO (que venceu depois do contato)
             -- contava como resultado do contato.
-            pagamentos_apos_contato AS (
-                SELECT p.cid,
-                       ARRAY_AGG(DISTINCT FORMAT_DATE('%d/%m/%Y', p.dt_pag)) AS datas
+            ultimo_contato_do_pag AS (
+                SELECT p.cid, p.dt_pag, MAX(c.data_tarefa) AS ultimo_contato
                 FROM pagamentos p
                 JOIN contatos_dias c
                   ON c.cid = p.cid
@@ -2093,7 +2092,20 @@ def fetch_eficacia_base(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -
                   AND DATE_DIFF(p.dt_pag, c.data_tarefa, DAY) <= 30
                 -- 5+ dias de atraso, mesma regua das colunas Reg. com/sem contato
                 WHERE DATE_DIFF(p.dt_pag, p.inicio_atraso, DAY) >= 5
-                GROUP BY p.cid
+                GROUP BY p.cid, p.dt_pag
+            ),
+            -- Cada regularizacao conta UMA vez: no mes do contato mais recente
+            -- antes do pagamento (mesma regra da coluna Reg. com contato).
+            -- Sem isso, quem foi contatado em 28/08 e 02/09 e pagou em 03/09
+            -- contava como sucesso em agosto E em setembro (98 pagamentos
+            -- em dobro de jun a set/2026).
+            pagamentos_apos_contato AS (
+                SELECT cid,
+                       ARRAY_AGG(DISTINCT FORMAT_DATE('%d/%m/%Y', dt_pag)) AS datas
+                FROM ultimo_contato_do_pag
+                WHERE ultimo_contato >= DATE('{dt_inicio_iso}')
+                  AND ultimo_contato <= DATE('{dt_fim_iso}')
+                GROUP BY cid
             )
             SELECT c.cid, c.atendente, c.primeiro_contato, p.datas
             FROM contatos_periodo c
