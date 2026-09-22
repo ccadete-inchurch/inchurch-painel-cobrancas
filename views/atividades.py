@@ -5,7 +5,7 @@ import streamlit as st
 import time as _time
 
 from helpers import get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link, carimbo_dia_cache
-from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_rolling, fetch_carteira_count, fetch_inadimplentes_snapshot_ref30d, _EMAIL_GRUPO
+from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_rolling, versao_dados_npl, fetch_carteira_count, fetch_inadimplentes_snapshot_ref30d, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
 
@@ -598,9 +598,14 @@ def _render_atividades(store, clientes, role):
     # Por receita (janela rolante em R$, sem overlay). Vira função porque o
     # multi-select de exclusão fica DENTRO do fragment dos indicadores: mexer
     # nele só re-roda o fragment, então o card precisa ser montado lá.
+    # Chave de cache da análise por receita: dia + versão dos dados no BQ.
+    # Lida UMA vez por execução da página e usada na lista de exclusão e no
+    # card (que re-roda no fragment): os dois saem sempre dos mesmos dados.
+    _chave_npl = f"{carimbo_dia_cache()}|{versao_dados_npl()}"
+
     def _montar_analise_receita(excluir: tuple = ()):
         _rolling = fetch_npl_rolling(
-            _npl_atendente, _npl_situacao, dia=carimbo_dia_cache(), excluir=excluir
+            _npl_atendente, _npl_situacao, dia=_chave_npl, excluir=excluir
         ) or {}
         return _html_analise_receita(_rolling, len(excluir))
 
@@ -652,7 +657,7 @@ def _render_atividades(store, clientes, role):
         str(c.get("id")): c.get("nome", "") for c in (store.get("clientes", []) or [])
     }
     _peso_receita = (fetch_npl_rolling(
-        _npl_atendente, _npl_situacao, dia=carimbo_dia_cache()
+        _npl_atendente, _npl_situacao, dia=_chave_npl
     ) or {}).get("peso_clientes") or []
 
     def _rotulos_exclusao():

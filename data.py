@@ -1714,6 +1714,35 @@ def fetch_carteira_count(atendente: str = None, situacao: str = "todos", dia: st
         return 0
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def versao_dados_npl() -> str:
+    """Versão dos dados que alimentam a análise por receita: último horário
+    de atualização das tabelas que fetch_npl_rolling lê (competência, mestre
+    de clientes, grupo). Entra na chave do cache junto com o carimbo do dia.
+
+    Por que: a lista de exclusão (chamada sem exclusão) e o card (chamada com
+    exclusão) são entradas de cache separadas, calculadas em momentos
+    diferentes. A mestre de clientes atualiza ~09:00, depois da virada do
+    carimbo (08:30): a lista saía da versão velha e o card da nova, e a
+    igreja que só existia na nova não dava pra excluir (sobrava peso mesmo
+    "selecionando tudo"). Com a versão na chave, os dois sempre saem dos
+    mesmos dados — e o card também se atualiza quando o pipeline atrasa.
+    Consulta só metadado (__TABLES__), cacheada 5 min pra todo mundo."""
+    client = get_bq_client()
+    if not client:
+        return ""
+    try:
+        df = client.query("""
+            SELECT MAX(last_modified_time) AS v
+            FROM `business-intelligence-467516.Splgc.__TABLES__`
+            WHERE table_id IN ('splgc-cobrancas_competencia-all',
+                               'splgc-clientes-inchurch', 'splgc-grupo')
+        """).to_dataframe()
+        return str(int(df["v"].iloc[0])) if not df.empty else ""
+    except Exception:
+        return ""
+
+
 @st.cache_data(ttl=86400)
 def fetch_npl_rolling(atendente: str = None, situacao: str = "todos", dia: str | None = None,
                       excluir: tuple = ()) -> dict:
