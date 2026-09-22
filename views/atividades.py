@@ -680,14 +680,19 @@ def _render_atividades(store, clientes, role):
         _ord = sorted(_peso_receita, key=lambda t: t[_idx], reverse=True)
         _tot = sum(t[_idx] for t in _peso_receita) or 1.0
         # Rótulo: nome · peso (% do valor em aberto da janela) · valor
-        # inteiro. O "21 mil" abreviado escondia o valor; centavos deixavam a
-        # etiqueta longa demais quando a igreja é selecionada.
-        return {
-            t[0]: (f'{_nomes_store.get(t[0]) or "ID " + t[0]} · '
-                   + f'{t[_idx] / _tot * 100:.1f}% · '.replace(".", ",")
-                   + f'R$ {t[_idx]:,.0f}'.replace(",", "."))
-            for t in _ord
-        }
+        # inteiro. Duas casas porque 22 igrejas ficavam em "0,0%" com uma só.
+        # Sem valor em aberto na janela escolhida, o % seria sempre 0,00% —
+        # melhor dizer isso com palavras.
+        _jan_txt = "no mês" if _janela == "Mensal" else "no trimestre"
+
+        def _rot(t):
+            nome = _nomes_store.get(t[0]) or "ID " + t[0]
+            if t[_idx] <= 0:
+                return f"{nome} · sem peso {_jan_txt}"
+            return (f"{nome} · " + f"{t[_idx] / _tot * 100:.2f}% · ".replace(".", ",")
+                    + f"R$ {t[_idx]:,.0f}".replace(",", "."))
+
+        return {t[0]: _rot(t) for t in _ord}
 
 
     # ═══════════════ ORDEM DE RENDER ═══════════════
