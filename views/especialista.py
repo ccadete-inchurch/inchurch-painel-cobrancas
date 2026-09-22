@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from auth import current_role
-from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_inadimplentes_fim_periodo, fetch_contatos_janela, fetch_serie_carteira_mensal
+from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_inadimplentes_fim_periodo, fetch_inadimplentes_distintos_periodo, fetch_contatos_janela, fetch_serie_carteira_mensal
 from helpers import fmt_moeda_plain, hoje_brt, carimbo_dia_cache
 
 
@@ -446,32 +446,43 @@ def _render_especialista(store, clientes, role):
     cobertura_equipe = (total_contatados / _base_cart * 100) if _base_cart else 0.0
     resultado_equipe = (total_reg_com / _base_cart * 100) if _base_cart else 0.0
 
-    # Card de inadimplentes: número ABSOLUTO (1+ dia devendo), sem a carência
-    # de 4 dias das métricas — é o tamanho da carteira, não a base da
-    # Cobertura. Mês corrente = carteira total atual das especialistas (mesma
-    # contagem por atendente da tela Inadimplência); mês fechado = foto do
-    # último snapshot do mês.
+    # Card de inadimplentes: número grande = clientes DISTINTOS que ficaram
+    # inadimplentes (1+ dia) em algum dia do mês — acumulado, como os outros
+    # cards do mês, e começo do funil (inadimplentes → carteira do mês →
+    # contatados → regularizações). Subtítulo = a foto: quem deve hoje (mês
+    # corrente) ou quem devia no último dia (mês fechado). Sem a carência de
+    # 4 dias: é o tamanho do problema, não a base da Cobertura.
+    _dist = fetch_inadimplentes_distintos_periodo(
+        dt_inicio.isoformat(), dt_fim.isoformat(), _versao_cache
+    )
+    if filtro_esp and not _dist.empty:
+        _dist = _dist[_dist["atendente"].isin(filtro_esp)]
+    _ids_mes = set(_dist["cid"].astype(str)) if not _dist.empty else set()
     if _mes_corrente:
-        # Sem quem regularizou hoje (API), igual Inadimplência e Lote do Dia.
-        # Em dia de pipeline parado o store ainda traz quem já pagou (em
-        # 22/09/2026 eram 155) e o card inflava pra 846.
-        _card_inad_valor = sum(
-            1 for c in clientes
+        # Foto de hoje sem quem regularizou hoje (API), igual Inadimplência e
+        # Lote do Dia. Em dia de pipeline parado o store ainda traz quem já
+        # pagou (em 22/09/2026 eram 155) e o número inflava pra 846.
+        _ids_hoje = {
+            str(c.get("id")) for c in clientes
             if not c.get("_regularizado_hoje")
             and _eh_grupo_match(c)
             and _eh_situacao_match(c)
-        )
-        _card_inad_sub = "hoje · carteira atual"
+        }
+        # Carteira de hoje entra no mês: dia sem snapshot (pipeline parado)
+        # ou cliente que atrasou hoje.
+        _card_inad_valor = len(_ids_mes | _ids_hoje)
+        _card_inad_sub = f"no mês · {len(_ids_hoje):,} hoje".replace(",", ".")
     else:
         _fim_p = fetch_inadimplentes_fim_periodo(
             dt_inicio.isoformat(), dt_fim.isoformat(), _versao_cache
         )
         if filtro_esp and not _fim_p.empty:
             _fim_p = _fim_p[_fim_p["atendente"].isin(filtro_esp)]
-        _card_inad_valor = int(_fim_p["clientes"].sum()) if not _fim_p.empty else 0
+        _card_inad_valor = len(_ids_mes)
         _card_inad_sub = (
-            f'em {pd.Timestamp(_fim_p["data_snapshot"].iloc[0]).strftime("%d/%m")} · fim do mês'
-            if not _fim_p.empty else f"carteira {_mes_label}"
+            f'no mês · {int(_fim_p["clientes"].sum()):,} em '.replace(",", ".")
+            + pd.Timestamp(_fim_p["data_snapshot"].iloc[0]).strftime("%d/%m")
+            if not _fim_p.empty else "no mês"
         )
 
     def _pct_br(v):
@@ -479,11 +490,11 @@ def _render_especialista(store, clientes, role):
 
     # Tooltips dos cards
     _tt_inad = (
-        "Carteira total atual das especialistas. A coluna Carteira do mês do "
-        "ranking é diferente: conta quem entrou na cobrança no mês, mesmo que já tenha pago."
-        if _mes_corrente else
-        f"Carteira das especialistas no último dia de {_mes_label}. A coluna "
-        "Carteira do mês do ranking é diferente: conta quem entrou na cobrança no mês."
+        f"Clientes das especialistas que ficaram inadimplentes em algum dia de "
+        f"{_mes_label}, mesmo que já tenham pago. Embaixo, quantos devem "
+        + ("hoje (igual à tela Inadimplência)." if _mes_corrente
+           else "no último dia do mês.")
+        + " A coluna Carteira do mês do ranking conta só quem chegou à cobrança."
     )
     _tt_cont = (
         f"Clientes distintos que receberam mensagem ou ligação no mês. Cobertura = "
@@ -518,19 +529,19 @@ def _render_especialista(store, clientes, role):
     )
     with c1:
         st.markdown(
-            _card_fmt("Inadimplentes", f"{_card_inad_valor:,}",
+            _card_fmt("Inadimplentes", f"{_card_inad_valor:,}".replace(",", "."),
                       _card_inad_sub, "#ef4444", _tt_inad),
             unsafe_allow_html=True,
         )
     with c2:
         st.markdown(
-            _card_fmt("Contatados", f"{total_contatados:,}",
+            _card_fmt("Contatados", f"{total_contatados:,}".replace(",", "."),
                       f"cobertura {_pct_br(cobertura_equipe)}", "#e8eaf0", _tt_cont),
             unsafe_allow_html=True,
         )
     with c3:
         st.markdown(
-            _card_fmt("Regularizações", f"{total_reg:,}",
+            _card_fmt("Regularizações", f"{total_reg:,}".replace(",", "."),
                       f"{_pct_br(pct_reg_com)} com contato", "#22c55e", _tt_reg),
             unsafe_allow_html=True,
         )

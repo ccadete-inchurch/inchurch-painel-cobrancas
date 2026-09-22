@@ -2136,6 +2136,35 @@ def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str, versao
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
+def fetch_inadimplentes_distintos_periodo(dt_inicio_iso: str, dt_fim_iso: str,
+                                          versao: str = "") -> pd.DataFrame:
+    """(atendente, cid) de todo cliente das especialistas que ficou
+    inadimplente (1+ dia) em ALGUM snapshot diário do período. Card
+    Inadimplentes da tela Resultados da Cobrança: universo do mês, mesma
+    lógica acumulada dos outros cards. A tela soma a carteira de hoje no mês
+    corrente (dia sem snapshot, como em pipeline parado)."""
+    client = get_bq_client()
+    if not client:
+        return pd.DataFrame()
+    try:
+        return client.query(f"""
+            SELECT DISTINCT g.grupo AS atendente, s.id_sacado_sac AS cid
+            FROM `{_SNAPSHOT_TABLE}` s
+            JOIN (
+                SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(grupo) AS grupo
+                FROM `business-intelligence-467516.Splgc.splgc-grupo`
+                WHERE grupo IN ('Ana Carolina', 'Priscila Oliveira')
+                GROUP BY id_sacado_sac
+            ) g ON g.cid = s.id_sacado_sac
+            WHERE s.data_snapshot >= DATE('{dt_inicio_iso}')
+              AND s.data_snapshot <= DATE('{dt_fim_iso}')
+              AND s.dias_atraso >= 1
+        """).to_dataframe()
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
 def fetch_inadimplentes_fim_periodo(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -> pd.DataFrame:
     """Por atendente: clientes inadimplentes (1+ dia) no ULTIMO snapshot
     diario do periodo. E' a foto do fim do mes pro card Inadimplentes da tela
