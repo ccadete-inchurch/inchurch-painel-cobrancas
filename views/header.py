@@ -34,15 +34,27 @@ def _texto_bq_stale(diag):
 
     chips = ["Pagamentos do dia continuam aparecendo (API Superlógica)",
              "Snapshot de hoje não gravado"]
+    # Nomes curtos dos pipelines que faltaram: "Pipeline de cobranças por
+    # liquidação Inchurch, 01/01/2025 a 03/31/2025" -> "liquidação 01/01/2025
+    # a 03/31/2025". Até 3; o resto vira "e mais N".
+    _falt = [re.sub(r"^Pipeline de cobranças por\s*", "", f).replace(" Inchurch,", "")
+             for f in (diag.get("faltando") or [])]
+    if _falt:
+        _lista = ", ".join(_falt[:3])
+        if len(_falt) > 3:
+            _lista += f" e mais {len(_falt) - 3}"
+        _quais = f" Não rodou: {_lista}."
+    else:
+        _quais = ""
     if diag.get("motivo") == "pipelines_faltando" and dia:
-        return ("Mostrando os dados de " + dia,
+        return ("Time travel: mostrando os dados de " + dia,
                 "A carga diária do Superlógica não rodou hoje, então o painel está "
-                "usando a última versão confiável.",
+                "usando a última versão confiável." + _quais,
                 chips)
     if diag.get("motivo") == "pipelines_faltando":
         return ("Dados podem estar incorretos",
                 "A carga diária do Superlógica não rodou hoje e não há versão "
-                "confiável nos últimos 14 dias.",
+                "confiável nos últimos 14 dias (sem time travel possível)." + _quais,
                 ["Verifique o pipeline antes de usar os números"])
     return ("Dados do BigQuery desatualizados",
             diag.get("detalhes") or "O painel está usando a última versão confiável.",

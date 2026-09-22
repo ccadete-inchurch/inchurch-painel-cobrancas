@@ -1118,19 +1118,24 @@ def diagnosticar_bq_saude(dia: str | None = None) -> dict:
                       AND script NOT LIKE %s
                       AND dt_update = DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
                 )
-                SELECT COUNT(*) FROM scripts_passado
+                SELECT script FROM scripts_passado
                 WHERE script NOT IN (SELECT script FROM scripts_hoje)
+                ORDER BY script
                 """,
                 (_PIPELINES_CRITICOS_INAD[0], _PIPELINES_CRITICOS_INAD[1], "%histórico%",
                  _PIPELINES_CRITICOS_INAD[0], _PIPELINES_CRITICOS_INAD[1], "%histórico%"),
             )
-            n_faltando = int(cur.fetchone()[0] or 0)
+            # Nomes (e nao so a contagem): o banner do header lista quais
+            # pipelines faltaram, pra quem le saber o que conferir.
+            scripts_faltando = [r[0] for r in cur.fetchall()]
+            n_faltando = len(scripts_faltando)
 
             if n_faltando == 0:  # tudo ou nada — qualquer falha aciona defesa
                 return {
                     "e_confiavel": True,
                     "motivo": "ok",
                     "detalhes": "Todos pipelines criticos rodaram hoje",
+                    "faltando": [],
                     "ts_ultimo_bom": None,
                 }
 
@@ -1189,6 +1194,7 @@ def diagnosticar_bq_saude(dia: str | None = None) -> dict:
                 f"Time travel: {ultimo_dia_bom}. Veja Google Chat." if ultimo_dia_bom
                 else f"Sem versao confiavel nos ultimos 14 dias — dados podem estar incorretos. Veja Google Chat."
             ),
+            "faltando": scripts_faltando,
             "ts_ultimo_bom": ts_bom,
         }
     except Exception as e:
@@ -1196,6 +1202,7 @@ def diagnosticar_bq_saude(dia: str | None = None) -> dict:
             "e_confiavel": True,
             "motivo": "erro",
             "detalhes": f"Erro na consulta splgc_validacoes: {str(e)[:100]}",
+            "faltando": [],
             "ts_ultimo_bom": None,
         }
 
