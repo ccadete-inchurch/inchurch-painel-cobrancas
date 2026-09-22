@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from auth import current_role
-from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_inadimplentes_fim_periodo, fetch_inadimplentes_distintos_periodo, fetch_contatos_janela, fetch_serie_carteira_mensal
+from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_inadimplentes_fim_periodo, fetch_contatos_janela, fetch_serie_carteira_mensal
 from helpers import fmt_moeda_plain, hoje_brt, carimbo_dia_cache
 
 
@@ -446,18 +446,13 @@ def _render_especialista(store, clientes, role):
     cobertura_equipe = (total_contatados / _base_cart * 100) if _base_cart else 0.0
     resultado_equipe = (total_reg_com / _base_cart * 100) if _base_cart else 0.0
 
-    # Card de inadimplentes: número grande = clientes DISTINTOS que ficaram
-    # inadimplentes (1+ dia) em algum dia do mês — acumulado, como os outros
-    # cards do mês, e começo do funil (inadimplentes → carteira do mês →
-    # contatados → regularizações). Subtítulo = a foto: quem deve hoje (mês
-    # corrente) ou quem devia no último dia (mês fechado). Sem a carência de
-    # 4 dias: é o tamanho do problema, não a base da Cobertura.
-    _dist = fetch_inadimplentes_distintos_periodo(
-        dt_inicio.isoformat(), dt_fim.isoformat(), _versao_cache
-    )
-    if filtro_esp and not _dist.empty:
-        _dist = _dist[_dist["atendente"].isin(filtro_esp)]
-    _ids_mes = set(_dist["cid"].astype(str)) if not _dist.empty else set()
+    # Card de inadimplentes: número grande = Carteira do mês (a soma da coluna
+    # do ranking: quem chegou à cobrança no mês, mesmo que já tenha pago).
+    # Subtítulo = a foto: quem deve hoje (mês corrente) ou no último dia (mês
+    # fechado). Chegou a mostrar os distintos com 1+ dia (964 em set/2026),
+    # mas eram três "inadimplentes" diferentes na tela; ficaram só dois: no
+    # mês e hoje.
+    _card_inad_valor = _base_cart
     if _mes_corrente:
         # Foto de hoje sem quem regularizou hoje (API), igual Inadimplência e
         # Lote do Dia. Em dia de pipeline parado o store ainda traz quem já
@@ -468,9 +463,6 @@ def _render_especialista(store, clientes, role):
             and _eh_grupo_match(c)
             and _eh_situacao_match(c)
         }
-        # Carteira de hoje entra no mês: dia sem snapshot (pipeline parado)
-        # ou cliente que atrasou hoje.
-        _card_inad_valor = len(_ids_mes | _ids_hoje)
         _card_inad_sub = f"no mês · {len(_ids_hoje):,} hoje".replace(",", ".")
     else:
         _fim_p = fetch_inadimplentes_fim_periodo(
@@ -478,7 +470,6 @@ def _render_especialista(store, clientes, role):
         )
         if filtro_esp and not _fim_p.empty:
             _fim_p = _fim_p[_fim_p["atendente"].isin(filtro_esp)]
-        _card_inad_valor = len(_ids_mes)
         _card_inad_sub = (
             f'no mês · {int(_fim_p["clientes"].sum()):,} em '.replace(",", ".")
             + pd.Timestamp(_fim_p["data_snapshot"].iloc[0]).strftime("%d/%m")
@@ -490,11 +481,10 @@ def _render_especialista(store, clientes, role):
 
     # Tooltips dos cards
     _tt_inad = (
-        f"Clientes das especialistas que ficaram inadimplentes em algum dia de "
-        f"{_mes_label}, mesmo que já tenham pago. Embaixo, quantos devem "
-        + ("hoje (igual à tela Inadimplência)." if _mes_corrente
-           else "no último dia do mês.")
-        + " A coluna Carteira do mês do ranking conta só quem chegou à cobrança."
+        f"Clientes que entraram na cobrança em algum dia de {_mes_label}, mesmo "
+        "que já tenham pago — é a soma da coluna Carteira do mês. Embaixo, quantos "
+        + ("devem hoje (igual à tela Inadimplência)." if _mes_corrente
+           else "deviam no último dia do mês.")
     )
     _tt_cont = (
         f"Clientes distintos que receberam mensagem ou ligação no mês. Cobertura = "
