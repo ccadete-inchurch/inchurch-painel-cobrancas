@@ -1,6 +1,9 @@
+import re
+
 import streamlit as st
 
 from auth import current_nome, current_role, current_email
+from helpers import _BRT
 from data import get_store, ping_online, get_online_users, diagnosticar_bq_saude
 
 
@@ -10,9 +13,45 @@ _ROLE_DISPLAY = {
 }
 
 
+def _texto_bq_stale(diag):
+    """Monta o aviso de dados desatualizados em linguagem simples.
+
+    Devolve (titulo, linha, chips). O `detalhes` cru do diagnóstico é
+    técnico ("1 pipeline(s) critico(s) Splgc nao rodaram hoje. Time travel:
+    2026-09-21.") e entra só como fallback de motivo desconhecido.
+    """
+    _dt = diag.get("ts_ultimo_bom")
+    dia = ""
+    if _dt is not None:
+        try:
+            dia = _dt.astimezone(_BRT).strftime("%d/%m")
+        except Exception:
+            dia = ""
+    if not dia:
+        _m = re.search(r"Time travel:\s*(\d{4})-(\d{2})-(\d{2})", diag.get("detalhes") or "")
+        if _m:
+            dia = f"{_m.group(3)}/{_m.group(2)}"
+
+    chips = ["Pagamentos do dia continuam aparecendo (API Superlógica)",
+             "Snapshot de hoje não gravado"]
+    if diag.get("motivo") == "pipelines_faltando" and dia:
+        return ("Mostrando os dados de " + dia,
+                "A carga diária do Superlógica não rodou hoje, então o painel está "
+                "usando a última versão confiável.",
+                chips)
+    if diag.get("motivo") == "pipelines_faltando":
+        return ("Dados podem estar incorretos",
+                "A carga diária do Superlógica não rodou hoje e não há versão "
+                "confiável nos últimos 14 dias.",
+                ["Verifique o pipeline antes de usar os números"])
+    return ("Dados do BigQuery desatualizados",
+            diag.get("detalhes") or "O painel está usando a última versão confiável.",
+            chips)
+
+
 def _banner_bq_stale():
-    """Banner amarelo visivel SO PRA ADMIN quando BQ Splgc esta com dados
-    ruins/velhos. Aparece em todas as telas via render_header().
+    """Aviso visivel SO PRA ADMIN quando BQ Splgc esta com dados ruins/velhos.
+    Aparece em todas as telas via render_header().
 
     Motivo de ser so admin: atendentes/gestores nao podem agir sobre
     pipeline BQ. Ver o alerta cria confusao sem acao possivel. Admin
@@ -25,20 +64,26 @@ def _banner_bq_stale():
     diag = diagnosticar_bq_saude()
     if diag["e_confiavel"]:
         return
+    titulo, linha, chips = _texto_bq_stale(diag)
+    chips_html = "".join(
+        f'<span style="display:inline-block;background:rgba(245,158,11,.14);'
+        f'border:1px solid rgba(245,158,11,.35);border-radius:20px;'
+        f'padding:3px 10px;font-size:11.5px;color:#fcd34d;margin:6px 6px 0 0">{c}</span>'
+        for c in chips
+    )
     st.markdown(
-        f'<div style="background:#3d2f0f;border:1px solid #f59e0b;'
-        f'border-radius:8px;padding:12px 18px;margin:0 24px 12px;'
+        # Faixa lateral âmbar em vez de borda inteira: menos "alarme", mais
+        # aviso. O texto antigo vinha sem acentos e em termos técnicos
+        # ("time travel", "pipelines criticos"), que ninguém fora do BI lê.
+        f'<div style="background:rgba(245,158,11,.08);border-left:3px solid #f59e0b;'
+        f'border-radius:6px;padding:12px 16px;margin:0 24px 14px;'
         f'display:flex;align-items:flex-start;gap:12px">'
-        f'<span style="font-size:20px;line-height:1;flex-shrink:0">⚠️</span>'
-        f'<div style="flex:1;font-size:13px;color:#fde68a;line-height:1.5">'
-        f'<div style="font-weight:700;margin-bottom:4px;color:#fbbf24">'
-        f'Dados BQ desatualizados — mostrando ultima versao confiavel'
-        f'</div>'
-        f'<div>{diag["detalhes"]}</div>'
-        f'<div style="margin-top:6px;color:#d97706;font-size:12px">'
-        f'Painel esta usando time travel do BQ automaticamente. '
-        f'Snapshots do dia nao estao sendo gravados.'
-        f'</div>'
+        f'<span style="font-size:16px;line-height:1.3;flex-shrink:0">⚠️</span>'
+        f'<div style="flex:1;min-width:0">'
+        f'<div style="font-size:13.5px;font-weight:700;color:#fbbf24;'
+        f'letter-spacing:.2px">{titulo}</div>'
+        f'<div style="font-size:12.5px;color:#fde68a;line-height:1.5;margin-top:3px">{linha}</div>'
+        f'<div>{chips_html}</div>'
         f'</div>'
         f'</div>',
         unsafe_allow_html=True,
