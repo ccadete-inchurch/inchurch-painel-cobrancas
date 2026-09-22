@@ -452,9 +452,13 @@ def _render_especialista(store, clientes, role):
     # contagem por atendente da tela Inadimplência); mês fechado = foto do
     # último snapshot do mês.
     if _mes_corrente:
+        # Sem quem regularizou hoje (API), igual Inadimplência e Lote do Dia.
+        # Em dia de pipeline parado o store ainda traz quem já pagou (em
+        # 22/09/2026 eram 155) e o card inflava pra 846.
         _card_inad_valor = sum(
             1 for c in clientes
-            if _eh_grupo_match(c)
+            if not c.get("_regularizado_hoje")
+            and _eh_grupo_match(c)
             and _eh_situacao_match(c)
         )
         _card_inad_sub = "hoje · carteira atual"
@@ -1044,11 +1048,13 @@ def _render_especialista(store, clientes, role):
             unsafe_allow_html=True,
         )
         # Mesma carteira do card Inadimplentes: total atual das duas
-        # especialistas (filtros de Especialista e Situação aplicados).
+        # especialistas, sem quem regularizou hoje (filtros de Especialista e
+        # Situação aplicados).
         carteira = pd.DataFrame([
             {"atendente": _norm_atendente_raw(c.get("_grupo")), "valor": float(c.get("valor") or 0)}
             for c in clientes
-            if _eh_grupo_match(c)
+            if not c.get("_regularizado_hoje")
+            and _eh_grupo_match(c)
             and _eh_situacao_match(c)
         ])
         if not carteira.empty:
