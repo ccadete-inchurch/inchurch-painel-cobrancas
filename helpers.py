@@ -4,6 +4,20 @@ import pandas as pd
 _BRT = timezone(timedelta(hours=-3))
 
 
+def carimbo_curto() -> str:
+    """Chave de cache das consultas de atualização rápida: muda a cada 2 min
+    das 08:00 às 23:59 e a cada 1 h das 00:00 às 07:59.
+
+    Por que: uma aba esquecida aberta mantinha o fragment consultando o BQ a
+    cada 1-2 min a noite toda, sem ninguém olhando e sem dado novo (o
+    pipeline só roda às 04:00). Passa de ~30 consultas/hora pra ~1.
+    """
+    agora = datetime.now(_BRT)
+    if agora.hour < 8:
+        return agora.strftime("%Y-%m-%dT%H")
+    return f'{agora.strftime("%Y-%m-%dT%H")}-{agora.minute // 2:02d}'
+
+
 def hoje_brt() -> str:
     """Data de hoje no fuso BRT (America/Sao_Paulo) em ISO. Usar como chave de
     'dia útil' em vez de date.today(), que segue o timezone do servidor (UTC)."""

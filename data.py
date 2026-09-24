@@ -1722,7 +1722,7 @@ def fetch_carteira_count(atendente: str = None, situacao: str = "todos", dia: st
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def versao_dados_npl() -> str:
+def versao_dados_npl(janela: str = "") -> str:
     """Versão dos dados que alimentam a análise por receita: último horário
     de atualização das tabelas que fetch_npl_rolling lê (competência, mestre
     de clientes, grupo). Entra na chave do cache junto com o carimbo do dia.
@@ -3754,7 +3754,7 @@ def get_lote_buckets_bq(atendente: str, clientes: list) -> dict:
 
 
 @st.cache_data(ttl=120, show_spinner=False)
-def fetch_ids_em_qualquer_lote_hoje() -> set:
+def fetch_ids_em_qualquer_lote_hoje(janela: str = "") -> set:
     """IDs de TODOS os clientes que estão em algum lote (qualquer atendente)
     do dia operacional atual. Usado pelo admin em 'Todos os clientes' pra
     distinguir visualmente quem está sendo trabalhado vs quem está fora.

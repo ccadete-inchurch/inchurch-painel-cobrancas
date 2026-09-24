@@ -3,7 +3,7 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
-from helpers import fmt_moeda_plain, get_effective_atendente, hoje_lote, carimbo_dia_cache
+from helpers import fmt_moeda_plain, get_effective_atendente, hoje_lote, carimbo_curto, carimbo_dia_cache
 from data import (
     fetch_ids_em_qualquer_lote_hoje,
     fetch_cobrancas_liquidacao,
@@ -203,7 +203,7 @@ def _render_historico(store):
         df = df[_mask_sem | _mask_grp]
 
     # IDs do lote de hoje: usados no checkbox e no destaque verde da tabela
-    ids_lote_hoje = fetch_ids_em_qualquer_lote_hoje()
+    ids_lote_hoje = fetch_ids_em_qualquer_lote_hoje(carimbo_curto())
     if filtro_lote and not df.empty:
         df = df[df["id"].astype(str).isin(ids_lote_hoje)]
 

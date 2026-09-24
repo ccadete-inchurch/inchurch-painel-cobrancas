@@ -4,7 +4,7 @@ import streamlit as st
 
 import time as _time
 
-from helpers import _BRT, get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link, carimbo_dia_cache
+from helpers import _BRT, get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, carimbo_curto, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link, carimbo_dia_cache
 from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_rolling, versao_dados_npl, fetch_carteira_count, fetch_inadimplentes_snapshot_ref30d, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
@@ -609,7 +609,7 @@ def _render_atividades(store, clientes, role):
     # Chave de cache da análise por receita: dia + versão dos dados no BQ.
     # Lida UMA vez por execução da página e usada na lista de exclusão e no
     # card (que re-roda no fragment): os dois saem sempre dos mesmos dados.
-    _chave_npl = f"{carimbo_dia_cache()}|{versao_dados_npl()}"
+    _chave_npl = f"{carimbo_dia_cache()}|{versao_dados_npl(carimbo_curto())}"
 
     def _montar_analise_receita(excluir: tuple = ()):
         _rolling = fetch_npl_rolling(
@@ -845,7 +845,7 @@ def _render_atividades(store, clientes, role):
             # do _total_cs (carteira filtrada).
             if email in _EMAIL_GRUPO:
                 if _fg == "Todos":
-                    _reg_parc_ids = fetch_ids_em_qualquer_lote_hoje()
+                    _reg_parc_ids = fetch_ids_em_qualquer_lote_hoje(carimbo_curto())
                 else:
                     _reg_parc_ids = ids_hoje
                 _reg_parc_cs = [c for c in clientes_full if c.get("id") in _reg_parc_ids]
@@ -1347,7 +1347,7 @@ def _render_atividades(store, clientes, role):
         # aplicar opacidade nos cards FORA do lote (sinaliza que não estão
         # sendo trabalhados por ninguém hoje).
         _modo_todos_admin = role == "admin" and _modo_admin == "Todos os clientes"
-        ids_em_lote_hoje = fetch_ids_em_qualquer_lote_hoje() if _modo_todos_admin else set()
+        ids_em_lote_hoje = fetch_ids_em_qualquer_lote_hoje(carimbo_curto()) if _modo_todos_admin else set()
 
         acordos = []; ligacao = []; so_msg = []; tentar_nov = []; concluida = []; aguardar = []
         for item in fila:
