@@ -2062,8 +2062,19 @@ def fetch_regularizados_mes_atual(dia: str | None = None) -> set:
         return set()
 
 
+def _cond_situacao_sql(situacao: str) -> str:
+    """WHERE do filtro de Situacao da tela Especialista, sobre a tabela
+    mestre de clientes (alias `m`, coluna `desat`). Vazio = Todos."""
+    if situacao == "ativos":
+        return "WHERE m.desat IS NULL"
+    if situacao == "inativos":
+        return "WHERE m.desat IS NOT NULL"
+    return ""
+
+
 @st.cache_data(ttl=None)
-def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -> pd.DataFrame:
+def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "",
+                                    situacao: str = "todos") -> pd.DataFrame:
     """Cobertura da carteira: % dos inadimplentes do especialista que ele
     tocou (msg ou ligacao) no periodo.
 
@@ -2083,27 +2094,44 @@ def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str, versao
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
+    # Filtro de Situacao (mesma regra da tela: desativacao na tabela mestre).
+    # Vale pros DOIS lados da conta — contatados e base — senao a cobertura
+    # comparava contatados de todo mundo com a base so de ativos.
+    cond_sit = _cond_situacao_sql(situacao)
     try:
         df = client.query(f"""
-            WITH contatos AS (
-                SELECT atendente,
-                       COUNT(DISTINCT CAST(id_sacado_sac AS STRING)) AS contactados
-                FROM `{_TAREFAS_TABLE}`
-                WHERE data_tarefa >= DATE('{dt_inicio_iso}')
-                  AND data_tarefa <= DATE('{dt_fim_iso}')
-                  AND (mensagem_enviada OR ligacao_feita OR ligacao_atendida)
-                GROUP BY atendente
-            ),
-            -- Base = inadimplentes do mes que chegaram a 5+ dias de atraso em
-            -- algum snapshot. Com 1-4 dias o lote nem pode pegar o cliente
-            -- (msg a partir de 5, ligacao de 7): conta-los derrubava a
-            -- cobertura (set/26: Ana 62% -> 81% sobre a base alcancavel).
-            grupos AS (
+            WITH grupos_raw AS (
                 SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(grupo) AS grupo
                 FROM `business-intelligence-467516.Splgc.splgc-grupo`
                 WHERE grupo IN ('Ana Carolina', 'Priscila Oliveira')
                 GROUP BY id_sacado_sac
             ),
+            mestre AS (
+                SELECT CAST(id_sacado_sac AS STRING) AS cid,
+                       MAX(dt_desativacao_sac) AS desat
+                FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
+                GROUP BY 1
+            ),
+            grupos AS (
+                SELECT g.cid, g.grupo
+                FROM grupos_raw g
+                LEFT JOIN mestre m ON m.cid = g.cid
+                {cond_sit}
+            ),
+            contatos AS (
+                SELECT t.atendente,
+                       COUNT(DISTINCT CAST(t.id_sacado_sac AS STRING)) AS contactados
+                FROM `{_TAREFAS_TABLE}` t
+                JOIN grupos g ON g.cid = CAST(t.id_sacado_sac AS STRING)
+                WHERE t.data_tarefa >= DATE('{dt_inicio_iso}')
+                  AND t.data_tarefa <= DATE('{dt_fim_iso}')
+                  AND (t.mensagem_enviada OR t.ligacao_feita OR t.ligacao_atendida)
+                GROUP BY t.atendente
+            ),
+            -- Base = inadimplentes do mes que chegaram a 5+ dias de atraso em
+            -- algum snapshot. Com 1-4 dias o lote nem pode pegar o cliente
+            -- (msg a partir de 5, ligacao de 7): conta-los derrubava a
+            -- cobertura (set/26: Ana 62% -> 81% sobre a base alcancavel).
             inad_cli AS (
                 SELECT g.grupo AS atendente, s.id_sacado_sac AS cid
                 FROM `{_SNAPSHOT_TABLE}` s
@@ -2143,7 +2171,8 @@ def fetch_cobertura_por_especialista(dt_inicio_iso: str, dt_fim_iso: str, versao
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
-def fetch_inadimplentes_fim_periodo(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -> pd.DataFrame:
+def fetch_inadimplentes_fim_periodo(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "",
+                                    situacao: str = "todos") -> pd.DataFrame:
     """Por atendente: clientes inadimplentes (1+ dia) no ULTIMO snapshot
     diario do periodo. E' a foto do fim do mes pro card Inadimplentes da tela
     Especialista em mes fechado (no mes corrente o card usa a carteira de
@@ -2152,6 +2181,7 @@ def fetch_inadimplentes_fim_periodo(dt_inicio_iso: str, dt_fim_iso: str, versao:
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
+    cond_sit = _cond_situacao_sql(situacao)
     try:
         return client.query(f"""
             WITH ultimo AS (
@@ -2166,10 +2196,19 @@ def fetch_inadimplentes_fim_periodo(dt_inicio_iso: str, dt_fim_iso: str, versao:
             FROM `{_SNAPSHOT_TABLE}` s
             JOIN ultimo u ON s.data_snapshot = u.d
             JOIN (
-                SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(grupo) AS grupo
-                FROM `business-intelligence-467516.Splgc.splgc-grupo`
-                WHERE grupo IN ('Ana Carolina', 'Priscila Oliveira')
-                GROUP BY id_sacado_sac
+                SELECT g.cid, g.grupo FROM (
+                    SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(grupo) AS grupo
+                    FROM `business-intelligence-467516.Splgc.splgc-grupo`
+                    WHERE grupo IN ('Ana Carolina', 'Priscila Oliveira')
+                    GROUP BY id_sacado_sac
+                ) g
+                LEFT JOIN (
+                    SELECT CAST(id_sacado_sac AS STRING) AS cid,
+                           MAX(dt_desativacao_sac) AS desat
+                    FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
+                    GROUP BY 1
+                ) m ON m.cid = g.cid
+                {cond_sit}
             ) g ON g.cid = s.id_sacado_sac
             WHERE s.dias_atraso >= 1
             GROUP BY 1
@@ -2179,7 +2218,8 @@ def fetch_inadimplentes_fim_periodo(dt_inicio_iso: str, dt_fim_iso: str, versao:
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
-def fetch_serie_carteira_mensal(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "") -> pd.DataFrame:
+def fetch_serie_carteira_mensal(dt_inicio_iso: str, dt_fim_iso: str, versao: str = "",
+                                situacao: str = "todos") -> pd.DataFrame:
     """Por mes e atendente: inadimplentes (clientes distintos nos snapshots
     diarios do mes) e contatados (msg/ligacao no mes).
 
@@ -2190,21 +2230,35 @@ def fetch_serie_carteira_mensal(dt_inicio_iso: str, dt_fim_iso: str, versao: str
     client = get_bq_client()
     if not client:
         return pd.DataFrame()
+    cond_sit = _cond_situacao_sql(situacao)
     try:
         return client.query(f"""
-            WITH grupos AS (
+            WITH grupos_raw AS (
                 SELECT CAST(id_sacado_sac AS STRING) AS cid, MAX(grupo) AS atendente
                 FROM `business-intelligence-467516.Splgc.splgc-grupo`
                 WHERE grupo IN ('Ana Carolina', 'Priscila Oliveira')
                 GROUP BY id_sacado_sac
             ),
+            mestre AS (
+                SELECT CAST(id_sacado_sac AS STRING) AS cid,
+                       MAX(dt_desativacao_sac) AS desat
+                FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
+                GROUP BY 1
+            ),
+            grupos AS (
+                SELECT g.cid, g.atendente
+                FROM grupos_raw g
+                LEFT JOIN mestre m ON m.cid = g.cid
+                {cond_sit}
+            ),
             contatos_cli AS (
-                SELECT DISTINCT FORMAT_DATE('%Y-%m', data_tarefa) AS mes, atendente,
-                       CAST(id_sacado_sac AS STRING) AS cid
-                FROM `{_TAREFAS_TABLE}`
-                WHERE data_tarefa >= DATE('{dt_inicio_iso}')
-                  AND data_tarefa <= DATE('{dt_fim_iso}')
-                  AND (mensagem_enviada OR ligacao_feita OR ligacao_atendida)
+                SELECT DISTINCT FORMAT_DATE('%Y-%m', t.data_tarefa) AS mes, t.atendente,
+                       CAST(t.id_sacado_sac AS STRING) AS cid
+                FROM `{_TAREFAS_TABLE}` t
+                JOIN grupos g ON g.cid = CAST(t.id_sacado_sac AS STRING)
+                WHERE t.data_tarefa >= DATE('{dt_inicio_iso}')
+                  AND t.data_tarefa <= DATE('{dt_fim_iso}')
+                  AND (t.mensagem_enviada OR t.ligacao_feita OR t.ligacao_atendida)
             ),
             -- Base = inadimplentes do mes que chegaram a 5+ dias de atraso
             -- (quem o lote pode alcancar) — mesma base da Cobertura da tabela.

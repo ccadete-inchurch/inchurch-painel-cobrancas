@@ -264,9 +264,19 @@ def _render_especialista(store, clientes, role):
         else f"mes-{_mes_sel[0]:04d}-{_mes_sel[1]:02d}"
     )
 
+    # Situação vira parâmetro das consultas do BQ (carteira do mês, cobertura,
+    # série mensal): elas olham snapshots e tarefas, onde o cliente pode nem
+    # estar mais na carteira de hoje, então filtrar pelo store não funciona.
+    _sit_bq = {"Apenas ativos": "ativos", "Apenas inativos": "inativos"}.get(
+        filtro_situacao, "todos"
+    )
+    _versao_cache_sit = f"{_versao_cache}|{_sit_bq}"
+
     # Cobertura vem cedo porque alimenta DOIS lugares: o card de inadimplentes
     # (mês fechado) e a coluna Carteira inad. do ranking. Uma consulta só.
-    df_cob = fetch_cobertura_por_especialista(dt_inicio.isoformat(), dt_fim.isoformat(), _versao_cache)
+    df_cob = fetch_cobertura_por_especialista(
+        dt_inicio.isoformat(), dt_fim.isoformat(), _versao_cache_sit, _sit_bq
+    )
 
     # ── Fonte: BQ JOIN com tarefas — atribui por contato efetivo ──────────
     # painel_tarefas_diarias + liquidações → último atendente que teve
@@ -394,7 +404,17 @@ def _render_especialista(store, clientes, role):
 
     def _contatados_por_atendente(ini, fim):
         """Clientes distintos com msg/ligação no período, por atendente —
-        denominador da Eficácia (mesmo filtro de Situação dos pagamentos)."""
+        denominador da Eficácia e da Cobertura.
+
+        Vem da mesma consulta do BQ que monta a Carteira do mês (df_cob), que
+        já aplica o filtro de Situação pela tabela mestre. Filtrar pelo store
+        perdia quem foi contatado e saiu da carteira: em 24/09/2026, com
+        "Apenas ativos", dava 93 contra 123."""
+        if not df_cob.empty and "contactados" in df_cob.columns:
+            return df_cob.rename(columns={"contactados": "contatados"})[
+                ["atendente", "contatados"]
+            ]
+        # Sem snapshot no período o df_cob vem vazio: cai pro cálculo local.
         _c = fetch_contatos_janela(ini.isoformat(), fim.isoformat())
         if _c.empty:
             return pd.DataFrame(columns=["atendente", "contatados"])
@@ -466,7 +486,7 @@ def _render_especialista(store, clientes, role):
         _card_inad_sub = f"no mês · {len(_ids_hoje):,} hoje".replace(",", ".")
     else:
         _fim_p = fetch_inadimplentes_fim_periodo(
-            dt_inicio.isoformat(), dt_fim.isoformat(), _versao_cache
+            dt_inicio.isoformat(), dt_fim.isoformat(), _versao_cache_sit, _sit_bq
         )
         if filtro_esp and not _fim_p.empty:
             _fim_p = _fim_p[_fim_p["atendente"].isin(filtro_esp)]
@@ -1164,7 +1184,8 @@ def _render_especialista(store, clientes, role):
     # compara mês a mês são as taxas, que não dependem do tamanho da carteira.
     _serie_mes = {}
     df_serie = fetch_serie_carteira_mensal(
-        _trend_inicio.isoformat(), _hoje_trend.isoformat(), f"dia-{carimbo_dia_cache()}"
+        _trend_inicio.isoformat(), _hoje_trend.isoformat(),
+        f"dia-{carimbo_dia_cache()}|{_sit_bq}", _sit_bq
     )
     if not df_serie.empty:
         _serie = df_serie
