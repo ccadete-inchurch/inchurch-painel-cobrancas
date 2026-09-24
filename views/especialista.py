@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from auth import current_role
-from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_inadimplentes_fim_periodo, fetch_contatos_janela, fetch_serie_carteira_mensal
+from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_inadimplentes_fim_periodo, fetch_cids_por_situacao, fetch_contatos_janela, fetch_serie_carteira_mensal
 from helpers import fmt_moeda_plain, hoje_brt, carimbo_dia_cache
 
 
@@ -391,16 +391,19 @@ def _render_especialista(store, clientes, role):
             return not c.get("_inativo")
         return bool(c.get("_inativo"))
 
-    # Set de IDs ativos/inativos baseado no filtro de situação — usado pra
-    # cruzar com df_per (pagamentos histórico). Quando filtro é "Todos",
-    # mantém None e não aplica restrição. Senão, restringe aos IDs que
-    # batem com a situação atual.
+    # Set de IDs ativos/inativos — usado pra cruzar com os pagamentos do
+    # histórico. Vem da tabela MESTRE, não da carteira de hoje: quem pagou e
+    # saiu da carteira não está mais no store, e era descartado do recorte
+    # (24/09/2026: a Ana tinha 61 regularizações no total, 24 em "ativos" e 0
+    # em "inativos"). "Todos" mantém None e não restringe nada.
     if filtro_situacao == "Todos":
         ids_situacao_ok = None
     else:
-        ids_situacao_ok = {
-            str(c.get("id") or "") for c in clientes if _eh_situacao_match(c)
-        }
+        ids_situacao_ok = fetch_cids_por_situacao(_sit_bq, _versao_cache_sit)
+        if not ids_situacao_ok:  # consulta falhou: cai pra carteira de hoje
+            ids_situacao_ok = {
+                str(c.get("id") or "") for c in clientes if _eh_situacao_match(c)
+            }
 
     def _contatados_por_atendente(ini, fim):
         """Clientes distintos com msg/ligação no período, por atendente —
@@ -647,8 +650,11 @@ def _render_especialista(store, clientes, role):
     # própria linha, então a conta se confere na tabela. A regularização
     # conta no mês do PAGAMENTO (uma vez só), igual a Reg. total e % da
     # carteira. Antes contava no mês do contato e nunca batia com a coluna.
+    # outer: especialista pode ter contatado e não ter NENHUM pagamento no
+    # recorte (com "Apenas inativos" em 24/09/2026 a Ana ficava fora do
+    # rank_agg e aparecia com 0 contatados, apesar de 157 no BQ).
     rank_agg = rank_agg.merge(
-        _contatados_por_atendente(dt_inicio, dt_fim), on="atendente", how="left"
+        _contatados_por_atendente(dt_inicio, dt_fim), on="atendente", how="outer"
     )
     rank_agg["ef_contatados"] = rank_agg["contatados"].fillna(0).astype(int)
     rank_agg["ef_regularizaram"] = rank_agg["reg_via_contato"].fillna(0).astype(int)
@@ -667,7 +673,7 @@ def _render_especialista(store, clientes, role):
     else:
         rank_agg = rank_agg.merge(
             df_cob[["atendente", "cobertura_pct", "contactados", "inadimplentes_periodo"]],
-            on="atendente", how="left",
+            on="atendente", how="outer",
         )
         rank_agg["cobertura"] = rank_agg["cobertura_pct"].fillna(0).astype(float)
         rank_agg["cob_contactados"] = rank_agg["contactados"].fillna(0).astype(int)

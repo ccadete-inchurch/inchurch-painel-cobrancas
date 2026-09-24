@@ -2062,6 +2062,31 @@ def fetch_regularizados_mes_atual(dia: str | None = None) -> set:
         return set()
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_cids_por_situacao(situacao: str, versao: str = "") -> set:
+    """IDs dos clientes ativos (ou inativos) pela tabela mestre.
+
+    A tela Especialista cruzava o filtro de Situacao com a carteira de HOJE,
+    entao quem pagou e saiu da carteira sumia da conta (24/09/2026: a Ana
+    tinha 61 regularizacoes no total e so 24 em 'Apenas ativos'). A mestre
+    tem todo mundo, inclusive quem ja saiu.
+    """
+    client = get_bq_client()
+    if not client or situacao not in ("ativos", "inativos"):
+        return set()
+    _cond = "IS NULL" if situacao == "ativos" else "IS NOT NULL"
+    try:
+        df = client.query(f"""
+            SELECT CAST(id_sacado_sac AS STRING) AS cid
+            FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
+            GROUP BY 1
+            HAVING MAX(dt_desativacao_sac) {_cond}
+        """).to_dataframe()
+        return set(df["cid"].astype(str)) if not df.empty else set()
+    except Exception:
+        return set()
+
+
 def _cond_situacao_sql(situacao: str) -> str:
     """WHERE do filtro de Situacao da tela Especialista, sobre a tabela
     mestre de clientes (alias `m`, coluna `desat`). Vazio = Todos."""
