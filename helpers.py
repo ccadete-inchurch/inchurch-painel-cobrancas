@@ -150,6 +150,10 @@ def formatar_telefone(tel: str) -> str:
         if len(n) == 9:
             return f"+595 {n[:3]} {n[3:6]} {n[6:]}"
         return f"+595 {n[:2]} {n[2:5]} {n[5:]}"
+    if digits.startswith("597") and len(digits) in (9, 10):  # Suriname
+        # 597 + 6 (fixo) ou 7 (movel). Nao colide com DDD: 59 nao existe.
+        n = digits[3:]
+        return f"+597 {n[:3]} {n[3:]}" if len(n) == 7 else f"+597 {n[:3]}-{n[3:]}"
     if digits.startswith("591") and len(digits) == 11:  # Bolivia
         n = digits[3:]
         return f"+591 {n[:4]}-{n[4:]}"
@@ -271,6 +275,9 @@ def telefone_wa_link(tel: str) -> str:
         return digits
     # Paraguai / Bolivia / Uruguai (3 digits)
     if digits.startswith(("595", "591", "598")) and len(digits) in (11, 12):
+        return digits
+    # Suriname (597 + 6 ou 7)
+    if digits.startswith("597") and len(digits) in (9, 10):
         return digits
     # Irlanda / Angola / Mocambique (3 digits + 9 = 12)
     if digits.startswith(("353", "244", "258")) and len(digits) == 12:
@@ -690,8 +697,9 @@ def _persistir_historico(store):
 # digitos: os de 1-2 digitos coincidem com DDD brasileiro ("1" e EUA mas
 # tambem DDD 11/12/13; "33" e Franca mas tambem Gov. Valadares) e a
 # leitura fica ambigua demais pra afirmar que o numero esta cortado.
-_TAM_NACIONAL_DDI3 = {"351": 9, "352": 9, "353": 9, "244": 9, "258": 9,
-                      "591": 8, "595": 9, "598": 8}
+_TAM_NACIONAL_DDI3 = {"351": (9,), "352": (9,), "353": (9,), "244": (9,),
+                      "258": (9,), "591": (8,), "595": (9,), "598": (8,),
+                      "597": (6, 7)}   # Suriname: fixo 6, movel 7
 
 _DDD_VALIDOS = {11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 24, 27, 28,
                 31, 32, 33, 34, 35, 37, 38, 41, 42, 43, 44, 45, 46, 47, 48, 49,
@@ -722,9 +730,12 @@ def problema_telefone(tel: str) -> str:
     # estrangeiro. Olhar so o prefixo marcava fixo legitimo de Minas como
     # cortado: (35) 3830-4361 comeca com "353", que tambem e a Irlanda.
     if formatar_telefone(d).startswith("+"):
-        for ddi, tam in _TAM_NACIONAL_DDI3.items():
+        for ddi, tams in _TAM_NACIONAL_DDI3.items():
             if d.startswith(ddi):
-                faltam = tam - (len(d) - len(ddi))
+                nac = len(d) - len(ddi)
+                if nac in tams:
+                    return ""
+                faltam = max(tams) - nac
                 if faltam > 0:
                     return f"faltam {faltam} dígito{'s' if faltam > 1 else ''}"
                 return ""
@@ -748,14 +759,17 @@ def problema_telefone(tel: str) -> str:
 def _numero_de_enchimento(d: str) -> bool:
     """Numero digitado so pra fechar o cadastro, nao pra ligar pra alguem.
 
-    Sao os de um digito so repetido: 99999999999, 00000000000, 9999999999 e
-    a variante com o 55 na frente (5599999999999). Esses nao aparecem na
-    tela nem em vermelho — nao ha o que corrigir, nao e o telefone de
-    ninguem. Fica de fora o 21999999999 (XP), que tem DDD de verdade: ali
-    nao da pra afirmar que e enchimento.
+    Sao os de um digito so repetido — 99999999999, 00000000000, 9999999999,
+    a variante com o 55 na frente (5599999999999) — e os que tem DDD de
+    verdade seguido de digito repetido: (21) 99999-9999, (21) 88888-8888.
+    Esses nao aparecem na tela nem em vermelho: nao ha o que corrigir, nao
+    e o telefone de ninguem.
     """
     nucleo = d[2:] if d.startswith("55") and len(d) > 11 else d
-    return len(set(nucleo)) == 1
+    if len(set(nucleo)) == 1:
+        return True
+    return (len(nucleo) in (10, 11) and nucleo[:2].isdigit()
+            and int(nucleo[:2]) in _DDD_VALIDOS and len(set(nucleo[2:])) == 1)
 
 
 def _mesmo_numero(a: str, b: str, a_ruim: bool = False, b_ruim: bool = False) -> bool:

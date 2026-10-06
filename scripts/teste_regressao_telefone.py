@@ -51,6 +51,13 @@ def invalido(d):
     """
     if not d or len(set(d)) <= 2:
         return True
+    # numero de enchimento: DDD de verdade seguido de um digito so
+    # repetido. (21) 99999-9999 tem forma de celular valido, mas nao e o
+    # telefone de ninguem — ficou definido nem exibir.
+    nucleo = d[2:] if d.startswith("55") and len(d) > 11 else d
+    if (len(nucleo) in (10, 11) and int(nucleo[:2]) in DDD_OK
+            and len(set(nucleo[2:])) == 1):
+        return True
     for ddi, tam in TAM_NACIONAL_3.items():
         if d.startswith(ddi):
             return (len(d) - len(ddi)) != tam
