@@ -3,7 +3,7 @@ import streamlit as st
 
 from config import STATUS_OPTS
 from auth import get_store, current_nome, current_email, current_role
-from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html, get_effective_lastContact, get_ultimo_login, parse_date_br, telefones_cliente
+from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html, get_effective_lastContact, get_ultimo_login, parse_date_br, telefones_cliente, aceita_whatsapp
 
 
 @st.dialog("Editar Registro", width="large")
@@ -371,6 +371,25 @@ def dialog_editar(eid, from_fixados: bool = False):
              "Força o lote a colocar em LIGAÇÃO e habilita botões "
              "manuais (Atendeu / Não atendeu) no rodapé.",
     )
+
+    # O cadastro tem celular e mesmo assim esta marcado como fixo? Mostra a
+    # contradicao em vez de escondê-la. Nao desmarca nada: a marcacao pode
+    # querer dizer "mandei mensagem e nao respondeu", que e' conhecimento
+    # que o cadastro nao tem. Quem decide e' quem ligou.
+    if tel_fixo:
+        _tels_cli = (cliente.get("telefones")
+                     or ([cliente.get("telefone")] if cliente.get("telefone") else []))
+        _cels = [f for b, f, p in telefones_cliente(_tels_cli)
+                 if not p and aceita_whatsapp(b)]
+        if _cels:
+            st.markdown(
+                f'<div style="background:rgba(251,191,36,.12);'
+                f'border:1px solid rgba(251,191,36,.35);border-radius:6px;'
+                f'padding:8px 12px;margin:-6px 0 10px 0;font-size:12px;'
+                f'color:#fbbf24;line-height:1.5">'
+                f'Este cliente tem celular no cadastro: '
+                f'<b>{" · ".join(_cels)}</b>. Ainda é só telefone fixo?'
+                f'</div>', unsafe_allow_html=True)
 
 
     # CSS pra 'Nao atendeu' vermelho — coluna marcada com data-naoatend.

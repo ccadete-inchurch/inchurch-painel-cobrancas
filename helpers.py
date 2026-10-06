@@ -926,3 +926,20 @@ def telefones_texto(valor, sep: str = " · ") -> str:
     partes = [f for _b, f, p in itens if not p]
     partes += [f"{f} (verificar)" for _b, f, p in itens if p]
     return sep.join(partes)
+
+
+def aceita_whatsapp(tel: str) -> bool:
+    """O numero e um celular que o WhatsApp alcanca.
+
+    Fica de FORA o fixo e o celular antigo de 8 digitos — nos dois o N8N
+    nao detecta mensagem, que e' justamente a razao de existir a marcacao
+    'telefone fixo' no painel. Numero estrangeiro entra: nao da pra
+    classificar por tamanho, e assumir celular e' o palpite util aqui.
+    """
+    import re as _re
+    d = _sem_ddi_55(_re.sub(r"\D", "", str(tel or "")))
+    if len(d) == 11 and d[:2].isdigit() and int(d[:2]) in _DDD_VALIDOS:
+        return d[2] == "9"
+    if len(d) in (10, 11):
+        return False          # fixo, ou celular antigo de 8 digitos
+    return len(d) > 11        # estrangeiro
