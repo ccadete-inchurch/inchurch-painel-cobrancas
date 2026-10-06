@@ -4329,7 +4329,7 @@ def recomendar_acao(cliente) -> list[str]:
     Nota: Ranking por score (2-fase) decide qual bucket (LIG ou MSG) o cliente cai.
     Clientes com 15d+ sem contato ≥3d são elegíveis, mas podem cair em MSG se score for menor.
     """
-    from helpers import get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_streak_cooldown_dias
+    from helpers import get_painel_dias_lig, get_painel_dias_msg, get_streak_cooldown_dias
 
     # Grupo SL 'NÃO COBRAR!' (id=55) — bloqueio administrativo vindo direto
     # da Superlógica. Sempre vence, antes de qualquer outra regra (acordo
@@ -4345,16 +4345,11 @@ def recomendar_acao(cliente) -> list[str]:
 
     cid = cliente.get("id")
     dias_lig      = get_painel_dias_lig(cid)          # ligação atendida (cooldown 5d)
-    dias_lig_tent = get_painel_dias_lig_tentada(cid)  # qualquer tentativa de lig
     dias_msg      = get_painel_dias_msg(cid)          # mensagem enviada (cooldown 3d)
     streak_lig    = get_streak_cooldown_dias(cid)     # 2 tentativas falhadas → cooldown 7d (só lig)
 
     cooldown_lig_ok = (dias_lig is None or dias_lig >= 5) and (streak_lig is None or streak_lig <= 0)
     cooldown_msg_ok = dias_msg is None or dias_msg >= 3
-    sem_contato_3d  = (
-        (dias_msg is None or dias_msg >= 3)
-        and (dias_lig_tent is None or dias_lig_tent >= 3)
-    )
 
     # 1. Acordo: SEMPRE só ligação (regra do Davi).
     #    - dias < 7: nenhuma ação (espera completar 7d, regra "vencida há 7 dias")
