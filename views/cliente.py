@@ -7,7 +7,7 @@ import streamlit as st
 from config import STATUS_LABELS, STATUS_COLORS
 from helpers import get_hist_unificado, get_effective_status, get_effective_lastContact, get_effective_atendente, fmt_moeda_plain, dias_html, get_ultimo_login
 from data import fetch_historico_atrasos, fetch_evolucao_saldo_mensal
-from helpers import carimbo_dia_cache
+from helpers import carimbo_dia_cache, telefones_texto
 from views.dialog import dialog_editar
 
 _MESES_PT = {1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
@@ -144,7 +144,9 @@ def _render_cliente(_store, clientes):
         (
             c4, "Carteira",
             f'<div style="{_CARD_VALUE_CSS};font-size:16px;color:#e8eaf0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{cliente.get("_grupo", "—")}</div>',
-            cliente.get("telefone", "—"),
+            # nao confia no campo ja formatado: o cache local guarda o
+            # formato antigo ate o BigQuery ser reprocessado
+            telefones_texto(cliente.get("telefones") or cliente.get("telefone")),
         ),
     ]
     for col, label, val_html, sub in cards:

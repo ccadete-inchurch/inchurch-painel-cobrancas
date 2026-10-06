@@ -889,3 +889,19 @@ def telefones_cliente(valor) -> list[tuple[str, str, str]]:
         if troca:
             saida[pos] = novo
     return [(b, f, p) for _d, b, f, p in saida]
+
+
+def telefones_texto(valor, sep: str = " · ") -> str:
+    """Os telefones do cliente em texto simples, pra onde nao cabe HTML
+    (subtitulo de card, celula de tabela, exportacao em CSV).
+
+    Mesma montagem de telefones_cliente — DDD aplicado, repetido juntado —
+    com os numeros bons na frente e o furado marcado entre parenteses, ja
+    que aqui nao da pra pintar de vermelho.
+    """
+    itens = telefones_cliente(valor)
+    if not itens:
+        return "—"
+    partes = [f for _b, f, p in itens if not p]
+    partes += [f"{f} (verificar)" for _b, f, p in itens if p]
+    return sep.join(partes)

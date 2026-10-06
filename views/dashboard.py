@@ -7,7 +7,7 @@ import streamlit as st
 
 from config import SORT_MAP, STATUS_FILTER_MAP, STATUS_LABELS, PAGE_SIZE
 from auth import get_store, current_role
-from helpers import get_hist, get_hist_unificado, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_ultimo_login, get_effective_atendente, parse_date_br, telefone_wa_link, formatar_telefone, telefones_cliente, carimbo_dia_cache
+from helpers import get_hist, get_hist_unificado, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_ultimo_login, get_effective_atendente, parse_date_br, telefone_wa_link, formatar_telefone, telefones_cliente, telefones_texto, carimbo_dia_cache
 from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_esta_semana, concluir_pendencia
 import re as _re_tel
 
@@ -641,7 +641,8 @@ def _render_dashboard(store, clientes, role):
                     STATUS_LABELS.get(c.get("_status", "pending"), ""), c.get("_lastContact", ""), c.get("_notes", ""),
                     "Sim" if c.get("_tem_acordo") else "Não",
                     str(c.get("id", "") or ""), c.get("_atendente", "") or "",
-                    c.get("telefone", "") or "", "Sim" if c.get("_tel_fixo") else "Não",
+                    telefones_texto(c.get("telefones") or c.get("telefone")),
+                    "Sim" if c.get("_tel_fixo") else "Não",
                     "Inativo" if c.get("_inativo") else "Ativo",
                     _fmt_data_br(c.get("_dt_desativacao")),
                     _fmt_num(c.get("_score")),

@@ -5,7 +5,7 @@ import streamlit as st
 
 from data import fetch_proximas_cobracas
 from helpers import carimbo_dia_cache, hoje_brt
-from helpers import fmt_moeda, fmt_moeda_plain
+from helpers import fmt_moeda, fmt_moeda_plain, telefones_texto
 
 
 # Janela maxima de fetch — cobre range default (hoje → hoje+30d) com folga.
@@ -94,7 +94,9 @@ def _render_proximas(_store, clientes):
             "id":             str(row.get("codigo",    "") or ""),  # id_sacado_sac
             "nome":           str(row.get("nome",      "") or ""),
             "cnpj":           str(row.get("cnpj",      "") or ""),
-            "telefone":       str(row.get("telefone",  "") or "—"),
+            # vem cru do BigQuery (os 4 campos colados por ;, com o
+            # marcador ddd=): formata aqui, igual as outras telas
+            "telefone":       telefones_texto(row.get("telefone")),
             "valor":          float(row.get("valor", 0) or 0),
             "vencimento":     venc_str,
             "_venc_date":     venc_date,

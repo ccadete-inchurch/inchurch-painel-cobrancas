@@ -1006,7 +1006,11 @@ def fetch_proximas_cobracas(days: int = 30, dia: str | None = None) -> pd.DataFr
         GROUP BY id_sacado_sac
     ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
     LEFT JOIN (
-        SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(st_fax_sac) AS st_fax_sac
+        SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac,
+               MAX(st_fax_sac) AS st_fax_sac,
+               MAX(st_celular_sac) AS st_celular_sac,
+               MAX(st_ddd_sac) AS st_ddd_sac,
+               MAX(st_telefone_sac) AS st_telefone_sac
         FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
         GROUP BY id_sacado_sac
     ) cli ON CAST(c.id_sacado_sac AS STRING) = cli.id_sacado_sac
