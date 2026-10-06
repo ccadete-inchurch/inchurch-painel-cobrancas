@@ -7,7 +7,7 @@ import streamlit as st
 
 from config import SORT_MAP, STATUS_FILTER_MAP, STATUS_LABELS, PAGE_SIZE
 from auth import get_store, current_role
-from helpers import get_hist, get_hist_unificado, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_ultimo_login, get_effective_atendente, parse_date_br, telefone_wa_link, formatar_telefone, carimbo_dia_cache
+from helpers import get_hist, get_hist_unificado, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_ultimo_login, get_effective_atendente, parse_date_br, telefone_wa_link, formatar_telefone, telefones_cliente, carimbo_dia_cache
 from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_esta_semana, concluir_pendencia
 import re as _re_tel
 
@@ -448,18 +448,13 @@ def _render_dashboard(store, clientes, role):
                 sufixo = "hoje" if dias_atraso == 0 else f"há {dias_atraso}d"
 
                 # Telefones do cliente: 1 icone WhatsApp por numero, cada um
-                # linkando pro proprio wa.me. Se telefone_wa_link nao valida
-                # (cadastro incompleto), o icone WA daquele numero e' omitido.
-                # Filtra numeros invalidos (formatar_telefone = "" pra cadastros
-                # so com DDI '55' ou lixo curto) pra evitar '+55' no card.
+                # linkando pro proprio wa.me. telefones_cliente descarta o que
+                # nao chega a ser telefone, tira o repetido por DIGITO (o mesmo
+                # numero vem escrito de formas diferentes nos 4 campos do
+                # cadastro) e marca o que nao da pra discar.
                 _raw_tels_fix = c.get("telefones") or ([c.get("telefone")] if c.get("telefone") else [])
-                _pairs_fix = []
-                for _t in _raw_tels_fix:
-                    if not _t: continue
-                    _fmt = formatar_telefone(_t)
-                    if _fmt and _fmt != "—":
-                        _pairs_fix.append((_t, _fmt))
-                if not _pairs_fix:
+                _itens_fix = telefones_cliente(_raw_tels_fix)
+                if not _itens_fix:
                     tel_html = ""
                 else:
                     def _wa_por_tel(t: str) -> str:
@@ -471,18 +466,20 @@ def _render_dashboard(store, clientes, role):
                             f'style="text-decoration:none;margin-right:3px;vertical-align:middle">'
                             f'{_ICON_FIX_WHATSAPP}</a>'
                         )
-                    _t0, _fmt0 = _pairs_fix[0]
-                    if len(_pairs_fix) == 1:
-                        conteudo = f'{_wa_por_tel(_t0)}{_fmt0}'
+                    # numero que existe no cadastro mas nao da pra discar sai
+                    # em vermelho e sem icone de WhatsApp; os bons vem antes,
+                    # pra que o destaque nunca seja um numero furado.
+                    _ps = [f'{_wa_por_tel(_b)}{_f}' for _b, _f, _p in _itens_fix if not _p]
+                    _ps += [f'<span style="color:#ef4444" title="cadastro '
+                            f'incompleto — {_p}">{_f}</span>'
+                            for _b, _f, _p in _itens_fix if _p]
+                    if len(_ps) == 1:
+                        conteudo = _ps[0]
                     else:
-                        primeiro = f'{_wa_por_tel(_t0)}{_fmt0}'
-                        extras = " · ".join(
-                            f'{_wa_por_tel(_t)}{_fmt}' for _t, _fmt in _pairs_fix[1:]
-                        )
                         conteudo = (
-                            f'{primeiro} '
+                            f'{_ps[0]} '
                             f'<span style="color:#6b7280;font-size:10px;font-weight:500">'
-                            f'· {extras}</span>'
+                            f'· {" · ".join(_ps[1:])}</span>'
                         )
                     tel_html = (
                         f'<div style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:12px">'
@@ -887,17 +884,15 @@ def _render_dashboard(store, clientes, role):
                     unsafe_allow_html=True,
                 )
             with rcols[5]:
-                # Telefones: um por linha, todos do mesmo tamanho. Filtra
-                # numeros invalidos (formatar_telefone retorna "" pra cadastros
-                # com <8 digitos tipo "55" solto, evitando "+55" na exibicao).
+                # Telefones: um por linha, todos do mesmo tamanho.
+                # telefones_cliente descarta o que nao chega a ser telefone,
+                # junta o mesmo numero escrito de formas diferentes nos 4
+                # campos do cadastro e marca o que nao da pra discar.
                 _raw_tels = row.get("telefones") or ([row.get("telefone")] if row.get("telefone") else [])
-                _pairs = []  # [(raw, formatado)] apenas os validos
-                for _t in _raw_tels:
-                    if not _t: continue
-                    _fmt = formatar_telefone(_t)
-                    if _fmt and _fmt != "—":
-                        _pairs.append((_t, _fmt))
-                if not _pairs:
+                _itens = telefones_cliente(_raw_tels)
+                _pairs = [(_b, _f) for _b, _f, _p in _itens if not _p]
+                _ruins = [(_f, _p) for _b, _f, _p in _itens if _p]
+                if not _pairs and not _ruins:
                     tel_display = "—"
                 else:
                     # Sem icone: um numero por linha, todos do mesmo tamanho.
@@ -920,7 +915,14 @@ def _render_dashboard(store, clientes, role):
                             f'<a href="{href}"{alvo} style="color:inherit;text-decoration:none">'
                             f'{fmt}</a></div>'
                         )
+                    # numero errado no cadastro: vermelho, sem link. Nao da
+                    # pra discar, mas precisa aparecer pra ser corrigido.
                     tel_display = "".join(_linha_tel(t, f) for t, f in _pairs)
+                    tel_display += "".join(
+                        f'<div style="white-space:nowrap;color:#ef4444" '
+                        f'title="cadastro incompleto — {p}">{f}</div>'
+                        for f, p in _ruins
+                    )
                 st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5;line-height:1.6">{tel_display}</div>', unsafe_allow_html=True)
             with rcols[6]:
                 _g_row = row.get("_grupo") or ""

@@ -73,7 +73,7 @@ import streamlit as st
 from google.cloud import bigquery
 
 from auth import get_store, current_nome
-from helpers import calc_dias, parse_date_br, get_hist, fmt_tel, fmt_tel_lista, hoje_lote, hoje_brt, dias_uteis_entre, carimbo_dia_cache
+from helpers import calc_dias, parse_date_br, get_hist, fmt_tel, fmt_tel_lista, telefones_cliente, hoje_lote, hoje_brt, dias_uteis_entre, carimbo_dia_cache
 
 
 # ── Feriados nacionais ────────────────────────────────────────────────────────
@@ -786,15 +786,19 @@ def fetch_cobrancas_competencia(dia: str | None = None):
         c.id_recebimento_recb                                             AS id_recebimento,
         MAX(c.st_nome_sac)                                                AS nome,
         MAX(c.st_cgc_sac)                                                 AS cnpj,
-        MAX(CASE
-            WHEN NULLIF(cli.st_fax_sac, '') IS NULL
-                THEN c.st_telefone_sac                                        -- so tem telefone
-            WHEN NULLIF(c.st_telefone_sac, '') IS NULL
-                THEN cli.st_fax_sac                                            -- so tem fax
-            WHEN cli.st_fax_sac = c.st_telefone_sac
-                THEN cli.st_fax_sac                                            -- iguais, um so
-            ELSE CONCAT(cli.st_fax_sac, ';', c.st_telefone_sac)                -- ambos diferentes, concatena
-        END)                                                              AS telefone,
+        -- Os 4 campos de telefone do cadastro. O st_ddd_sac vai marcado,
+        -- porque ele completa QUALQUER um dos outros tres, nao so o
+        -- st_telefone_sac: o cliente 4548 tem '982338073' no st_fax_sac e
+        -- '071' no st_ddd_sac, e juntos dao (71) 98233-8073. Quem junta e
+        -- escolhe e' o telefones_cliente() no helpers.
+        MAX(ARRAY_TO_STRING([
+            NULLIF(cli.st_celular_sac, ''),
+            NULLIF(cli.st_fax_sac, ''),
+            NULLIF(cli.st_telefone_sac, ''),
+            NULLIF(c.st_telefone_sac, ''),
+            CASE WHEN NULLIF(cli.st_ddd_sac, '') IS NOT NULL
+                 THEN CONCAT('ddd=', cli.st_ddd_sac) END
+        ], ';'))                                                          AS telefone,
         SUM(c.comp_valor)                                                 AS valor,
         FORMAT_TIMESTAMP('%Y-%m-%d', MAX(c.dt_vencimento_recb))          AS vencimento,
         MAX(c.fl_status_recb)                                             AS status,
@@ -815,6 +819,8 @@ def fetch_cobrancas_competencia(dia: str | None = None):
     ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
     LEFT JOIN (
         SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(st_fax_sac) AS st_fax_sac,
+               MAX(st_celular_sac) AS st_celular_sac, MAX(st_ddd_sac) AS st_ddd_sac,
+               MAX(st_telefone_sac) AS st_telefone_sac,
                MAX(dt_desativacao_sac) AS dt_desativacao_sac
         FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
         GROUP BY id_sacado_sac
@@ -973,15 +979,19 @@ def fetch_proximas_cobracas(days: int = 30, dia: str | None = None) -> pd.DataFr
         c.id_sacado_sac                                      AS codigo,
         MAX(c.st_nome_sac)                                        AS nome,
         MAX(c.st_cgc_sac)                                         AS cnpj,
-        MAX(CASE
-            WHEN NULLIF(cli.st_fax_sac, '') IS NULL
-                THEN c.st_telefone_sac
-            WHEN NULLIF(c.st_telefone_sac, '') IS NULL
-                THEN cli.st_fax_sac
-            WHEN cli.st_fax_sac = c.st_telefone_sac
-                THEN cli.st_fax_sac
-            ELSE CONCAT(cli.st_fax_sac, ';', c.st_telefone_sac)
-        END)                                                       AS telefone,
+        -- Os 4 campos de telefone do cadastro. O st_ddd_sac vai marcado,
+        -- porque ele completa QUALQUER um dos outros tres, nao so o
+        -- st_telefone_sac: o cliente 4548 tem '982338073' no st_fax_sac e
+        -- '071' no st_ddd_sac, e juntos dao (71) 98233-8073. Quem junta e
+        -- escolhe e' o telefones_cliente() no helpers.
+        MAX(ARRAY_TO_STRING([
+            NULLIF(cli.st_celular_sac, ''),
+            NULLIF(cli.st_fax_sac, ''),
+            NULLIF(cli.st_telefone_sac, ''),
+            NULLIF(c.st_telefone_sac, ''),
+            CASE WHEN NULLIF(cli.st_ddd_sac, '') IS NOT NULL
+                 THEN CONCAT('ddd=', cli.st_ddd_sac) END
+        ], ';'))                                                   AS telefone,
         -- Total do boleto: soma TODOS os itens (App, Site, Setup, acordo,
         -- multa, desconto…), igual à lista de inadimplentes. Era MAX(item),
         -- que mostrava só o maior item (boleto de R$ 40.560 aparecia 19.980).
@@ -3729,15 +3739,17 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
                     c.id_sacado_sac AS id,
                     MAX(c.st_nome_sac) AS nome,
                     MAX(c.st_cgc_sac)  AS cnpj,
-                    MAX(CASE
-                        WHEN NULLIF(cli.st_fax_sac, '') IS NULL
-                            THEN c.st_telefone_sac
-                        WHEN NULLIF(c.st_telefone_sac, '') IS NULL
-                            THEN cli.st_fax_sac
-                        WHEN cli.st_fax_sac = c.st_telefone_sac
-                            THEN cli.st_fax_sac
-                        ELSE CONCAT(cli.st_fax_sac, ';', c.st_telefone_sac)
-                    END) AS telefone,
+                    -- Mesmos 4 campos do cadastro das outras consultas,
+                    -- pra o card de regularizado nao mostrar um telefone
+                    -- diferente do que a tela de cobranca mostra.
+                    MAX(ARRAY_TO_STRING([
+                        NULLIF(cli.st_celular_sac, ''),
+                        NULLIF(cli.st_fax_sac, ''),
+                        NULLIF(cli.st_telefone_sac, ''),
+                        NULLIF(c.st_telefone_sac, ''),
+                        CASE WHEN NULLIF(cli.st_ddd_sac, '') IS NOT NULL
+                             THEN CONCAT('ddd=', cli.st_ddd_sac) END
+                    ], ';')) AS telefone,
                     MAX(u.nm_grupo) AS grupo,
                     MAX(CASE WHEN c.dt_desativacao_sac IS NOT NULL THEN TRUE ELSE FALSE END) AS inativo
                 FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all` c
@@ -3747,7 +3759,11 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
                     GROUP BY id_sacado_sac
                 ) u ON CAST(c.id_sacado_sac AS STRING) = u.id_sacado_sac
                 LEFT JOIN (
-                    SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac, MAX(st_fax_sac) AS st_fax_sac
+                    SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac,
+                           MAX(st_fax_sac) AS st_fax_sac,
+                           MAX(st_celular_sac) AS st_celular_sac,
+                           MAX(st_ddd_sac) AS st_ddd_sac,
+                           MAX(st_telefone_sac) AS st_telefone_sac
                     FROM `business-intelligence-467516.Splgc.splgc-clientes-inchurch`
                     GROUP BY id_sacado_sac
                 ) cli ON CAST(c.id_sacado_sac AS STRING) = cli.id_sacado_sac
@@ -3781,7 +3797,9 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
             "cod":                str(row["id"]),
             "nome":               str(row.get("nome") or ""),
             "cnpj":               str(row.get("cnpj") or ""),
-            "telefone":           fmt_tel(row.get("telefone")),
+            "telefone":           (_t_reg[0] if (_t_reg := [
+                                      _f for _b, _f, _p in telefones_cliente(row.get("telefone"))
+                                  ]) else "—"),
             "valor":              0.0,
             "vencimento":         "",
             "dias_atraso":        0,
@@ -4130,8 +4148,17 @@ def processar_dados_bigquery():
                 "cod":              codigo,
                 "nome":             str(row["nome"]     or ""),
                 "cnpj":             str(row["cnpj"]     or ""),
-                "telefone":         fmt_tel(row["telefone"]),
-                "telefones":        fmt_tel_lista(row["telefone"]),
+                # Resolve aqui, uma vez: telefones_cliente aplica o
+                # st_ddd_sac em quem precisa e junta o mesmo numero escrito
+                # de formas diferentes nos 4 campos. O resto do painel — a
+                # tela e o casamento com o historico do N8N — passa a ver a
+                # lista ja limpa, sem o marcador 'ddd=' e sem repetido.
+                # 'telefone' (campo legado, usado na ficha e na exportacao)
+                # sai formatado; 'telefones' guarda o numero cru, que e' o
+                # que vira link de WhatsApp.
+                "telefone":         ((_tels_lp := telefones_cliente(row["telefone"]))
+                                     and _tels_lp[0][1] or "—"),
+                "telefones":        [_b for _b, _f, _p in _tels_lp],
                 "valor":            valor_devedor,
                 "vencimento":       vencimento,
                 "dias_atraso":      dias_atraso_num,

@@ -4,7 +4,7 @@ import streamlit as st
 
 import time as _time
 
-from helpers import _BRT, get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, carimbo_curto, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link, carimbo_dia_cache
+from helpers import _BRT, get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, carimbo_curto, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link, telefones_cliente, carimbo_dia_cache
 from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_rolling, versao_dados_npl, fetch_carteira_count, fetch_inadimplentes_snapshot_ref30d, _EMAIL_GRUPO
 from auth import current_nome, current_role, current_email
 from views.dialog import dialog_editar
@@ -100,16 +100,13 @@ def _tels_html(c) -> str:
             return "—"
         tels = [_fallback]
 
-    # Filtra numeros invalidos (cadastro so com DDI '55' ou lixo tipo
-    # 3-9 digitos). formatar_telefone agora retorna "" nesses casos —
-    # sem esse filtro, extras apareciam vazios entre os separadores ·
-    _pairs = []  # [(raw, formatado)] so os validos
-    for _t in tels:
-        if not _t: continue
-        _fmt = formatar_telefone(_t)
-        if _fmt and _fmt != "—":
-            _pairs.append((_t, _fmt))
-    if not _pairs:
+    # telefones_cliente faz tres coisas: descarta o que nao chega a ser
+    # telefone (cadastro so com o DDI '55', 3-4 digitos), tira o repetido
+    # por DIGITO — o mesmo numero chega escrito de formas diferentes nos 4
+    # campos do cadastro, e o card mostrava duas vezes — e diz, em cada
+    # item, por que o numero nao serve pra discar.
+    _itens = telefones_cliente(tels)
+    if not _itens:
         return "—"
 
     def _wa_icon(t: str) -> str:
@@ -125,22 +122,28 @@ def _tels_html(c) -> str:
             f'{_ICON_WHATSAPP}</a>'
         )
 
+    def _ruim(fmt: str, motivo: str) -> str:
+        """Numero que existe no cadastro mas nao da pra discar: vermelho e
+        SEM icone de WhatsApp. Esconder nao resolveria — a atendente precisa
+        ver que o cadastro tem numero errado pra mandar corrigir."""
+        return (f'<span style="color:#ef4444" title="cadastro incompleto — '
+                f'{motivo}">{fmt}</span>')
+
+    # bons primeiro: o primeiro da lista e o que fica em destaque, e nao
+    # pode ser um numero que leva a lugar nenhum
+    _partes = [f'{_wa_icon(_b)}{_f}' for _b, _f, _p in _itens if not _p]
+    _partes += [_ruim(_f, _p) for _b, _f, _p in _itens if _p]
+
     # 1 telefone: icone + numero formatado
-    if len(_pairs) == 1:
-        _t0, _fmt0 = _pairs[0]
-        return f'{_wa_icon(_t0)}{_fmt0}'
+    if len(_partes) == 1:
+        return _partes[0]
 
     # 2+ telefones: primeiro em destaque, extras em cinza menor, cada um
     # com seu proprio icone WA clicavel
-    _t0, _fmt0 = _pairs[0]
-    primeiro = f'{_wa_icon(_t0)}{_fmt0}'
-    extras = " · ".join(
-        f'{_wa_icon(_t)}{_fmt}' for _t, _fmt in _pairs[1:]
-    )
     return (
-        f'{primeiro} '
+        f'{_partes[0]} '
         f'<span style="color:#6b7280;font-size:10px;font-weight:500">'
-        f'· {extras}</span>'
+        f'· {" · ".join(_partes[1:])}</span>'
     )
 
 

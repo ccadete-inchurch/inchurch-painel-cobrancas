@@ -63,10 +63,17 @@ import json
 # ── Telefone ──────────────────────────────────────────────────────────────────
 
 def fmt_tel(valor) -> str:
-    """Retorna o primeiro telefone (legado — preservado pra compat)."""
+    """Retorna o primeiro telefone (legado — preservado pra compat).
+
+    Pula o marcador 'ddd=XX' que o data.py manda junto: ele e' o st_ddd_sac
+    do cadastro, nao um telefone."""
     if not valor:
         return "—"
-    return str(valor).split(";")[0].strip() or "—"
+    for parte in str(valor).split(";"):
+        parte = parte.strip()
+        if parte and parte[:4].lower() != "ddd=":
+            return parte
+    return "—"
 
 
 def fmt_tel_lista(valor) -> list[str]:
@@ -150,6 +157,16 @@ def formatar_telefone(tel: str) -> str:
         n = digits[3:]
         return f"+598 {n[:2]} {n[2:5]} {n[5:]}"
 
+    if digits.startswith("353") and len(digits) == 12:  # Irlanda
+        n = digits[3:]
+        return f"+353 {n[:2]} {n[2:5]} {n[5:]}"
+    if digits.startswith("244") and len(digits) == 12:  # Angola
+        n = digits[3:]
+        return f"+244 {n[:3]} {n[3:6]} {n[6:]}"
+    if digits.startswith("258") and len(digits) == 12:  # Mocambique
+        n = digits[3:]
+        return f"+258 {n[:2]} {n[2:5]} {n[5:]}"
+
     # ─── Codigos de 2 digitos ─────────────────────────────────────────
     # Italia (39 + 9-10 digitos)
     if digits.startswith("39") and len(digits) in (11, 12):
@@ -167,6 +184,20 @@ def formatar_telefone(tel: str) -> str:
     if digits.startswith("44") and len(digits) == 12:
         n = digits[2:]
         return f"+44 {n[:4]} {n[4:7]} {n[7:]}"
+    # Franca (33 + 9). DDD 33 existe no BR (Gov. Valadares), entao so
+    # aceita quando o nacional comeca com 6 ou 7 — movel frances. Um numero
+    # brasileiro do DDD 33 comeca com 9 (movel) ou 2-5 (fixo), nunca 6/7.
+    if digits.startswith("33") and len(digits) == 11 and digits[2] in "67":
+        n = digits[2:]
+        return f"+33 {n[:1]} {n[1:3]} {n[3:5]} {n[5:7]} {n[7:]}"
+    # Espanha (34 + 9). Mesmo raciocinio: DDD 34 e Uberlandia.
+    if digits.startswith("34") and len(digits) == 11 and digits[2] in "67":
+        n = digits[2:]
+        return f"+34 {n[:3]} {n[3:6]} {n[6:]}"
+    # Holanda (31 + 9, movel comeca com 6). DDD 31 e Belo Horizonte.
+    if digits.startswith("31") and len(digits) == 11 and digits[2] == "6":
+        n = digits[2:]
+        return f"+31 {n[:1]} {n[1:5]} {n[5:]}"
     # Japao (81 + 10 = 12 total; BR DDD 81 tem 11)
     if digits.startswith("81") and len(digits) == 12:
         n = digits[2:]
@@ -174,7 +205,10 @@ def formatar_telefone(tel: str) -> str:
 
     # Cadastro BR antigo com '0' na frente (formato pre-portabilidade):
     # 0XXXXXXXXXX (12 digitos comecando com 0). Remove o 0 e formata como BR.
-    if digits.startswith("0") and len(digits) == 12:
+    # Vale para 10, 11 e 12 digitos: o cadastro antigo grava 0 + DDD + numero,
+    # e com 10/11 a leitura sem tirar o zero inventa DDD inexistente
+    # (06992588451 virava "(06) 99258-8451"; o certo e "(69) 9258-8451").
+    if digits.startswith("0") and len(digits) in (10, 11, 12):
         digits = digits[1:]  # remove o 0 inicial
 
     # EUA/Canada (1 + 10 digitos)
@@ -238,6 +272,9 @@ def telefone_wa_link(tel: str) -> str:
     # Paraguai / Bolivia / Uruguai (3 digits)
     if digits.startswith(("595", "591", "598")) and len(digits) in (11, 12):
         return digits
+    # Irlanda / Angola / Mocambique (3 digits + 9 = 12)
+    if digits.startswith(("353", "244", "258")) and len(digits) == 12:
+        return digits
     # Italia (39 + 9-10)
     if digits.startswith("39") and len(digits) in (11, 12):
         return digits
@@ -253,6 +290,14 @@ def telefone_wa_link(tel: str) -> str:
     # Japao (81 + 10 = 12; BR 81 tem 11)
     if digits.startswith("81") and len(digits) == 12:
         return digits
+    # Franca / Espanha (2 + 9 = 11). DDD 33 e 34 existem no BR, entao so
+    # valem quando o nacional comeca com 6 ou 7 (movel la); numero BR do
+    # mesmo DDD comeca com 9 (movel) ou 2-5 (fixo).
+    if digits.startswith(("33", "34")) and len(digits) == 11 and digits[2] in "67":
+        return digits
+    # Holanda (31 + 9, movel comeca com 6). DDD 31 e Belo Horizonte.
+    if digits.startswith("31") and len(digits) == 11 and digits[2] == "6":
+        return digits
     # Suica (41 + 9 = 11; BR 41 tem 11 tb, mas movel BR obriga 3o dig = 9)
     if digits.startswith("41") and len(digits) == 11 and digits[2] != "9":
         return digits
@@ -262,8 +307,10 @@ def telefone_wa_link(tel: str) -> str:
     # Mexico (52 + 10 = 12 padrao; 52 nao e' DDD BR, entao 11 dig tb assume MX)
     if digits.startswith("52") and len(digits) in (11, 12):
         return digits
-    # BR antigo com '0' na frente (12 digitos) — remove 0 e prefixa 55
-    if digits.startswith("0") and len(digits) == 12:
+    # BR antigo com '0' na frente — remove 0 e prefixa 55. Vale para 10, 11
+    # e 12 digitos: com 10/11 o zero era lido como parte do DDD e gerava
+    # link para DDD inexistente (06992588451 -> wa.me/5506992588451).
+    if digits.startswith("0") and len(digits) in (10, 11, 12):
         return "55" + digits[1:]
     # EUA/Canada — 3 sinais possiveis:
     # 1. '+' explicito
@@ -636,3 +683,195 @@ def _persistir_historico(store):
             json.dump(cache, f, indent=2, ensure_ascii=False)
     except Exception:
         pass
+
+
+# ─── diagnostico do numero (usado pra marcar em vermelho no card) ──────
+# Tamanho do numero NACIONAL (sem o DDI) por pais, so para DDIs de 3
+# digitos: os de 1-2 digitos coincidem com DDD brasileiro ("1" e EUA mas
+# tambem DDD 11/12/13; "33" e Franca mas tambem Gov. Valadares) e a
+# leitura fica ambigua demais pra afirmar que o numero esta cortado.
+_TAM_NACIONAL_DDI3 = {"351": 9, "352": 9, "353": 9, "244": 9, "258": 9,
+                      "591": 8, "595": 9, "598": 8}
+
+_DDD_VALIDOS = {11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 24, 27, 28,
+                31, 32, 33, 34, 35, 37, 38, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+                51, 53, 54, 55, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+                71, 73, 74, 75, 77, 79, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+                91, 92, 93, 94, 95, 96, 97, 98, 99}
+
+
+def problema_telefone(tel: str) -> str:
+    """Por que o numero nao serve pra discar. String vazia = esta ok.
+
+    So aponta o que da pra afirmar com certeza:
+      - numero com DDI de 3 digitos e menos digitos que o pais usa
+        (a mascara do campo de celular no Superlogica corta em 11)
+      - DDD que nao existe no Brasil
+      - digito repetido (00000000000)
+
+    NAO usa regra generica por quantidade de digitos: nos EUA 1+10=11 e o
+    tamanho certo, na Franca/Espanha/Suica/Belgica/Italia 2+9=11 tambem.
+    """
+    import re as _re
+    d = _re.sub(r"\D", "", str(tel or ""))
+    if not d:
+        return ""
+    if len(d) > 6 and len(set(d)) <= 2:
+        return "número repetido"
+    # A regra de DDI so vale quando o proprio formatador leu o numero como
+    # estrangeiro. Olhar so o prefixo marcava fixo legitimo de Minas como
+    # cortado: (35) 3830-4361 comeca com "353", que tambem e a Irlanda.
+    if formatar_telefone(d).startswith("+"):
+        for ddi, tam in _TAM_NACIONAL_DDI3.items():
+            if d.startswith(ddi):
+                faltam = tam - (len(d) - len(ddi))
+                if faltam > 0:
+                    return f"faltam {faltam} dígito{'s' if faltam > 1 else ''}"
+                return ""
+        return ""
+    wa = telefone_wa_link(d)
+    if wa.startswith("55") and not d.startswith("55"):
+        n = wa[2:]
+        if len(n) in (10, 11) and int(n[:2]) not in _DDD_VALIDOS:
+            return f"DDD {n[:2]} não existe"
+        if len(n) == 11 and n[2] != "9":
+            # Fato, sem chutar a direcao do erro: todo celular brasileiro
+            # tem 9 no 3o digito. Quem cai aqui pode ser um fixo com digito
+            # a MAIS — (35) 3598-8372 cadastrado como 35359883724, cliente
+            # 6553 — ou um numero estrangeiro cortado pela mascara, que e o
+            # caso do 72 (353 8761 8609, Irlanda). Dizer "incompleto"
+            # afirmava o segundo caso e errava o primeiro.
+            return "tem 11 dígitos mas não é celular"
+    return ""
+
+
+def _numero_de_enchimento(d: str) -> bool:
+    """Numero digitado so pra fechar o cadastro, nao pra ligar pra alguem.
+
+    Sao os de um digito so repetido: 99999999999, 00000000000, 9999999999 e
+    a variante com o 55 na frente (5599999999999). Esses nao aparecem na
+    tela nem em vermelho — nao ha o que corrigir, nao e o telefone de
+    ninguem. Fica de fora o 21999999999 (XP), que tem DDD de verdade: ali
+    nao da pra afirmar que e enchimento.
+    """
+    nucleo = d[2:] if d.startswith("55") and len(d) > 11 else d
+    return len(set(nucleo)) == 1
+
+
+def _mesmo_numero(a: str, b: str, a_ruim: bool = False, b_ruim: bool = False) -> bool:
+    """Os dois so de digitos sao o MESMO telefone escrito de outro jeito.
+
+    Tamanhos diferentes — da pra afirmar olhando so os digitos:
+      1) identico
+      2) um e o fim do outro: a diferenca e so prefixo, seja o 55 do Brasil
+         ('5511954052870' x '11954052870'), o DDI ('351968173292' x
+         '968173292') ou o DDD que faltava ('65999776677' x '999776677')
+      3) o nono digito do celular: (48) 9601-4697 x (48) 99601-4697
+      4) a versao cortada pela mascara, que corta no FIM 1 ou 2 digitos
+         ('595985969416' x '59598596941')
+
+    Mesmo tamanho — aqui so entra quando UM dos dois nao da pra discar, pra
+    nunca esconder numero bom. Dois jeitos de o cadastro repetir o numero:
+      5) difere so no 3o digito, que num celular e o 9 obrigatorio:
+         99088270757 x 99988270757 (6677)
+      6) digito a mais colado na frente e a mascara cortando o fim — o DDD
+         digitado duas vezes (21219714553 x 21971455309, cliente 3491), o
+         DDD errado na frente de um numero que ja tinha o seu (21659997766 x
+         65999776677, cliente 636) ou um digito solto (64699922565 x
+         64999225652, cliente 2631).
+
+    Sem a trava do "um dos dois e ruim", a regra 5 fundia 11981675371 (Sao
+    Paulo) com 17981675371 (Aracatuba), que sao numeros diferentes com o
+    mesmo final.
+    """
+    if a == b:
+        return True
+    curto, longo = (a, b) if len(a) < len(b) else (b, a)
+    if len(curto) != len(longo):
+        if longo.endswith(curto):
+            return True
+        if {len(a), len(b)} == {10, 11} and longo[:2] == curto[:2]                 and longo[2] == "9" and longo[3:] == curto[2:]:
+            return True
+        return longo.startswith(curto) and 1 <= len(longo) - len(curto) <= 2
+    if a_ruim == b_ruim:
+        return False
+    if a[:2] == b[:2] and a[-8:] == b[-8:]:
+        return True
+    for k in (1, 2):
+        for i in range(3):
+            if a[:i] + a[i + k:] == b[:len(b) - k]:
+                return True
+            if b[:i] + b[i + k:] == a[:len(a) - k]:
+                return True
+    return False
+
+
+def telefones_cliente(valor) -> list[tuple[str, str, str]]:
+    """Lista final de telefones do cliente: (bruto, formatado, problema).
+
+    Recebe a string com os 4 campos do cadastro separados por ';' (ou a lista
+    ja separada) e devolve o que a tela deve mostrar. Faz duas coisas que o
+    fmt_tel_lista sozinho nao faz:
+
+    1) tira repetido por DIGITO, nao por string. O mesmo numero chega escrito
+       de formas diferentes — CONCAT(st_ddd_sac, st_telefone_sac) reproduz o
+       que esta em st_celular_sac em 319 clientes, e o st_fax_sac guarda a
+       versao com 55 na frente ('5521983368588' x '21983368588'). Sem isso o
+       card mostrava o mesmo telefone duas e as vezes tres vezes.
+    2) junta tambem o numero cortado com a versao inteira dele: a mascara do
+       Superlogica corta no FIM, entao o final de 8 digitos nao coincide e a
+       deduplicacao por final deixava os dois passarem (114 clientes).
+
+    Quando dois numeros se juntam, fica o que da pra discar; empatados, fica
+    o mais completo. Sem essa ordem um celular quebrado expulsava o numero bom
+    (6677: 99088270757 expulsava 99988270757).
+
+    'problema' vem do problema_telefone(): vazio = numero bom, texto = motivo
+    pra pintar de vermelho e nao oferecer o WhatsApp.
+    """
+    import re as _re
+    brutos = valor if isinstance(valor, (list, tuple)) else fmt_tel_lista(valor)
+
+    # O data.py manda o st_ddd_sac marcado ('ddd=071'). Ele vale pra QUALQUER
+    # campo, nao so pro st_telefone_sac: o cliente 4548 tem '982338073' no
+    # st_fax_sac e '071' no st_ddd_sac, e juntos dao (71) 98233-8073 — um
+    # celular de Salvador, que e onde o cliente fica.
+    ddd = ""
+    numeros = []
+    for item in brutos:
+        txt = str(item or "").strip()
+        if txt[:4].lower() == "ddd=":
+            ddd = _re.sub(r"\D", "", txt[4:])
+            continue
+        numeros.append(item)
+    if ddd in ("0", "00"):
+        ddd = ""
+
+    saida: list[tuple[str, str, str, str]] = []   # (digitos, bruto, fmt, prob)
+    for bruto in numeros:
+        if not bruto:
+            continue
+        d = _re.sub(r"\D", "", str(bruto))
+        if not d or _numero_de_enchimento(d):
+            continue
+        fmt = formatar_telefone(bruto)
+        if (not fmt or fmt == "—") and ddd and not d.startswith(ddd):
+            # sozinho nao vira telefone; com o DDD do cadastro, vira
+            alt = formatar_telefone(ddd + d)
+            if alt and alt != "—":
+                bruto, d, fmt = ddd + d, ddd + d, alt
+        if not fmt or fmt == "—":
+            continue
+        prob = problema_telefone(bruto)
+        novo = (d, str(bruto), fmt, prob)
+        pos = next((i for i, (dj, _b, _f, pj) in enumerate(saida)
+                    if _mesmo_numero(dj, d, bool(pj), bool(prob))), None)
+        if pos is None:
+            saida.append(novo)
+            continue
+        atual = saida[pos]
+        troca = (not prob and atual[3]) or (
+            bool(prob) == bool(atual[3]) and len(d) > len(atual[0]))
+        if troca:
+            saida[pos] = novo
+    return [(b, f, p) for _d, b, f, p in saida]

@@ -3,7 +3,7 @@ import streamlit as st
 
 from config import STATUS_OPTS
 from auth import get_store, current_nome, current_email, current_role
-from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html, get_effective_lastContact, get_ultimo_login, parse_date_br
+from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html, get_effective_lastContact, get_ultimo_login, parse_date_br, telefones_cliente
 
 
 @st.dialog("Editar Registro", width="large")
@@ -198,8 +198,15 @@ def dialog_editar(eid, from_fixados: bool = False):
     with c5:
         # Todos os telefones do cliente — primeiro destacado, demais inline
         # em fonte menor (igual aos cards). Todos selecionáveis/copiáveis.
-        tels = cliente.get("telefones") or ([cliente.get("telefone")] if cliente.get("telefone") else [])
-        tels = [t for t in tels if t]
+        # Aqui saia o valor CRU do cadastro ("351968173332"). Passa por
+        # telefones_cliente, que formata, junta o repetido e separa o que
+        # nao da pra discar — este ultimo em vermelho, igual aos cards.
+        _raw = cliente.get("telefones") or ([cliente.get("telefone")] if cliente.get("telefone") else [])
+        _itens = telefones_cliente(_raw)
+        # bons antes: o destaque nunca pode ser um numero furado
+        tels = [f for _b, f, p in _itens if not p]
+        tels += [f'<span style="color:#ef4444" title="cadastro incompleto — {p}">{f}</span>'
+                 for _b, f, p in _itens if p]
         if not tels:
             tel_principal_html = "—"
             tel_extras_html    = "&nbsp;"
