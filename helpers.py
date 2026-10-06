@@ -150,6 +150,21 @@ def formatar_telefone(tel: str) -> str:
         if len(n) == 9:
             return f"+595 {n[:3]} {n[3:6]} {n[6:]}"
         return f"+595 {n[:2]} {n[2:5]} {n[5:]}"
+    # Suica e Belgica estavam no telefone_wa_link e nao aqui: o card mostrava
+    # (41) 76572-0874 — leitura brasileira, DDD de Curitiba — e o link ia pra
+    # Suica. Cliente 1623 Eglise Du Centre, R$ 3.200, ficava sem contato
+    # exibivel. Mesma condicao do link: movel brasileiro obriga 9 no 3o digito.
+    if digits.startswith("41") and len(digits) == 11 and digits[2] != "9":
+        n = digits[2:]
+        return f"+41 {n[:2]} {n[2:5]} {n[5:7]} {n[7:]}"
+    if digits.startswith("32") and len(digits) == 11 and digits[2] != "9":
+        n = digits[2:]
+        return f"+32 {n[:3]} {n[3:5]} {n[5:7]} {n[7:]}"
+    if digits.startswith("52") and len(digits) == 12:  # Mexico
+        # O telefone_wa_link ja tratava 52 e o visual nao: a tela mostrava
+        # (52) 44613-8389, DDD que nao existe, e o link ia pro Mexico.
+        n = digits[2:]
+        return f"+52 {n[:3]} {n[3:6]} {n[6:]}"
     if digits.startswith("597") and len(digits) in (9, 10):  # Suriname
         # 597 + 6 (fixo) ou 7 (movel). Nao colide com DDD: 59 nao existe.
         n = digits[3:]
@@ -740,10 +755,18 @@ def problema_telefone(tel: str) -> str:
                     return f"faltam {faltam} dígito{'s' if faltam > 1 else ''}"
                 return ""
         return ""
-    wa = telefone_wa_link(d)
-    if wa.startswith("55") and not d.startswith("55"):
-        n = wa[2:]
-        if len(n) in (10, 11) and int(n[:2]) not in _DDD_VALIDOS:
+    # Daqui pra baixo, o numero que a TELA mostra como brasileiro. Antes isso
+    # era decidido pelo telefone_wa_link, e as duas funcoes nem sempre
+    # concordam: 52446138389 saia como (52) 44613-8389 no card e como
+    # Mexico no link, entao o DDD 52 — que nao existe — nunca era acusado.
+    fmt = formatar_telefone(d)
+    if not fmt.startswith("("):
+        return ""
+    # Le os digitos DO QUE A TELA MOSTRA, nao do cru: o formatador ja tirou
+    # o 55 e o zero a esquerda. Lendo o cru, 0812345678 virava "DDD 08".
+    n = _re.sub(r"\D", "", fmt)
+    if len(n) in (10, 11):
+        if int(n[:2]) not in _DDD_VALIDOS:
             return f"DDD {n[:2]} não existe"
         if len(n) == 11 and n[2] != "9":
             # Fato, sem chutar a direcao do erro: todo celular brasileiro
@@ -763,6 +786,18 @@ def _sem_ddi_55(d: str) -> str:
     55 e' o DDD do Rio Grande do Sul.
     """
     return d[2:] if d.startswith("55") and len(d) in (12, 13) else d
+
+
+def _foi_identificado(fmt: str, d: str) -> bool:
+    """O formatador reconheceu o numero, ou so devolveu os digitos crus.
+
+    Quando nenhum pais casa, formatar_telefone devolve '+' + digitos, sem
+    espaco nem parentese. Isso nao e um telefone legivel nem discavel, e no
+    desempate tem que perder pra versao reconhecida — era o que fazia o
+    cliente 6592 exibir +5621999718953 (alguem digitou 56 no lugar do 55)
+    no lugar do (21) 99971-8953 que o cadastro tambem tem.
+    """
+    return fmt != "+" + d
 
 
 def _numero_de_enchimento(d: str) -> bool:
@@ -904,9 +939,12 @@ def telefones_cliente(valor) -> list[tuple[str, str, str]]:
         # cliente 3532 (japones) exibir (81) 90395-5778, leitura brasileira
         # do 5581903955778, no lugar do +81 90 3955-7782 que o cadastro tem
         # inteiro no st_telefone_sac.
+        ident_novo, ident_atual = _foi_identificado(fmt, d), _foi_identificado(atual[2], atual[0])
         troca = (not prob and atual[3]) or (
-            bool(prob) == bool(atual[3])
-            and len(_sem_ddi_55(d)) > len(_sem_ddi_55(atual[0])))
+            bool(prob) == bool(atual[3]) and (
+                (ident_novo and not ident_atual)
+                or (ident_novo == ident_atual
+                    and len(_sem_ddi_55(d)) > len(_sem_ddi_55(atual[0])))))
         if troca:
             saida[pos] = novo
     return [(b, f, p) for _d, b, f, p in saida]

@@ -61,17 +61,22 @@ def invalido(d):
     for ddi, tam in TAM_NACIONAL_3.items():
         if d.startswith(ddi):
             return (len(d) - len(ddi)) != tam
-    if formatar_telefone(d) in ("", "—"):
+    f = formatar_telefone(d)
+    if f in ("", "—"):
         return True
-    wa = telefone_wa_link(d)
-    if not wa:
+    if not telefone_wa_link(d):
         return True
-    if wa.startswith("55") and not d.startswith("55"):
-        n = wa[2:]
-        if len(n) in (10, 11) and int(n[:2]) not in DDD_OK:
-            return True
-        if len(n) == 11 and n[2] != "9":
-            return True
+    # Le os digitos do que a TELA mostra. Antes a condicao era
+    # wa.startswith("55") and not d.startswith("55"), e numero ja gravado
+    # com o 55 escapava inteiro da checagem: o 55519983472 do cliente 3295
+    # — 55 + DDD 51 + 7 digitos, cortado pela mascara — passava por valido.
+    if f.startswith("("):
+        n = re.sub(r"\D", "", f)
+        if len(n) in (10, 11):
+            if int(n[:2]) not in DDD_OK:
+                return True
+            if len(n) == 11 and n[2] != "9":
+                return True
     return False
 
 
