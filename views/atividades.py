@@ -122,12 +122,12 @@ def _tels_html(c) -> str:
             f'{_ICON_WHATSAPP}</a>'
         )
 
-    # Verde = da pra discar, vermelho = nao da. Mesmo par de cores que o
-    # resto do painel usa (saldo, variacao, badges). O vermelho vem SEM
-    # icone de WhatsApp; esconder nao resolveria, a atendente precisa ver
-    # que o cadastro tem numero errado pra mandar corrigir.
+    # Numero bom fica no cinza do card — e a maioria, colorir todo mundo
+    # tiraria o destaque de quem precisa de atencao. So o que nao da pra
+    # discar ganha cor, em vermelho e SEM icone de WhatsApp; esconder nao
+    # resolveria, a atendente precisa ver que o cadastro esta errado.
     def _bom(t: str, fmt: str) -> str:
-        return f'{_wa_icon(t)}<span style="color:#22c55e">{fmt}</span>'
+        return f'{_wa_icon(t)}{fmt}'
 
     def _ruim(fmt: str, motivo: str) -> str:
         return (f'<span style="color:#ef4444" title="cadastro incompleto — '

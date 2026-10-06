@@ -44,6 +44,12 @@ def precisa_processar_bq(store: dict) -> bool:
     """
     if not store.get("clientes"):
         return True
+    # Dados montados por uma versao anterior do codigo. Sem isso, sessao
+    # aberta antes de um deploy segue mostrando o que carregou — foi o que
+    # aconteceu com o telefone do 4474, que continuava so com o numero
+    # velho porque o store da sessao era de antes da mudanca.
+    if store.get("_cache_version") != _CACHE_VERSION:
+        return True
     ultima_str = store.get("ultima_atualizacao") or ""
     if not ultima_str:
         return True
@@ -4216,6 +4222,7 @@ def processar_dados_bigquery():
     store["clientes"]           = clientes
     store["regularizados"]      = historico_regularizados
     store["ultima_atualizacao"] = datetime.now(timezone(timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M")
+    store["_cache_version"]     = _CACHE_VERSION
     salvar_cache_local()
 
     return clientes, len(historico_regularizados)
@@ -4420,7 +4427,8 @@ def concluir_pendencia(cid: str):
 # Versão do schema/filtros dos dados em cache. Bump quando mudar query
 # do BQ (ex: filtro novo) — cache local com versão diferente é descartado,
 # forçando re-fetch fresh no próximo login.
-_CACHE_VERSION = 3  # v3: overlay também filtra clientes em contexto de inadimplência
+_CACHE_VERSION = 4  # v4: telefone passou a vir dos 4 campos do cadastro,
+                   # deduplicado e com o st_ddd_sac aplicado
 
 
 def salvar_cache_local():
@@ -4455,6 +4463,7 @@ def carregar_cache_local():
         store["clientes"]           = data.get("clientes",           [])
         store["regularizados"]      = data.get("regularizados",      [])
         store["ultima_atualizacao"] = data.get("ultima_atualizacao", "")
+        store["_cache_version"]     = data.get("_version")
         store["historico"]          = data.get("historico",          {})
         return True
     except Exception:
