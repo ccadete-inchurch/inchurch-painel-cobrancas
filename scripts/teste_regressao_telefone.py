@@ -150,8 +150,18 @@ def main():
             # (com o 55 na frente, com o DDD que faltava, inteiro em vez de
             # cortado). Checagem frouxa de proposito: ela so pode DEIXAR
             # passar uma perda, nunca inventar uma.
+            #
+            # Compara tambem sem o 55 do Brasil: o numero que sobrevive a
+            # dedupe pode ficar guardado com o DDI, e ai nenhuma das
+            # comparacoes abaixo casa com a versao sem ele (cliente 4532,
+            # 5521995002430 sobrevivendo no lugar de 2199500243).
+            s55 = lambda v: v[2:] if v.startswith("55") and len(v) in (12, 13) else v
+            dn = s55(d)
             if any(x == d or x[-8:] == d[-8:] or x.endswith(d)
-                   or (len(x) > len(d) and x.startswith(d)) for x in depois):
+                   or (len(x) > len(d) and x.startswith(d))
+                   or s55(x) == dn or s55(x).endswith(dn)
+                   or (len(s55(x)) > len(dn) and s55(x).startswith(dn))
+                   for x in depois):
                 continue
             # O numero some legitimamente quando foi fundido com outro: a
             # versao inteira dele mesmo, ou a versao limpa de um numero que

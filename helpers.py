@@ -756,6 +756,15 @@ def problema_telefone(tel: str) -> str:
     return ""
 
 
+def _sem_ddi_55(d: str) -> str:
+    """Tira o 55 do Brasil pra contar digito de forma justa.
+
+    So em 12/13 digitos, onde o 55 e' DDI sem ambiguidade — em 10 digitos
+    55 e' o DDD do Rio Grande do Sul.
+    """
+    return d[2:] if d.startswith("55") and len(d) in (12, 13) else d
+
+
 def _numero_de_enchimento(d: str) -> bool:
     """Numero digitado so pra fechar o cadastro, nao pra ligar pra alguem.
 
@@ -798,6 +807,11 @@ def _mesmo_numero(a: str, b: str, a_ruim: bool = False, b_ruim: bool = False) ->
     Paulo) com 17981675371 (Aracatuba), que sao numeros diferentes com o
     mesmo final.
     """
+    # Tira o 55 do Brasil antes de comparar. O cadastro guarda o mesmo
+    # numero com e sem ele, e as regras abaixo contam digito: sem essa
+    # normalizacao o 5592994950307 nao casava com o 9294950307 (cliente
+    # 4344), que e o mesmo celular sem o nono digito.
+    a, b = _sem_ddi_55(a), _sem_ddi_55(b)
     if a == b:
         return True
     curto, longo = (a, b) if len(a) < len(b) else (b, a)
@@ -884,8 +898,15 @@ def telefones_cliente(valor) -> list[tuple[str, str, str]]:
             saida.append(novo)
             continue
         atual = saida[pos]
+        # Desempate: vence o que da pra discar; empatados, o mais completo.
+        # O tamanho e' medido SEM o 55, senao um numero truncado com o DDI
+        # na frente parece maior que o inteiro sem ele — era o que fazia o
+        # cliente 3532 (japones) exibir (81) 90395-5778, leitura brasileira
+        # do 5581903955778, no lugar do +81 90 3955-7782 que o cadastro tem
+        # inteiro no st_telefone_sac.
         troca = (not prob and atual[3]) or (
-            bool(prob) == bool(atual[3]) and len(d) > len(atual[0]))
+            bool(prob) == bool(atual[3])
+            and len(_sem_ddi_55(d)) > len(_sem_ddi_55(atual[0])))
         if troca:
             saida[pos] = novo
     return [(b, f, p) for _d, b, f, p in saida]
