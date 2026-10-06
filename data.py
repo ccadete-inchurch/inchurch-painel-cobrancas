@@ -2799,10 +2799,16 @@ def corrigir_bucket_tel_fixo_removido(cid: str, atendente: str) -> bool:
     contava em lugar nenhum, porque o _metricas_lote_painel exige bucket e
     bool baterem, e a ligacao nao tinha como ser registrada.
 
-    So mexe quando NENHUMA acao foi registrada ainda. Se a atendente ja
-    tinha ligado e so depois descobriu que o cliente tem WhatsApp, mover o
-    bucket apagaria essa ligacao das metricas do dia — o trabalho de hoje
-    foi ligacao mesmo, e amanha o lote de 08:15 ja gera como mensagem.
+    So nao mexe quando ja houve LIGACAO registrada: mover o bucket apagaria
+    essa ligacao das metricas do dia. Nesse caso o trabalho de hoje foi
+    ligacao mesmo, e amanha o lote de 08:15 ja gera como mensagem.
+
+    Mensagem ja enviada NAO impede o movimento — pelo contrario, e o caso
+    em que ele mais rende. Cliente que o lote colocou em ligacao e recebeu
+    WhatsApp enquanto estava marcado como fixo tem mensagem_enviada=TRUE
+    com bucket='ligacao', e o _metricas_lote_painel exige os dois batendo:
+    a mensagem fica invisivel. Mover pra 'mensagem' faz esse trabalho
+    aparecer, em vez de so parar de perder o trabalho seguinte.
     """
     client = get_bq_client()
     if not client:
@@ -2819,7 +2825,6 @@ def corrigir_bucket_tel_fixo_removido(cid: str, atendente: str) -> bool:
               AND dt_entrou_coluna_ligacao IS NOT NULL
               AND NOT COALESCE(ligacao_feita, FALSE)
               AND NOT COALESCE(ligacao_atendida, FALSE)
-              AND NOT COALESCE(mensagem_enviada, FALSE)
         """)
         job.result()
         return (job.num_dml_affected_rows or 0) > 0
