@@ -469,7 +469,8 @@ def _render_dashboard(store, clientes, role):
                     # numero que existe no cadastro mas nao da pra discar sai
                     # em vermelho e sem icone de WhatsApp; os bons vem antes,
                     # pra que o destaque nunca seja um numero furado.
-                    _ps = [f'{_wa_por_tel(_b)}{_f}' for _b, _f, _p in _itens_fix if not _p]
+                    _ps = [f'{_wa_por_tel(_b)}<span style="color:#22c55e">{_f}</span>'
+                           for _b, _f, _p in _itens_fix if not _p]
                     _ps += [f'<span style="color:#ef4444" title="cadastro '
                             f'incompleto — {_p}">{_f}</span>'
                             for _b, _f, _p in _itens_fix if _p]
@@ -900,6 +901,8 @@ def _render_dashboard(store, clientes, role):
                     # O numero inteiro e' o link (wa.me pra celular, tel: pra
                     # fixo), entao o clique continua funcionando sem gastar
                     # ~35px de coluna com dois SVGs por linha.
+                    # Verde = da pra discar. Mesmo par verde/vermelho do
+                    # resto do painel; o link herda a cor da linha.
                     def _linha_tel(t: str, fmt: str) -> str:
                         if _eh_fixo(t):
                             _d = _tel_only_digits(t)
@@ -909,10 +912,11 @@ def _render_dashboard(store, clientes, role):
                             _wa = telefone_wa_link(t)
                             href = f"https://wa.me/{_wa}" if _wa else ""
                             alvo = ' target="_blank"'
+                        _css = "white-space:nowrap;color:#22c55e"
                         if not href:
-                            return f'<div style="white-space:nowrap">{fmt}</div>'
+                            return f'<div style="{_css}">{fmt}</div>'
                         return (
-                            f'<div style="white-space:nowrap">'
+                            f'<div style="{_css}">'
                             f'<a href="{href}"{alvo} style="color:inherit;text-decoration:none">'
                             f'{fmt}</a></div>'
                         )

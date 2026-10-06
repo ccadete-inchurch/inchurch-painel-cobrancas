@@ -122,16 +122,20 @@ def _tels_html(c) -> str:
             f'{_ICON_WHATSAPP}</a>'
         )
 
+    # Verde = da pra discar, vermelho = nao da. Mesmo par de cores que o
+    # resto do painel usa (saldo, variacao, badges). O vermelho vem SEM
+    # icone de WhatsApp; esconder nao resolveria, a atendente precisa ver
+    # que o cadastro tem numero errado pra mandar corrigir.
+    def _bom(t: str, fmt: str) -> str:
+        return f'{_wa_icon(t)}<span style="color:#22c55e">{fmt}</span>'
+
     def _ruim(fmt: str, motivo: str) -> str:
-        """Numero que existe no cadastro mas nao da pra discar: vermelho e
-        SEM icone de WhatsApp. Esconder nao resolveria — a atendente precisa
-        ver que o cadastro tem numero errado pra mandar corrigir."""
         return (f'<span style="color:#ef4444" title="cadastro incompleto — '
                 f'{motivo}">{fmt}</span>')
 
     # bons primeiro: o primeiro da lista e o que fica em destaque, e nao
     # pode ser um numero que leva a lugar nenhum
-    _partes = [f'{_wa_icon(_b)}{_f}' for _b, _f, _p in _itens if not _p]
+    _partes = [_bom(_b, _f) for _b, _f, _p in _itens if not _p]
     _partes += [_ruim(_f, _p) for _b, _f, _p in _itens if _p]
 
     # 1 telefone: icone + numero formatado
