@@ -966,18 +966,44 @@ def telefones_texto(valor, sep: str = " · ") -> str:
     return sep.join(partes)
 
 
-def aceita_whatsapp(tel: str) -> bool:
-    """O numero e um celular que o WhatsApp alcanca.
+def tipo_numero(tel: str) -> str:
+    """'celular', 'celular_antigo' ou 'fixo'.
 
-    Fica de FORA o fixo e o celular antigo de 8 digitos — nos dois o N8N
-    nao detecta mensagem, que e' justamente a razao de existir a marcacao
-    'telefone fixo' no painel. Numero estrangeiro entra: nao da pra
-    classificar por tamanho, e assumir celular e' o palpite util aqui.
+    O meio do caminho existe por teste empirico: o WhatsApp no Brasil guarda
+    conta registrada ANTES da migracao do nono digito com o numero de 8, e
+    wa.me/558399947162 abre a conversa normalmente. Fixo nao abre —
+    wa.me/553332717755 nao existe no WhatsApp.
+
+    Antes isso era um booleano que juntava celular antigo e fixo no mesmo
+    balde, e os dois pedem decisoes opostas: o antigo vale tentar, o fixo
+    nao. Eram 662 numeros antigos contra 158 fixos, e o filtro descartava
+    315 clientes que provavelmente sao alcancaveis.
+
+    Local comecando em 2-5 e fixo; 6-9 e movel (a faixa de antes da
+    migracao). Numero estrangeiro conta como celular: nao da pra classificar
+    por tamanho, e assumir celular e' o palpite util aqui.
     """
     import re as _re
+    # Pergunta ao formatador se o numero e estrangeiro, em vez de deduzir dos
+    # digitos: 18045887655 (EUA) e 41765720874 (Suica) tem 11 digitos
+    # comecando com DDD brasileiro valido, e cairiam em 'fixo'. Seriam
+    # justamente os clientes 6504 e 1623, que o disparo pularia.
+    if formatar_telefone(tel).startswith("+"):
+        return "celular"
     d = _sem_ddi_55(_re.sub(r"\D", "", str(tel or "")))
     if len(d) == 11 and d[:2].isdigit() and int(d[:2]) in _DDD_VALIDOS:
-        return d[2] == "9"
+        return "celular" if d[2] == "9" else "fixo"
+    if len(d) == 10 and d[:2].isdigit() and int(d[:2]) in _DDD_VALIDOS:
+        return "celular_antigo" if d[2] in "6789" else "fixo"
     if len(d) in (10, 11):
-        return False          # fixo, ou celular antigo de 8 digitos
-    return len(d) > 11        # estrangeiro
+        return "fixo"
+    return "celular"          # estrangeiro
+
+
+def aceita_whatsapp(tel: str) -> bool:
+    """O WhatsApp tem chance de alcancar esse numero. So fixo fica de fora.
+
+    Inclui o celular antigo de 8 digitos — ver tipo_numero() pro teste que
+    mostrou que o wa.me acha essas contas.
+    """
+    return tipo_numero(tel) != "fixo"

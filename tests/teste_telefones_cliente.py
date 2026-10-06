@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from helpers import telefones_cliente
+from helpers import telefones_cliente, tipo_numero
 
 # (cliente, o que a historia ensinou, campo do data.py, saida esperada)
 # A saida e [(texto exibido, motivo de estar furado)] — motivo vazio = o
@@ -184,6 +184,40 @@ CASOS_SINTETICOS = [
 ]
 
 
+# tipo_numero: 'celular' | 'celular_antigo' | 'fixo'. O meio do caminho veio
+# de teste empirico no proprio wa.me — ver o docstring da funcao.
+CASOS_TIPO = [
+    ("558399947162",  "celular_antigo", "wa.me abre: conta de antes do nono digito"),
+    ("554288351487",  "celular_antigo", "idem, DDD 42"),
+    ("553598156027",  "celular_antigo", "6553 ordem 1 — testado, abre"),
+    ("553588372493",  "celular_antigo", "6553 ordem 2 — testado, abre"),
+    ("553332717755",  "fixo",           "testado: NAO existe no WhatsApp"),
+    ("5535359883724", "fixo",           "6553 ordem 3 — testado, nao abre"),
+    ("554133334444",  "fixo",           "fixo de Curitiba"),
+    ("5541995270686", "celular",        "celular com o nono digito"),
+    ("5577999221521", "celular",        "idem, montado do st_ddd_sac"),
+    ("41765720874",   "celular",        "Suica: 41 e DDD valido, mas e +41 — "
+                                        "deduzir dos digitos marcava 'fixo' e o "
+                                        "disparo pularia o cliente 1623"),
+    ("18045887655",   "celular",        "EUA pelo mesmo motivo — cliente 6504"),
+    ("351913178975",  "celular",        "Portugal"),
+    ("353876186097",  "celular",        "Irlanda"),
+    ("524461383891",  "celular",        "Mexico"),
+]
+
+
+def roda_tipo():
+    falhas = []
+    print(f"\n=== tipo_numero ({len(CASOS_TIPO)}) ===")
+    for numero, esperado, licao in CASOS_TIPO:
+        obtido = tipo_numero(numero)
+        ok = obtido == esperado
+        print(f"  {'ok  ' if ok else 'FALHA'} {numero:16s} {obtido:16s} {licao}")
+        if not ok:
+            falhas.append((numero, numero, esperado, obtido))
+    return falhas
+
+
 def roda(titulo, casos):
     falhas = []
     print(f"\n=== {titulo} ===")
@@ -199,17 +233,19 @@ def roda(titulo, casos):
 def main():
     falhas = roda(f"casos reais ({len(CASOS)})", CASOS)
     falhas += roda(f"casos sinteticos ({len(CASOS_SINTETICOS)})", CASOS_SINTETICOS)
+    falhas += roda_tipo()
 
     print()
     if falhas:
-        print(f"FALHOU: {len(falhas)} de {len(CASOS) + len(CASOS_SINTETICOS)} casos\n")
+        print(f"FALHOU: {len(falhas)} de "
+              f"{len(CASOS) + len(CASOS_SINTETICOS) + len(CASOS_TIPO)} casos\n")
         for nome, campo, esperado, obtido in falhas:
             print(f"  {nome}")
             print(f"     cadastro : {campo}")
             print(f"     esperado : {esperado}")
             print(f"     obtido   : {obtido}")
         return 1
-    print(f"PASSOU: {len(CASOS) + len(CASOS_SINTETICOS)} casos.")
+    print(f"PASSOU: {len(CASOS)+len(CASOS_SINTETICOS)+len(CASOS_TIPO)} casos.")
     return 0
 
 
