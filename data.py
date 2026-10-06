@@ -2789,6 +2789,44 @@ def corrigir_bucket_tel_fixo(cid: str, atendente: str) -> bool:
         return False
 
 
+def corrigir_bucket_tel_fixo_removido(cid: str, atendente: str) -> bool:
+    """Devolve a linha de hoje pra bucket='mensagem' quando a atendente
+    DESMARCA 'Telefone fixo' num cliente que o lote colocou em ligacao.
+
+    Espelho do corrigir_bucket_tel_fixo. Sem ele o cliente ficava preso em
+    ligacao o resto do dia, mas SEM os botoes Atendeu/Nao atendeu (que so
+    aparecem com a flag ligada): a mensagem que a atendente mandasse nao
+    contava em lugar nenhum, porque o _metricas_lote_painel exige bucket e
+    bool baterem, e a ligacao nao tinha como ser registrada.
+
+    So mexe quando NENHUMA acao foi registrada ainda. Se a atendente ja
+    tinha ligado e so depois descobriu que o cliente tem WhatsApp, mover o
+    bucket apagaria essa ligacao das metricas do dia — o trabalho de hoje
+    foi ligacao mesmo, e amanha o lote de 08:15 ja gera como mensagem.
+    """
+    client = get_bq_client()
+    if not client:
+        return False
+    hoje = hoje_lote()
+    try:
+        job = client.query(f"""
+            UPDATE `{_TAREFAS_TABLE}`
+            SET dt_entrou_coluna_msg     = dt_entrou_coluna_ligacao,
+                dt_entrou_coluna_ligacao = NULL
+            WHERE id_sacado_sac = '{cid}'
+              AND atendente     = '{atendente}'
+              AND data_tarefa   = '{hoje}'
+              AND dt_entrou_coluna_ligacao IS NOT NULL
+              AND NOT COALESCE(ligacao_feita, FALSE)
+              AND NOT COALESCE(ligacao_atendida, FALSE)
+              AND NOT COALESCE(mensagem_enviada, FALSE)
+        """)
+        job.result()
+        return (job.num_dml_affected_rows or 0) > 0
+    except Exception:
+        return False
+
+
 def load_historico_from_bq():
     """Carrega historico do BQ para o session_state.
 

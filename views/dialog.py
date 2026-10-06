@@ -485,11 +485,18 @@ def dialog_editar(eid, from_fixados: bool = False):
             # corrige pra 'ligacao' na hora — senão a ligação real feita via
             # Atendeu/Não atendeu não conta em lugar nenhum nas métricas
             # (bucket diz mensagem, bools dizem ligação, nada bate).
-            if bool(tel_fixo) and not _expected_tel_fixo:
-                from data import corrigir_bucket_tel_fixo
-                _atd_nome = cliente.get("_grupo") or ""
-                if _atd_nome:
+            _atd_nome = cliente.get("_grupo") or ""
+            if _atd_nome and bool(tel_fixo) != _expected_tel_fixo:
+                if bool(tel_fixo):
+                    from data import corrigir_bucket_tel_fixo
                     corrigir_bucket_tel_fixo(eid, _atd_nome)
+                else:
+                    # Desmarcou: devolve o cliente pra coluna de mensagem,
+                    # senao ele fica preso em ligacao o resto do dia sem os
+                    # botoes de registro manual, e a mensagem que ela mandar
+                    # nao conta nas metricas (bucket e bool nao batem).
+                    from data import corrigir_bucket_tel_fixo_removido
+                    corrigir_bucket_tel_fixo_removido(eid, _atd_nome)
             st.toast("Alterações salvas")
 
     # Linha "Editado por" só faz sentido em modo edição
