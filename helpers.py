@@ -846,16 +846,26 @@ def _mesmo_numero(a: str, b: str, a_ruim: bool = False, b_ruim: bool = False) ->
     # numero com e sem ele, e as regras abaixo contam digito: sem essa
     # normalizacao o 5592994950307 nao casava com o 9294950307 (cliente
     # 4344), que e o mesmo celular sem o nono digito.
-    a, b = _sem_ddi_55(a), _sem_ddi_55(b)
-    if a == b:
-        return True
-    curto, longo = (a, b) if len(a) < len(b) else (b, a)
-    if len(curto) != len(longo):
+    # Compara nas DUAS formas: com e sem o 55. Tirar o DDI so de um lado
+    # destroi a relacao — o cliente 1992 tem 551129050120 no celular e
+    # 55112905012 no fax (o mesmo numero cortado pela mascara); o primeiro
+    # perde o 55 por ter 12 digitos, o segundo nao por ter 11, e aí deixam
+    # de se parecer. Sem tirar de nenhum, um e prefixo do outro.
+    for x, y in ((a, b), (_sem_ddi_55(a), _sem_ddi_55(b))):
+        if x == y:
+            return True
+        curto, longo = (x, y) if len(x) < len(y) else (y, x)
+        if len(curto) == len(longo):
+            continue
         if longo.endswith(curto):
             return True
-        if {len(a), len(b)} == {10, 11} and longo[:2] == curto[:2]                 and longo[2] == "9" and longo[3:] == curto[2:]:
+        if {len(x), len(y)} == {10, 11} and longo[:2] == curto[:2]                 and longo[2] == "9" and longo[3:] == curto[2:]:
             return True
-        return longo.startswith(curto) and 1 <= len(longo) - len(curto) <= 2
+        if longo.startswith(curto) and 1 <= len(longo) - len(curto) <= 2:
+            return True
+    a, b = _sem_ddi_55(a), _sem_ddi_55(b)
+    if len(a) != len(b):
+        return False
     if a_ruim == b_ruim:
         return False
     if a[:2] == b[:2] and a[-8:] == b[-8:]:
@@ -925,6 +935,12 @@ def telefones_cliente(valor) -> list[tuple[str, str, str]]:
                 bruto, d, fmt = ddd + d, ddd + d, alt
         if not fmt or fmt == "—":
             continue
+        # Fallback do formatador: quando nenhum pais casa, ele devolve
+        # '+' + digitos crus. Isso nao e um telefone legivel nem discavel —
+        # o cliente 2443 tem 22 digitos (dois numeros colados) e o 2174 tem
+        # o 55 repetido tres vezes. Antes viravam linha na tela e no disparo.
+        if not _foi_identificado(fmt, d):
+            continue
         prob = problema_telefone(bruto)
         novo = (d, str(bruto), fmt, prob)
         pos = next((i for i, (dj, _b, _f, pj) in enumerate(saida)
@@ -967,7 +983,7 @@ def telefones_texto(valor, sep: str = " · ") -> str:
 
 
 def tipo_numero(tel: str) -> str:
-    """'celular', 'celular_antigo' ou 'fixo'.
+    """'celular', 'celular_antigo', 'fixo' ou 'desconhecido'.
 
     O meio do caminho existe por teste empirico: o WhatsApp no Brasil guarda
     conta registrada ANTES da migracao do nono digito com o numero de 8, e
@@ -988,15 +1004,22 @@ def tipo_numero(tel: str) -> str:
     # digitos: 18045887655 (EUA) e 41765720874 (Suica) tem 11 digitos
     # comecando com DDD brasileiro valido, e cairiam em 'fixo'. Seriam
     # justamente os clientes 6504 e 1623, que o disparo pularia.
-    if formatar_telefone(tel).startswith("+"):
+    fmt = formatar_telefone(tel)
+    if fmt.startswith("+"):
         return "celular"
-    d = _sem_ddi_55(_re.sub(r"\D", "", str(tel or "")))
+    # Os digitos DO QUE A TELA MOSTRA, nao do valor cru: o formatador ja tirou
+    # o 55 e o zero a esquerda. Lendo o cru, o 06992588451 do cliente 4216
+    # virava "DDD 06" e caia em 'fixo', quando e (69) 9258-8451.
+    d = _sem_ddi_55(_re.sub(r"\D", "", fmt) or _re.sub(r"\D", "", str(tel or "")))
     if len(d) == 11 and d[:2].isdigit() and int(d[:2]) in _DDD_VALIDOS:
         return "celular" if d[2] == "9" else "fixo"
     if len(d) == 10 and d[:2].isdigit() and int(d[:2]) in _DDD_VALIDOS:
         return "celular_antigo" if d[2] in "6789" else "fixo"
     if len(d) in (10, 11):
-        return "fixo"
+        # DDD que nao existe: nao da pra dizer se e fixo ou movel, e chamar
+        # de 'fixo' afirma algo falso. Sao 7 numeros, todos com problema
+        # preenchido — o disparo nao os ve, mas quem le a linha, ve.
+        return "desconhecido"
     return "celular"          # estrangeiro
 
 
@@ -1006,4 +1029,4 @@ def aceita_whatsapp(tel: str) -> bool:
     Inclui o celular antigo de 8 digitos — ver tipo_numero() pro teste que
     mostrou que o wa.me acha essas contas.
     """
-    return tipo_numero(tel) != "fixo"
+    return tipo_numero(tel) != "fixo"      # 'desconhecido' entra: vale tentar

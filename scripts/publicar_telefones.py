@@ -70,7 +70,7 @@ ESQUEMA = [
                                      "existe no cadastro mas nao leva a lugar "
                                      "nenhum; nao gastar envio"),
     bigquery.SchemaField("tipo_numero", "STRING", mode="REQUIRED",
-                         description="celular | celular_antigo | fixo. O antigo "
+                         description="celular | celular_antigo | fixo | desconhecido. O antigo "
                                      "e de 8 digitos, de antes do nono: o wa.me "
                                      "acha essas contas, entao vale tentar. "
                                      "Fixo o WhatsApp nao alcanca"),
@@ -109,7 +109,7 @@ def main():
         # celular de 9 digitos antes do antigo de 8, que e de antes de 2016
         # e tem mais chance de estar inativo. Sem a segunda regra, 55
         # clientes tinham o antigo em 1o lugar com um atual logo abaixo.
-        peso = {"celular": 0, "celular_antigo": 1, "fixo": 2}
+        peso = {"celular": 0, "celular_antigo": 1, "fixo": 2, "desconhecido": 3}
         ordenados = sorted(
             itens,
             key=lambda t: (bool(t[2]), peso.get(tipo_numero(t[0]), 3)))

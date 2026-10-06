@@ -177,6 +177,16 @@ CASOS_SINTETICOS = [
      "17472786803",
      [("+1 747 278-6803", "")]),
 
+    ("lixo que o fallback deixava passar",
+     "22 digitos sao dois numeros colados — cliente 2443, nao e telefone",
+     "6199519952161999054131",
+     []),
+
+    ("o 55 repetido tres vezes",
+     "cliente 2174 — o formatador nao reconhece e devolvia '+' + digitos",
+     "55555562991808662",
+     []),
+
     ("dois celulares bons que a regra de digito inserido casaria",
      "a trava 'so junta se UM dos dois for furado' protege aqui",
      "11987654321;11998765432",
@@ -187,6 +197,8 @@ CASOS_SINTETICOS = [
 # tipo_numero: 'celular' | 'celular_antigo' | 'fixo'. O meio do caminho veio
 # de teste empirico no proprio wa.me — ver o docstring da funcao.
 CASOS_TIPO = [
+    ("06992588451",   "celular_antigo", "zero a esquerda: ler o cru dava 'DDD 06' "
+                                        "e caia em fixo — cliente 4216"),
     ("558399947162",  "celular_antigo", "wa.me abre: conta de antes do nono digito"),
     ("554288351487",  "celular_antigo", "idem, DDD 42"),
     ("553598156027",  "celular_antigo", "6553 ordem 1 — testado, abre"),
@@ -194,6 +206,9 @@ CASOS_TIPO = [
     ("553332717755",  "fixo",           "testado: NAO existe no WhatsApp"),
     ("5535359883724", "fixo",           "6553 ordem 3 — testado, nao abre"),
     ("554133334444",  "fixo",           "fixo de Curitiba"),
+    ("559091146918",  "desconhecido",   "DDD 90 nao existe: nao da pra dizer o "
+                                        "tipo, e chamar de 'fixo' seria falso"),
+    ("555099231312",  "desconhecido",   "DDD 50 idem"),
     ("5541995270686", "celular",        "celular com o nono digito"),
     ("5577999221521", "celular",        "idem, montado do st_ddd_sac"),
     ("41765720874",   "celular",        "Suica: 41 e DDD valido, mas e +41 — "
