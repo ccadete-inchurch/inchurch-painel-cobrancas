@@ -2789,6 +2789,36 @@ def corrigir_bucket_tel_fixo(cid: str, atendente: str) -> bool:
         return False
 
 
+def deve_voltar_pra_mensagem(cliente: dict, acoes_hoje: dict | None = None) -> bool:
+    """A atendente desmarcou 'telefone fixo': o cliente volta pra coluna de
+    mensagem hoje, ou fica em ligacao?
+
+    A regra estava espalhada entre o dialog e o WHERE da SQL, e isso custou
+    tres bugs seguidos — cliente com acordo sendo movido, cooldown de
+    mensagem ignorado, e mensagem ja enviada travando o movimento quando era
+    justamente o caso em que ele mais rende. Agora mora aqui, e o
+    scripts/teste_bucket_tel_fixo.py cobre os sete casos.
+
+    NAO volta quando:
+      - ja houve LIGACAO registrada hoje. Mover apagaria essa ligacao das
+        metricas, porque elas exigem bucket e bool batendo e uma linha so
+        nao conta as duas coisas.
+      - o cliente nao e elegivel a mensagem agora. Mesma pergunta que o lote
+        faz as 08:15: acordo e sempre so ligacao (regra do Davi), cooldown
+        de mensagem bloqueia, e atraso < 5 dias nao gera tarefa de mensagem.
+
+    VOLTA quando nada de ligacao foi registrado e o cliente e elegivel —
+    inclusive se ja houve MENSAGEM enviada. Esse e o caso que mais rende:
+    cliente que o lote colocou em ligacao e recebeu WhatsApp enquanto estava
+    marcado como fixo fica com mensagem_enviada=TRUE e bucket='ligacao', e
+    essa mensagem nao conta em lugar nenhum. Mover faz ela aparecer.
+    """
+    acoes_hoje = acoes_hoje or {}
+    if acoes_hoje.get("lig") or acoes_hoje.get("atend"):
+        return False
+    return "mensagem" in recomendar_acao(cliente)
+
+
 def corrigir_bucket_tel_fixo_removido(cid: str, atendente: str) -> bool:
     """Devolve a linha de hoje pra bucket='mensagem' quando a atendente
     DESMARCA 'Telefone fixo' num cliente que o lote colocou em ligacao.

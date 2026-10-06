@@ -493,17 +493,12 @@ def dialog_editar(eid, from_fixados: bool = False):
                 else:
                     # Desmarcou: devolve o cliente pra coluna de mensagem,
                     # senao ele fica preso em ligacao o resto do dia sem os
-                    # botoes de registro manual, e a mensagem que ela mandar
-                    # nao conta nas metricas (bucket e bool nao batem).
-                    #
-                    # So move se o cliente for mesmo elegivel a mensagem —
-                    # a mesma pergunta que o lote faz as 08:15. Cliente com
-                    # acordo so pode receber ligacao (regra do Davi) e
-                    # cliente em cooldown de mensagem nao pode receber
-                    # nenhuma: nos dois casos a ligacao de hoje esta certa e
-                    # mover inventaria uma tarefa que o lote nao daria.
-                    from data import recomendar_acao, corrigir_bucket_tel_fixo_removido
-                    if "mensagem" in recomendar_acao(cliente):
+                    # botoes de registro manual. Quem decide se pode e o
+                    # deve_voltar_pra_mensagem — ver os sete casos la.
+                    from data import (deve_voltar_pra_mensagem,
+                                      corrigir_bucket_tel_fixo_removido)
+                    from helpers import get_painel_acoes_hoje
+                    if deve_voltar_pra_mensagem(cliente, get_painel_acoes_hoje(eid)):
                         corrigir_bucket_tel_fixo_removido(eid, _atd_nome)
             st.toast("Alterações salvas")
 
