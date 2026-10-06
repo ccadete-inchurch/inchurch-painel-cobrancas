@@ -495,8 +495,16 @@ def dialog_editar(eid, from_fixados: bool = False):
                     # senao ele fica preso em ligacao o resto do dia sem os
                     # botoes de registro manual, e a mensagem que ela mandar
                     # nao conta nas metricas (bucket e bool nao batem).
-                    from data import corrigir_bucket_tel_fixo_removido
-                    corrigir_bucket_tel_fixo_removido(eid, _atd_nome)
+                    #
+                    # So move se o cliente for mesmo elegivel a mensagem —
+                    # a mesma pergunta que o lote faz as 08:15. Cliente com
+                    # acordo so pode receber ligacao (regra do Davi) e
+                    # cliente em cooldown de mensagem nao pode receber
+                    # nenhuma: nos dois casos a ligacao de hoje esta certa e
+                    # mover inventaria uma tarefa que o lote nao daria.
+                    from data import recomendar_acao, corrigir_bucket_tel_fixo_removido
+                    if "mensagem" in recomendar_acao(cliente):
+                        corrigir_bucket_tel_fixo_removido(eid, _atd_nome)
             st.toast("Alterações salvas")
 
     # Linha "Editado por" só faz sentido em modo edição
