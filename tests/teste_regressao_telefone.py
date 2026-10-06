@@ -15,9 +15,20 @@ aprovaria qualquer fusao que o helpers fizesse, inclusive uma errada.
 Ganhar numero invalido novo nao falha: ficou definido exibi-los em vermelho,
 sem icone de WhatsApp, em vez de esconde-los.
 
+ATENCAO — este e' uma trava de MIGRACAO, nao um teste de unidade. O "antes"
+e' o comportamento do commit 13708c4, reproduzido a mao no monta(campos,
+False). Ele valeu pra garantir que a leitura dos 4 campos do cadastro nao
+perdesse numero de ninguem, e segue pegando quebra grosseira no
+telefones_cliente — mas o baseline vai perdendo sentido conforme o codigo
+anda, porque compara com um comportamento que nao existe mais em lugar
+nenhum.
+
+Precisa de credencial do BigQuery e leva 1 a 2 minutos. O
+teste_bucket_tel_fixo.py, ao lado, e' o oposto: puro e em milissegundos.
+
 Rodar antes e depois de mexer em helpers.py / data.py:
 
-    .venv/Scripts/python.exe scripts/teste_regressao_telefone.py
+    .venv/Scripts/python.exe tests/teste_regressao_telefone.py
 
 Sai com codigo 0 se passou, 1 se falhou.
 """

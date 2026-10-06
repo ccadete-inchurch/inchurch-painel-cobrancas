@@ -11,7 +11,7 @@ Aqui ficam os sete casos escritos. Roda em milissegundos e nao toca no
 BigQuery — o que ele cobre e a DECISAO, que foi onde os tres bugs
 estiveram, nao a escrita.
 
-    .venv/Scripts/python.exe scripts/teste_bucket_tel_fixo.py
+    .venv/Scripts/python.exe tests/teste_bucket_tel_fixo.py
 
 Sai com codigo 0 se passou, 1 se falhou.
 """

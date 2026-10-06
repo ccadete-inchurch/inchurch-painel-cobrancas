@@ -2797,7 +2797,7 @@ def deve_voltar_pra_mensagem(cliente: dict, acoes_hoje: dict | None = None) -> b
     tres bugs seguidos — cliente com acordo sendo movido, cooldown de
     mensagem ignorado, e mensagem ja enviada travando o movimento quando era
     justamente o caso em que ele mais rende. Agora mora aqui, e o
-    scripts/teste_bucket_tel_fixo.py cobre os sete casos.
+    tests/teste_bucket_tel_fixo.py cobre os casos.
 
     NAO volta quando:
       - ja houve LIGACAO registrada hoje. Mover apagaria essa ligacao das
