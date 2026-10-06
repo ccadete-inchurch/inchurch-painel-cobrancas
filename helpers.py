@@ -851,7 +851,13 @@ def _mesmo_numero(a: str, b: str, a_ruim: bool = False, b_ruim: bool = False) ->
     # 55112905012 no fax (o mesmo numero cortado pela mascara); o primeiro
     # perde o 55 por ter 12 digitos, o segundo nao por ter 11, e aí deixam
     # de se parecer. Sem tirar de nenhum, um e prefixo do outro.
-    for x, y in ((a, b), (_sem_ddi_55(a), _sem_ddi_55(b))):
+    # Tres formas de comparar: crua, sem o 55 do Brasil, e sem o zero a
+    # esquerda do formato antigo. Comparar so a crua deixava passar o
+    # cliente 2351: o celular tem 03519102152 e o telefone 351910215230 —
+    # o mesmo numero portugues, um com zero na frente e dois digitos a
+    # menos. O formatador tira o zero; a comparacao tambem precisa tirar.
+    _sem0 = lambda d: d.lstrip("0") or d
+    for x, y in ((a, b), (_sem_ddi_55(a), _sem_ddi_55(b)), (_sem0(a), _sem0(b))):
         if x == y:
             return True
         curto, longo = (x, y) if len(x) < len(y) else (y, x)

@@ -177,6 +177,18 @@ CASOS_SINTETICOS = [
      "17472786803",
      [("+1 747 278-6803", "")]),
 
+    ("2351 Igreja Renovo Portugal",
+     "zero a esquerda cegava a dedupe: o celular e o telefone sao o mesmo "
+     "numero portugues, um com 0 na frente e 2 digitos a menos",
+     "03519102152;351910215230",
+     [("+351 910 215 230", "")]),
+
+    ("1992 CPESP",
+     "o 55 tirado so de um lado quebrava a comparacao: 12 digitos perdem o "
+     "DDI, 11 nao, e deixam de se parecer",
+     "551129050120;55112905012",
+     [("(11) 2905-0120", "")]),
+
     ("lixo que o fallback deixava passar",
      "22 digitos sao dois numeros colados — cliente 2443, nao e telefone",
      "6199519952161999054131",
