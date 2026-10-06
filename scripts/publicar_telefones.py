@@ -104,8 +104,15 @@ def main():
         if not itens:
             sem_numero += 1
             continue
-        # bons primeiro: quem dispara percorre por 'ordem' e para no que der
-        ordenados = [t for t in itens if not t[2]] + [t for t in itens if t[2]]
+        # A ordem NAO prevê qual numero entrega — isso so se descobre
+        # tentando. Ela garante duas coisas: numero quebrado por ultimo, e
+        # celular de 9 digitos antes do antigo de 8, que e de antes de 2016
+        # e tem mais chance de estar inativo. Sem a segunda regra, 55
+        # clientes tinham o antigo em 1o lugar com um atual logo abaixo.
+        peso = {"celular": 0, "celular_antigo": 1, "fixo": 2}
+        ordenados = sorted(
+            itens,
+            key=lambda t: (bool(t[2]), peso.get(tipo_numero(t[0]), 3)))
         for i, (bruto, fmt, prob) in enumerate(ordenados, start=1):
             wa = telefone_wa_link(bruto)
             if not wa:
