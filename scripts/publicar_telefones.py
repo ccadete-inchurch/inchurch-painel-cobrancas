@@ -40,7 +40,8 @@ from google.cloud import bigquery
 
 from helpers import telefones_cliente, telefone_wa_link, tipo_numero
 
-TABELA = "business-intelligence-467516.N8N.telefones_para_disparo"
+PROJETO = "business-intelligence-467516"
+TABELA = f"{PROJETO}.N8N.telefones_para_disparo"
 
 # Peso da ordem. 'desconhecido' e DDD inexistente: nao da pra afirmar que e
 # fixo, mas tambem nao da pra confiar — vai depois do fixo.
@@ -102,7 +103,9 @@ def cliente_bq():
     from google.oauth2 import service_account
     creds = service_account.Credentials.from_service_account_info(
         json.loads(sa), scopes=["https://www.googleapis.com/auth/cloud-platform"])
-    return bigquery.Client(credentials=creds, project=creds.project_id)
+    # project explicito, igual ao data.py. Usar creds.project_id faria os jobs
+    # rodarem no projeto da credencial, que nao e necessariamente este.
+    return bigquery.Client(credentials=creds, project=PROJETO)
 
 
 def montar_campo(r):

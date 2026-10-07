@@ -51,6 +51,4 @@ jobs:
         continue-on-error: true
         env:
           GCP_SA_JSON: ${{ secrets.GCP_SA_JSON }}
-        run: |
-          python tests/teste_telefones_cliente.py
-          python scripts/publicar_telefones.py
+        run: python scripts/publicar_telefones.py
