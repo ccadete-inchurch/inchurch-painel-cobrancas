@@ -28,6 +28,7 @@ A tabela cobre o cadastro inteiro — 5.596 clientes, nao so os inadimplentes.
     .venv/Scripts/python.exe scripts/publicar_telefones.py          # grava
     .venv/Scripts/python.exe scripts/publicar_telefones.py --dry    # so mostra
 """
+import json
 import os
 import sys
 from datetime import datetime, timezone, timedelta
@@ -37,7 +38,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
 from google.cloud import bigquery
 
-import data as D
 from helpers import telefones_cliente, telefone_wa_link, tipo_numero
 
 TABELA = "business-intelligence-467516.N8N.telefones_para_disparo"
@@ -83,6 +83,28 @@ ESQUEMA = [
 ]
 
 
+def cliente_bq():
+    """Cliente BigQuery, com ou sem painel em volta.
+
+    Antes isso era `data.get_bq_client()`. Importar o data.py arrastava o
+    Streamlit inteiro, que le st.secrets no import — e no GitHub Actions nao
+    existe .streamlit/secrets.toml. Isso custou uma tentativa de extrair um
+    shim de 119 linhas do gerar_lote_cron.py, mexendo em producao, quando o
+    acoplamento inteiro vinha desta UNICA chamada.
+
+    Na Action a credencial vem da env var; local, do secrets.toml como sempre.
+    """
+    sa = os.environ.get("GCP_SA_JSON")
+    if not sa:
+        import data
+        return data.get_bq_client()
+
+    from google.oauth2 import service_account
+    creds = service_account.Credentials.from_service_account_info(
+        json.loads(sa), scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    return bigquery.Client(credentials=creds, project=creds.project_id)
+
+
 def montar_campo(r):
     """A mesma string que o data.py entrega pro painel."""
     partes = [str(v).strip() for v in (r.cel, r.fax, r.tel) if str(v or "").strip()]
@@ -93,7 +115,7 @@ def montar_campo(r):
 
 def main():
     dry = "--dry" in sys.argv
-    client = D.get_bq_client()
+    client = cliente_bq()
     if client is None:
         print("sem cliente BigQuery — checar credenciais")
         return 1

@@ -36,3 +36,21 @@ jobs:
           SL_APP_TOKEN:    ${{ secrets.SL_APP_TOKEN }}
           SL_ACCESS_TOKEN: ${{ secrets.SL_ACCESS_TOKEN }}
         run: python scripts/gerar_lote_cron.py
+
+      # A tabela que o disparo consulta (N8N.telefones_para_disparo) e uma
+      # projecao do cadastro: WRITE_TRUNCATE, reconstruida inteira. Roda aqui
+      # porque o cadastro de clientes aterrissa 8:01 (fluxo n8n das 8h) e esta
+      # Action roda 8:15 — provado por time travel, nao por suposicao.
+      #
+      # continue-on-error e deliberado: o n8n le a conclusao desta Action pra
+      # decidir se avisa "o lote FALHOU" no chat. Sem isso, uma falha na
+      # publicacao dos telefones daria alarme falso sobre o lote, que estaria
+      # perfeito. O preco e a falha ficar silenciosa — da pra ver pela coluna
+      # atualizado_em da tabela.
+      - name: Publicar telefones pro disparo
+        continue-on-error: true
+        env:
+          GCP_SA_JSON: ${{ secrets.GCP_SA_JSON }}
+        run: |
+          python tests/teste_telefones_cliente.py
+          python scripts/publicar_telefones.py
