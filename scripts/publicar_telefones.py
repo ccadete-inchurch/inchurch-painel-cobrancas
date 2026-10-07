@@ -42,6 +42,10 @@ from helpers import telefones_cliente, telefone_wa_link, tipo_numero
 
 TABELA = "business-intelligence-467516.N8N.telefones_para_disparo"
 
+# Peso da ordem. 'desconhecido' e DDD inexistente: nao da pra afirmar que e
+# fixo, mas tambem nao da pra confiar — vai depois do fixo.
+PESO = {"celular": 0, "celular_antigo": 1, "fixo": 2, "desconhecido": 3}
+
 ORIGEM = """
 SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac,
        MAX(st_nome_sac)      AS nome,
@@ -109,14 +113,18 @@ def main():
         # celular de 9 digitos antes do antigo de 8, que e de antes de 2016
         # e tem mais chance de estar inativo. Sem a segunda regra, 55
         # clientes tinham o antigo em 1o lugar com um atual logo abaixo.
-        peso = {"celular": 0, "celular_antigo": 1, "fixo": 2, "desconhecido": 3}
         ordenados = sorted(
             itens,
-            key=lambda t: (bool(t[2]), peso.get(tipo_numero(t[0]), 3)))
-        for i, (bruto, fmt, prob) in enumerate(ordenados, start=1):
-            wa = telefone_wa_link(bruto)
-            if not wa:
-                continue
+            key=lambda t: (bool(t[2]), PESO.get(tipo_numero(t[0]), 3)))
+        # Descarta ANTES de numerar. Enumerar primeiro e pular depois abriria
+        # buraco na ordem (1, 3, 4) e quem consome por 'ORDER BY ordem' com
+        # LIMIT 1 no retry pararia num numero que nao existe. Hoje nenhum
+        # cliente cai nisso — telefones_cliente nao devolve nada que o
+        # wa_link recuse — mas a ordem contigua passa a ser garantida pelo
+        # codigo, nao por coincidencia.
+        com_link = [(b, f, p, telefone_wa_link(b)) for b, f, p in ordenados]
+        com_link = [x for x in com_link if x[3]]
+        for i, (bruto, fmt, prob, wa) in enumerate(com_link, start=1):
             linhas.append({
                 "id_sacado_sac":   r.id_sacado_sac,
                 "nome":            str(r.nome or ""),
