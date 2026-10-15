@@ -1,11 +1,24 @@
 from datetime import datetime, date
 import streamlit as st
 
+import re as _re_acordo
+
 from acordo import (PARCELAS_MAX, calcular as calcular_acordo,
                     texto_whatsapp as texto_acordo, _pct as pct_acordo)
+from acordo_pdf import gerar as gerar_pdf_acordo
 from config import STATUS_OPTS
 from auth import get_store, current_nome, current_email, current_role
 from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html, get_effective_lastContact, get_ultimo_login, parse_date_br, telefones_cliente, aceita_whatsapp
+
+
+
+def _slug(nome: str) -> str:
+    """Nome do cliente virando nome de arquivo: sem acento, sem espaco."""
+    import unicodedata
+    s = unicodedata.normalize("NFKD", str(nome or "Cliente"))
+    s = s.encode("ascii", "ignore").decode()
+    s = _re_acordo.sub(r"[^A-Za-z0-9]+", "_", s).strip("_")
+    return (s or "Cliente")[:60]
 
 
 @st.dialog("Editar Registro", width="large")
@@ -345,11 +358,35 @@ def dialog_editar(eid, from_fixados: bool = False):
                 + '</div>',
                 unsafe_allow_html=True,
             )
-            st.text_area(
-                "Texto pra enviar", value=texto_acordo(cliente.get("nome", ""), _prop),
-                height=200, key=f"acordo_txt_{eid}",
-                help="Selecione e copie. O negrito com um asterisco e do WhatsApp.",
-            )
+            # O PDF traz SEMPRE as duas opcoes lado a lado, como o modelo do
+            # financeiro: a vista com o desconto que a especialista escolheu,
+            # e o parcelamento. Por isso calcula a segunda aqui — o seletor
+            # de cima define qual parcelamento vai na Opcao B.
+            _parc_pdf = _parc if _parc > 1 else 2
+            _prop_vista = calcular_acordo(cobracas_inad, 1, _desc if _parc == 1 else 0.0)
+            _prop_parc = calcular_acordo(cobracas_inad, _parc_pdf, 0.0)
+
+            b1, b2 = st.columns([1, 1])
+            with b1:
+                st.download_button(
+                    "Baixar proposta em PDF",
+                    data=gerar_pdf_acordo(
+                        cliente.get("nome", ""), _prop_vista, _prop_parc,
+                        current_nome(), current_email()),
+                    file_name=f"Proposta_Acordo_{_slug(cliente.get('nome',''))}.pdf",
+                    mime="application/pdf", width="stretch", type="primary",
+                    key=f"acordo_pdf_{eid}",
+                )
+            with b2:
+                st.caption(f"O PDF sai com as duas opções: à vista e "
+                           f"{_parc_pdf}x. Assinado por {current_nome()}.")
+
+            with st.expander("Texto pra mandar no WhatsApp"):
+                st.text_area(
+                    "Selecione e copie", value=texto_acordo(cliente.get("nome", ""), _prop),
+                    height=200, key=f"acordo_txt_{eid}",
+                    label_visibility="collapsed",
+                )
             st.caption(
                 "Juros contados por parcela, do vencimento de cada uma, pro rata "
                 "por dia. Não inclui atualização monetária. Confira antes de enviar."

@@ -96,6 +96,43 @@ print(f"  {'ok  ' if ok else 'FALHA'} parcelado mostra 3x e NAO mostra desconto"
 if not ok:
     falhas.append(("texto parcelado", "3x sem desconto", t3))
 
+
+print()
+print("=== o PDF ===")
+from acordo_pdf import gerar as gerar_pdf, TELEFONE_ATENDENTE
+cob5 = [
+    {"id_recebimento": "122661", "vencimento": "17/08/2026", "valor": 178.32, "dias_atraso": 59},
+    {"id_recebimento": "122662", "vencimento": "15/09/2026", "valor": 178.32, "dias_atraso": 30},
+    {"id_recebimento": "126436", "vencimento": "10/08/2026", "valor": 129.90, "dias_atraso": 66},
+    {"id_recebimento": "128066", "vencimento": "10/09/2026", "valor": 129.90, "dias_atraso": 35},
+    {"id_recebimento": "129623", "vencimento": "13/10/2026", "valor": 129.90, "dias_atraso": 2},
+]
+pv = calcular(cob5, 1, 66.50)
+pp = calcular(cob5, 2)
+# Conferido contra a proposta real da Vinho Novo enviada pela Priscila:
+# principal bate exato; o atualizado sai 28 centavos acima (0,036%).
+checa("principal igual ao da proposta real", pv.principal, 746.34)
+checa("atualizado perto do da proposta real", pv.atualizado, 770.74, tol=0.50)
+checa("a vista com desconto", pv.total, 704.24, tol=0.50)
+checa("parcela do 2x", pp.valor_parcela, 385.37, tol=0.50)
+b = gerar_pdf("Igreja Evangélica Vinho Novo", pv, pp,
+              "Priscila Oliveira", "priscila.oliveira@inchurch.com.br")
+ok = b[:4] == b"%PDF" and len(b) > 4000
+print(f"  {'ok  ' if ok else 'FALHA'} gera PDF valido ({len(b):,} bytes)")
+if not ok:
+    falhas.append(("pdf invalido", "%PDF e >4KB", f"{b[:8]!r} {len(b)}"))
+b2 = gerar_pdf("Cliente Sem Telefone", pv, pp, "Ana Carolina",
+               "anacarolina.silveira@inchurch.com.br")
+ok = b2[:4] == b"%PDF"
+print(f"  {'ok  ' if ok else 'FALHA'} gera PDF mesmo sem telefone cadastrado")
+if not ok:
+    falhas.append(("pdf sem telefone", "%PDF", repr(b2[:8])))
+b3 = gerar_pdf("", calcular([]), calcular([], 2), "", "")
+ok = b3[:4] == b"%PDF"
+print(f"  {'ok  ' if ok else 'FALHA'} nao quebra com cliente sem cobranca")
+if not ok:
+    falhas.append(("pdf vazio", "%PDF", repr(b3[:8])))
+
 print()
 if falhas:
     print(f"FALHOU: {len(falhas)} verificacoes\n")
