@@ -4208,6 +4208,69 @@ def carregar_respostas_whatsapp() -> dict:
 
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def carregar_divida_fora_do_painel() -> dict:
+    """{cid: (valor, qtd_cobrancas)} de divida EM ABERTO que o painel nao ve.
+
+    O painel le so a splgc-cobrancas_competencia-all. A tabela irma
+    splgc-cobrancas_competencia-hist tem 6.704 cobrancas com
+    fl_status_recb = '0', que e EM ABERTO (nenhuma delas tem
+    dt_liquidacao_recb; as de status '1' tem todas). Essas cobrancas
+    existem, estao vencidas e nao aparecem em lugar nenhum aqui.
+
+    O Caio descobriu pelo Somma Church (4228): o painel mostrava R$
+    1.204,70 e o Superlogica cobrava R$ 2.099,50. A diferenca de R$ 894,80
+    sao 4 cobrancas de 2024 que so existem na hist.
+
+    Tamanho do buraco: 1.143 clientes, R$ 2.125.459,41. Entre os
+    inadimplentes de hoje, 103 clientes e R$ 195.457,65 — o 4177 aparece
+    devendo R$ 1.584 e deve R$ 17.135.
+
+    Por ora isso serve pra uma coisa so: NAO deixar gerar proposta de
+    acordo pra esses clientes. Acordo fechado com valor incompleto quita
+    uma divida que continua existindo. Consertar o saldo do painel e outra
+    conversa — muda numero de 103 devedores, a composicao do lote e o
+    historico.
+
+    7,5 MB por execucao, 1x por dia.
+    """
+    client = get_bq_client()
+    if client is None:
+        return {}
+    try:
+        df = client.query("""
+            WITH aberto_all AS (
+              SELECT CAST(id_sacado_sac AS STRING) cid,
+                     CAST(id_recebimento_recb AS STRING) r
+              FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
+              WHERE CAST(fl_status_recb AS STRING) = '0'
+              GROUP BY 1, 2
+            ), aberto_hist AS (
+              SELECT CAST(id_sacado_sac AS STRING) cid,
+                     CAST(id_recebimento_recb AS STRING) r,
+                     SUM(comp_valor) v
+              FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-hist`
+              WHERE CAST(fl_status_recb AS STRING) = '0'
+              GROUP BY 1, 2
+            )
+            SELECT h.cid, ROUND(SUM(h.v), 2) AS valor, COUNT(*) AS cobrancas
+            FROM aberto_hist h
+            LEFT JOIN aberto_all a ON a.cid = h.cid AND a.r = h.r
+            WHERE a.cid IS NULL
+            GROUP BY 1
+        """).to_dataframe()
+    except Exception as e:
+        # Falhou? Melhor NAO bloquear ninguem do que bloquear todo mundo —
+        # mas o aviso tem que aparecer, porque sem esse dado o painel volta
+        # a poder gerar acordo com valor incompleto.
+        print(f"[WARN] divida fora do painel indisponivel ({str(e)[:80]}) — "
+              f"a trava do acordo nao vai valer nesta sessao", flush=True)
+        return {}
+    return {str(r.cid): (float(r.valor), int(r.cobrancas))
+            for r in df.itertuples(index=False)}
+
+
+
 def processar_dados_bigquery():
     fetch_cobrancas_competencia.clear()
     fetch_cobrancas_liquidacao.clear()

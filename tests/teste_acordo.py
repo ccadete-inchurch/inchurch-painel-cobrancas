@@ -146,6 +146,34 @@ print(f"  {'ok  ' if ok else 'FALHA'} nao quebra com cliente sem cobranca")
 if not ok:
     falhas.append(("pdf vazio", "%PDF", repr(b3[:8])))
 
+
+print()
+print("=== a trava da divida fora do painel ===")
+# Regra: so gera acordo se o painel enxerga a divida INTEIRA. O Somma Church
+# (4228) mostrava R$ 1.204,70 e o Superlogica cobrava R$ 2.099,50 — 4
+# cobrancas de 2024 que so existem na tabela hist. Acordo fechado com o
+# valor de cima quitaria uma divida que continua existindo.
+#
+# Aqui so trava a DECISAO, que e pura. A consulta vive no data.py e e
+# cacheada 1x por dia; nao da pra testar sem BigQuery e nem faz sentido.
+def pode_gerar(cid, divida_fora):
+    return divida_fora.get(str(cid)) is None
+
+FORA = {"4228": (894.80, 4), "4177": (15551.20, 12)}
+for cid, esperado in (("4228", False), ("4177", False), ("6344", True), ("5884", True)):
+    obtido = pode_gerar(cid, FORA)
+    ok = obtido == esperado
+    print(f"  {'ok  ' if ok else 'FALHA'} cliente {cid}: "
+          f"{'gera' if obtido else 'BLOQUEADO'}")
+    if not ok:
+        falhas.append((f"trava do {cid}", esperado, obtido))
+# Se a consulta falhar, o dict vem vazio e ninguem e bloqueado — melhor que
+# bloquear todo mundo, mas o data.py grita um [WARN] nesse caso.
+ok = pode_gerar("4228", {})
+print(f"  {'ok  ' if ok else 'FALHA'} sem o dado, nao bloqueia (so avisa no log)")
+if not ok:
+    falhas.append(("fallback sem dado", True, ok))
+
 print()
 if falhas:
     print(f"FALHOU: {len(falhas)} verificacoes\n")

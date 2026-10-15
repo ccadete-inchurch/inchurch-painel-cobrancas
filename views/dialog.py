@@ -6,6 +6,7 @@ import re as _re_acordo
 from acordo import (PARCELAS_MAX, calcular as calcular_acordo,
                     texto_whatsapp as texto_acordo, _pct as pct_acordo)
 from acordo_pdf import gerar as gerar_pdf_acordo
+from data import carregar_divida_fora_do_painel
 from config import STATUS_OPTS
 from auth import get_store, current_nome, current_email, current_role
 from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html, get_effective_lastContact, get_ultimo_login, parse_date_br, telefones_cliente, aceita_whatsapp
@@ -301,7 +302,25 @@ def dialog_editar(eid, from_fixados: bool = False):
     # pra ele nao EDITAR status e observacao, e gerar proposta nao altera
     # nada — calcula e baixa um arquivo. Escondi do admin na primeira versao
     # e o Caio, que e admin, abriu o dialog e nao achou a secao.
-    if cobracas_inad:
+    # Nao basta ter cobranca em atraso: o painel precisa enxergar a divida
+    # INTEIRA. Pra 1.143 clientes existe cobranca em aberto que so mora na
+    # splgc-cobrancas_competencia-hist, que o painel nao le. Gerar acordo
+    # ali quitaria por menos do que a igreja deve — o Somma Church (4228)
+    # aparece com R$ 1.204,70 e o Superlogica cobra R$ 2.099,50.
+    _fora = carregar_divida_fora_do_painel().get(str(eid))
+    if cobracas_inad and _fora:
+        _vf, _qf = _fora
+        st.warning(
+            f"**Proposta de acordo indisponível para este cliente.**\n\n"
+            f"O painel enxerga {fmt_moeda_plain(cliente['valor'])}, mas existem "
+            f"mais {fmt_moeda_plain(_vf)} em aberto "
+            f"({_qf} cobrança{'s' if _qf != 1 else ''}) que não chegam até aqui "
+            f"— são anteriores à base que o painel carrega.\n\n"
+            f"Total real: **{fmt_moeda_plain(cliente['valor'] + _vf)}**. "
+            f"Um acordo fechado com o valor de cima quitaria a dívida por menos "
+            f"do que ela é. Gere a proposta pelo Superlógica."
+        )
+    elif cobracas_inad:
         with st.expander("Gerar proposta de acordo"):
             # O valor atualizado nao muda com o parcelamento — juros e multa
             # sao do atraso, nao do parcelamento. Entao da pra calcular uma
