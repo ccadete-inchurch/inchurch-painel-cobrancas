@@ -38,14 +38,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
 from google.cloud import bigquery
 
-from helpers import telefones_cliente, telefone_wa_link, tipo_numero
+from helpers import (SQL_RESPOSTAS_WHATSAPP, montar_respostas,
+                     telefones_cliente, telefone_wa_link, tipo_numero)
 
 PROJETO = "business-intelligence-467516"
 TABELA = f"{PROJETO}.N8N.telefones_para_disparo"
-
-# Peso da ordem. 'desconhecido' e DDD inexistente: nao da pra afirmar que e
-# fixo, mas tambem nao da pra confiar — vai depois do fixo.
-PESO = {"celular": 0, "celular_antigo": 1, "fixo": 2, "desconhecido": 3}
 
 ORIGEM = """
 SELECT CAST(id_sacado_sac AS STRING) AS id_sacado_sac,
@@ -109,8 +106,17 @@ def cliente_bq():
 
 
 def montar_campo(r):
-    """A mesma string que o data.py entrega pro painel."""
-    partes = [str(v).strip() for v in (r.cel, r.fax, r.tel) if str(v or "").strip()]
+    """A mesma string que o data.py entrega pro painel.
+
+    O st_celular_sac vai MARCADO e por ultimo: a tela do Superlogica nao
+    mostra essa coluna, ela guarda o valor de antes da ultima edicao. O
+    telefones_cliente usa a marca pra deixa-la consertar numero cortado sem
+    deixa-la trazer numero proprio. Tem que ser identico ao data.py, senao
+    a tabela e o painel voltam a divergir.
+    """
+    partes = [str(v).strip() for v in (r.fax, r.tel) if str(v or "").strip()]
+    if str(r.cel or "").strip():
+        partes.append("solto=" + str(r.cel).strip())
     if str(r.ddd or "").strip():
         partes.append("ddd=" + str(r.ddd).strip())
     return ";".join(partes)
@@ -123,24 +129,31 @@ def main():
         print("sem cliente BigQuery — checar credenciais")
         return 1
 
+    # A MESMA consulta do painel (constante no helpers), com o cliente daqui —
+    # sem importar o data.py, que arrastaria o Streamlit pra dentro da Action.
+    try:
+        respostas = montar_respostas(
+            client.query(SQL_RESPOSTAS_WHATSAPP).to_dataframe())
+    except Exception as e:
+        print(f"[WARN] historico indisponivel ({str(e)[:70]}) — ordem cai no tipo")
+        respostas = {}
+    print(f"numeros no historico de resposta : {len(respostas)}")
+
     cad = client.query(ORIGEM).to_dataframe()
     agora = datetime.now(timezone(timedelta(hours=-3)))
 
     linhas = []
     sem_numero = 0
     for _, r in cad.iterrows():
-        itens = telefones_cliente(montar_campo(r))
+        itens = telefones_cliente(montar_campo(r), respostas)
         if not itens:
             sem_numero += 1
             continue
-        # A ordem NAO prevê qual numero entrega — isso so se descobre
-        # tentando. Ela garante duas coisas: numero quebrado por ultimo, e
-        # celular de 9 digitos antes do antigo de 8, que e de antes de 2016
-        # e tem mais chance de estar inativo. Sem a segunda regra, 55
-        # clientes tinham o antigo em 1o lugar com um atual logo abaixo.
-        ordenados = sorted(
-            itens,
-            key=lambda t: (bool(t[2]), PESO.get(tipo_numero(t[0]), 3)))
+        # A ordem vem JA PRONTA do telefones_cliente — a mesma que o painel
+        # exibe. Antes a ordenacao era feita aqui, so por tipo, e o painel
+        # nao ordenava nada: dois criterios pra mesma pergunta, e em 114
+        # clientes eles discordavam de qual numero tentar primeiro.
+        ordenados = itens
         # Descarta ANTES de numerar. Enumerar primeiro e pular depois abriria
         # buraco na ordem (1, 3, 4) e quem consome por 'ORDER BY ordem' com
         # LIMIT 1 no retry pararia num numero que nao existe. Hoje nenhum

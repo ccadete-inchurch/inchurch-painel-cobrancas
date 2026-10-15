@@ -19,6 +19,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from datetime import date
+
 from helpers import telefones_cliente, tipo_numero
 
 # (cliente, o que a historia ensinou, campo do data.py, saida esperada)
@@ -91,22 +93,22 @@ CASOS = [
      [("(11) 98167-5371", ""), ("(17) 98167-5371", "")]),
 
     ("72 Life and Spirit",
-     "irlandes cortado fica VERMELHO, e o bom aparece do lado",
+     "irlandes cortado fica VERMELHO e vai pro FIM; o bom lidera",
      "35383043618;353876186097",
-     [("(35) 38304-3618", "tem 11 dígitos mas não é celular"),
-      ("+353 87 618 6097", "")]),
+     [("+353 87 618 6097", ""),
+      ("(35) 38304-3618", "tem 11 dígitos mas não é celular")]),
 
     ("1150 AD Floripa",
-     "fixo com 1 digito a mais fica vermelho; o outro numero serve",
+     "fixo com 1 digito a mais fica vermelho e desce; o bom lidera",
      "48322502582;4896014697",
-     [("(48) 32250-2582", "tem 11 dígitos mas não é celular"),
-      ("(48) 9601-4697", "")]),
+     [("(48) 9601-4697", ""),
+      ("(48) 32250-2582", "tem 11 dígitos mas não é celular")]),
 
     ("6553 Sal da Terra Horto",
-     "o celular repetido no meio do fax some; sobram os tres distintos",
+     "repetido some, sobram tres, e o quebrado vai pro fim",
      "35359883724;3598156027;35359883724;3588372493;9815-6027;ddd=35",
-     [("(35) 35988-3724", "tem 11 dígitos mas não é celular"),
-      ("(35) 9815-6027", ""), ("(35) 8837-2493", "")]),
+     [("(35) 9815-6027", ""), ("(35) 8837-2493", ""),
+      ("(35) 35988-3724", "tem 11 dígitos mas não é celular")]),
 
     ("5424 Regenerando Vidas",
      "dois numeros portugueses distintos, um deles montado do st_ddd_sac",
@@ -233,6 +235,119 @@ CASOS_TIPO = [
 ]
 
 
+# ── Campo solto (st_celular_sac) ────────────────────────────────────────────
+# A tela do Superlogica NAO mostra essa coluna: ela edita a lista 'celular',
+# que chega achatada no st_fax_sac. A coluna solta guarda o valor de antes da
+# ultima edicao, entao acumula numero vencido que ninguem consegue corrigir.
+# Ela perde o direito de trazer numero proprio e mantem o de consertar.
+CASOS_SOLTO = [
+    ("5884 Igreja Mundial do Poder de Deus",
+     "a tela mostra 2 numeros e o painel exibia 3 — o extra, com 19 respostas "
+     "e a ultima em maio, vinha na frente do bom, com 134 e a ultima na semana",
+     "11912067208;11989652081;solto=11983932486",
+     [("(11) 91206-7208", ""), ("(11) 98965-2081", "")]),
+
+    ("4151 Associacao Portuguesa El Shadai",
+     "aqui o solto CONSERTA: a mascara da tela cortou 1 digito do +351 e a "
+     "versao inteira esta na coluna solta — 137 clientes dependem disso",
+     "35191317897;solto=351913178975",
+     [("+351 913 178 975", "")]),
+
+    ("5921 Mount Zion USA",
+     "mesmo conserto, Mexico",
+     "52446138389;solto=524461383891",
+     [("+52 446 138 3891", "")]),
+
+    ("1992 CPESP",
+     "o solto resolve o 55 sobrando no numero da tela",
+     "55112905012;solto=551129050120",
+     [("(11) 2905-0120", "")]),
+
+    ("cliente so com o campo solto preenchido",
+     "18 clientes vivem so dali — sem a excecao ficariam SEM CONTATO",
+     "solto=11987654321",
+     [("(11) 98765-4321", "")]),
+
+    ("solto que nao casa e nunca respondeu",
+     "e o caso da Mundial: numero proprio, sem prova de que funciona, sai",
+     "11912067208;solto=11933334444",
+     [("(11) 91206-7208", "")]),
+]
+
+# Com historico de resposta: {numero_wa: (enviadas, respostas, ultima_resposta)}
+# O historico e PARAMETRO, nao consulta — o telefones_cliente continua puro e
+# a trava continua instantanea.
+CASOS_HISTORICO = [
+    ("5884 Mundial: o que responde lidera",
+     "a ordem deixa de ser o acaso do campo e passa a ser quem atende",
+     "11989652081;11912067208",
+     {"5511912067208": (297, 134, date(2026, 10, 14)),
+      "5511989652081": (160, 83, date(2026, 5, 25))},
+     [("(11) 91206-7208", ""), ("(11) 98965-2081", "")]),
+
+    ("6562 Comunidade Crista Nova",
+     "levou 61 mensagens num numero que nunca respondeu, tendo outro ao lado",
+     "11999474597;11999780404",
+     {"5511999474597": (61, 0, None),
+      "5511999780404": (14, 12, date(2026, 8, 24))},
+     [("(11) 99978-0404", ""), ("(11) 99947-4597", "")]),
+
+    ("tentado sem resposta perde pra nunca tentado",
+     "5+ envios e 0 resposta e informacao: aquele nao funciona. O nao testado "
+     "e incognita, e incognita vale mais que fracasso conhecido",
+     "11911112222;11933334444",
+     {"5511911112222": (30, 0, None)},
+     [("(11) 93333-4444", ""), ("(11) 91111-2222", "")]),
+
+    ("resposta recente vence resposta antiga",
+     "o sinal tem data: quem respondeu semana passada vem antes de quem "
+     "respondeu ano passado",
+     "11911112222;11933334444",
+     {"5511911112222": (10, 5, date(2025, 3, 1)),
+      "5511933334444": (10, 2, date(2026, 10, 10))},
+     [("(11) 93333-4444", ""), ("(11) 91111-2222", "")]),
+
+    ("33 clientes: o solto que RESPONDE fica",
+     "4362 tem 42 respostas no solto e zero no visivel — descartar seria "
+     "tirar o unico canal comprovado do cliente",
+     "21997790128;solto=21981198336",
+     {"5521981198336": (90, 42, date(2026, 5, 21))},
+     [("(21) 98119-8336", ""), ("(21) 99779-0128", "")]),
+
+    ("sem historico, a ordem e a de antes",
+     "em 76% da base nao ha o que consultar: decide o tipo do numero",
+     "1132657890;11987651234",
+     None,
+     [("(11) 98765-1234", ""), ("(11) 3265-7890", "")]),
+]
+
+
+def roda_solto():
+    falhas = []
+    print()
+    print(f"=== campo solto ({len(CASOS_SOLTO)}) ===")
+    for nome, licao, campo, esperado in CASOS_SOLTO:
+        obtido = [(f, p) for _b, f, p in telefones_cliente(campo)]
+        ok = obtido == esperado
+        print(f"  {'ok  ' if ok else 'FALHA'} {nome:40s} {licao[:46]}")
+        if not ok:
+            falhas.append((nome, campo, esperado, obtido))
+    return falhas
+
+
+def roda_historico():
+    falhas = []
+    print()
+    print(f"=== ordenacao por resposta ({len(CASOS_HISTORICO)}) ===")
+    for nome, licao, campo, hist, esperado in CASOS_HISTORICO:
+        obtido = [(f, p) for _b, f, p in telefones_cliente(campo, hist)]
+        ok = obtido == esperado
+        print(f"  {'ok  ' if ok else 'FALHA'} {nome:40s} {licao[:46]}")
+        if not ok:
+            falhas.append((nome, f"{campo}  hist={hist}", esperado, obtido))
+    return falhas
+
+
 def roda_tipo():
     falhas = []
     print(f"\n=== tipo_numero ({len(CASOS_TIPO)}) ===")
@@ -260,19 +375,21 @@ def roda(titulo, casos):
 def main():
     falhas = roda(f"casos reais ({len(CASOS)})", CASOS)
     falhas += roda(f"casos sinteticos ({len(CASOS_SINTETICOS)})", CASOS_SINTETICOS)
+    falhas += roda_solto()
+    falhas += roda_historico()
     falhas += roda_tipo()
 
     print()
     if falhas:
         print(f"FALHOU: {len(falhas)} de "
-              f"{len(CASOS) + len(CASOS_SINTETICOS) + len(CASOS_TIPO)} casos\n")
+              f"{len(CASOS)+len(CASOS_SINTETICOS)+len(CASOS_SOLTO)+len(CASOS_HISTORICO)+len(CASOS_TIPO)} casos\n")
         for nome, campo, esperado, obtido in falhas:
             print(f"  {nome}")
             print(f"     cadastro : {campo}")
             print(f"     esperado : {esperado}")
             print(f"     obtido   : {obtido}")
         return 1
-    print(f"PASSOU: {len(CASOS)+len(CASOS_SINTETICOS)+len(CASOS_TIPO)} casos.")
+    print(f"PASSOU: {len(CASOS)+len(CASOS_SINTETICOS)+len(CASOS_SOLTO)+len(CASOS_HISTORICO)+len(CASOS_TIPO)} casos.")
     return 0
 
 

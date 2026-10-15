@@ -885,7 +885,82 @@ def _mesmo_numero(a: str, b: str, a_ruim: bool = False, b_ruim: bool = False) ->
     return False
 
 
-def telefones_cliente(valor) -> list[tuple[str, str, str]]:
+# O historico de WhatsApp do N8N, agregado por numero. Mora aqui — e nao no
+# data.py — porque o scripts/publicar_telefones.py roda sem Streamlit no
+# GitHub Actions e precisa da MESMA consulta. Duas copias divergiriam, que e
+# exatamente o defeito que a tabela de telefones existe pra evitar.
+SQL_RESPOSTAS_WHATSAPP = r"""
+SELECT REGEXP_REPLACE(telefone, r'\D', '')                 AS num,
+       COUNTIF(LOWER(CAST(fromme AS STRING))  = 'true')     AS env,
+       COUNTIF(LOWER(CAST(fromme AS STRING)) != 'true')     AS resp,
+       MAX(CASE WHEN LOWER(CAST(fromme AS STRING)) != 'true'
+                THEN DATE(created_at) END)                  AS ult
+FROM `business-intelligence-467516.N8N.n8nfinchatbot_historico_msgs`
+GROUP BY 1
+"""
+
+
+def montar_respostas(df) -> dict:
+    """DataFrame da SQL_RESPOSTAS_WHATSAPP -> {num: (enviadas, respostas, ult)}."""
+    out = {}
+    for r in df.itertuples(index=False):
+        if not r.num:
+            continue
+        ult = r.ult
+        try:
+            vazio = ult is None or pd.isna(ult)
+        except (TypeError, ValueError):
+            vazio = ult is None
+        out[str(r.num)] = (int(r.env), int(r.resp), None if vazio else ult)
+    return out
+
+
+
+_PESO_TIPO = {"celular": 0, "celular_antigo": 1, "fixo": 2, "desconhecido": 3}
+
+
+def ordenar_telefones(itens, historico=None):
+    """Ordena (bruto, formatado, problema) do melhor pro pior.
+
+    Antes nao existia ordenacao nenhuma: o painel exibia na ordem em que os
+    campos do cadastro vinham concatenados, e so a tabela do disparo ordenava
+    — por tipo. Dois criterios pra mesma pergunta, e em 114 clientes o painel
+    mostrava primeiro um numero pior que o que a tabela mandava.
+
+    A ordem agora, em quatro niveis:
+
+    1. numero quebrado por ultimo (nao leva a lugar nenhum)
+    2. QUEM RESPONDE primeiro, mais recente antes. 'historico' e o unico
+       criterio que sabe em vez de supor: {numero_wa: (enviadas, respostas,
+       data_ultima_resposta)}. Sem ele a funcao cai nos niveis 3 e 4, que e
+       o comportamento de antes.
+    3. tentado 5+ vezes sem NUNCA responder vai depois de quem nunca foi
+       tentado — a gente sabe que aquele nao funciona, o outro e incognita
+    4. empate: celular de 9 digitos, celular antigo de 8, fixo, desconhecido
+
+    O nivel 2 so alcanca 24% da base (1.303 de 5.518 clientes tem numero no
+    historico). Nos outros, decide o nivel 4, igual a antes.
+    """
+    hist = historico or {}
+    hoje = date.today()
+
+    def chave(t):
+        bruto, _fmt, prob = t
+        wa = telefone_wa_link(bruto)
+        env, resp, ult = hist.get(wa, (0, 0, None))
+        if resp > 0:
+            # dias desde a ultima resposta: menor = mais recente = melhor
+            faixa, rec = 0, (hoje - ult).days if ult else 99999
+        elif env >= 5:
+            faixa, rec = 2, 0
+        else:
+            faixa, rec = 1, 0
+        return (bool(prob), faixa, rec, _PESO_TIPO.get(tipo_numero(bruto), 3))
+
+    return sorted(itens, key=chave)
+
+
+def telefones_cliente(valor, historico=None) -> list[tuple[str, str, str]]:
     """Lista final de telefones do cliente: (bruto, formatado, problema).
 
     Recebe a string com os 4 campos do cadastro separados por ';' (ou a lista
@@ -915,19 +990,41 @@ def telefones_cliente(valor) -> list[tuple[str, str, str]]:
     # campo, nao so pro st_telefone_sac: o cliente 4548 tem '982338073' no
     # st_fax_sac e '071' no st_ddd_sac, e juntos dao (71) 98233-8073 — um
     # celular de Salvador, que e onde o cliente fica.
+    # O 'solto=' marca o st_celular_sac. A tela do Superlogica NAO mostra essa
+    # coluna — ela edita a lista 'celular', que chega achatada no st_fax_sac.
+    # A coluna solta guarda o valor de ANTES da ultima edicao, entao acumula
+    # numero vencido que ninguem consegue corrigir: o cliente 5884 exibia 3
+    # numeros onde a tela mostra 2, e o extra (19 respostas, ultima em maio)
+    # vinha na frente do bom (134 respostas, ultima na semana passada).
+    #
+    # Mas ela nao e so lixo: em 137 clientes ela guarda a versao INTEIRA de um
+    # numero que a mascara do campo da tela cortou — e o que faz o 4151 exibir
+    # +351 913 178 975 em vez de (35) 19131-7897. Entao ela perde o direito de
+    # trazer numero PROPRIO e mantem o de CONSERTAR numero existente.
     ddd = ""
-    numeros = []
+    numeros, soltos = [], []
     for item in brutos:
         txt = str(item or "").strip()
         if txt[:4].lower() == "ddd=":
             ddd = _re.sub(r"\D", "", txt[4:])
             continue
+        if txt[:6].lower() == "solto=":
+            soltos.append(txt[6:])
+            continue
         numeros.append(item)
     if ddd in ("0", "00"):
         ddd = ""
+    # Os soltos entram DEPOIS, pra lista base ser so o que a tela mostra.
+    n_visiveis = len(numeros)
+    numeros = numeros + soltos
 
     saida: list[tuple[str, str, str, str]] = []   # (digitos, bruto, fmt, prob)
-    for bruto in numeros:
+    base_vazia = None          # a tela nao deu nenhum numero utilizavel?
+    for idx, bruto in enumerate(numeros):
+        eh_solto = idx >= n_visiveis
+        if eh_solto and base_vazia is None:
+            # congela aqui: os visiveis ja foram todos processados
+            base_vazia = not saida
         if not bruto:
             continue
         d = _re.sub(r"\D", "", str(bruto))
@@ -952,6 +1049,15 @@ def telefones_cliente(valor) -> list[tuple[str, str, str]]:
         pos = next((i for i, (dj, _b, _f, pj) in enumerate(saida)
                     if _mesmo_numero(dj, d, bool(pj), bool(prob))), None)
         if pos is None:
+            # Nao casou com ninguem: e numero PROPRIO. O campo solto so pode
+            # trazer numero proprio em duas situacoes — quando a igreja ja
+            # respondeu nele (33 clientes; jogar fora seria perder o unico
+            # canal comprovado de 21 deles) ou quando a tela nao deu nenhum
+            # numero (18 clientes, que senao ficariam sem contato).
+            if eh_solto and not base_vazia:
+                wa = telefone_wa_link(bruto)
+                if (historico or {}).get(wa, (0, 0, None))[1] <= 0:
+                    continue
             saida.append(novo)
             continue
         atual = saida[pos]
@@ -969,7 +1075,7 @@ def telefones_cliente(valor) -> list[tuple[str, str, str]]:
                     and len(_sem_ddi_55(d)) > len(_sem_ddi_55(atual[0])))))
         if troca:
             saida[pos] = novo
-    return [(b, f, p) for _d, b, f, p in saida]
+    return ordenar_telefones([(b, f, p) for _d, b, f, p in saida], historico)
 
 
 def telefones_texto(valor, sep: str = " · ") -> str:

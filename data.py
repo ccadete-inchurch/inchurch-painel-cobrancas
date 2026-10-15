@@ -79,7 +79,7 @@ import streamlit as st
 from google.cloud import bigquery
 
 from auth import get_store, current_nome
-from helpers import calc_dias, parse_date_br, get_hist, fmt_tel, fmt_tel_lista, telefones_cliente, hoje_lote, hoje_brt, dias_uteis_entre, carimbo_dia_cache
+from helpers import SQL_RESPOSTAS_WHATSAPP, montar_respostas, calc_dias, parse_date_br, get_hist, fmt_tel, fmt_tel_lista, telefones_cliente, hoje_lote, hoje_brt, dias_uteis_entre, carimbo_dia_cache
 
 
 # ── Feriados nacionais ────────────────────────────────────────────────────────
@@ -798,10 +798,17 @@ def fetch_cobrancas_competencia(dia: str | None = None):
         -- '071' no st_ddd_sac, e juntos dao (71) 98233-8073. Quem junta e
         -- escolhe e' o telefones_cliente() no helpers.
         MAX(ARRAY_TO_STRING([
-            NULLIF(cli.st_celular_sac, ''),
             NULLIF(cli.st_fax_sac, ''),
             NULLIF(cli.st_telefone_sac, ''),
             NULLIF(c.st_telefone_sac, ''),
+            -- st_celular_sac vai MARCADO e por ultimo: a tela do Superlogica
+            -- nao mostra essa coluna (ela edita a lista 'celular', que chega
+            -- achatada no st_fax_sac). Ela guarda o valor de ANTES da ultima
+            -- edicao, entao serve pra completar numero cortado pela mascara,
+            -- mas nao pra trazer numero proprio. Quem aplica a regra e o
+            -- telefones_cliente().
+            CASE WHEN NULLIF(cli.st_celular_sac, '') IS NOT NULL
+                 THEN CONCAT('solto=', cli.st_celular_sac) END,
             CASE WHEN NULLIF(cli.st_ddd_sac, '') IS NOT NULL
                  THEN CONCAT('ddd=', cli.st_ddd_sac) END
         ], ';'))                                                          AS telefone,
@@ -991,10 +998,17 @@ def fetch_proximas_cobracas(days: int = 30, dia: str | None = None) -> pd.DataFr
         -- '071' no st_ddd_sac, e juntos dao (71) 98233-8073. Quem junta e
         -- escolhe e' o telefones_cliente() no helpers.
         MAX(ARRAY_TO_STRING([
-            NULLIF(cli.st_celular_sac, ''),
             NULLIF(cli.st_fax_sac, ''),
             NULLIF(cli.st_telefone_sac, ''),
             NULLIF(c.st_telefone_sac, ''),
+            -- st_celular_sac vai MARCADO e por ultimo: a tela do Superlogica
+            -- nao mostra essa coluna (ela edita a lista 'celular', que chega
+            -- achatada no st_fax_sac). Ela guarda o valor de ANTES da ultima
+            -- edicao, entao serve pra completar numero cortado pela mascara,
+            -- mas nao pra trazer numero proprio. Quem aplica a regra e o
+            -- telefones_cliente().
+            CASE WHEN NULLIF(cli.st_celular_sac, '') IS NOT NULL
+                 THEN CONCAT('solto=', cli.st_celular_sac) END,
             CASE WHEN NULLIF(cli.st_ddd_sac, '') IS NOT NULL
                  THEN CONCAT('ddd=', cli.st_ddd_sac) END
         ], ';'))                                                   AS telefone,
@@ -3826,10 +3840,13 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
                     -- pra o card de regularizado nao mostrar um telefone
                     -- diferente do que a tela de cobranca mostra.
                     MAX(ARRAY_TO_STRING([
-                        NULLIF(cli.st_celular_sac, ''),
                         NULLIF(cli.st_fax_sac, ''),
                         NULLIF(cli.st_telefone_sac, ''),
                         NULLIF(c.st_telefone_sac, ''),
+                        -- marcado e por ultimo — ver o comentario no bloco
+                        -- principal, acima
+                        CASE WHEN NULLIF(cli.st_celular_sac, '') IS NOT NULL
+                             THEN CONCAT('solto=', cli.st_celular_sac) END,
                         CASE WHEN NULLIF(cli.st_ddd_sac, '') IS NOT NULL
                              THEN CONCAT('ddd=', cli.st_ddd_sac) END
                     ], ';')) AS telefone,
@@ -3881,7 +3898,7 @@ def fetch_regularizados_do_dia(ids_lote: set) -> list:
             "nome":               str(row.get("nome") or ""),
             "cnpj":               str(row.get("cnpj") or ""),
             "telefone":           (_t_reg[0] if (_t_reg := [
-                                      _f for _b, _f, _p in telefones_cliente(row.get("telefone"))
+                                      _f for _b, _f, _p in telefones_cliente(row.get("telefone"), carregar_respostas_whatsapp())
                                   ]) else "—"),
             "valor":              0.0,
             "vencimento":         "",
@@ -4156,6 +4173,41 @@ def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
 
 # ── Processamento ─────────────────────────────────────────────────────────────
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def carregar_respostas_whatsapp() -> dict:
+    """{numero_wa: (enviadas, respostas, data_ultima_resposta)} do historico N8N.
+
+    Serve pra ordenar os telefones do cliente por quem DE FATO atende, em vez
+    de supor pelo formato do numero. fromme='false' e mensagem que veio da
+    igreja — prova de que tem gente daquele lado.
+
+    Por que isso existe: a Igreja Mundial do Poder de Deus (5884) tinha 3
+    numeros no painel e o primeiro era o pior deles — 19 respostas, a ultima
+    em maio — enquanto o de 134 respostas, com a ultima na semana, ficava em
+    segundo. A ordem era o acaso de qual campo do cadastro vinha primeiro.
+    Em 325 clientes o primeiro numero nunca tinha respondido tendo outro ao
+    lado que responde; em 17 ele ja havia levado 5+ mensagens sem retorno
+    nenhum (a Comunidade Crista Nova levou 61).
+
+    Alcanca 24% da base — 1.303 de 5.518 clientes tem numero no historico.
+    Nos outros o telefones_cliente cai no desempate por tipo, como antes.
+
+    3,9 MB por execucao, 1x por dia.
+    """
+    client = get_bq_client()
+    if client is None:
+        return {}
+    try:
+        df = client.query(SQL_RESPOSTAS_WHATSAPP).to_dataframe()
+    except Exception as e:
+        # Sem o historico o painel nao para: a ordenacao volta a ser por tipo.
+        print(f"[WARN] historico de respostas indisponivel ({str(e)[:80]}) — "
+              f"ordenacao de telefone cai no desempate por tipo", flush=True)
+        return {}
+    return montar_respostas(df)
+
+
+
 def processar_dados_bigquery():
     fetch_cobrancas_competencia.clear()
     fetch_cobrancas_liquidacao.clear()
@@ -4175,6 +4227,10 @@ def processar_dados_bigquery():
         return [], 0
 
     clientes_dict = {}
+
+    # Uma consulta pra base inteira, nao uma por cliente. Decide a ORDEM dos
+    # telefones: quem a igreja atende vem primeiro. Cacheado 24h.
+    _resp_wa = carregar_respostas_whatsapp()
 
     for _, row in df_competencia.iterrows():
         codigo = str(row["codigo"])
@@ -4239,7 +4295,7 @@ def processar_dados_bigquery():
                 # 'telefone' (campo legado, usado na ficha e na exportacao)
                 # sai formatado; 'telefones' guarda o numero cru, que e' o
                 # que vira link de WhatsApp.
-                "telefone":         ((_tels_lp := telefones_cliente(row["telefone"]))
+                "telefone":         ((_tels_lp := telefones_cliente(row["telefone"], _resp_wa))
                                      and _tels_lp[0][1] or "—"),
                 "telefones":        [_b for _b, _f, _p in _tels_lp],
                 "valor":            valor_devedor,
