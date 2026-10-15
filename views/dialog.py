@@ -297,7 +297,11 @@ def dialog_editar(eid, from_fixados: bool = False):
     # Inadimplencia ja abre ESTE dialog — botao separado criaria um segundo
     # lugar pro mesmo cliente — e porque o dado que o calculo precisa (valor,
     # vencimento e atraso de cada parcela) ja esta carregado acima.
-    if cobracas_inad and not somente_leitura:
+    # Sem o somente_leitura de proposito: o admin tambem ve. A trava existe
+    # pra ele nao EDITAR status e observacao, e gerar proposta nao altera
+    # nada — calcula e baixa um arquivo. Escondi do admin na primeira versao
+    # e o Caio, que e admin, abriu o dialog e nao achou a secao.
+    if cobracas_inad:
         with st.expander("Gerar proposta de acordo"):
             ac1, ac2 = st.columns([1, 1], vertical_alignment="bottom")
             with ac1:
