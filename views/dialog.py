@@ -41,7 +41,7 @@ def _render_acordo(eid, cliente, itens):
 
     def _rotulo(n):
         if n == 1:
-            return "A vista — " + _m(base.atualizado)
+            return "À vista — " + _m(base.atualizado)
         return str(n) + "x de " + _m(base.atualizado / n)
 
     ac1, ac2 = st.columns([1, 1], vertical_alignment="bottom")
@@ -50,21 +50,21 @@ def _render_acordo(eid, cliente, itens):
                             index=0, key=f"acordo_parc_{eid}", format_func=_rotulo)
     with ac2:
         if parc == 1:
-            desc = st.number_input("Desconto a vista (R$)", min_value=0.0,
+            desc = st.number_input("Desconto à vista (R$)", min_value=0.0,
                                    step=10.0, value=0.0, key=f"acordo_desc_{eid}",
-                                   help="Opcional, e so na opcao a vista.")
+                                   help="Opcional, e só na opção à vista.")
         else:
             desc = 0.0
-            st.caption("Desconto so na opcao a vista.")
+            st.caption("Desconto só na opção à vista.")
 
     prop = montar_acordo(itens, parc, desc)
 
-    with st.expander(f"Ver o calculo das {len(prop.detalhe)} cobrancas"):
+    with st.expander(f"Ver o cálculo das {len(prop.detalhe)} cobranças"):
         cab = ('<table style="width:100%;font-size:12px;border-collapse:collapse">'
                '<tr style="color:#8b94a5;text-align:right">'
-               '<th style="text-align:left;padding:4px 0">Cobranca</th>'
-               '<th>Vencimento</th><th>Atraso</th><th>Principal</th>'
-               '<th>Multa</th><th>Juros</th><th>Correcao</th><th>Atualizado</th></tr>')
+               '<th style="text-align:left;padding:4px 0">Cobrança</th>'
+               '<th>Vencimento</th><th>Atraso</th><th>Valor original</th>'
+               '<th>Multa</th><th>Juros</th><th>Atualização</th><th>Atualizado</th></tr>')
         corpo = "".join(
             '<tr style="text-align:right;border-top:1px solid #1e2333">'
             '<td style="text-align:left;padding:4px 0;color:#8b94a5">'
@@ -81,10 +81,10 @@ def _render_acordo(eid, cliente, itens):
 
     linhas = [("Valor original", _m(prop.principal), "#e8eaf0"),
               ("Multa (2%)", _m(prop.multa), "#8b94a5"),
-              ("Juros (1% ao mes · ate " + str(prop.dias_max) + "d de atraso)",
+              ("Juros (1% ao mês · até " + str(prop.dias_max) + "d de atraso)",
                _m(prop.juros), "#8b94a5")]
     if prop.correcao > 0:
-        linhas.append(("Atualizacao monetaria", _m(prop.correcao), "#8b94a5"))
+        linhas.append(("Atualização", _m(prop.correcao), "#8b94a5"))
     linhas.append(("Total atualizado", _m(prop.atualizado), "#e8eaf0"))
     if prop.desconto > 0:
         linhas.append(("Desconto (" + pct_acordo(prop.pct_desconto) + "%)",
@@ -96,7 +96,7 @@ def _render_acordo(eid, cliente, itens):
         '<span style="font-variant-numeric:tabular-nums;font-weight:'
         + ("700" if "Total" in rot else "500") + '">' + val + '</span></div>'
         for rot, val, cor in linhas)
-    rodape_rot = "A vista" if prop.parcelas == 1 else str(prop.parcelas) + "x de"
+    rodape_rot = "À vista" if prop.parcelas == 1 else str(prop.parcelas) + "x de"
     total_extra = ('<div style="color:#8b94a5;font-size:12px;margin-top:4px;'
                    'text-align:right">total ' + _m(prop.total) + '</div>'
                    if prop.parcelas > 1 else "")
@@ -114,29 +114,24 @@ def _render_acordo(eid, cliente, itens):
 
     # O PDF leva SEMPRE as duas opcoes, como o modelo do financeiro.
     parc_pdf = parc if parc > 1 else 2
-    b1, b2 = st.columns([1, 1])
-    with b1:
-        st.download_button(
-            "Baixar proposta em PDF",
-            data=gerar_pdf_acordo(
-                cliente.get("nome", ""),
-                montar_acordo(itens, 1, desc if parc == 1 else 0.0),
-                montar_acordo(itens, parc_pdf, 0.0),
-                current_nome(), current_email()),
-            file_name="Proposta_Acordo_" + _slug(cliente.get("nome", "")) + ".pdf",
-            mime="application/pdf", width="stretch", type="primary",
-            key=f"acordo_pdf_{eid}")
-    with b2:
-        st.caption(f"O PDF sai com as duas opcoes: a vista e {parc_pdf}x. "
-                   f"Assinado por {current_nome()}.")
+    st.download_button(
+        f"Baixar proposta — à vista e {parc_pdf}x",
+        data=gerar_pdf_acordo(
+            cliente.get("nome", ""),
+            montar_acordo(itens, 1, desc if parc == 1 else 0.0),
+            montar_acordo(itens, parc_pdf, 0.0),
+            current_nome(), current_email()),
+        file_name="Proposta_Acordo_" + _slug(cliente.get("nome", "")) + ".pdf",
+        mime="application/pdf", width="stretch", type="primary",
+        icon=":material/picture_as_pdf:",
+        help=f"PDF assinado por {current_nome()}, com as duas opções de pagamento.",
+        key=f"acordo_pdf_{eid}")
 
     with st.expander("Texto pra mandar no WhatsApp"):
         st.text_area("Selecione e copie",
                      value=texto_acordo(cliente.get("nome", ""), prop),
                      height=200, key=f"acordo_txt_{eid}",
                      label_visibility="collapsed")
-    st.caption("Multa, juros e atualizacao monetaria vem calculados do "
-               "Superlogica, cobranca a cobranca.")
 
 
 @st.dialog("Editar Registro", width="large")
@@ -425,7 +420,16 @@ def dialog_editar(eid, from_fixados: bool = False):
     # pro porque. Isso tambem resolve a divida que o painel nao enxerga: a API
     # traz as cobrancas da competencia-hist, que o SQL do painel ignora.
     if cobracas_inad:
-        with st.expander("Gerar proposta de acordo"):
+        # Botao, nao expander: o Streamlit EXECUTA tudo que esta dentro de um
+        # expander em toda renderizacao, aberto ou nao — ele so colapsa na
+        # tela. Com a consulta la dentro, todo dialog aberto pagava 0,3 a 1,2
+        # segundo de API mesmo sem ninguem querer proposta.
+        _k_acordo = f"acordo_on_{eid}"
+        if not st.session_state.get(_k_acordo):
+            if st.button("Gerar proposta de acordo", width="stretch",
+                         key=f"btn_{_k_acordo}"):
+                st.session_state[_k_acordo] = True
+        if st.session_state.get(_k_acordo):
             _itens, _erro = fetch_encargos_superlogica(str(eid))
             if _erro:
                 st.error(
