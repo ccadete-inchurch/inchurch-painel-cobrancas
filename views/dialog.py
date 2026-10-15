@@ -303,12 +303,26 @@ def dialog_editar(eid, from_fixados: bool = False):
     # e o Caio, que e admin, abriu o dialog e nao achou a secao.
     if cobracas_inad:
         with st.expander("Gerar proposta de acordo"):
+            # O valor atualizado nao muda com o parcelamento — juros e multa
+            # sao do atraso, nao do parcelamento. Entao da pra calcular uma
+            # vez e so dividir pra montar o rotulo de cada opcao, sem rodar
+            # o calculo 12 vezes.
+            _base = calcular_acordo(cobracas_inad, 1, 0.0)
+
+            def _rotulo_parcela(n):
+                # "sem juros" aqui quer dizer que parcelar nao acrescenta
+                # nada — os juros do atraso ja estao no valor atualizado.
+                if n == 1:
+                    return f"À vista — {fmt_moeda_plain(_base.atualizado)}"
+                return (f"{n}x de {fmt_moeda_plain(_base.atualizado / n)}"
+                        f"  (sem juros de parcelamento)")
+
             ac1, ac2 = st.columns([1, 1], vertical_alignment="bottom")
             with ac1:
                 _parc = st.selectbox(
                     "Parcelamento", list(range(1, PARCELAS_MAX + 1)),
                     index=0, key=f"acordo_parc_{eid}",
-                    format_func=lambda n: "À vista (1x)" if n == 1 else f"{n}x sem juros",
+                    format_func=_rotulo_parcela,
                 )
             with ac2:
                 # Some quando parcela: a regra e que desconto so existe a
