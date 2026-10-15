@@ -115,6 +115,19 @@ checa("principal igual ao da proposta real", pv.principal, 746.34)
 checa("atualizado perto do da proposta real", pv.atualizado, 770.74, tol=0.50)
 checa("a vista com desconto", pv.total, 704.24, tol=0.50)
 checa("parcela do 2x", pp.valor_parcela, 385.37, tol=0.50)
+# O numero do boleto tem que chegar no detalhe: e a coluna "No COBRANCA" do
+# PDF. Ficou DE FORA na primeira versao e o PDF saiu com "—" em toda linha —
+# eu tinha conferido os valores e nunca essa coluna.
+_ids = [d["id_recebimento"] for d in pv.detalhe]
+ok = _ids == ["122661", "122662", "126436", "128066", "129623"]
+print(f"  {'ok  ' if ok else 'FALHA'} o numero do boleto chega no detalhe")
+if not ok:
+    falhas.append(("id_recebimento no detalhe", "os 5 numeros", _ids))
+# E o acrescimo e por cobranca, nao rateado do montante: a de 2 dias paga
+# centavos de juros e a de 66 dias paga quase 3 reais.
+_j = {d["id_recebimento"]: d["juros"] for d in pv.detalhe}
+checa("juros da cobranca de 2 dias", _j["129623"], 0.09)
+checa("juros da cobranca de 66 dias", _j["126436"], 2.86)
 b = gerar_pdf("Igreja Evangélica Vinho Novo", pv, pp,
               "Priscila Oliveira", "priscila.oliveira@inchurch.com.br")
 ok = b[:4] == b"%PDF" and len(b) > 4000

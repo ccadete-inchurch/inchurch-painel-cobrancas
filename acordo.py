@@ -105,6 +105,12 @@ def calcular(cobrancas, parcelas: int = 1, desconto: float = 0.0) -> Proposta:
         p.juros += juros
         p.dias_max = max(p.dias_max, dias)
         p.detalhe.append({
+            # id_recebimento e o numero do boleto: conferi os cinco da
+            # proposta real da Vinho Novo (122661, 122662, 126436, 128066,
+            # 129623) contra o BigQuery e batem numero, vencimento e valor.
+            # E a coluna "No COBRANCA" do PDF — sem ele a igreja nao
+            # reconhece a cobranca que esta sendo negociada.
+            "id_recebimento": str(c.get("id_recebimento") or ""),
             "valor": valor, "dias": dias, "multa": multa, "juros": juros,
             "vencimento": c.get("vencimento", ""),
             "total": valor + multa + juros,

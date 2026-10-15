@@ -310,12 +310,13 @@ def dialog_editar(eid, from_fixados: bool = False):
             _base = calcular_acordo(cobracas_inad, 1, 0.0)
 
             def _rotulo_parcela(n):
-                # "sem juros" aqui quer dizer que parcelar nao acrescenta
-                # nada — os juros do atraso ja estao no valor atualizado.
+                # Sem "sem juros": TODAS as opcoes tem juros — os do atraso,
+                # que ja estao no valor atualizado. O rotulo antigo dizia
+                # "sem juros" pensando em juros de financiamento e dava a
+                # entender que a opcao era limpa, o que nao e verdade.
                 if n == 1:
                     return f"À vista — {fmt_moeda_plain(_base.atualizado)}"
-                return (f"{n}x de {fmt_moeda_plain(_base.atualizado / n)}"
-                        f"  (sem juros de parcelamento)")
+                return f"{n}x de {fmt_moeda_plain(_base.atualizado / n)}"
 
             ac1, ac2 = st.columns([1, 1], vertical_alignment="bottom")
             with ac1:
@@ -340,6 +341,31 @@ def dialog_editar(eid, from_fixados: bool = False):
 
             _prop = calcular_acordo(cobracas_inad, _parc, _desc)
             _m = fmt_moeda_plain
+
+            # O acrescimo e calculado cobranca a cobranca, cada uma do
+            # proprio vencimento — nao sobre o montante. Mostrar a conta
+            # aberta deixa isso visivel e e a mesma tabela do PDF.
+            with st.expander(f"Ver o cálculo das {len(_prop.detalhe)} cobranças"):
+                st.markdown(
+                    '<table style="width:100%;font-size:12px;border-collapse:collapse">'
+                    '<tr style="color:#8b94a5;text-align:right">'
+                    '<th style="text-align:left;padding:4px 0">Cobrança</th>'
+                    '<th>Vencimento</th><th>Atraso</th><th>Principal</th>'
+                    '<th>Multa 2%</th><th>Juros 1%/mês</th><th>Atualizado</th></tr>'
+                    + "".join(
+                        f'<tr style="text-align:right;border-top:1px solid #1e2333">'
+                        f'<td style="text-align:left;padding:4px 0;color:#8b94a5">'
+                        f'{d.get("id_recebimento") or "—"}</td>'
+                        f'<td style="color:#8b94a5">{d.get("vencimento") or "—"}</td>'
+                        f'<td style="color:#8b94a5">{d["dias"]}d</td>'
+                        f'<td>{_m(d["valor"])}</td>'
+                        f'<td style="color:#8b94a5">{_m(d["multa"])}</td>'
+                        f'<td style="color:#8b94a5">{_m(d["juros"])}</td>'
+                        f'<td style="font-weight:700">{_m(d["total"])}</td></tr>'
+                        for d in _prop.detalhe)
+                    + '</table>',
+                    unsafe_allow_html=True,
+                )
             _linhas = [
                 ("Valor original", _m(_prop.principal), "#e8eaf0"),
                 ("Multa (2%)", _m(_prop.multa), "#8b94a5"),
