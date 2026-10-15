@@ -3,10 +3,10 @@ import streamlit as st
 
 import re as _re_acordo
 
-from acordo import (PARCELAS_MAX, calcular as calcular_acordo,
+from acordo import (PARCELAS_MAX, montar as montar_acordo,
                     texto_whatsapp as texto_acordo, _pct as pct_acordo)
 from acordo_pdf import gerar as gerar_pdf_acordo
-from data import carregar_divida_fora_do_painel
+from data import fetch_encargos_superlogica
 from config import STATUS_OPTS
 from auth import get_store, current_nome, current_email, current_role
 from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html, get_effective_lastContact, get_ultimo_login, parse_date_br, telefones_cliente, aceita_whatsapp
@@ -20,6 +20,123 @@ def _slug(nome: str) -> str:
     s = s.encode("ascii", "ignore").decode()
     s = _re_acordo.sub(r"[^A-Za-z0-9]+", "_", s).strip("_")
     return (s or "Cliente")[:60]
+
+
+
+def _render_acordo(eid, cliente, itens):
+    """A secao de acordo, com os valores ja vindos do Superlogica."""
+    _m = fmt_moeda_plain
+    base = montar_acordo(itens, 1, 0.0)
+
+    # O card mostra o saldo do BigQuery, que pra 1.143 clientes e MENOR que a
+    # divida real — o painel le so a competencia-all. Mostrar os dois lado a
+    # lado evita a atendente achar que a proposta esta errada.
+    if abs(base.principal - float(cliente.get("valor") or 0)) >= 0.01:
+        st.info(
+            f"O card mostra {_m(cliente.get('valor') or 0)} e o Superlogica "
+            f"cobra {_m(base.principal)} de principal. A diferenca sao "
+            f"cobrancas antigas que nao chegam ao painel. **A proposta usa o "
+            f"valor do Superlogica.**"
+        )
+
+    def _rotulo(n):
+        if n == 1:
+            return "A vista — " + _m(base.atualizado)
+        return str(n) + "x de " + _m(base.atualizado / n)
+
+    ac1, ac2 = st.columns([1, 1], vertical_alignment="bottom")
+    with ac1:
+        parc = st.selectbox("Parcelamento", list(range(1, PARCELAS_MAX + 1)),
+                            index=0, key=f"acordo_parc_{eid}", format_func=_rotulo)
+    with ac2:
+        if parc == 1:
+            desc = st.number_input("Desconto a vista (R$)", min_value=0.0,
+                                   step=10.0, value=0.0, key=f"acordo_desc_{eid}",
+                                   help="Opcional, e so na opcao a vista.")
+        else:
+            desc = 0.0
+            st.caption("Desconto so na opcao a vista.")
+
+    prop = montar_acordo(itens, parc, desc)
+
+    with st.expander(f"Ver o calculo das {len(prop.detalhe)} cobrancas"):
+        cab = ('<table style="width:100%;font-size:12px;border-collapse:collapse">'
+               '<tr style="color:#8b94a5;text-align:right">'
+               '<th style="text-align:left;padding:4px 0">Cobranca</th>'
+               '<th>Vencimento</th><th>Atraso</th><th>Principal</th>'
+               '<th>Multa</th><th>Juros</th><th>Correcao</th><th>Atualizado</th></tr>')
+        corpo = "".join(
+            '<tr style="text-align:right;border-top:1px solid #1e2333">'
+            '<td style="text-align:left;padding:4px 0;color:#8b94a5">'
+            + str(d.get("id_recebimento") or "—") + '</td>'
+            '<td style="color:#8b94a5">' + str(d.get("vencimento") or "—") + '</td>'
+            '<td style="color:#8b94a5">' + str(d.get("dias", 0)) + 'd</td>'
+            '<td>' + _m(d.get("principal", 0)) + '</td>'
+            '<td style="color:#8b94a5">' + _m(d.get("multa", 0)) + '</td>'
+            '<td style="color:#8b94a5">' + _m(d.get("juros", 0)) + '</td>'
+            '<td style="color:#8b94a5">' + _m(d.get("correcao", 0)) + '</td>'
+            '<td style="font-weight:700">' + _m(d.get("total", 0)) + '</td></tr>'
+            for d in prop.detalhe)
+        st.markdown(cab + corpo + "</table>", unsafe_allow_html=True)
+
+    linhas = [("Valor original", _m(prop.principal), "#e8eaf0"),
+              ("Multa (2%)", _m(prop.multa), "#8b94a5"),
+              ("Juros (1% ao mes · ate " + str(prop.dias_max) + "d de atraso)",
+               _m(prop.juros), "#8b94a5")]
+    if prop.correcao > 0:
+        linhas.append(("Atualizacao monetaria", _m(prop.correcao), "#8b94a5"))
+    linhas.append(("Total atualizado", _m(prop.atualizado), "#e8eaf0"))
+    if prop.desconto > 0:
+        linhas.append(("Desconto (" + pct_acordo(prop.pct_desconto) + "%)",
+                       "- " + _m(prop.desconto), "#7cc243"))
+
+    corpo = "".join(
+        '<div style="display:flex;justify-content:space-between;padding:3px 0;'
+        'color:' + cor + '"><span>' + rot + '</span>'
+        '<span style="font-variant-numeric:tabular-nums;font-weight:'
+        + ("700" if "Total" in rot else "500") + '">' + val + '</span></div>'
+        for rot, val, cor in linhas)
+    rodape_rot = "A vista" if prop.parcelas == 1 else str(prop.parcelas) + "x de"
+    total_extra = ('<div style="color:#8b94a5;font-size:12px;margin-top:4px;'
+                   'text-align:right">total ' + _m(prop.total) + '</div>'
+                   if prop.parcelas > 1 else "")
+    st.markdown(
+        '<div style="background:#13161f;border:1px solid #1e2333;border-radius:8px;'
+        'padding:12px 14px;font-size:13px">' + corpo
+        + '<div style="border-top:1px solid #1e2333;margin-top:8px;padding-top:8px;'
+          'display:flex;justify-content:space-between;align-items:baseline">'
+          '<span style="color:#8b94a5;font-size:12px;text-transform:uppercase;'
+          'letter-spacing:1px">' + rodape_rot + '</span>'
+          '<span style="color:#7cc243;font-weight:800;font-size:19px;'
+          'font-variant-numeric:tabular-nums">' + _m(prop.valor_parcela)
+        + '</span></div>' + total_extra + '</div>',
+        unsafe_allow_html=True)
+
+    # O PDF leva SEMPRE as duas opcoes, como o modelo do financeiro.
+    parc_pdf = parc if parc > 1 else 2
+    b1, b2 = st.columns([1, 1])
+    with b1:
+        st.download_button(
+            "Baixar proposta em PDF",
+            data=gerar_pdf_acordo(
+                cliente.get("nome", ""),
+                montar_acordo(itens, 1, desc if parc == 1 else 0.0),
+                montar_acordo(itens, parc_pdf, 0.0),
+                current_nome(), current_email()),
+            file_name="Proposta_Acordo_" + _slug(cliente.get("nome", "")) + ".pdf",
+            mime="application/pdf", width="stretch", type="primary",
+            key=f"acordo_pdf_{eid}")
+    with b2:
+        st.caption(f"O PDF sai com as duas opcoes: a vista e {parc_pdf}x. "
+                   f"Assinado por {current_nome()}.")
+
+    with st.expander("Texto pra mandar no WhatsApp"):
+        st.text_area("Selecione e copie",
+                     value=texto_acordo(cliente.get("nome", ""), prop),
+                     height=200, key=f"acordo_txt_{eid}",
+                     label_visibility="collapsed")
+    st.caption("Multa, juros e atualizacao monetaria vem calculados do "
+               "Superlogica, cobranca a cobranca.")
 
 
 @st.dialog("Editar Registro", width="large")
@@ -293,167 +410,38 @@ def dialog_editar(eid, from_fixados: bool = False):
         st.info("Nenhuma cobrança em atraso")
 
     # ── Proposta de acordo ──────────────────────────────────────────────────
-    # Fechado por padrao: o dialog ja e denso e a maioria dos atendimentos nao
-    # negocia acordo. Fica aqui, e nao em tela propria, porque a tela de
+    # ── Proposta de acordo ──────────────────────────────────────────────────
+    # Fechada por padrao: o dialog ja e denso e a maioria dos atendimentos nao
+    # negocia acordo. Mora aqui, e nao em tela propria, porque a tela de
     # Inadimplencia ja abre ESTE dialog — botao separado criaria um segundo
-    # lugar pro mesmo cliente — e porque o dado que o calculo precisa (valor,
-    # vencimento e atraso de cada parcela) ja esta carregado acima.
-    # Sem o somente_leitura de proposito: o admin tambem ve. A trava existe
-    # pra ele nao EDITAR status e observacao, e gerar proposta nao altera
-    # nada — calcula e baixa um arquivo. Escondi do admin na primeira versao
-    # e o Caio, que e admin, abriu o dialog e nao achou a secao.
-    # Nao basta ter cobranca em atraso: o painel precisa enxergar a divida
-    # INTEIRA. Pra 1.143 clientes existe cobranca em aberto que so mora na
-    # splgc-cobrancas_competencia-hist, que o painel nao le. Gerar acordo
-    # ali quitaria por menos do que a igreja deve — o Somma Church (4228)
-    # aparece com R$ 1.204,70 e o Superlogica cobra R$ 2.099,50.
-    _fora = carregar_divida_fora_do_painel().get(str(eid))
-    if cobracas_inad and _fora:
-        _vf, _qf = _fora
-        st.warning(
-            f"**Proposta de acordo indisponível para este cliente.**\n\n"
-            f"O painel enxerga {fmt_moeda_plain(cliente['valor'])}, mas existem "
-            f"mais {fmt_moeda_plain(_vf)} em aberto "
-            f"({_qf} cobrança{'s' if _qf != 1 else ''}) que não chegam até aqui "
-            f"— são anteriores à base que o painel carrega.\n\n"
-            f"Total real: **{fmt_moeda_plain(cliente['valor'] + _vf)}**. "
-            f"Um acordo fechado com o valor de cima quitaria a dívida por menos "
-            f"do que ela é. Gere a proposta pelo Superlógica."
-        )
-    elif cobracas_inad:
+    # lugar pro mesmo cliente — e porque e aqui que a especialista registra o
+    # que fez.
+    #
+    # O admin tambem ve: a trava de somente_leitura existe pra ele nao EDITAR
+    # status e observacao, e gerar proposta nao altera nada.
+    #
+    # Os valores NAO sao calculados aqui. Vem do Superlogica ja com multa,
+    # juros e correcao monetaria aplicados — ver data.fetch_encargos_superlogica
+    # pro porque. Isso tambem resolve a divida que o painel nao enxerga: a API
+    # traz as cobrancas da competencia-hist, que o SQL do painel ignora.
+    if cobracas_inad:
         with st.expander("Gerar proposta de acordo"):
-            # O valor atualizado nao muda com o parcelamento — juros e multa
-            # sao do atraso, nao do parcelamento. Entao da pra calcular uma
-            # vez e so dividir pra montar o rotulo de cada opcao, sem rodar
-            # o calculo 12 vezes.
-            _base = calcular_acordo(cobracas_inad, 1, 0.0)
-
-            def _rotulo_parcela(n):
-                # Sem "sem juros": TODAS as opcoes tem juros — os do atraso,
-                # que ja estao no valor atualizado. O rotulo antigo dizia
-                # "sem juros" pensando em juros de financiamento e dava a
-                # entender que a opcao era limpa, o que nao e verdade.
-                if n == 1:
-                    return f"À vista — {fmt_moeda_plain(_base.atualizado)}"
-                return f"{n}x de {fmt_moeda_plain(_base.atualizado / n)}"
-
-            ac1, ac2 = st.columns([1, 1], vertical_alignment="bottom")
-            with ac1:
-                _parc = st.selectbox(
-                    "Parcelamento", list(range(1, PARCELAS_MAX + 1)),
-                    index=0, key=f"acordo_parc_{eid}",
-                    format_func=_rotulo_parcela,
+            _itens, _erro = fetch_encargos_superlogica(str(eid))
+            if _erro:
+                st.error(
+                    f"Nao consegui consultar o Superlogica ({_erro}). "
+                    f"A proposta precisa do valor atualizado de la — sem isso "
+                    f"ela sairia errada, entao nao vou gerar. Tente de novo em "
+                    f"alguns minutos."
                 )
-            with ac2:
-                # Some quando parcela: a regra e que desconto so existe a
-                # vista. Deixar o campo visivel e ignorar o valor por dentro
-                # seria pior — a especialista digitaria e nao entenderia.
-                if _parc == 1:
-                    _desc = st.number_input(
-                        "Desconto à vista (R$)", min_value=0.0, step=10.0,
-                        value=0.0, key=f"acordo_desc_{eid}",
-                        help="Opcional, e so na opcao a vista.",
-                    )
-                else:
-                    _desc = 0.0
-                    st.caption("Desconto só na opção à vista.")
-
-            _prop = calcular_acordo(cobracas_inad, _parc, _desc)
-            _m = fmt_moeda_plain
-
-            # O acrescimo e calculado cobranca a cobranca, cada uma do
-            # proprio vencimento — nao sobre o montante. Mostrar a conta
-            # aberta deixa isso visivel e e a mesma tabela do PDF.
-            with st.expander(f"Ver o cálculo das {len(_prop.detalhe)} cobranças"):
-                st.markdown(
-                    '<table style="width:100%;font-size:12px;border-collapse:collapse">'
-                    '<tr style="color:#8b94a5;text-align:right">'
-                    '<th style="text-align:left;padding:4px 0">Cobrança</th>'
-                    '<th>Vencimento</th><th>Atraso</th><th>Principal</th>'
-                    '<th>Multa 2%</th><th>Juros 1%/mês</th><th>Atualizado</th></tr>'
-                    + "".join(
-                        f'<tr style="text-align:right;border-top:1px solid #1e2333">'
-                        f'<td style="text-align:left;padding:4px 0;color:#8b94a5">'
-                        f'{d.get("id_recebimento") or "—"}</td>'
-                        f'<td style="color:#8b94a5">{d.get("vencimento") or "—"}</td>'
-                        f'<td style="color:#8b94a5">{d["dias"]}d</td>'
-                        f'<td>{_m(d["valor"])}</td>'
-                        f'<td style="color:#8b94a5">{_m(d["multa"])}</td>'
-                        f'<td style="color:#8b94a5">{_m(d["juros"])}</td>'
-                        f'<td style="font-weight:700">{_m(d["total"])}</td></tr>'
-                        for d in _prop.detalhe)
-                    + '</table>',
-                    unsafe_allow_html=True,
+            elif not _itens:
+                st.info(
+                    "O Superlogica nao retornou cobranca em aberto para este "
+                    "cliente, embora o painel mostre atraso. Confira la antes "
+                    "de negociar."
                 )
-            _linhas = [
-                ("Valor original", _m(_prop.principal), "#e8eaf0"),
-                ("Multa (2%)", _m(_prop.multa), "#8b94a5"),
-                (f"Juros (1% ao mês · até {_prop.dias_max}d de atraso)",
-                 _m(_prop.juros), "#8b94a5"),
-                ("Total atualizado", _m(_prop.atualizado), "#e8eaf0"),
-            ]
-            if _prop.desconto > 0:
-                _pc = pct_acordo(_prop.pct_desconto)
-                _linhas.append((f"Desconto ({_pc}%)",
-                                "- " + _m(_prop.desconto), "#7cc243"))
-            st.markdown(
-                '<div style="background:#13161f;border:1px solid #1e2333;'
-                'border-radius:8px;padding:12px 14px;font-size:13px">'
-                + "".join(
-                    f'<div style="display:flex;justify-content:space-between;'
-                    f'padding:3px 0;color:{cor}">'
-                    f'<span>{rot}</span>'
-                    f'<span style="font-variant-numeric:tabular-nums;'
-                    f'font-weight:{700 if "Total" in rot else 500}">{val}</span></div>'
-                    for rot, val, cor in _linhas)
-                + f'<div style="border-top:1px solid #1e2333;margin-top:8px;'
-                  f'padding-top:8px;display:flex;justify-content:space-between;'
-                  f'align-items:baseline">'
-                  f'<span style="color:#8b94a5;font-size:12px;text-transform:uppercase;'
-                  f'letter-spacing:1px">'
-                  f'{"À vista" if _prop.parcelas == 1 else f"{_prop.parcelas}x de"}</span>'
-                  f'<span style="color:#7cc243;font-weight:800;font-size:19px;'
-                  f'font-variant-numeric:tabular-nums">{_m(_prop.valor_parcela)}</span>'
-                  f'</div>'
-                + (f'<div style="color:#8b94a5;font-size:12px;margin-top:4px;'
-                   f'text-align:right">total {_m(_prop.total)}</div>'
-                   if _prop.parcelas > 1 else "")
-                + '</div>',
-                unsafe_allow_html=True,
-            )
-            # O PDF traz SEMPRE as duas opcoes lado a lado, como o modelo do
-            # financeiro: a vista com o desconto que a especialista escolheu,
-            # e o parcelamento. Por isso calcula a segunda aqui — o seletor
-            # de cima define qual parcelamento vai na Opcao B.
-            _parc_pdf = _parc if _parc > 1 else 2
-            _prop_vista = calcular_acordo(cobracas_inad, 1, _desc if _parc == 1 else 0.0)
-            _prop_parc = calcular_acordo(cobracas_inad, _parc_pdf, 0.0)
-
-            b1, b2 = st.columns([1, 1])
-            with b1:
-                st.download_button(
-                    "Baixar proposta em PDF",
-                    data=gerar_pdf_acordo(
-                        cliente.get("nome", ""), _prop_vista, _prop_parc,
-                        current_nome(), current_email()),
-                    file_name=f"Proposta_Acordo_{_slug(cliente.get('nome',''))}.pdf",
-                    mime="application/pdf", width="stretch", type="primary",
-                    key=f"acordo_pdf_{eid}",
-                )
-            with b2:
-                st.caption(f"O PDF sai com as duas opções: à vista e "
-                           f"{_parc_pdf}x. Assinado por {current_nome()}.")
-
-            with st.expander("Texto pra mandar no WhatsApp"):
-                st.text_area(
-                    "Selecione e copie", value=texto_acordo(cliente.get("nome", ""), _prop),
-                    height=200, key=f"acordo_txt_{eid}",
-                    label_visibility="collapsed",
-                )
-            st.caption(
-                "Juros contados por parcela, do vencimento de cada uma, pro rata "
-                "por dia. Não inclui atualização monetária. Confira antes de enviar."
-            )
+            else:
+                _render_acordo(eid, cliente, _itens)
 
     # Respiro antes do STATUS. Sem expander (1 parcela so') o campo colava na
     # linha da cobranca; com expander o proprio bloco ja' separava. Compensa a

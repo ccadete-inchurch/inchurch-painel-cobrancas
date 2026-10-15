@@ -4271,6 +4271,79 @@ def carregar_divida_fora_do_painel() -> dict:
 
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_encargos_superlogica(cid: str) -> tuple[list, str]:
+    """As cobrancas em aberto do cliente COM os encargos ja calculados pelo
+    Superlogica. Devolve (lista, erro).
+
+    Por que nao calculamos aqui: a conta parece simples — 2% de multa e 1% ao
+    mes de juros — mas o Superlogica faz tres coisas que nao da pra reproduzir
+    de fora sem errar centavos:
+
+      juros   0,033% ao DIA, com o valor diario arredondado e multiplicado
+              pelos dias. Nao e (dias/30)*1% sobre o valor exato.
+      correcao  por indice, mes a mes. Pro cliente 6344 ela e ZERO porque o
+              indice CAIU: 178,32 * 104,62704 (out/2026) / 104,96292
+              (ago/2026) = 177,75, menos que o principal, entao trava em zero.
+              Pro 4228, com 709 dias de atraso, ela e R$ 11,08 numa parcela
+              de R$ 137,50.
+      base    as cobrancas que o Superlogica considera, que NAO sao as mesmas
+              que o painel ve — o painel le so a competencia-all e ignora a
+              -hist, onde moram 6.704 cobrancas em aberto.
+
+    Calculando localmente, a proposta da Igreja Evangelica Vinho Novo dava
+    771,02 contra os 770,74 da proposta real. Por aqui da 770,74 exato, nas
+    cinco cobrancas.
+
+    O status=2 e obrigatorio. Sem ele, cliente como o Somma Church (4228)
+    volta vazio — descobri testando, a documentacao nao diz.
+
+    Cacheado 1h: os juros so mudam de um dia pro outro, e 1h deixa tentar de
+    novo rapido se a API falhar.
+    """
+    cid = str(cid or "").strip()
+    if not cid:
+        return [], "cliente sem id"
+    status, body, erro = _superlogica_get("/inadimplencia", {
+        "id": cid, "status": "2", "apenasColunasPrincipais": "0",
+        "pagina": 1, "itensPorPagina": 200,
+    })
+    if status != 200:
+        return [], erro or f"HTTP {status}"
+    if not isinstance(body, list) or not body:
+        return [], ""        # sem divida em aberto no Superlogica
+    out = []
+    for r in (body[0].get("recebimento") or []):
+        enc = (r.get("encargos") or [{}])[0]
+        det = enc.get("detalhes") or {}
+        f = lambda v: float(str(v or 0).replace(",", ".") or 0)
+        principal = f(r.get("vl_emitido_recb"))
+        if principal <= 0:
+            continue
+        out.append({
+            "id_recebimento": str(r.get("id_recebimento_recb") or ""),
+            # a API devolve data em MM/DD/YYYY
+            "vencimento":     _data_br(r.get("dt_vencimento_recb")),
+            "dias":           int(f(enc.get("diasatraso"))),
+            "principal":      principal,
+            "multa":          f(det.get("multa")),
+            "juros":          f(det.get("juros")),
+            "correcao":       f(det.get("atualizacaomonetaria")),
+            "total":          f(enc.get("valorcorrigido")) or principal,
+        })
+    return out, ""
+
+
+def _data_br(v) -> str:
+    """MM/DD/YYYY da API -> DD/MM/YYYY."""
+    s = str(v or "").strip()[:10]
+    partes = s.split("/")
+    if len(partes) == 3 and len(partes[2]) == 4:
+        return f"{partes[1]}/{partes[0]}/{partes[2]}"
+    return s
+
+
+
 def processar_dados_bigquery():
     fetch_cobrancas_competencia.clear()
     fetch_cobrancas_liquidacao.clear()

@@ -2,12 +2,12 @@
 """Gera o PDF da proposta de acordo, no layout que o financeiro ja usa.
 
 O modelo veio de uma proposta real enviada pela Priscila (Igreja Evangelica
-Vinho Novo, 15/10/2026). O calculo foi conferido contra ela: principal bate
-exato (746,34) e o total atualizado sai 771,02 contra 770,74 do documento —
-28 centavos em 770 reais, 0,036%, que e arredondamento ou a atualizacao
-monetaria que nao entra aqui (ver acordo.py).
+Vinho Novo, 15/10/2026). Os numeros batem com ela EXATAMENTE — R$ 770,74 nas
+cinco cobrancas, zero de diferenca — porque nao sao calculados aqui: vem
+prontos do Superlogica (ver data.fetch_encargos_superlogica).
 
-So monta o arquivo. Quem calcula e o acordo.py, quem entrega e o dialog.
+So monta o arquivo. Quem soma e divide e o acordo.py, quem entrega e o
+dialog.
 """
 from io import BytesIO
 from pathlib import Path
@@ -63,8 +63,11 @@ def _tabela_cobrancas(proposta):
         linhas.append([
             _p(str(d.get("id_recebimento") or "—"), 8.5, align=TA_CENTER),
             _p(d.get("vencimento") or "—", 8.5, align=TA_CENTER),
-            _p(_m(d["valor"]), 8.5, align=TA_CENTER),
-            _p(_m(d["multa"] + d["juros"]), 8.5, align=TA_CENTER),
+            _p(_m(d["principal"]), 8.5, align=TA_CENTER),
+            # "Encargos" junta os tres, como no modelo do financeiro: a
+            # correcao monetaria entra aqui e nao em coluna propria.
+            _p(_m(d["multa"] + d["juros"] + d.get("correcao", 0.0)),
+               8.5, align=TA_CENTER),
             _p(_m(d["total"]), 8.5, align=TA_CENTER),
         ])
     linhas.append([

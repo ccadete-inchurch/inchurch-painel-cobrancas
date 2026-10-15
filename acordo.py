@@ -1,43 +1,37 @@
 # -*- coding: utf-8 -*-
-"""Proposta de acordo: valor atualizado, parcelamento e desconto.
+"""Proposta de acordo: parcelamento, desconto e o texto pro cliente.
 
-O valor que o Superlogica mostra e o painel exibe e o PRINCIPAL — sem juros
-nem multa. Quando a especialista negocia, ela precisa do valor de hoje, e
-hoje ela calcula na mao ou pede pro financeiro.
+NAO calcula encargos. Quem calcula e o Superlogica, e a conta chega pronta
+pelo /inadimplencia (ver data.fetch_encargos_superlogica). Aqui so soma,
+divide e formata.
 
-As duas taxas sao as do cadastro da cobranca no Superlogica:
+A primeira versao calculava aqui, com as taxas configuradas na empresa — 2%
+de multa e 1% ao mes de juros. Chegava perto: na proposta real da Igreja
+Evangelica Vinho Novo dava R$ 771,02 contra os R$ 770,74 do documento. Mas
+"perto" nao serve pra papel que a igreja assina, e a diferenca vinha de tres
+coisas que so o Superlogica sabe:
 
-    vl_txmulta_emp = 2.00    multa, uma vez, quando atrasa
-    vl_txjuros_emp = 1.00    juros, 1% ao mes
+  juros     0,033% ao DIA, com o valor diario arredondado e multiplicado
+            pelos dias. Nao e (dias/30) * 1% sobre o valor exato.
+  correcao  por indice mensal, e pode dar ZERO quando o indice CAI — foi o
+            caso da Vinho Novo: 178,32 * 104,62704 (out/2026) / 104,96292
+            (ago/2026) = 177,75, menos que o principal, entao trava em zero.
+            Ja o Somma Church, com 709 dias de atraso, paga R$ 11,08 de
+            correcao numa parcela de R$ 137,50.
+  base      cobrancas que o painel nao enxerga. Ele le so a
+            splgc-cobrancas_competencia-all e ignora a -hist, onde moram
+            6.704 cobrancas em aberto. No Somma isso e a diferenca entre os
+            R$ 1.204,70 do card e os R$ 2.099,50 de principal real.
 
-Conferidas contra 118 acordos ja fechados, lidos pelo endpoint /acordos:
-a multa fica entre 1,9% e 2,1% do principal em 99 deles (84%), e os juros
-divididos pelo principal dao uma distribuicao continua de 0,5 a 32 "meses",
-que e o que se espera de 1% x meses — nao e valor fixo nem tem teto.
+Puxando do Superlogica, a proposta da Vinho Novo sai R$ 770,74 exato, nas
+cinco cobrancas, sem um centavo de diferenca.
 
-Tres decisoes que os dados NAO resolvem, assumidas aqui e sinalizadas na
-tela pra especialista conferir:
-
-1. Os juros contam por COBRANCA, cada uma do proprio vencimento. Usar o
-   atraso da parcela mais antiga pra todas superestimaria: um cliente com
-   parcela de 600 dias e outra de 30 pagaria 20% em cima das duas.
-2. Pro rata por dia (dias/30), nao mes cheio arredondado pra cima. Mes
-   cheio da um numero maior e o Superlogica pode fazer diferente — por isso
-   a tela mostra os dias, pra dar pra conferir.
-3. A linha 'AtualizacaoMonetaria' que aparece em 112 dos 195 acordos fica
-   FORA. Mediana de 0,34% do principal, e sem saber o indice nao da pra
-   reproduzir. Se tiver que entrar, e so somar aqui.
-
-O desconto e opcional e so existe a vista: parcelou, nao tem desconto. Ele
-NAO e calculado — nos 195 acordos lidos a mediana de desconto e 0% e nao
-ha relacao com a quantidade de parcelas, ou seja, e decisao de quem
-negocia, nao regra da casa.
+O que continua sendo decidido aqui, porque e da especialista e nao do
+sistema: quantas parcelas e quanto de desconto.
 """
 from dataclasses import dataclass, field
 
-TAXA_MULTA = 0.02    # 2%, uma vez
-TAXA_JUROS = 0.01    # 1% ao mes
-PARCELAS_MAX = 12    # 177 dos 184 acordos lidos ficam em 12 ou menos
+PARCELAS_MAX = 12    # 177 dos 184 acordos ja fechados ficam em 12 ou menos
 
 
 @dataclass
@@ -45,6 +39,7 @@ class Proposta:
     principal: float = 0.0
     multa: float = 0.0
     juros: float = 0.0
+    correcao: float = 0.0
     desconto: float = 0.0
     parcelas: int = 1
     dias_max: int = 0
@@ -52,8 +47,17 @@ class Proposta:
 
     @property
     def atualizado(self) -> float:
-        """Principal + multa + juros, antes do desconto."""
-        return self.principal + self.multa + self.juros
+        """O que o Superlogica cobraria hoje, antes do desconto.
+
+        Soma o 'valorcorrigido' de cada cobranca em vez de principal +
+        encargos: os dois batem, mas o valorcorrigido e o numero que o
+        Superlogica emite, e e ele que tem que aparecer na proposta.
+        """
+        return sum(d.get("total", 0.0) for d in self.detalhe)
+
+    @property
+    def encargos(self) -> float:
+        return self.multa + self.juros + self.correcao
 
     @property
     def total(self) -> float:
@@ -67,58 +71,30 @@ class Proposta:
     def pct_desconto(self) -> float:
         return 100.0 * self.desconto / self.atualizado if self.atualizado else 0.0
 
-    @property
-    def pct_acrescimo(self) -> float:
-        return 100.0 * (self.multa + self.juros) / self.principal if self.principal else 0.0
 
+def montar(itens, parcelas: int = 1, desconto: float = 0.0) -> Proposta:
+    """Monta a proposta a partir do que o Superlogica devolveu.
 
-def calcular(cobrancas, parcelas: int = 1, desconto: float = 0.0) -> Proposta:
-    """Monta a proposta a partir das cobrancas em atraso do cliente.
+    itens: o que o data.fetch_encargos_superlogica entrega — dicts com
+    id_recebimento, vencimento, dias, principal, multa, juros, correcao e
+    total (o valorcorrigido da API).
 
-    cobrancas: iteravel de dicts com 'valor' e 'dias_atraso' — e o formato
-    que o cliente["_cobracas"] do data.py ja entrega.
-
-    Desconto vira 0 automaticamente quando parcelas > 1: a regra e que so
-    existe desconto a vista, e deixar o valor passar escondido numa aba que
-    a tela esconde seria o tipo de erro que ninguem ve.
+    O desconto vira 0 quando parcela: a regra e que so existe desconto a
+    vista. Manter o campo e ignorar o valor por dentro seria pior — a
+    especialista digitaria e nao entenderia por que nao mudou nada.
     """
     p = Proposta(parcelas=max(1, int(parcelas or 1)))
     if p.parcelas > 1:
         desconto = 0.0
-
-    for c in cobrancas or []:
-        try:
-            valor = float(c.get("valor") or 0)
-        except (TypeError, ValueError):
-            continue
-        dias = c.get("dias_atraso") or 0
-        try:
-            dias = int(dias)
-        except (TypeError, ValueError):
-            dias = 0
-        if valor <= 0 or dias <= 0:
-            continue
-        multa = valor * TAXA_MULTA
-        juros = valor * TAXA_JUROS * (dias / 30.0)
-        p.principal += valor
-        p.multa += multa
-        p.juros += juros
-        p.dias_max = max(p.dias_max, dias)
-        p.detalhe.append({
-            # id_recebimento e o numero do boleto: conferi os cinco da
-            # proposta real da Vinho Novo (122661, 122662, 126436, 128066,
-            # 129623) contra o BigQuery e batem numero, vencimento e valor.
-            # E a coluna "No COBRANCA" do PDF — sem ele a igreja nao
-            # reconhece a cobranca que esta sendo negociada.
-            "id_recebimento": str(c.get("id_recebimento") or ""),
-            "valor": valor, "dias": dias, "multa": multa, "juros": juros,
-            "vencimento": c.get("vencimento", ""),
-            "total": valor + multa + juros,
-        })
-
+    for it in itens or []:
+        p.detalhe.append(dict(it))
+        p.principal += float(it.get("principal") or 0)
+        p.multa     += float(it.get("multa") or 0)
+        p.juros     += float(it.get("juros") or 0)
+        p.correcao  += float(it.get("correcao") or 0)
+        p.dias_max = max(p.dias_max, int(it.get("dias") or 0))
     p.desconto = min(max(float(desconto or 0), 0.0), p.atualizado)
     return p
-
 
 
 def _pct(v: float) -> str:
@@ -135,26 +111,27 @@ def texto_whatsapp(nome_cliente: str, p: Proposta) -> str:
     """
     m = lambda v: f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     linhas = [
-        f"Olá! Segue a proposta para regularizar a pendência"
+        "Olá! Segue a proposta para regularizar a pendência"
         + (f" da {nome_cliente}" if nome_cliente else "") + ":",
         "",
         f"Valor original: {m(p.principal)}",
         f"Multa (2%): {m(p.multa)}",
         f"Juros (1% ao mês): {m(p.juros)}",
-        f"*Total atualizado: {m(p.atualizado)}*",
     ]
+    # So aparece quando existe: na maioria das propostas o indice nao subiu o
+    # bastante e ela e zero. Linha de R$ 0,00 num documento pro cliente so
+    # gera pergunta.
+    if p.correcao > 0:
+        linhas.append(f"Atualização monetária: {m(p.correcao)}")
+    linhas.append(f"*Total atualizado: {m(p.atualizado)}*")
+
     if p.desconto > 0:
-        linhas += [
-            "",
-            f"Desconto para pagamento à vista: -{m(p.desconto)}"
-            + f" ({_pct(p.pct_desconto)}%)",
-            f"*Valor à vista: {m(p.total)}*",
-        ]
+        linhas += ["",
+                   f"Desconto para pagamento à vista: -{m(p.desconto)}"
+                   f" ({_pct(p.pct_desconto)}%)",
+                   f"*Valor à vista: {m(p.total)}*"]
     elif p.parcelas > 1:
-        linhas += [
-            "",
-            f"*Parcelado em {p.parcelas}x de {m(p.valor_parcela)}*",
-        ]
+        linhas += ["", f"*Parcelado em {p.parcelas}x de {m(p.valor_parcela)}*"]
     else:
         linhas += ["", f"*Valor à vista: {m(p.total)}*"]
     return "\n".join(linhas)
