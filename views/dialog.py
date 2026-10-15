@@ -1,6 +1,8 @@
 from datetime import datetime, date
 import streamlit as st
 
+from acordo import (PARCELAS_MAX, calcular as calcular_acordo,
+                    texto_whatsapp as texto_acordo, _pct as pct_acordo)
 from config import STATUS_OPTS
 from auth import get_store, current_nome, current_email, current_role
 from helpers import get_hist, get_hist_unificado, save_hist, fmt_moeda_plain, dias_html, get_effective_lastContact, get_ultimo_login, parse_date_br, telefones_cliente, aceita_whatsapp
@@ -275,6 +277,83 @@ def dialog_editar(eid, from_fixados: bool = False):
                 st.markdown("".join(_render_cobranca_row(c) for c in extras), unsafe_allow_html=True)
     else:
         st.info("Nenhuma cobrança em atraso")
+
+    # ── Proposta de acordo ──────────────────────────────────────────────────
+    # Fechado por padrao: o dialog ja e denso e a maioria dos atendimentos nao
+    # negocia acordo. Fica aqui, e nao em tela propria, porque a tela de
+    # Inadimplencia ja abre ESTE dialog — botao separado criaria um segundo
+    # lugar pro mesmo cliente — e porque o dado que o calculo precisa (valor,
+    # vencimento e atraso de cada parcela) ja esta carregado acima.
+    if cobracas_inad and not somente_leitura:
+        with st.expander("Gerar proposta de acordo"):
+            ac1, ac2 = st.columns([1, 1], vertical_alignment="bottom")
+            with ac1:
+                _parc = st.selectbox(
+                    "Parcelamento", list(range(1, PARCELAS_MAX + 1)),
+                    index=0, key=f"acordo_parc_{eid}",
+                    format_func=lambda n: "À vista (1x)" if n == 1 else f"{n}x sem juros",
+                )
+            with ac2:
+                # Some quando parcela: a regra e que desconto so existe a
+                # vista. Deixar o campo visivel e ignorar o valor por dentro
+                # seria pior — a especialista digitaria e nao entenderia.
+                if _parc == 1:
+                    _desc = st.number_input(
+                        "Desconto à vista (R$)", min_value=0.0, step=10.0,
+                        value=0.0, key=f"acordo_desc_{eid}",
+                        help="Opcional, e so na opcao a vista.",
+                    )
+                else:
+                    _desc = 0.0
+                    st.caption("Desconto só na opção à vista.")
+
+            _prop = calcular_acordo(cobracas_inad, _parc, _desc)
+            _m = fmt_moeda_plain
+            _linhas = [
+                ("Valor original", _m(_prop.principal), "#e8eaf0"),
+                ("Multa (2%)", _m(_prop.multa), "#8b94a5"),
+                (f"Juros (1% ao mês · até {_prop.dias_max}d de atraso)",
+                 _m(_prop.juros), "#8b94a5"),
+                ("Total atualizado", _m(_prop.atualizado), "#e8eaf0"),
+            ]
+            if _prop.desconto > 0:
+                _pc = pct_acordo(_prop.pct_desconto)
+                _linhas.append((f"Desconto ({_pc}%)",
+                                "- " + _m(_prop.desconto), "#7cc243"))
+            st.markdown(
+                '<div style="background:#13161f;border:1px solid #1e2333;'
+                'border-radius:8px;padding:12px 14px;font-size:13px">'
+                + "".join(
+                    f'<div style="display:flex;justify-content:space-between;'
+                    f'padding:3px 0;color:{cor}">'
+                    f'<span>{rot}</span>'
+                    f'<span style="font-variant-numeric:tabular-nums;'
+                    f'font-weight:{700 if "Total" in rot else 500}">{val}</span></div>'
+                    for rot, val, cor in _linhas)
+                + f'<div style="border-top:1px solid #1e2333;margin-top:8px;'
+                  f'padding-top:8px;display:flex;justify-content:space-between;'
+                  f'align-items:baseline">'
+                  f'<span style="color:#8b94a5;font-size:12px;text-transform:uppercase;'
+                  f'letter-spacing:1px">'
+                  f'{"À vista" if _prop.parcelas == 1 else f"{_prop.parcelas}x de"}</span>'
+                  f'<span style="color:#7cc243;font-weight:800;font-size:19px;'
+                  f'font-variant-numeric:tabular-nums">{_m(_prop.valor_parcela)}</span>'
+                  f'</div>'
+                + (f'<div style="color:#8b94a5;font-size:12px;margin-top:4px;'
+                   f'text-align:right">total {_m(_prop.total)}</div>'
+                   if _prop.parcelas > 1 else "")
+                + '</div>',
+                unsafe_allow_html=True,
+            )
+            st.text_area(
+                "Texto pra enviar", value=texto_acordo(cliente.get("nome", ""), _prop),
+                height=200, key=f"acordo_txt_{eid}",
+                help="Selecione e copie. O negrito com um asterisco e do WhatsApp.",
+            )
+            st.caption(
+                "Juros contados por parcela, do vencimento de cada uma, pro rata "
+                "por dia. Não inclui atualização monetária. Confira antes de enviar."
+            )
 
     # Respiro antes do STATUS. Sem expander (1 parcela so') o campo colava na
     # linha da cobranca; com expander o proprio bloco ja' separava. Compensa a
