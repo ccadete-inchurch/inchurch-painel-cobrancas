@@ -1,6 +1,14 @@
 import base64
 from pathlib import Path
 
+
+# Versao do codigo no ar. Serve pra responder "o deploy pegou?" sem
+# adivinhacao: o rodape da sidebar mostra isso, e se nao bater com o que
+# acabou de subir, o painel esta rodando codigo velho. Bumpar a cada deploy
+# que mude comportamento visivel.
+VERSAO = "2026.10.15-acordo-pdf"
+
+
 # ── Paginação e regras ────────────────────────────────────────────────────────
 PAGE_SIZE        = 50
 
