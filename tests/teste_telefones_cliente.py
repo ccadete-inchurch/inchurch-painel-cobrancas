@@ -314,6 +314,27 @@ CASOS_HISTORICO = [
      {"5521981198336": (90, 42, date(2026, 5, 21))},
      [("(21) 98119-8336", ""), ("(21) 99779-0128", "")]),
 
+
+    ("5884 Mundial: o solto SAI quando o visivel ja responde",
+     "o solto tem 19 respostas, a ultima em fevereiro; o visivel tem 134, a "
+     "ultima ontem. O Caio avisou que o terceiro era de alguem que nao e "
+     "mais da igreja — resposta prova que ALGUEM atende, nao que seja quem "
+     "deve atender",
+     "11912067208;11989652081;solto=11983932486",
+     {"5511912067208": (297, 134, date(2026, 10, 14)),
+      "5511989652081": (160, 83, date(2026, 5, 25)),
+      "5511983932486": (115, 19, date(2026, 2, 9))},
+     [("(11) 91206-7208", ""), ("(11) 98965-2081", "")]),
+
+    ("5171 Mais Que Vencedores: o solto FICA quando ninguem mais responde",
+     "9 respostas no solto e ZERO no visivel. Sao 9 clientes assim na base; "
+     "tirar deixaria a atendente so com um numero nunca testado. Dado real: "
+     "conferi contra o historico, nao inventei a fixtura como fiz antes com "
+     "o 4362, cujo visivel na verdade responde (32, a ultima em 13/10)",
+     "24981554319;solto=24981151851",
+     {"5524981151851": (28, 9, date(2026, 4, 7)),
+      "5524981554319": (12, 0, None)},
+     [("(24) 98115-1851", ""), ("(24) 98155-4319", "")]),
     ("sem historico, a ordem e a de antes",
      "em 76% da base nao ha o que consultar: decide o tipo do numero",
      "1132657890;11987651234",

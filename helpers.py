@@ -1025,6 +1025,12 @@ def telefones_cliente(valor, historico=None) -> list[tuple[str, str, str]]:
         if eh_solto and base_vazia is None:
             # congela aqui: os visiveis ja foram todos processados
             base_vazia = not saida
+            # ...e se algum deles ja RESPONDE, o cliente tem canal bom e
+            # editavel. Nesse caso o numero proprio do campo solto nao
+            # acrescenta nada — ver o comentario la embaixo.
+            base_responde = any(
+                (historico or {}).get(telefone_wa_link(b), (0, 0, None))[1] > 0
+                for _dj, b, _fj, _pj in saida)
         if not bruto:
             continue
         d = _re.sub(r"\D", "", str(bruto))
@@ -1055,6 +1061,26 @@ def telefones_cliente(valor, historico=None) -> list[tuple[str, str, str]]:
             # canal comprovado de 21 deles) ou quando a tela nao deu nenhum
             # numero (18 clientes, que senao ficariam sem contato).
             if eh_solto and not base_vazia:
+                # Tem que ser o UNICO que responde. A primeira versao desta
+                # regra aceitava qualquer numero solto com resposta, e a
+                # Igreja Mundial (5884) ficou com tres: o solto tem 19
+                # respostas, a ultima em fevereiro, contra 134 do visivel,
+                # a ultima ontem. O Caio avisou que aquele terceiro era de
+                # alguem que nao e mais da igreja.
+                #
+                # O erro foi meu: tratei "tem resposta" como prova de que o
+                # numero serve. Prova que ALGUEM atende, nao que seja a
+                # pessoa certa — e o campo solto e justamente onde fica o
+                # contato ANTERIOR, o lugar mais provavel de ter ex-tesoureiro
+                # respondendo.
+                #
+                # Se o cliente ja tem um numero visivel que responde, esse e
+                # o canal: editavel na tela e comprovado. O solto so entra
+                # quando nenhum visivel responde — em 9 clientes ele e a
+                # unica coisa que funciona, e tirar deixaria a atendente com
+                # um numero nunca testado.
+                if base_responde:
+                    continue
                 wa = telefone_wa_link(bruto)
                 if (historico or {}).get(wa, (0, 0, None))[1] <= 0:
                     continue
