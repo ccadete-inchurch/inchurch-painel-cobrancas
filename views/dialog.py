@@ -61,8 +61,11 @@ def _render_acordo(eid, cliente, itens):
         parc = st.selectbox(
             "Parcelamento", list(range(2, PARCELAS_MAX + 1)), index=0,
             key=f"acordo_parc_{eid}",
-            format_func=lambda n: (f"Em {n}x de {_m(base.atualizado / n)}"
-                                   f"  ·  total {_m(base.atualizado)}"))
+            # So entra no rotulo o que MUDA entre as opcoes, que e o valor
+            # da parcela. O total e o juros sao iguais nas onze — juros aqui
+            # e de ATRASO, nao de parcelamento — e repetir o mesmo numero em
+            # toda linha e ruido. A composicao fica nos quadros abaixo.
+            format_func=lambda n: f"Em {n}x de {_m(base.atualizado / n)}")
     with c2:
         desc = st.number_input(
             "Desconto à vista (R$)", min_value=0.0, step=10.0, value=0.0,
@@ -124,9 +127,12 @@ def _render_acordo(eid, cliente, itens):
         linhas_a.append((f"Desconto ({pct_acordo(prop_a.pct_desconto)}%)",
                          "- " + _m(prop_a.desconto), "#7cc243"))
 
-    linhas_b = [("Total atualizado", _m(prop_b.atualizado), "#e8eaf0"),
-                (f"{parc} parcelas iguais", _m(prop_b.valor_parcela), "#8b94a5"),
-                ("Sem acréscimo por parcelar", "—", "#8b94a5")]
+    # "Sem acrescimo por parcelar" respondia a pergunta errada. A que a
+    # igreja faz e "esse valor ja tem os juros?" — e tem: os do atraso.
+    linhas_b = [("Valor original", _m(prop_b.principal), "#8b94a5"),
+                ("Multa e juros do atraso", _m(prop_b.encargos), "#8b94a5"),
+                ("Total atualizado", _m(prop_b.atualizado), "#e8eaf0"),
+                (f"Dividido em {parc} parcelas iguais", "", "#8b94a5")]
 
     o1, o2 = st.columns(2)
     with o1:
