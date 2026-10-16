@@ -272,11 +272,16 @@ def dialog_editar(eid, from_fixados: bool = False):
     /* O gatilho da proposta de acordo imita o summary do expander acima:
        texto puro, sem moldura, mesma cor e tamanho. Sao a mesma classe de
        acao — abrir detalhe das cobrancas — e precisam parecer irmas. */
+    /* font-family:inherit porque <button> herda a fonte do user-agent, nao a
+       do app — sem isso o rotulo sai numa fonte diferente do expander logo
+       acima. Mas NAO pode cair no icone: o Material Symbols depende da fonte
+       propria pra transformar a ligadura "expand_more" em simbolo, e quando
+       eu usei `button *` o nome vazou como texto cru na tela. Por isso os
+       seletores miram o botao e o container do rotulo, nunca "todos os
+       filhos". */
     [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button,
-    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button *{
-        /* font-family:inherit porque <button> herda a fonte do user-agent, nao
-           a do app — sem isso o rotulo saia numa fonte diferente do expander
-           logo acima, que era o que o Caio estava vendo. */
+    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button [data-testid="stMarkdownContainer"],
+    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button p{
         font-family:inherit !important;
         font-size:13px !important;
         font-weight:400 !important;
@@ -293,7 +298,8 @@ def dialog_editar(eid, from_fixados: bool = False):
         justify-content:flex-start !important;
     }
     [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button:hover,
-    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button:hover *{
+    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button:hover p,
+    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button:hover [data-testid="stIconMaterial"]{
         color:#e8eaf0 !important;
         background:transparent !important;
     }
