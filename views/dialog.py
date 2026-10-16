@@ -47,7 +47,7 @@ def _render_acordo(eid, cliente, itens):
         )
 
     # ── controles ────────────────────────────────────────────────────────
-    c1, c2 = st.columns([1.4, 1], vertical_alignment="bottom")
+    c1, c2, c3 = st.columns([1.5, 1, 1], vertical_alignment="bottom")
     with c1:
         # 2x a 12x: a opcao A (a vista) existe sempre no documento e nao
         # precisa ser escolhida. Antes o seletor incluia 1x e, quando a
@@ -66,14 +66,22 @@ def _render_acordo(eid, cliente, itens):
             # e de ATRASO, nao de parcelamento — e repetir o mesmo numero em
             # toda linha e ruido. A composicao fica nos quadros abaixo.
             format_func=lambda n: f"Em {n}x de {_m(base.atualizado / n)}")
+    # Um desconto por opcao: a negociacao acontece como "a vista dou 10%,
+    # parcelado dou 5%". Antes havia um campo so, que valia pra opcao A — o
+    # Caio pediu os dois.
     with c2:
-        desc = st.number_input(
+        desc_a = st.number_input(
             "Desconto à vista (R$)", min_value=0.0, step=10.0, value=0.0,
-            format="%.2f", key=f"acordo_desc_{eid}",
-            help="Opcional. Vale para a opção à vista.")
+            format="%.2f", key=f"acordo_desc_a_{eid}",
+            help="Opcional. Abate da opção A.")
+    with c3:
+        desc_b = st.number_input(
+            "Desconto parcelado (R$)", min_value=0.0, step=10.0, value=0.0,
+            format="%.2f", key=f"acordo_desc_b_{eid}",
+            help="Opcional. Abate da opção B.")
 
-    prop_a = montar_acordo(itens, 1, desc)          # opcao A, a vista
-    prop_b = montar_acordo(itens, parc, 0.0)        # opcao B, parcelada
+    prop_a = montar_acordo(itens, 1, desc_a)        # opcao A, a vista
+    prop_b = montar_acordo(itens, parc, desc_b)     # opcao B, parcelada
 
     # ── o calculo aberto ─────────────────────────────────────────────────
     with st.expander(f"Ver o cálculo das {len(prop_a.detalhe)} cobranças"):
@@ -131,8 +139,11 @@ def _render_acordo(eid, cliente, itens):
     # igreja faz e "esse valor ja tem os juros?" — e tem: os do atraso.
     linhas_b = [("Valor original", _m(prop_b.principal), "#8b94a5"),
                 ("Multa e juros do atraso", _m(prop_b.encargos), "#8b94a5"),
-                ("Total atualizado", _m(prop_b.atualizado), "#e8eaf0"),
-                (f"Dividido em {parc} parcelas iguais", "", "#8b94a5")]
+                ("Total atualizado", _m(prop_b.atualizado), "#e8eaf0")]
+    if prop_b.desconto > 0:
+        linhas_b.append((f"Desconto ({pct_acordo(prop_b.pct_desconto)}%)",
+                         "- " + _m(prop_b.desconto), "#7cc243"))
+    linhas_b.append((f"Dividido em {parc} parcelas iguais", "", "#8b94a5"))
 
     o1, o2 = st.columns(2)
     with o1:
@@ -153,7 +164,8 @@ def _render_acordo(eid, cliente, itens):
         mime="application/pdf", width="stretch", type="primary",
         icon=":material/picture_as_pdf:",
         help=f"PDF com as duas opções, assinado por {current_nome()}.",
-        key=f"acordo_pdf_{eid}_{parc}_{int(round(desc * 100))}")
+        key=(f"acordo_pdf_{eid}_{parc}_{int(round(desc_a * 100))}"
+             f"_{int(round(desc_b * 100))}"))
 
 
 @st.dialog("Editar Registro", width="large")

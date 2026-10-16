@@ -89,11 +89,19 @@ checa("Opcao B: parcela do 2x (PDF: 385,37)", pp.valor_parcela, 385.37)
 checa("Opcao B: total do 2x = total a vista sem desconto", pp.total, 770.74)
 
 print()
-print("=== desconto so existe a vista ===")
+print("=== desconto vale nas DUAS opcoes ===")
+# A primeira versao zerava o desconto quando parcelava, porque o modelo do
+# financeiro so tem desconto na opcao a vista. O Caio pediu os dois: a
+# negociacao acontece como "a vista dou 10%, parcelado dou 5%".
 p3 = montar(VINHO_NOVO, 3, 100.0)
-checa("3x IGNORA o desconto", p3.total, 770.74)
-checa("3x: valor da parcela", p3.valor_parcela, 256.91, tol=0.01)
-checa("desconto zerado", p3.desconto, 0.00)
+checa("3x APLICA o desconto", p3.total, 670.74)
+checa("3x: valor da parcela", p3.valor_parcela, 223.58, tol=0.01)
+checa("desconto preservado", p3.desconto, 100.00)
+# e cada opcao leva o seu
+pa, pb = montar(VINHO_NOVO, 1, 66.50), montar(VINHO_NOVO, 6, 30.0)
+checa("opcao A com desconto proprio", pa.total, 704.24)
+checa("opcao B com desconto proprio", pb.total, 740.74)
+checa("opcao B: parcela ja com o desconto", pb.valor_parcela, 123.46, tol=0.01)
 
 print()
 print("=== correcao monetaria quando ela existe (Somma, 709 dias) ===")

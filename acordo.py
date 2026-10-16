@@ -79,13 +79,13 @@ def montar(itens, parcelas: int = 1, desconto: float = 0.0) -> Proposta:
     id_recebimento, vencimento, dias, principal, multa, juros, correcao e
     total (o valorcorrigido da API).
 
-    O desconto vira 0 quando parcela: a regra e que so existe desconto a
-    vista. Manter o campo e ignorar o valor por dentro seria pior — a
-    especialista digitaria e nao entenderia por que nao mudou nada.
+    O desconto NAO e mais zerado quando parcela. A primeira versao fazia
+    isso porque o modelo do financeiro so tem desconto na opcao a vista.
+    Mas o Caio pediu os dois: a negociacao acontece como "a vista dou 10%,
+    parcelado dou 5%", e cada opcao leva o desconto dela. Quem decide qual
+    valor vai em cada uma e o dialog.
     """
     p = Proposta(parcelas=max(1, int(parcelas or 1)))
-    if p.parcelas > 1:
-        desconto = 0.0
     for it in itens or []:
         p.detalhe.append(dict(it))
         p.principal += float(it.get("principal") or 0)

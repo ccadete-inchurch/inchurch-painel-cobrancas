@@ -109,8 +109,11 @@ def _caixa_opcoes(proposta, proposta_parcelada):
          Spacer(1, 5),
          _p(f"Entrada (1ª parcela): R$ {_m(pp.valor_parcela)}", 9),
          Spacer(1, 4),
-         _p(f"Demais Parcelas: {pp.parcelas - 1}x de R$ {_m(pp.valor_parcela)}", 9),
-         Spacer(1, 6),
+         _p(f"Demais Parcelas: {pp.parcelas - 1}x de R$ {_m(pp.valor_parcela)}", 9)]
+    if pp.desconto > 0:
+        b += [Spacer(1, 4),
+              _p(f"Desconto Concedido: - R$ {_m(pp.desconto)}", 9, VERDE)]
+    b += [Spacer(1, 6),
          Table([[""]], colWidths=[80*mm], rowHeights=[0.5],
                style=TableStyle([("LINEABOVE", (0, 0), (-1, 0), 0.5, BORDA)])),
          Spacer(1, 5),
