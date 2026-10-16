@@ -272,24 +272,39 @@ def dialog_editar(eid, from_fixados: bool = False):
     /* O gatilho da proposta de acordo imita o summary do expander acima:
        texto puro, sem moldura, mesma cor e tamanho. Sao a mesma classe de
        acao — abrir detalhe das cobrancas — e precisam parecer irmas. */
+    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button,
+    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button *{
+        /* font-family:inherit porque <button> herda a fonte do user-agent, nao
+           a do app — sem isso o rotulo saia numa fonte diferente do expander
+           logo acima, que era o que o Caio estava vendo. */
+        font-family:inherit !important;
+        font-size:13px !important;
+        font-weight:400 !important;
+        color:#8b94a5 !important;
+        line-height:1.2 !important;
+    }
     [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button{
         border:none !important;
         background:transparent !important;
         box-shadow:none !important;
-        color:#8b94a5 !important;
-        font-size:13px !important;
-        font-weight:400 !important;
         padding:6px 0 !important;
         min-height:auto !important;
+        height:auto !important;
         justify-content:flex-start !important;
     }
-    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button:hover{
+    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button:hover,
+    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button:hover *{
         color:#e8eaf0 !important;
         background:transparent !important;
     }
-    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button p{
-        font-size:13px !important;
-        font-weight:400 !important;
+    /* o icone do Material vem com tamanho proprio e destoava da setinha do
+       expander */
+    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button [data-testid="stIconMaterial"]{
+        font-size:18px !important;
+        margin-right:2px !important;
+    }
+    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] [data-testid="stMarkdownContainer"] p{
+        margin:0 !important;
     }
     /* Com 5 cards em 900px a coluna fica estreita e o label de 13px quebrava
        no meio da palavra ("VENCIMENT/O"). 11px + keep-all resolve; label de
