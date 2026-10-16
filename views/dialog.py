@@ -47,28 +47,27 @@ def _render_acordo(eid, cliente, itens):
         )
 
     # ── controles ────────────────────────────────────────────────────────
-    c1, c2, c3 = st.columns([1, 1, 1.15], vertical_alignment="bottom")
+    c1, c2 = st.columns([1.4, 1], vertical_alignment="bottom")
     with c1:
         # 2x a 12x: a opcao A (a vista) existe sempre no documento e nao
         # precisa ser escolhida. Antes o seletor incluia 1x e, quando a
         # especialista escolhia "a vista", a opcao B do PDF saia 2x fixo.
+        #
+        # O rotulo traz o valor da parcela E o total, no formato que o Caio
+        # pediu. O total e IGUAL em todas as opcoes — parcelar nao acrescenta
+        # nada — por isso escrevi "total" e nao "com juros": os juros estao
+        # dentro do valor, mas sao os do ATRASO, e "com juros" daria a
+        # entender juros de financiamento, que aqui nao existem.
         parc = st.selectbox(
             "Parcelamento", list(range(2, PARCELAS_MAX + 1)), index=0,
             key=f"acordo_parc_{eid}",
-            format_func=lambda n: f"{n}x de {_m(base.atualizado / n)}")
+            format_func=lambda n: (f"Em {n}x de {_m(base.atualizado / n)}"
+                                   f"  ·  total {_m(base.atualizado)}"))
     with c2:
-        # Dois jeitos de dizer a mesma coisa, porque a negociacao acontece das
-        # duas formas. So com o campo de desconto, uma atendente digitou
-        # 2.673,73 num cliente que devia 2.785,86 — ela queria o valor FINAL,
-        # e aquilo era um desconto de 96%.
-        modo = st.selectbox("Negociar por", ["Desconto (R$)", "Valor final (R$)"],
-                            key=f"acordo_modo_{eid}")
-    with c3:
-        v = st.number_input(modo, min_value=0.0, step=10.0, value=0.0,
-                            format="%.2f", key=f"acordo_val_{eid}",
-                            label_visibility="collapsed",
-                            help="Opcional. Vale para a opção à vista.")
-    desc = v if modo.startswith("Desconto") else max(base.atualizado - v, 0.0)
+        desc = st.number_input(
+            "Desconto à vista (R$)", min_value=0.0, step=10.0, value=0.0,
+            format="%.2f", key=f"acordo_desc_{eid}",
+            help="Opcional. Vale para a opção à vista.")
 
     prop_a = montar_acordo(itens, 1, desc)          # opcao A, a vista
     prop_b = montar_acordo(itens, parc, 0.0)        # opcao B, parcelada
@@ -148,7 +147,7 @@ def _render_acordo(eid, cliente, itens):
         mime="application/pdf", width="stretch", type="primary",
         icon=":material/picture_as_pdf:",
         help=f"PDF com as duas opções, assinado por {current_nome()}.",
-        key=f"acordo_pdf_{eid}")
+        key=f"acordo_pdf_{eid}_{parc}_{int(round(desc * 100))}")
 
 
 @st.dialog("Editar Registro", width="large")
