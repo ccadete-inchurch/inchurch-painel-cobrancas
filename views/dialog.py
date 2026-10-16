@@ -394,10 +394,25 @@ def dialog_editar(eid, from_fixados: bool = False):
             unsafe_allow_html=True,
         )
     with _tc2:
-        if cobracas_inad and not st.session_state.get(_k_acordo):
-            if st.button("Proposta de acordo", width="stretch",
-                         key=f"btn_{_k_acordo}"):
-                st.session_state[_k_acordo] = True
+        # Abre e fecha no mesmo botao, como o expander "Ver mais N parcelas"
+        # logo abaixo. Nao USO um expander aqui de proposito: o Streamlit
+        # executa o conteudo de um expander em toda renderizacao, aberto ou
+        # nao, e com a consulta ao Superlogica la dentro abrir qualquer
+        # cliente custava 1 segundo. Com o botao, a consulta so sai depois do
+        # clique — e a alternancia da o mesmo comportamento na tela.
+        if cobracas_inad:
+            # on_click em vez de ler o retorno: o callback roda ANTES da
+            # renderizacao, entao o icone ja sai com o estado novo. Lendo o
+            # retorno, o botao seria desenhado antes da virada e a setinha
+            # ficaria um passo atrasada.
+            def _alterna(_k=_k_acordo):
+                st.session_state[_k] = not st.session_state.get(_k, False)
+
+            st.button("Proposta de acordo", width="stretch",
+                      key=f"btn_{_k_acordo}", on_click=_alterna,
+                      icon=":material/expand_less:"
+                           if st.session_state.get(_k_acordo)
+                           else ":material/expand_more:")
 
     def _render_cobranca_row(cob):
         # Linha compacta single-row: economiza ~50% de altura comparado ao
