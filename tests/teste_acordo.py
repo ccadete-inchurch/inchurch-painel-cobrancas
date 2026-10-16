@@ -18,7 +18,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from acordo import montar, texto_whatsapp, PARCELAS_MAX
+from acordo import montar, PARCELAS_MAX
 
 falhas = []
 
@@ -114,20 +114,6 @@ diz("PARCELAS_MAX e 12", PARCELAS_MAX == 12)
 _ids = [d["id_recebimento"] for d in p.detalhe]
 diz("o numero do boleto chega no detalhe",
     _ids == ["122661", "122662", "126436", "128066", "129623"], str(_ids))
-
-print()
-print("=== o texto pro WhatsApp ===")
-t = texto_whatsapp("Igreja Evangelica Vinho Novo", pv)
-for trecho in ("746,34", "Multa (2%)", "Juros (1% ao mês)", "770,74",
-               "704,24", "Igreja Evangelica Vinho Novo"):
-    diz(f"texto contem {trecho!r}", trecho in t)
-diz("NAO mostra linha de correcao quando ela e zero",
-    "Atualização monetária" not in t)
-diz("mostra a correcao quando ela existe",
-    "Atualização monetária" in texto_whatsapp("X", montar(SOMMA_1)))
-t3 = texto_whatsapp("", montar(VINHO_NOVO, 3))
-diz("parcelado mostra 3x e NAO mostra desconto",
-    "3x de" in t3 and "Desconto" not in t3)
 
 print()
 print("=== o PDF ===")

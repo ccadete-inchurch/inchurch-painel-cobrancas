@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Proposta de acordo: parcelamento, desconto e o texto pro cliente.
+"""Proposta de acordo: parcelamento e desconto.
 
 NAO calcula encargos. Quem calcula e o Superlogica, e a conta chega pronta
 pelo /inadimplencia (ver data.fetch_encargos_superlogica). Aqui so soma,
@@ -101,37 +101,3 @@ def _pct(v: float) -> str:
     """Percentual com virgula, do jeito que se escreve em portugues. Uma casa
     so quando e menor que 1% — R$ 500 em R$ 670 mil arredondava pra '0%'."""
     return (f"{v:.1f}".replace(".", ",") if v < 1 else f"{v:.0f}")
-
-
-def texto_whatsapp(nome_cliente: str, p: Proposta) -> str:
-    """A proposta em texto corrido, pra especialista colar no WhatsApp.
-
-    Sem markdown de tela: o WhatsApp usa *negrito* com um asterisco so, e
-    tabela nao existe la.
-    """
-    m = lambda v: f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    linhas = [
-        "Olá! Segue a proposta para regularizar a pendência"
-        + (f" da {nome_cliente}" if nome_cliente else "") + ":",
-        "",
-        f"Valor original: {m(p.principal)}",
-        f"Multa (2%): {m(p.multa)}",
-        f"Juros (1% ao mês): {m(p.juros)}",
-    ]
-    # So aparece quando existe: na maioria das propostas o indice nao subiu o
-    # bastante e ela e zero. Linha de R$ 0,00 num documento pro cliente so
-    # gera pergunta.
-    if p.correcao > 0:
-        linhas.append(f"Atualização monetária: {m(p.correcao)}")
-    linhas.append(f"*Total atualizado: {m(p.atualizado)}*")
-
-    if p.desconto > 0:
-        linhas += ["",
-                   f"Desconto para pagamento à vista: -{m(p.desconto)}"
-                   f" ({_pct(p.pct_desconto)}%)",
-                   f"*Valor à vista: {m(p.total)}*"]
-    elif p.parcelas > 1:
-        linhas += ["", f"*Parcelado em {p.parcelas}x de {m(p.valor_parcela)}*"]
-    else:
-        linhas += ["", f"*Valor à vista: {m(p.total)}*"]
-    return "\n".join(linhas)
