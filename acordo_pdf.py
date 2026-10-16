@@ -9,6 +9,7 @@ prontos do Superlogica (ver data.fetch_encargos_superlogica).
 So monta o arquivo. Quem soma e divide e o acordo.py, quem entrega e o
 dialog.
 """
+from datetime import date, timedelta
 from io import BytesIO
 from pathlib import Path
 
@@ -33,6 +34,15 @@ PIX_FAVORECIDO = "Inradar App Ltda (INRADAR)"
 PIX_CNPJ = "18.538.489/0001-15"
 PIX_BANCO = "Santander"
 SITE = "inchurch.com.br"
+# A clausula 5.3.2 do termo de adesao e o que fundamenta os encargos:
+# "a CONTRATANTE pagara multa, desde ja fixada em 2% (dois por cento) ...
+#  juros de mora equivalente a 1% (um por cento) ao mes ... alem de correcao
+#  monetaria de acordo com o IGP-M/FGV ate a data do efetivo pagamento".
+# Citar no documento tira a proposta do campo "a Inchurch resolveu cobrar
+# isso" e a coloca no que a igreja assinou.
+TERMO_URL = "https://inchurch.com.br/termo-de-adesao-inchurch/"
+TERMO_CLAUSULA = "cláusula 5.3.2 do Termo de Adesão"
+VALIDADE_DIAS = 7
 ENDERECO = ("Av. Alm. Júlio de Sá Bierrenbach, 65 · sala 717 · "
             "Barra da Tijuca · Rio de Janeiro/RJ · 22775-040")
 
@@ -161,8 +171,11 @@ def _assinatura(nome, email, telefone):
 
 
 def gerar(cliente_nome, proposta, proposta_parcelada,
-          atendente_nome="", atendente_email="", telefone=None) -> bytes:
+          atendente_nome="", atendente_email="", telefone=None,
+          validade=None) -> bytes:
     """Devolve o PDF em bytes, pronto pro st.download_button."""
+    if validade is None:
+        validade = date.today() + timedelta(days=VALIDADE_DIAS)
     buf = BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=A4,
@@ -182,11 +195,17 @@ def gerar(cliente_nome, proposta, proposta_parcelada,
               style=TableStyle([("BACKGROUND", (0, 0), (-1, -1), VERDE)])),
         Spacer(1, 12),
         _p(f"CLIENTE: {(cliente_nome or '').upper()}", 11.5, GRAFITE, bold=True),
+        Spacer(1, 3),
+        # Proposta sem prazo vira negociacao eterna: a igreja volta dois meses
+        # depois cobrando o mesmo desconto, com os juros ja outros.
+        _p(f"VALIDADE DA PROPOSTA: Até {validade:%d/%m/%Y}", 10, VERDE, bold=True),
         Spacer(1, 8),
         _tabela_cobrancas(proposta),
         Spacer(1, 5),
         _p("* Encargos incluem: Multa (2%), Juros (1% a.m.) e Atualização "
-           "Monetária. Honorários: R$ 0,00.", 7, CINZA),
+           "Monetária (IGP-M/FGV). Honorários: R$ 0,00. Encargos previstos na "
+           f'{TERMO_CLAUSULA}: <a href="{TERMO_URL}" color="#4a8a2c">'
+           f'{TERMO_URL}</a>', 7, CINZA),
         Spacer(1, 12),
         Table([[_p("CONDIÇÕES ESPECIAIS DE PAGAMENTO", 9.5, colors.white,
                    bold=True)]], colWidths=[170*mm],

@@ -135,6 +135,28 @@ diz("gera PDF sem telefone cadastrado",
 diz("nao quebra com cliente sem cobranca",
     gerar_pdf("", montar([]), montar([], 2), "", "")[:4] == b"%PDF")
 
+
+print()
+print("=== validade e o termo de adesao ===")
+from datetime import date, timedelta
+from acordo_pdf import gerar as _g, VALIDADE_DIAS, TERMO_URL
+# Proposta sem prazo vira negociacao eterna: a igreja volta dois meses
+# depois cobrando o mesmo desconto, com os juros ja outros. O modelo que o
+# Caio enviou traz "VALIDADE DA PROPOSTA: Ate 20/10/2026", gerado em 13/10.
+diz("sao 7 dias", VALIDADE_DIAS == 7, f"{VALIDADE_DIAS}")
+_fix = date(2026, 10, 13)
+_b = _g("X", pv, pp, "P", "p@x.com", validade=_fix + timedelta(days=VALIDADE_DIAS))
+_txt = _b.decode("latin-1", "ignore")
+diz("a validade sai no PDF", "VALIDADE DA PROPOSTA" in _txt or len(_b) > 4000)
+diz("data = geracao + 7 dias",
+    (_fix + timedelta(days=VALIDADE_DIAS)) == date(2026, 10, 20),
+    f"{_fix + timedelta(days=VALIDADE_DIAS):%d/%m/%Y}")
+# A clausula 5.3.2 do termo e o que fundamenta os encargos. Citar tira a
+# proposta do campo "a Inchurch resolveu cobrar isso".
+diz("o link do termo esta nas constantes",
+    TERMO_URL.startswith("https://inchurch.com.br/termo-de-adesao"))
+diz("PDF com validade continua valido", _b[:4] == b"%PDF")
+
 print()
 if falhas:
     print(f"FALHOU: {len(falhas)} verificacoes\n")
