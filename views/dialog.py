@@ -269,6 +269,28 @@ def dialog_editar(eid, from_fixados: bool = False):
         background:transparent !important;
         border:none !important;
     }
+    /* O gatilho da proposta de acordo imita o summary do expander acima:
+       texto puro, sem moldura, mesma cor e tamanho. Sao a mesma classe de
+       acao — abrir detalhe das cobrancas — e precisam parecer irmas. */
+    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button{
+        border:none !important;
+        background:transparent !important;
+        box-shadow:none !important;
+        color:#8b94a5 !important;
+        font-size:13px !important;
+        font-weight:400 !important;
+        padding:6px 0 !important;
+        min-height:auto !important;
+        justify-content:flex-start !important;
+    }
+    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button:hover{
+        color:#e8eaf0 !important;
+        background:transparent !important;
+    }
+    [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button p{
+        font-size:13px !important;
+        font-weight:400 !important;
+    }
     /* Com 5 cards em 900px a coluna fica estreita e o label de 13px quebrava
        no meio da palavra ("VENCIMENT/O"). 11px + keep-all resolve; label de
        duas palavras ainda quebra, mas no espaco. */
@@ -386,33 +408,11 @@ def dialog_editar(eid, from_fixados: bool = False):
     # Streamlit executa o conteudo de um expander em toda renderizacao —
     # com a consulta a API la dentro, abrir qualquer cliente custava 1s.
     _k_acordo = f"acordo_on_{eid}"
-    _tc1, _tc2 = st.columns([2.6, 1], vertical_alignment="center")
-    with _tc1:
-        st.markdown(
-            '<div style="font-size:13px;font-weight:700;color:#8b94a5;letter-spacing:1.2px;'
-            'text-transform:uppercase;margin:14px 0 10px 0">Cobranças Inadimplentes</div>',
-            unsafe_allow_html=True,
-        )
-    with _tc2:
-        # Abre e fecha no mesmo botao, como o expander "Ver mais N parcelas"
-        # logo abaixo. Nao USO um expander aqui de proposito: o Streamlit
-        # executa o conteudo de um expander em toda renderizacao, aberto ou
-        # nao, e com a consulta ao Superlogica la dentro abrir qualquer
-        # cliente custava 1 segundo. Com o botao, a consulta so sai depois do
-        # clique — e a alternancia da o mesmo comportamento na tela.
-        if cobracas_inad:
-            # on_click em vez de ler o retorno: o callback roda ANTES da
-            # renderizacao, entao o icone ja sai com o estado novo. Lendo o
-            # retorno, o botao seria desenhado antes da virada e a setinha
-            # ficaria um passo atrasada.
-            def _alterna(_k=_k_acordo):
-                st.session_state[_k] = not st.session_state.get(_k, False)
-
-            st.button("Proposta de acordo", width="stretch",
-                      key=f"btn_{_k_acordo}", on_click=_alterna,
-                      icon=":material/expand_less:"
-                           if st.session_state.get(_k_acordo)
-                           else ":material/expand_more:")
+    st.markdown(
+        '<div style="font-size:13px;font-weight:700;color:#8b94a5;letter-spacing:1.2px;'
+        'text-transform:uppercase;margin:14px 0 10px 0">Cobranças Inadimplentes</div>',
+        unsafe_allow_html=True,
+    )
 
     def _render_cobranca_row(cob):
         # Linha compacta single-row: economiza ~50% de altura comparado ao
@@ -453,6 +453,27 @@ def dialog_editar(eid, from_fixados: bool = False):
                 st.markdown("".join(_render_cobranca_row(c) for c in extras), unsafe_allow_html=True)
     else:
         st.info("Nenhuma cobrança em atraso")
+
+    # Logo abaixo do "Ver mais N parcelas" e com o mesmo visual: as duas
+    # coisas abrem detalhe das mesmas cobrancas.
+    #
+    # E botao, e nao um segundo expander, de proposito: o Streamlit executa
+    # o conteudo de um expander em TODA renderizacao, aberto ou nao — ele so
+    # colapsa na tela. Com a consulta ao Superlogica la dentro, abrir
+    # qualquer cliente custava 0,3 a 1,2 segundo de API mesmo sem ninguem
+    # querer proposta. Foi assim que o dialog ficou lento na primeira versao.
+    #
+    # A virada vai por on_click: o callback roda ANTES da renderizacao, entao
+    # a setinha ja sai com o estado novo. Lendo o retorno do botao, o icone
+    # ficaria um passo atrasado — apontando pra baixo com a secao ja aberta.
+    if cobracas_inad:
+        def _alterna(_k=_k_acordo):
+            st.session_state[_k] = not st.session_state.get(_k, False)
+
+        st.button("Gerar proposta de acordo", key=f"btn_{_k_acordo}",
+                  on_click=_alterna,
+                  icon=":material/expand_less:" if st.session_state.get(_k_acordo)
+                       else ":material/expand_more:")
 
     # ── Proposta de acordo ──────────────────────────────────────────────────
     # ── Proposta de acordo ──────────────────────────────────────────────────

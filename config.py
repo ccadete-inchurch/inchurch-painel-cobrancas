@@ -6,7 +6,7 @@ from pathlib import Path
 # adivinhacao: o rodape da sidebar mostra isso, e se nao bater com o que
 # acabou de subir, o painel esta rodando codigo velho. Bumpar a cada deploy
 # que mude comportamento visivel.
-VERSAO = "2026.10.15-acordo-alterna"
+VERSAO = "2026.10.15-acordo-abaixo"
 
 
 # ── Paginação e regras ────────────────────────────────────────────────────────
