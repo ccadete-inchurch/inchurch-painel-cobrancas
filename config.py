@@ -6,7 +6,7 @@ from pathlib import Path
 # adivinhacao: o rodape da sidebar mostra isso, e se nao bater com o que
 # acabou de subir, o painel esta rodando codigo velho. Bumpar a cada deploy
 # que mude comportamento visivel.
-VERSAO = "2026.10.16-proposta"
+VERSAO = "2026.10.20-proposta-topo"
 
 
 # ── Paginação e regras ────────────────────────────────────────────────────────

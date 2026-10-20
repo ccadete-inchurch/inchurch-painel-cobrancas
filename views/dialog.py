@@ -35,19 +35,17 @@ def _render_acordo(eid, cliente, itens):
     _m = fmt_moeda_plain
     base = montar_acordo(itens, 1, 0.0)
 
-    # Resumo do que esta sendo negociado. No modo proposta a lista de
-    # cobrancas sai da tela, entao estes tres numeros sao o unico contexto
-    # que sobra de quanto e por quanto tempo a igreja deve.
-    _n = len(base.detalhe)
+    # So o total atualizado. A contagem de cobrancas e os dias de atraso
+    # saiam aqui tambem, mas os cards do topo do dialog ja dizem os dois —
+    # e eles continuam na tela no modo proposta. O total atualizado fica
+    # porque e o unico numero que o cabecalho NAO tem: o card mostra o
+    # saldo sem multa, juros e correcao.
     st.markdown(
-        f'<div style="display:flex;gap:18px;align-items:baseline;'
-        f'margin:0 0 12px 0;font-size:13px;color:#8b94a5">'
-        f'<span>{_n} cobrança{"s" if _n != 1 else ""} em aberto</span>'
-        f'<span>{base.dias_max} dia{"s" if base.dias_max != 1 else ""} '
-        f'de atraso</span>'
-        f'<span style="margin-left:auto">Total atualizado '
+        f'<div style="display:flex;justify-content:flex-end;'
+        f'align-items:baseline;gap:8px;margin:0 0 12px 0;'
+        f'font-size:13px;color:#8b94a5">Total atualizado'
         f'<b style="color:#e8eaf0;font-size:15px;'
-        f'font-variant-numeric:tabular-nums">{_m(base.atualizado)}</b></span>'
+        f'font-variant-numeric:tabular-nums">{_m(base.atualizado)}</b>'
         f'</div>', unsafe_allow_html=True)
 
     # O card mostra o saldo do BigQuery, que pra 1.143 clientes e MENOR que a
@@ -407,6 +405,46 @@ def _dialog_editar(eid, from_fixados: bool = False):
     role = current_role()
     somente_leitura = role == "admin"
     h = get_hist_unificado(eid) if somente_leitura else get_hist(eid)
+
+    # Cobranças inadimplentes — precisa vir antes do botão, que só existe
+    # quando há o que negociar.
+    cobracas_inad = sorted(
+        [c for c in cliente.get("_cobracas", []) if c["dias_atraso"] and c["dias_atraso"] > 0],
+        key=lambda c: c["dias_atraso"],
+    )
+
+    _k_acordo = f"acordo_on_{eid}"
+    _k_notes = f"dlg_notes_{eid}"
+    _k_guard = f"_notes_guard_{eid}"
+    _modo_proposta = bool(cobracas_inad) and st.session_state.get(_k_acordo)
+
+    # ── O gatilho dos dois modos, logo abaixo do titulo do dialog ───────
+    # Fica no topo porque nao e detalhe das cobrancas: e navegacao. O
+    # "Voltar" ja estava aqui em cima por natureza, e o "Gerar proposta"
+    # morava la embaixo, depois do "Ver mais N parcelas" — os dois lados da
+    # mesma troca apareciam em lugares diferentes da tela.
+    if cobracas_inad:
+        if _modo_proposta:
+            def _voltar(_k=_k_acordo):
+                st.session_state[_k] = False
+
+            st.button("Voltar à cobrança", key=f"btn_voltar_{eid}",
+                      on_click=_voltar, icon=":material/arrow_back:")
+        else:
+            def _para_proposta(_k=_k_acordo, _kn=_k_notes, _kg=_k_guard):
+                # O campo de Observacoes sai da tela no modo proposta, e o
+                # Streamlit descarta o estado de widget que nao e
+                # renderizado. Sem guardar aqui, quem digitou e clicou direto
+                # no botao perdia o texto — o auto-save la embaixo nem chega
+                # a rodar nesse ciclo.
+                if _kn in st.session_state:
+                    st.session_state[_kg] = st.session_state[_kn]
+                st.session_state[_k] = True
+
+            st.button("Gerar proposta de acordo", key=f"btn_{_k_acordo}",
+                      on_click=_para_proposta,
+                      icon=":material/arrow_forward:")
+
     if somente_leitura:
         # Texto puro em azul — sem retângulo de fundo (econômico em espaço
         # vertical e visualmente discreto). Só aparece pra admin.
@@ -480,16 +518,6 @@ def _dialog_editar(eid, from_fixados: bool = False):
             unsafe_allow_html=True,
         )
 
-    # Cobranças inadimplentes
-    cobracas_inad = sorted(
-        [c for c in cliente.get("_cobracas", []) if c["dias_atraso"] and c["dias_atraso"] > 0],
-        key=lambda c: c["dias_atraso"],
-    )
-
-    _k_acordo = f"acordo_on_{eid}"
-    _k_notes = f"dlg_notes_{eid}"
-    _k_guard = f"_notes_guard_{eid}"
-
     # ── MODO PROPOSTA ───────────────────────────────────────────────────
     # O dialog TROCA de conteudo em vez de empilhar a proposta embaixo de
     # tudo. Nao da pra abrir um segundo dialog: o Streamlit so mantem um
@@ -500,16 +528,11 @@ def _dialog_editar(eid, from_fixados: bool = False):
     # observacoes. Nenhum deles entra na proposta, e os tres ultimos ficam
     # tao longe, no fim de um dialog que ja rola, que ninguem via as duas
     # opcoes lado a lado sem rolar de volta. Voltam intactos no "Voltar".
-    if cobracas_inad and st.session_state.get(_k_acordo):
-        def _voltar(_k=_k_acordo):
-            st.session_state[_k] = False
-
-        st.button("Voltar à cobrança", key=f"btn_voltar_{eid}",
-                  on_click=_voltar, icon=":material/arrow_back:")
+    if _modo_proposta:
         st.markdown(
             '<div style="font-size:13px;font-weight:700;color:#8b94a5;'
             'letter-spacing:1.2px;text-transform:uppercase;'
-            'margin:10px 0 10px 0">Proposta de Acordo</div>',
+            'margin:14px 0 10px 0">Proposta de Acordo</div>',
             unsafe_allow_html=True)
 
         # Os valores NAO sao calculados aqui. Vem do Superlogica ja com
@@ -583,32 +606,6 @@ def _dialog_editar(eid, from_fixados: bool = False):
                 st.markdown("".join(_render_cobranca_row(c) for c in extras), unsafe_allow_html=True)
     else:
         st.info("Nenhuma cobrança em atraso")
-
-    # Logo abaixo do "Ver mais N parcelas" e com o mesmo visual: as duas
-    # coisas tratam das mesmas cobrancas.
-    #
-    # E botao, e nao um expander, de proposito: o Streamlit executa o
-    # conteudo de um expander em TODA renderizacao, aberto ou nao — ele so
-    # colapsa na tela. Com a consulta ao Superlogica la dentro, abrir
-    # qualquer cliente custava 0,3 a 1,2 segundo de API mesmo sem ninguem
-    # querer proposta. Foi assim que o dialog ficou lento na primeira versao.
-    #
-    # A seta aponta pra DIREITA, nao pra baixo: isso nao abre uma secao aqui,
-    # troca o dialog inteiro de modo. O on_click guarda as observacoes antes
-    # de virar — ver _para_proposta.
-    if cobracas_inad:
-        def _para_proposta(_k=_k_acordo, _kn=_k_notes, _kg=_k_guard):
-            # O campo de Observacoes sai da tela no modo proposta, e o
-            # Streamlit descarta o estado de widget que nao e renderizado.
-            # Sem guardar aqui, quem digitou e clicou direto no botao perdia
-            # o texto — o auto-save la embaixo nem chega a rodar nesse ciclo.
-            if _kn in st.session_state:
-                st.session_state[_kg] = st.session_state[_kn]
-            st.session_state[_k] = True
-
-        st.button("Gerar proposta de acordo", key=f"btn_{_k_acordo}",
-                  on_click=_para_proposta,
-                  icon=":material/arrow_forward:")
 
     # Respiro antes do STATUS. Sem expander (1 parcela so') o campo colava na
     # linha da cobranca; com expander o proprio bloco ja' separava. Compensa a
