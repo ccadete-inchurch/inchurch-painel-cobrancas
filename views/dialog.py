@@ -126,9 +126,14 @@ def _render_acordo(eid, cliente, itens):
             'font-size:12.5px;color:' + cor + '"><span>' + rot + '</span>'
             '<span style="font-variant-numeric:tabular-nums">' + val + '</span></div>'
             for rot, val, cor in linhas)
+        # margin-bottom na propria caixa, e nao so um spacer depois das
+        # colunas: a caixa tem height:100% e estica ate o fim da linha, entao
+        # o respiro precisa sair de DENTRO dela pra sobrar espaco antes do
+        # Exportar. Com spacer solto a Opcao A continuava encostando no botao.
         return (
             '<div style="border:1px solid ' + ("#7cc243" if verde else "#2a2f42") + ';'
-            'border-radius:8px;padding:12px 14px;background:#13161f;height:100%">'
+            'border-radius:8px;padding:12px 14px;background:#13161f;'
+            'height:calc(100% - 14px);margin-bottom:14px">'
             '<div style="font-size:11px;font-weight:700;letter-spacing:1px;'
             'text-transform:uppercase;color:' + ("#7cc243" if verde else "#8b94a5")
             + ';margin-bottom:8px">' + titulo + '</div>' + corpo
@@ -285,16 +290,16 @@ def _dialog_editar(eid, from_fixados: bool = False):
         margin-bottom:0 !important;
         line-height:1.2 !important;
     }
-    /* Os quatro filtros da proposta dividem a largura do dialog, e em caixa
-       alta com letter-spacing o rotulo nao cabe na coluna — "DESCONTO
-       PARCELADO" quebrava no meio e desalinhava a linha inteira, porque o
-       vizinho de uma linha so subia. Menor e sem espacamento extra, cabe;
-       nowrap garante que, se um dia nao couber, ele encolhe com reticencias
-       em vez de empurrar os outros campos pra baixo. */
+    /* Os quatro filtros da proposta dividem a largura do dialog. O que nao
+       cabia era "DESCONTO PARCELADO (R$)"; sem o "(R$)" o rotulo encurtou o
+       bastante pra voltar a um corpo legivel. O nowrap fica como rede: se
+       um dia nao couber, encolhe com reticencias em vez de quebrar em duas
+       linhas e desalinhar a fileira inteira — o vizinho de uma linha so
+       subiria. */
     [data-testid="stDialog"] [data-testid="stWidgetLabel"] p,
     [data-testid="stDialog"] [data-testid="stWidgetLabel"] label{
-        font-size:11px !important;
-        letter-spacing:0.3px !important;
+        font-size:12.5px !important;
+        letter-spacing:0.5px !important;
         white-space:nowrap !important;
         overflow:hidden !important;
         text-overflow:ellipsis !important;
