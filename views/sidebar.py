@@ -35,12 +35,26 @@ def render_sidebar():
         padding: 0 16px !important;
         z-index: 50 !important;
     }
+    /* A largura do 'Sair' e fixa porque position:fixed mede 100% contra a
+       JANELA, nao contra a sidebar. Entao ela precisa acompanhar a mao: em
+       tela estreita a sidebar encolhe pra 190px e o botao de 250px
+       transbordava — era o que deixava ele torto no print do Caio. */
+    @media (max-width:1500px){
+      section[data-testid="stSidebar"] [data-testid="stElementContainer"]:last-of-type{
+          width: 190px !important; padding: 0 10px !important;
+      }
+    }
+    /* Com a sidebar recolhida o 'Sair' ficaria flutuando sobre o conteudo,
+       porque position:fixed o tira do fluxo e o translateX da sidebar nao o
+       acompanha. */
+    section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stElementContainer"]:last-of-type{
+        display: none !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
     st.sidebar.markdown(f"""
-    <div style="padding:24px 20px 18px;border-bottom:1px solid #1e2333;margin-bottom:8px">
-        <div style="font-size:10px;color:#6b7280;font-weight:500;letter-spacing:0.5px;margin-bottom:4px">v2.0</div>
+    <div style="padding:18px 20px 14px;border-bottom:1px solid #1e2333;margin-bottom:8px">
         {logo_sb}
         <div style="font-size:12px;color:#8b94a5;margin-top:6px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600">Painel de Cobrança</div>
     </div>

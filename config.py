@@ -141,6 +141,17 @@ section[data-testid="stSidebar"] .stButton>button{
 section[data-testid="stSidebar"] .stButton>button:hover{
   background:rgba(124,194,67,.1)!important;color:#7cc243!important;transform:none!important
 }
+/* O gap padrao de 1rem entre blocos, somado aos 6 itens de navegacao, custa
+   ~96px de altura. Em tela estreita, onde "Pagamentos em Atraso" e
+   "Resultados da Cobranca" quebram em duas linhas, a lista crescia tanto
+   que encostava no 'Sair' fixo do rodape. */
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:0.15rem!important}
+/* Rotulo de duas linhas tem que parecer intencional, nao texto estourando:
+   entrelinha curta e sem a margem de paragrafo que o markdown poe. */
+section[data-testid="stSidebar"] .stButton>button p{line-height:1.25!important;margin:0!important}
+@media (max-width:1500px){
+  section[data-testid="stSidebar"] .stButton>button{padding:8px 11px!important;font-size:12.5px!important}
+}
 
 /* ── Cards de métrica ── */
 .metric-card{background:#181c26;border:1px solid #1e2333;border-radius:14px;padding:20px 22px;box-shadow:0 1px 6px rgba(0,0,0,.15);transition:box-shadow .2s;min-height:130px;display:flex;flex-direction:column;justify-content:space-between}
