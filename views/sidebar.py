@@ -54,9 +54,12 @@ def render_sidebar():
     """, unsafe_allow_html=True)
 
     st.sidebar.markdown(f"""
-    <div style="padding:18px 20px 14px;border-bottom:1px solid #1e2333;margin-bottom:8px">
+    <div style="padding:18px 16px 14px;border-bottom:1px solid #1e2333;margin-bottom:14px">
         {logo_sb}
-        <div style="font-size:12px;color:#8b94a5;margin-top:6px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600">Painel de Cobrança</div>
+        <!-- letter-spacing 1.5px custava 25px so de espacamento e fazia
+             "PAINEL DE COBRANCA" quebrar em duas linhas na sidebar de
+             200px. 0.8px e nowrap resolvem sem encolher a fonte. -->
+        <div style="font-size:12px;color:#8b94a5;margin-top:6px;text-transform:uppercase;letter-spacing:0.8px;font-weight:600;white-space:nowrap">Painel de Cobrança</div>
     </div>
     """, unsafe_allow_html=True)
 

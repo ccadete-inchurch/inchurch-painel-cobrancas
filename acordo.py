@@ -98,6 +98,10 @@ def montar(itens, parcelas: int = 1, desconto: float = 0.0) -> Proposta:
 
 
 def _pct(v: float) -> str:
-    """Percentual com virgula, do jeito que se escreve em portugues. Uma casa
-    so quando e menor que 1% — R$ 500 em R$ 670 mil arredondava pra '0%'."""
-    return (f"{v:.1f}".replace(".", ",") if v < 1 else f"{v:.0f}")
+    """Percentual com virgula, do jeito que se escreve em portugues.
+
+    Duas casas sempre. Antes arredondava pra inteiro acima de 1%, e um
+    desconto de R$ 66,50 em R$ 890,24 — que e 7,47% — aparecia como "7%".
+    Quem negocia precisa ver o numero que esta dando, nao o arredondado.
+    """
+    return f"{v:.2f}".replace(".", ",")

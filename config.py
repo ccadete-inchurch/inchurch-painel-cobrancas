@@ -126,13 +126,10 @@ section[data-testid="stSidebar"][aria-expanded="false"]{min-width:0!important;wi
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"]{padding:0!important;min-height:0!important;height:0!important}
 section[data-testid="stSidebar"] [data-testid="stSidebarLogo"],
 section[data-testid="stSidebar"] [data-testid="stLogoSpacer"]{display:none!important}
-/* O Streamlit so revela o botao de recolher quando o mouse entra na
-   sidebar (onMouseOver no stSidebarContent). Aqui ele fica sempre na tela:
-   nao da pra descobrir um botao que so existe depois de passar o mouse por
-   cima dele. */
-section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]{display:block!important;position:absolute!important;top:8px;right:6px;z-index:120!important;opacity:.75!important;visibility:visible!important;transform:none!important;pointer-events:auto!important}
-section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] *{opacity:1!important;visibility:visible!important}
-section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]:hover{opacity:1!important}
+/* Aparece quando o mouse entra na sidebar — comportamento nativo do
+   Streamlit (onMouseOver no stSidebarContent), e o Caio preferiu assim:
+   mais limpo que um botao permanente no canto. Aqui so o posicionamento. */
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]{display:block!important;position:absolute!important;top:8px;right:6px;z-index:120!important}
 .main .block-container{margin-left:0!important}
 
 /* Botões da sidebar */
@@ -151,7 +148,11 @@ section[data-testid="stSidebar"] .stButton>button:hover{
    altura mas colava o "Lote do Dia" na borda do cabecalho — 0.3rem e o meio
    termo, com um respiro explicito antes do primeiro item. */
 section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:0.3rem!important}
-section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:first-of-type{margin-top:6px!important}
+/* O respiro antes do "Lote do Dia" mora na margem do cabecalho, nao num
+   :first-of-type do bloco — aquele seletor pegava o PROPRIO cabecalho (ele
+   tambem e um stElementContainer), entao empurrava o logo pra baixo e
+   deixava o primeiro item colado na borda, que era o defeito. */
+section[data-testid="stSidebar"] .stButton:first-of-type{margin-top:10px!important}
 /* nowrap porque rotulo de navegacao quebrado em duas linhas desalinha a
    lista inteira: cada item passa a ter altura diferente do vizinho. */
 section[data-testid="stSidebar"] .stButton>button p{line-height:1.3!important;margin:0!important;white-space:nowrap!important}
