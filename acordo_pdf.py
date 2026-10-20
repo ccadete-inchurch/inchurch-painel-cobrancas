@@ -300,7 +300,7 @@ def gerar(cliente_nome, proposta, proposta_parcelada,
         Spacer(1, 2),
         # Proposta sem prazo vira negociacao eterna: a igreja volta dois meses
         # depois cobrando o mesmo desconto, com os juros ja outros.
-        _p(f"VALIDADE DA PROPOSTA: Até {validade:%d/%m/%Y}", 10, VERMELHO,
+        _p(f"VALIDADE DA PROPOSTA: ATÉ {validade:%d/%m/%Y}", 10, VERMELHO,
            bold=True),
         Spacer(1, 8),
         _tabela_cobrancas(proposta),

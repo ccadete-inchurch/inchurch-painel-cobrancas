@@ -403,28 +403,37 @@ def _dialog_editar(eid, from_fixados: bool = False):
        104px virava espaco morto no topo — caro num dialog que ja' rola.
        align-items:stretch no bloco das colunas iguala a altura sem reservar
        espaco fixo. Padding tambem mais justo que o .dialog-info global. */
-    /* Os 5 cards do topo saiam com alturas diferentes: o align-items:stretch
-       iguala as COLUNAS, mas entre a coluna e o .dialog-info ha dois
-       containers do Streamlit (stElementContainer e stMarkdownContainer) que
-       nao herdam altura. Sem height:100% nos dois, o card para na altura do
-       proprio texto e o stretch nao chega nele. */
+    /* Altura igual nos 5 cards do topo. O align-items:stretch iguala as
+       COLUNAS — isso ja funcionava — mas entre a coluna e o .dialog-info ha
+       uma pilha de containers do Streamlit (stVerticalBlock,
+       stElementContainer, stMarkdownContainer) que nao herdam altura. Sem
+       height:100% em CADA um, o card para na altura do proprio texto e o
+       stretch da coluna nunca chega nele.
+       Da primeira vez eu usei ">" entre eles e nao pegou: a pilha tem
+       wrapper que nao e filho direto. Aqui vai por descendencia, escopado
+       pela linha que CONTEM os cards, pra nao esticar container de outras
+       partes do dialog. */
     [data-testid="stDialog"] [data-testid="stHorizontalBlock"]{
         align-items:stretch !important;
     }
-    [data-testid="stDialog"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
-    [data-testid="stDialog"] [data-testid="stColumn"] > [data-testid="stVerticalBlock"],
-    [data-testid="stDialog"] [data-testid="stColumn"] [data-testid="stElementContainer"]:has(.dialog-info),
-    [data-testid="stDialog"] [data-testid="stColumn"] [data-testid="stMarkdownContainer"]:has(.dialog-info){
+    [data-testid="stDialog"] [data-testid="stHorizontalBlock"]:has(.dialog-info) [data-testid="stColumn"],
+    [data-testid="stDialog"] [data-testid="stHorizontalBlock"]:has(.dialog-info) [data-testid="stVerticalBlock"],
+    [data-testid="stDialog"] [data-testid="stHorizontalBlock"]:has(.dialog-info) [data-testid="stElementContainer"],
+    [data-testid="stDialog"] [data-testid="stHorizontalBlock"]:has(.dialog-info) [data-testid="stMarkdownContainer"]{
         height:100% !important;
     }
-    /* space-between distribui rotulo / valor / complemento pela altura toda,
-       em vez de amontoar tudo no topo e deixar o resto vazio. */
+    /* min-height e cinto e suspensorio: se o :has() falhar, os cards ainda
+       saem iguais. 100px e a altura do mais alto hoje (rotulo em duas
+       linhas + valor + complemento em duas), entao nao sobra espaco morto.
+       space-between distribui rotulo / valor / complemento pela altura toda
+       em vez de amontoar no topo. */
     [data-testid="stDialog"] .dialog-info{
         padding:10px 13px !important;
         display:flex !important;
         flex-direction:column !important;
         justify-content:space-between !important;
         height:100% !important;
+        min-height:100px !important;
         box-sizing:border-box !important;
     }
     </style>

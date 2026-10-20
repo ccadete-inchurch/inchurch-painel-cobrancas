@@ -162,7 +162,7 @@ print()
 print("=== o que o documento diz ===")
 t = texto(s)
 for trecho in ("PROPOSTA DE ACORDO DE REGULARIZA", "CLIENTE: CLIENTE EXEMPLO",
-               "VALIDADE DA PROPOSTA: At", "20/10/2026",
+               "VALIDADE DA PROPOSTA: AT", "20/10/2026",
                "CONDI", "ESPECIAIS DE PAGAMENTO",
                "OP", "O A: PAGAMENTO", "DADOS PARA PAGAMENTO (PIX)",
                "Inradar App Ltda (INRADAR)", "18.538.489/0001-15",
