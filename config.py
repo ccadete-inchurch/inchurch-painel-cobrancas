@@ -126,8 +126,13 @@ section[data-testid="stSidebar"][aria-expanded="false"]{min-width:0!important;wi
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"]{padding:0!important;min-height:0!important;height:0!important}
 section[data-testid="stSidebar"] [data-testid="stSidebarLogo"],
 section[data-testid="stSidebar"] [data-testid="stLogoSpacer"]{display:none!important}
-section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]{display:block!important;position:absolute!important;top:8px;right:6px;z-index:120!important;opacity:.55}
-section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]:hover{opacity:1}
+/* O Streamlit so revela o botao de recolher quando o mouse entra na
+   sidebar (onMouseOver no stSidebarContent). Aqui ele fica sempre na tela:
+   nao da pra descobrir um botao que so existe depois de passar o mouse por
+   cima dele. */
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]{display:block!important;position:absolute!important;top:8px;right:6px;z-index:120!important;opacity:.75!important;visibility:visible!important;transform:none!important;pointer-events:auto!important}
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] *{opacity:1!important;visibility:visible!important}
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]:hover{opacity:1!important}
 .main .block-container{margin-left:0!important}
 
 /* Botões da sidebar */
@@ -141,16 +146,19 @@ section[data-testid="stSidebar"] .stButton>button{
 section[data-testid="stSidebar"] .stButton>button:hover{
   background:rgba(124,194,67,.1)!important;color:#7cc243!important;transform:none!important
 }
-/* O gap padrao de 1rem entre blocos, somado aos 6 itens de navegacao, custa
-   ~96px de altura. Em tela estreita, onde "Pagamentos em Atraso" e
-   "Resultados da Cobranca" quebram em duas linhas, a lista crescia tanto
-   que encostava no 'Sair' fixo do rodape. */
-section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:0.15rem!important}
-/* Rotulo de duas linhas tem que parecer intencional, nao texto estourando:
-   entrelinha curta e sem a margem de paragrafo que o markdown poe. */
-section[data-testid="stSidebar"] .stButton>button p{line-height:1.25!important;margin:0!important}
+/* O gap padrao de 1rem entre blocos, vezes 6 itens, custa ~96px de altura e
+   empurrava a navegacao contra o 'Sair' fixo do rodape. 0.15rem resolvia a
+   altura mas colava o "Lote do Dia" na borda do cabecalho — 0.3rem e o meio
+   termo, com um respiro explicito antes do primeiro item. */
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:0.3rem!important}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:first-of-type{margin-top:6px!important}
+/* nowrap porque rotulo de navegacao quebrado em duas linhas desalinha a
+   lista inteira: cada item passa a ter altura diferente do vizinho. */
+section[data-testid="stSidebar"] .stButton>button p{line-height:1.3!important;margin:0!important;white-space:nowrap!important}
+/* Em tela estreita a sidebar vai a 200px (nao 190): "Resultados da Cobranca"
+   e o rotulo mais longo e, a 12px com o padding menor, cabe em uma linha. */
 @media (max-width:1500px){
-  section[data-testid="stSidebar"] .stButton>button{padding:8px 11px!important;font-size:12.5px!important}
+  section[data-testid="stSidebar"] .stButton>button{padding:8px 10px!important;font-size:12px!important;letter-spacing:0!important}
 }
 
 /* ── Cards de métrica ── */
@@ -237,13 +245,13 @@ span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
 }
 
 /* Sidebar em tela estreita: 250px fixos comem ~18% de um notebook de 1366.
-   Encolhe pra 190px. O recolher/reabrir ja vale em qualquer largura desde
+   Encolhe pra 200px. O recolher/reabrir ja vale em qualquer largura desde
    que as regras globais passaram a respeitar o aria-expanded — aqui so
    sobra a largura, e o translateX do estado fechado acompanhando ela. */
 @media (max-width:1500px){
-  section[data-testid="stSidebar"][aria-expanded="true"]{min-width:190px!important;width:190px!important}
-  section[data-testid="stSidebar"][aria-expanded="true"] > div:first-child{width:190px!important}
-  section[data-testid="stSidebar"][aria-expanded="false"]{transform:translateX(-190px)!important}
+  section[data-testid="stSidebar"][aria-expanded="true"]{min-width:200px!important;width:200px!important}
+  section[data-testid="stSidebar"][aria-expanded="true"] > div:first-child{width:200px!important}
+  section[data-testid="stSidebar"][aria-expanded="false"]{transform:translateX(-200px)!important}
 }
 .stDateInput input{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
 

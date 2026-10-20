@@ -37,11 +37,11 @@ def render_sidebar():
     }
     /* A largura do 'Sair' e fixa porque position:fixed mede 100% contra a
        JANELA, nao contra a sidebar. Entao ela precisa acompanhar a mao: em
-       tela estreita a sidebar encolhe pra 190px e o botao de 250px
+       tela estreita a sidebar encolhe pra 200px e o botao de 250px
        transbordava — era o que deixava ele torto no print do Caio. */
     @media (max-width:1500px){
       section[data-testid="stSidebar"] [data-testid="stElementContainer"]:last-of-type{
-          width: 190px !important; padding: 0 10px !important;
+          width: 200px !important; padding: 0 10px !important;
       }
     }
     /* Com a sidebar recolhida o 'Sair' ficaria flutuando sobre o conteudo,

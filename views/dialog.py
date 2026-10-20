@@ -76,21 +76,21 @@ def _render_acordo(eid, cliente, itens):
     # Caio pediu os dois.
     with c2:
         desc_a = st.number_input(
-            "Desconto à vista (R$)", min_value=0.0, step=10.0, value=0.0,
+            "Desconto à vista", min_value=0.0, step=10.0, value=0.0,
             format="%.2f", key=f"acordo_desc_a_{eid}",
-            help="Opcional. Abate da opção A.")
+            help="Em reais. Opcional. Abate da opção A.")
     with c3:
         desc_b = st.number_input(
-            "Desconto parcelado (R$)", min_value=0.0, step=10.0, value=0.0,
+            "Desconto parcelado", min_value=0.0, step=10.0, value=0.0,
             format="%.2f", key=f"acordo_desc_b_{eid}",
-            help="Opcional. Abate da opção B.")
+            help="Em reais. Opcional. Abate da opção B.")
 
     with c4:
         # Campo, nao calculo fixo: o prazo e parte da negociacao. O padrao de
         # 7 dias veio do modelo que o financeiro ja envia, mas quem fecha o
         # acordo pode dar mais ou menos conforme o caso.
         validade = st.date_input(
-            "Validade da proposta", value=date.today() + timedelta(days=7),
+            "Validade", value=date.today() + timedelta(days=7),
             min_value=date.today(), format="DD/MM/YYYY",
             key=f"acordo_val_ate_{eid}",
             help="Até quando a proposta vale. Sai no PDF.")
@@ -170,7 +170,9 @@ def _render_acordo(eid, cliente, itens):
                            f"{parc}x de", _m(prop_b.valor_parcela), False),
                     unsafe_allow_html=True)
 
-    st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
+    # As duas caixas encostavam no Exportar. 22px separa a leitura das
+    # opcoes da acao de gerar o documento.
+    st.markdown('<div style="height:22px"></div>', unsafe_allow_html=True)
     st.download_button(
         "Exportar",
         data=gerar_pdf_acordo(cliente.get("nome", ""), prop_a, prop_b,
@@ -283,6 +285,20 @@ def _dialog_editar(eid, from_fixados: bool = False):
         margin-bottom:0 !important;
         line-height:1.2 !important;
     }
+    /* Os quatro filtros da proposta dividem a largura do dialog, e em caixa
+       alta com letter-spacing o rotulo nao cabe na coluna — "DESCONTO
+       PARCELADO" quebrava no meio e desalinhava a linha inteira, porque o
+       vizinho de uma linha so subia. Menor e sem espacamento extra, cabe;
+       nowrap garante que, se um dia nao couber, ele encolhe com reticencias
+       em vez de empurrar os outros campos pra baixo. */
+    [data-testid="stDialog"] [data-testid="stWidgetLabel"] p,
+    [data-testid="stDialog"] [data-testid="stWidgetLabel"] label{
+        font-size:11px !important;
+        letter-spacing:0.3px !important;
+        white-space:nowrap !important;
+        overflow:hidden !important;
+        text-overflow:ellipsis !important;
+    }
     [data-testid="stDialog"] button[kind="primary"]{
         background-color:#4a8a2c !important;
         border:1px solid #4a8a2c !important;
@@ -329,9 +345,12 @@ def _dialog_editar(eid, from_fixados: bool = False):
     [data-testid="stDialog"] [class*="st-key-btn_voltar_"] button [data-testid="stMarkdownContainer"],
     [data-testid="stDialog"] [class*="st-key-btn_voltar_"] button p{
         font-family:inherit !important;
-        font-size:13px !important;
-        font-weight:400 !important;
-        color:#8b94a5 !important;
+        /* Maior e mais claro que o cinza do expander: no topo do dialog ele
+           e o unico caminho pra proposta, e no cinza de rotulo auxiliar
+           passava despercebido. */
+        font-size:14.5px !important;
+        font-weight:500 !important;
+        color:#c7cede !important;
         line-height:1.2 !important;
     }
     [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button,
@@ -524,7 +543,7 @@ def _dialog_editar(eid, from_fixados: bool = False):
         st.markdown(
             '<div style="font-size:13px;font-weight:700;color:#8b94a5;'
             'letter-spacing:1.2px;text-transform:uppercase;'
-            'margin:14px 0 10px 0">Proposta de Acordo</div>',
+            'margin:14px 0 22px 0">Proposta de Acordo</div>',
             unsafe_allow_html=True)
 
         # Os valores NAO sao calculados aqui. Vem do Superlogica ja com
