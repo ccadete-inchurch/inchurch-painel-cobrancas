@@ -6,7 +6,7 @@ from pathlib import Path
 # adivinhacao: o rodape da sidebar mostra isso, e se nao bater com o que
 # acabou de subir, o painel esta rodando codigo velho. Bumpar a cada deploy
 # que mude comportamento visivel.
-VERSAO = "2026.10.20-proposta-topo"
+VERSAO = "2026.10.20-ipca"
 
 
 # ── Paginação e regras ────────────────────────────────────────────────────────
@@ -173,7 +173,10 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"]:hover{
 /* ── Inputs ── */
 .stTextInput input,.stTextArea textarea{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
 .stTextInput input:focus,.stTextArea textarea:focus{border-color:#7cc243!important;box-shadow:0 0 0 2px rgba(124,194,67,.15)!important}
-.stTextInput label,.stTextArea label,.stSelectbox label,.stMultiSelect label,.stDateInput label{color:#6b7280!important;font-size:13px!important;text-transform:uppercase!important;letter-spacing:0.8px!important;font-weight:600!important}
+/* stNumberInput faltava nesta lista: os dois campos de desconto da proposta
+   saiam na fonte do user-agent, do lado de "PARCELAMENTO" que e selectbox e
+   pegava a regra. Sao os unicos number_input do app. */
+.stTextInput label,.stTextArea label,.stSelectbox label,.stMultiSelect label,.stDateInput label,.stNumberInput label{color:#6b7280!important;font-size:13px!important;text-transform:uppercase!important;letter-spacing:0.8px!important;font-weight:600!important}
 div[data-baseweb="select"]>div{background:#181c26!important;border-color:#1e2333!important;border-radius:8px!important}
 div[data-baseweb="select"] span{color:#e8eaf0!important;font-size:12px!important}
 div[data-baseweb="popover"],div[data-baseweb="menu"]{background:#181c26!important;border:1px solid #2a2f42!important;border-radius:10px!important}

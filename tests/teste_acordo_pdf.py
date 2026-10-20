@@ -169,12 +169,20 @@ for trecho in ("PROPOSTA DE ACORDO DE REGULARIZA", "CLIENTE: CLIENTE EXEMPLO",
                "Santander", "FINANCEIRO", "inchurch.com.br"):
     diz(f"traz {trecho!r}", trecho in t)
 diz("o numero da cobranca aparece na tabela", "100" in t)
-# A clausula 5.3.2 e o link sao o que sustenta os encargos. Sem eles a
-# proposta vira "a Inchurch resolveu cobrar isso".
+# A clausula 5.3.2 e o que sustenta os encargos. Sem ela a proposta vira
+# "a Inchurch resolveu cobrar isso".
 diz("cita a clausula 5.3.2", "5.3.2" in t)
-diz("o link do termo esta no PDF",
-    acordo_pdf.TERMO_URL.encode() in pdf)
-diz("o link e clicavel (anotacao /URI)", b"/S /URI" in pdf)
+# O link saiu a pedido do Caio em 20/10/2026. Travado nos dois sentidos:
+# a URL nao pode voltar pro texto nem como anotacao clicavel, senao o
+# documento volta a ter 2 linhas de rodape em vez de 1.
+diz("o link do termo NAO esta no PDF",
+    acordo_pdf.TERMO_URL.encode() not in pdf)
+diz("nao ha anotacao de link no documento", b"/S /URI" not in pdf)
+# O indice da correcao: era IGP-M/FGV, virou IPCA em 20/10/2026.
+diz("a correcao monetaria sai como IPCA",
+    "IPCA" in t and "IGP" not in t, acordo_pdf.INDICE_CORRECAO)
+diz("o rodape cabe em 1 linha (sem a URL)",
+    len([x for x in t.split() if "inchurch.com.br/termo" in x]) == 0)
 
 print()
 print("=== a validade e um campo, nao uma conta fixa ===")

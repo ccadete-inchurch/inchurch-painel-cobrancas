@@ -77,14 +77,17 @@ PIX_FAVORECIDO = "Inradar App Ltda (INRADAR)"
 PIX_CNPJ = "18.538.489/0001-15"
 PIX_BANCO = "Santander"
 SITE = "inchurch.com.br"
-# A clausula 5.3.2 do termo de adesao e o que fundamenta os encargos:
-# "a CONTRATANTE pagara multa, desde ja fixada em 2% (dois por cento) ...
-#  juros de mora equivalente a 1% (um por cento) ao mes ... alem de correcao
-#  monetaria de acordo com o IGP-M/FGV ate a data do efetivo pagamento".
-# Citar no documento tira a proposta do campo "a Inchurch resolveu cobrar
-# isso" e a coloca no que a igreja assinou.
+# A clausula 5.3.2 do termo de adesao e o que fundamenta os encargos: multa
+# de 2%, juros de mora de 1% ao mes e correcao monetaria ate a data do
+# efetivo pagamento. Citar a clausula tira a proposta do campo "a Inchurch
+# resolveu cobrar isso" e a coloca no que a igreja assinou.
+#
+# O LINK do termo saiu a pedido do Caio (20/10/2026). A URL continua aqui
+# porque o teste confere que ela nao voltou pro documento por descuido.
 TERMO_URL = "https://inchurch.com.br/termo-de-adesao-inchurch/"
 TERMO_CLAUSULA = "cláusula 5.3.2 do Termo de Adesão"
+# O indice da correcao monetaria, como sai escrito no documento.
+INDICE_CORRECAO = "IPCA"
 VALIDADE_DIAS = 7
 ENDERECO = ("Av. Alm. Júlio de Sá Bierrenbach, 65 · sala 717 · "
             "Barra da Tijuca · Rio de Janeiro/RJ · 22775-040")
@@ -303,9 +306,8 @@ def gerar(cliente_nome, proposta, proposta_parcelada,
         _tabela_cobrancas(proposta),
         Spacer(1, 4),
         _p("* Encargos incluem: Multa (2%), Juros (1% a.m.) e Atualização "
-           "Monetária (IGP-M/FGV). Honorários: R$ 0,00. Encargos previstos na "
-           f'{TERMO_CLAUSULA}: <a href="{TERMO_URL}" color="#6a9c27">'
-           f'{TERMO_URL}</a>', 7.5, NOTA),
+           f"Monetária ({INDICE_CORRECAO}). Honorários: R$ 0,00. Encargos "
+           f"previstos na {TERMO_CLAUSULA}.", 7.5, NOTA),
         Spacer(1, 12),
         Paragraph("CONDIÇÕES ESPECIAIS DE PAGAMENTO", faixa),
         Spacer(1, 8),

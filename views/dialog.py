@@ -35,18 +35,10 @@ def _render_acordo(eid, cliente, itens):
     _m = fmt_moeda_plain
     base = montar_acordo(itens, 1, 0.0)
 
-    # So o total atualizado. A contagem de cobrancas e os dias de atraso
-    # saiam aqui tambem, mas os cards do topo do dialog ja dizem os dois —
-    # e eles continuam na tela no modo proposta. O total atualizado fica
-    # porque e o unico numero que o cabecalho NAO tem: o card mostra o
-    # saldo sem multa, juros e correcao.
-    st.markdown(
-        f'<div style="display:flex;justify-content:flex-end;'
-        f'align-items:baseline;gap:8px;margin:0 0 12px 0;'
-        f'font-size:13px;color:#8b94a5">Total atualizado'
-        f'<b style="color:#e8eaf0;font-size:15px;'
-        f'font-variant-numeric:tabular-nums">{_m(base.atualizado)}</b>'
-        f'</div>', unsafe_allow_html=True)
+    # Sem linha de resumo aqui. A contagem de cobrancas e os dias de atraso
+    # ja estao nos cards do topo do dialog, que continuam na tela no modo
+    # proposta, e o total atualizado aparece dentro dos dois quadros de
+    # opcao logo abaixo — repetir no topo era so ruido.
 
     # O card mostra o saldo do BigQuery, que pra 1.143 clientes e MENOR que a
     # divida real — o painel le so a competencia-all e ignora a -hist. Mostrar

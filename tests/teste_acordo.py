@@ -152,7 +152,8 @@ diz("data = geracao + 7 dias",
     (_fix + timedelta(days=VALIDADE_DIAS)) == date(2026, 10, 20),
     f"{_fix + timedelta(days=VALIDADE_DIAS):%d/%m/%Y}")
 # A clausula 5.3.2 do termo e o que fundamenta os encargos. Citar tira a
-# proposta do campo "a Inchurch resolveu cobrar isso".
+# proposta do campo "a Inchurch resolveu cobrar isso". A URL continua nas
+# constantes, mas NAO sai mais no documento — ver teste_acordo_pdf.py.
 diz("o link do termo esta nas constantes",
     TERMO_URL.startswith("https://inchurch.com.br/termo-de-adesao"))
 diz("PDF com validade continua valido", _b[:4] == b"%PDF")
