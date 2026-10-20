@@ -89,14 +89,45 @@ CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap');
 html,body,[class*="css"]{font-family:'DM Sans',sans-serif!important;background:#0f1117!important;color:#e8eaf0!important;font-size:20px!important}
 #MainMenu,footer,header{visibility:hidden}
+/* ...MENOS o botao de reabrir a sidebar, que o Streamlit renderiza dentro
+   do <header>. Esconder o header inteiro deixava a sidebar fechar e nunca
+   mais abrir — foi o que derrubou a tentativa anterior. visibility (e nao
+   display) justamente porque da pra reverter no filho. O testid certo e
+   stExpandSidebarButton; o "collapsedControl" que estava no CSS nao existe
+   mais no Streamlit 1.59 e aquela regra nao casava com nada. */
+[data-testid="stExpandSidebarButton"],
+[data-testid="stExpandSidebarButton"] *{visibility:visible!important}
+[data-testid="stExpandSidebarButton"]{opacity:.55;z-index:130!important}
+[data-testid="stExpandSidebarButton"]:hover{opacity:1}
 .block-container{padding-top:0!important;padding-bottom:1.5rem!important;max-width:100%!important;padding-left:2rem!important;padding-right:2rem!important}
 
-/* ── Sidebar ── */
-section[data-testid="stSidebar"]{background:#13161f!important;border-right:1px solid #1e2333!important;min-width:250px!important;width:250px!important;transform:translateX(0)!important;display:block!important;visibility:visible!important;opacity:1!important;position:relative!important;z-index:100!important}
-section[data-testid="stSidebar"] > div:first-child{width:250px!important;padding:0!important;display:block!important}
-[data-testid="collapsedControl"]{display:none!important;visibility:hidden!important}
-section[data-testid="stSidebar"] [data-testid="stSidebarHeader"]{display:none!important}
-section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]{display:none!important}
+/* ── Sidebar ──────────────────────────────────────────────────────────────
+   Recolhivel. O Streamlit ja sabe fazer isso sozinho; o que impedia eram
+   tres regras daqui, e vale registrar quais pra ninguem reintroduzir:
+
+     transform:translateX(0)!important   prendia ela aberta. Mesmo com o
+                                         Streamlit marcando aria-expanded
+                                         ="false", o transform trazia de volta.
+     [data-testid="collapsedControl"]    e o botao de REABRIR, e vive FORA da
+       display:none                      sidebar. Escondido, dava pra fechar e
+                                         nunca mais abrir.
+     stSidebarCollapseButton             o botao de recolher, dentro dela.
+       display:none
+
+   Agora as regras de largura e transform sao presas a aria-expanded="true",
+   e o estado "false" tem as suas. Sem isso o !important da largura vence o
+   colapso do Streamlit e a sidebar fecha pela metade. */
+section[data-testid="stSidebar"]{background:#13161f!important;border-right:1px solid #1e2333!important;position:relative!important;z-index:100!important;transition:width .2s ease,transform .2s ease!important}
+section[data-testid="stSidebar"][aria-expanded="true"]{min-width:250px!important;width:250px!important;transform:translateX(0)!important;display:block!important;visibility:visible!important;opacity:1!important}
+section[data-testid="stSidebar"][aria-expanded="true"] > div:first-child{width:250px!important;padding:0!important;display:block!important}
+section[data-testid="stSidebar"][aria-expanded="false"]{min-width:0!important;width:0!important;transform:translateX(-250px)!important;overflow:visible!important;border-right:none!important}
+/* O cabecalho nativo some (a sidebar ja tem logo propria), mas o botao de
+   recolher mora dentro dele — entao escondo o logo nativo, nao o header. */
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"]{padding:0!important;min-height:0!important;height:0!important}
+section[data-testid="stSidebar"] [data-testid="stSidebarLogo"],
+section[data-testid="stSidebar"] [data-testid="stLogoSpacer"]{display:none!important}
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]{display:block!important;position:absolute!important;top:8px;right:6px;z-index:120!important;opacity:.55}
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]:hover{opacity:1}
 .main .block-container{margin-left:0!important}
 
 /* Botões da sidebar */
@@ -195,17 +226,13 @@ span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
 }
 
 /* Sidebar em tela estreita: 250px fixos comem ~18% de um notebook de 1366.
-   Encolhe pra 190px e devolve o botao de colapsar (escondido globalmente),
-   pra quem quiser recuperar a largura inteira. O translateX(0) global e' o
-   que prende ela aberta — so' vale quando aria-expanded="true". */
+   Encolhe pra 190px. O recolher/reabrir ja vale em qualquer largura desde
+   que as regras globais passaram a respeitar o aria-expanded — aqui so
+   sobra a largura, e o translateX do estado fechado acompanhando ela. */
 @media (max-width:1500px){
-  section[data-testid="stSidebar"]{min-width:190px!important;width:190px!important}
-  section[data-testid="stSidebar"] > div:first-child{width:190px!important}
-  section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]{
-    display:block!important;position:absolute!important;top:8px;right:6px;z-index:120!important}
-  section[data-testid="stSidebar"][aria-expanded="false"]{
-    min-width:0!important;width:0!important;
-    transform:translateX(-190px)!important;overflow:visible!important}
+  section[data-testid="stSidebar"][aria-expanded="true"]{min-width:190px!important;width:190px!important}
+  section[data-testid="stSidebar"][aria-expanded="true"] > div:first-child{width:190px!important}
+  section[data-testid="stSidebar"][aria-expanded="false"]{transform:translateX(-190px)!important}
 }
 .stDateInput input{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
 

@@ -1,6 +1,6 @@
 import streamlit as st
 
-from config import LOGO_SRC, VERSAO
+from config import LOGO_SRC
 from auth import is_logged
 
 
@@ -68,12 +68,8 @@ def render_sidebar():
     # Spacer pra não esconder último nav atrás do botão Sair (fixed bottom)
     st.sidebar.markdown('<div style="height:70px"></div>', unsafe_allow_html=True)
 
-    st.sidebar.markdown(
-        f'<div style="font-size:10px;color:#4a5160;letter-spacing:.5px;'
-        f'padding:0 4px 6px 4px">v{VERSAO}</div>',
-        unsafe_allow_html=True,
-    )
-
+    # A versao saiu da tela a pedido do Caio (20/10/2026). A constante fica
+    # no config porque e ela que o deploy usa pra confirmar o que subiu.
     if st.sidebar.button("Sair", width="stretch"):
         # Limpa TODAS as chaves do session_state — garante que o login
         # subsequente faça fresh load do BQ + cache, sem heranças.

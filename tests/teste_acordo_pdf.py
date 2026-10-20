@@ -169,10 +169,11 @@ for trecho in ("PROPOSTA DE ACORDO DE REGULARIZA", "CLIENTE: CLIENTE EXEMPLO",
                "Santander", "FINANCEIRO", "inchurch.com.br"):
     diz(f"traz {trecho!r}", trecho in t)
 diz("o numero da cobranca aparece na tabela", "100" in t)
-# A clausula 5.3.2 e o que sustenta os encargos. Sem ela a proposta vira
-# "a Inchurch resolveu cobrar isso".
-diz("cita a clausula 5.3.2", "5.3.2" in t)
-# O link saiu a pedido do Caio em 20/10/2026. Travado nos dois sentidos:
+# A clausula 5.3.2 e o link sairam a pedido do Caio (20/10/2026). O rodape
+# voltou a ser exatamente o do modelo do financeiro, so trocando o indice.
+diz("NAO cita a clausula", "5.3.2" not in t)
+diz("nao menciona o termo de adesao", "Termo de Ades" not in t)
+# Travado nos dois sentidos:
 # a URL nao pode voltar pro texto nem como anotacao clicavel, senao o
 # documento volta a ter 2 linhas de rodape em vez de 1.
 diz("o link do termo NAO esta no PDF",

@@ -306,8 +306,7 @@ def gerar(cliente_nome, proposta, proposta_parcelada,
         _tabela_cobrancas(proposta),
         Spacer(1, 4),
         _p("* Encargos incluem: Multa (2%), Juros (1% a.m.) e Atualização "
-           f"Monetária ({INDICE_CORRECAO}). Honorários: R$ 0,00. Encargos "
-           f"previstos na {TERMO_CLAUSULA}.", 7.5, NOTA),
+           f"Monetária ({INDICE_CORRECAO}). Honorários: R$ 0,00.", 7.5, NOTA),
         Spacer(1, 12),
         Paragraph("CONDIÇÕES ESPECIAIS DE PAGAMENTO", faixa),
         Spacer(1, 8),
