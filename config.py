@@ -7,6 +7,10 @@ from pathlib import Path
 # acabou de subir, o painel esta rodando codigo velho. Bumpar a cada deploy
 # que mude comportamento visivel.
 VERSAO = "2026.10.20-ipca"
+# A versao do PRODUTO, que e a que aparece na sidebar. A VERSAO acima e
+# a do build: muda a cada deploy e serve pra conferir o que subiu, nao
+# pra ocupar espaco na tela da atendente.
+VERSAO_CURTA = "2.0"
 
 
 # ── Paginação e regras ────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import streamlit as st
 
-from config import LOGO_SRC
+from config import LOGO_SRC, VERSAO_CURTA
 from auth import is_logged
 
 
@@ -55,11 +55,12 @@ def render_sidebar():
 
     st.sidebar.markdown(f"""
     <div style="padding:18px 16px 14px;border-bottom:1px solid #1e2333;margin-bottom:14px">
+        <div style="font-size:10px;color:#6b7280;font-weight:500;letter-spacing:0.5px;margin-bottom:4px">v{VERSAO_CURTA}</div>
         {logo_sb}
         <!-- letter-spacing 1.5px custava 25px so de espacamento e fazia
-             "PAINEL DE COBRANCA" quebrar em duas linhas na sidebar de
+             "PAINEL DE COBRANCAS" quebrar em duas linhas na sidebar de
              200px. 0.8px e nowrap resolvem sem encolher a fonte. -->
-        <div style="font-size:12px;color:#8b94a5;margin-top:6px;text-transform:uppercase;letter-spacing:0.8px;font-weight:600;white-space:nowrap">Painel de Cobrança</div>
+        <div style="font-size:12px;color:#8b94a5;margin-top:6px;text-transform:uppercase;letter-spacing:0.8px;font-weight:600;white-space:nowrap">Painel de Cobranças</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -85,8 +86,6 @@ def render_sidebar():
     # Spacer pra não esconder último nav atrás do botão Sair (fixed bottom)
     st.sidebar.markdown('<div style="height:70px"></div>', unsafe_allow_html=True)
 
-    # A versao saiu da tela a pedido do Caio (20/10/2026). A constante fica
-    # no config porque e ela que o deploy usa pra confirmar o que subiu.
     if st.sidebar.button("Sair", width="stretch"):
         # Limpa TODAS as chaves do session_state — garante que o login
         # subsequente faça fresh load do BQ + cache, sem heranças.
