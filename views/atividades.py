@@ -718,8 +718,15 @@ def _render_atividades(store, clientes, role):
             # Centavos: sem eles, igreja de R$ 3.189,60 e de R$ 3.189,04
             # apareciam com o mesmo valor na lista.
             _rs = f"R$ {t[2]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            return (f"{nome} · {_pct(t[1], _emi30)} 30d · "
-                    f"{_pct(t[2], _emi90)} 90d · {_rs}")
+            # Tres grupos — nome, os dois percentuais, o valor — separados por
+            # travessao com folga; dentro do grupo dos percentuais, o ponto.
+            # Com "·" entre as quatro partes tudo virava uma frase so, sem
+            # hierarquia nenhuma. Os espacos sao NBSP: espaco normal colapsa
+            # na renderizacao da opcao e a folga sumiria.
+            _sp = "  "
+            return (f"{nome}{_sp}—{_sp}"
+                    f"{_pct(t[1], _emi30)} 30d · {_pct(t[2], _emi90)} 90d"
+                    f"{_sp}—{_sp}{_rs}")
 
         return {t[0]: _rot(t) for t in _ord}
 
@@ -1067,35 +1074,43 @@ def _render_atividades(store, clientes, role):
             # Filtro no topo da coluna da Análise, na mesma altura do card
             # Visão Geral (antes ficava numa linha própria acima dos dois
             # cards e saía mais alto que a Visão Geral).
-            ind_cols = st.columns(_col_widths)
-            with ind_cols[0]:
-                st.markdown(cards_html[0], unsafe_allow_html=True)
-            for i, _h in enumerate(_cards_analise, start=1):
-                with ind_cols[i]:
-                    # Sem o seletor "Ordenar por" que ficava ao lado: ele
-                    # parecia delimitar a exclusao e nao delimitava, e o card
-                    # mostra as duas janelas ao mesmo tempo. Agora a lista
-                    # traz os dois pesos no proprio rotulo, e a lista inteira
-                    # ocupa a largura que antes era dividida.
-                    st.multiselect(
-                        "Excluir da análise por receita",
-                        options=list(_rotulo_excluir.keys()),
-                        format_func=lambda i: _rotulo_excluir.get(i, i),
-                        key="atv_excluir_receita",
-                        # Sem título visível (fica alinhado ao topo da Visão
-                        # Geral); o texto do campo vazio explica pra que serve.
-                        label_visibility="collapsed",
-                        placeholder="Excluir igrejas da análise",
-                        help="Tira a igreja do cálculo de inadimplência mensal e "
-                             "trimestral por receita. Útil quando um cliente com valor "
-                             "muito alto distorce o percentual da carteira. Não muda nada "
-                             "no lote.\n\nCada linha mostra **quanto da inadimplência "
-                             "acima vem daquela igreja**, em 30 e em 90 dias, mais o "
-                             "valor em aberto no trimestre. Somando todas as linhas de "
-                             "uma janela, dá o percentual do card. A lista é ordenada "
-                             "pelo peso em 90 dias.",
-                    )
-                    st.markdown(_h, unsafe_allow_html=True)
+            #
+            # O container com key existe por causa do CSS: abaixo de 1500px o
+            # config.py aperta o gap de TODO stHorizontalBlock pra 0.35rem —
+            # regra escrita pra tabela de 10 colunas da Inadimplencia, que
+            # ganhava ~144px com isso. Aqui sao duas colunas largas, e o
+            # mesmo aperto colava o filtro no card ao lado. A key da um
+            # seletor pra devolver o respiro so nesta linha.
+            with st.container(key="atv_linha_indicadores"):
+                ind_cols = st.columns(_col_widths)
+                with ind_cols[0]:
+                    st.markdown(cards_html[0], unsafe_allow_html=True)
+                for i, _h in enumerate(_cards_analise, start=1):
+                    with ind_cols[i]:
+                        # Sem o seletor "Ordenar por" que ficava ao lado: ele
+                        # parecia delimitar a exclusao e nao delimitava, e o card
+                        # mostra as duas janelas ao mesmo tempo. Agora a lista
+                        # traz os dois pesos no proprio rotulo, e a lista inteira
+                        # ocupa a largura que antes era dividida.
+                        st.multiselect(
+                            "Excluir da análise por receita",
+                            options=list(_rotulo_excluir.keys()),
+                            format_func=lambda i: _rotulo_excluir.get(i, i),
+                            key="atv_excluir_receita",
+                            # Sem título visível (fica alinhado ao topo da Visão
+                            # Geral); o texto do campo vazio explica pra que serve.
+                            label_visibility="collapsed",
+                            placeholder="Excluir igrejas da análise",
+                            help="Tira a igreja do cálculo de inadimplência mensal e "
+                                 "trimestral por receita. Útil quando um cliente com valor "
+                                 "muito alto distorce o percentual da carteira. Não muda nada "
+                                 "no lote.\n\nCada linha mostra **quanto da inadimplência "
+                                 "acima vem daquela igreja**, em 30 e em 90 dias, mais o "
+                                 "valor em aberto no trimestre. Somando todas as linhas de "
+                                 "uma janela, dá o percentual do card. A lista é ordenada "
+                                 "pelo peso em 90 dias.",
+                        )
+                        st.markdown(_h, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
     # 2. Indicadores + Analise da carteira (3 cards lado a lado no fragment)

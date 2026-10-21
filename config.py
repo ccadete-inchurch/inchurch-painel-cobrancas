@@ -258,12 +258,15 @@ span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
 @media (max-width:1100px){
   .topbar-online{display:none!important}
 }
-/* O multiselect de exclusao fica no topo da coluna da Analise, na mesma
-   altura do card Visao Geral ao lado. Em tela estreita as duas colunas se
-   aproximam e ele encostava no card — o gap das colunas nao vale entre o
-   filtro e o card vizinho, porque sao de colunas diferentes. */
-[data-testid="stHorizontalBlock"] .stMultiSelect{
-  padding-left:4px!important;
+/* A regra de gap acima foi escrita pra tabela de 10 colunas da
+   Inadimplencia, mas pega TODO stHorizontalBlock do app. Na linha "Visao
+   Geral + Analise", que tem so duas colunas largas, o mesmo aperto colava o
+   filtro de exclusao no card ao lado. Aqui o gap volta ao normal — so nessa
+   linha, pela key do container. */
+.st-key-atv_linha_indicadores [data-testid="stHorizontalBlock"]{
+  gap:1rem!important;
+}
+.st-key-atv_linha_indicadores .stMultiSelect{
   margin-bottom:10px!important;
 }
 @media (max-width:820px){
