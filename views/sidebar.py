@@ -80,14 +80,18 @@ def render_sidebar():
             st.session_state["page"] = key_page
             st.rerun()
 
-    nav_item("Lote do Dia",         "atividades")
-    nav_item("Inadimplência",      "dashboard")
+    nav_item("Lote do Dia",          "atividades")
+    nav_item("Inadimplência",        "dashboard")
     nav_item("Pagamentos em Atraso", "historico")
-    nav_item("Próximas Cobranças", "proximas")
-    nav_item("Ficha do Cliente",   "cliente")
-    # Resultados da Cobrança (page key "especialista"): liberada pra todos
-    # os perfis — as atendentes veem a equipe inteira, não só a si mesmas.
-    nav_item("Resultados da Cobrança", "especialista")
+    nav_item("A Vencer",             "proximas")
+    nav_item("Ficha do Cliente",     "cliente")
+    # "Desempenho" e nao "Resultados da Cobranca": o painel inteiro ja se
+    # chama "de Cobrancas", entao o nome antigo nao distinguia esta tela de
+    # nenhuma outra — e ela fala da EQUIPE (ranking, matriz, taxas), nao das
+    # cobrancas. A chave "especialista" fica: e so rotulo.
+    # Liberada pra todos os perfis — as atendentes veem a equipe inteira,
+    # nao so a si mesmas.
+    nav_item("Desempenho",           "especialista")
 
     # Sem espacador: ele existia porque o 'Sair' era position:fixed e cobria
     # o ultimo item. Agora o botao esta no fluxo e o margin-top:auto cuida do
