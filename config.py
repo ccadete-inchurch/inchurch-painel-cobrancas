@@ -249,6 +249,20 @@ span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
   [data-testid="stHorizontalBlock"]{gap:0.35rem!important}
 }
 
+/* Topbar em tela estreita. O nowrap do proprio header impede a quebra, mas
+   nao cria espaco: abaixo de certa largura os pills simplesmente nao cabem
+   lado a lado. Entao eles somem por ordem de dispensabilidade — primeiro
+   quem esta online (informacao social), depois o "Atualizado" (o carimbo
+   tambem aparece no banner de dados velhos). O nome de quem esta logado
+   nunca sai: e o unico que responde "estou vendo a carteira de quem?". */
+@media (max-width:1100px){
+  .topbar-online{display:none!important}
+}
+@media (max-width:820px){
+  .topbar-upd{display:none!important}
+  .topbar{padding:0 14px!important}
+}
+
 /* Sidebar em tela estreita: 250px fixos comem ~18% de um notebook de 1366.
    Encolhe pra 200px. O recolher/reabrir ja vale em qualquer largura desde
    que as regras globais passaram a respeitar o aria-expanded — aqui so

@@ -134,21 +134,33 @@ def render_header():
             online_html = "".join(
                 f'<span style="display:inline-flex;align-items:center;gap:8px;'
                 f'background:#1e2333;border:1px solid #2a2f42;border-radius:20px;'
-                f'padding:6px 14px;font-size:13px;color:#e8eaf0;font-weight:500">'
-                f'<span style="width:8px;height:8px;background:#7cc243;border-radius:50%;display:inline-block"></span>'
+                f'padding:6px 14px;font-size:13px;color:#e8eaf0;font-weight:500;'
+                f'white-space:nowrap;flex-shrink:0">'
+                f'<span style="width:8px;height:8px;background:#7cc243;border-radius:50%;display:inline-block;flex-shrink:0"></span>'
                 f'{u["nome"].split()[0] if u["nome"] else u["email"]}'
                 f'</span>'
                 for u in outros_online[:4]  # cap pra não estourar o header
             )
 
         # Layout: presença do time na esquerda; status/usuário à direita.
+        #
+        # Em tela estreita o header quebrava em cima de si mesmo: a altura era
+        # height:60px FIXO, e sem white-space:nowrap o "Atualizado: ..." e o
+        # nome quebravam em duas linhas dentro de uma caixa que nao crescia —
+        # dai o texto saindo por cima.
+        #
+        # Agora: min-height no lugar de height (se um dia quebrar, cresce em
+        # vez de transbordar), nowrap nos dois pills da direita, e o bloco da
+        # direita com flex-shrink:0 — quem cede espaco e a lista de "online
+        # agora" da esquerda, que e decorativa e pode perder o ultimo nome
+        # sem prejuizo. As classes servem as regras responsivas do config.py.
         st.markdown(f"""
-        <div style="background:#181c26;border-bottom:1px solid #2a2f42;padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,.15)">
-          <div style="display:flex;align-items:center;gap:8px">{online_html}</div>
-          <div style="display:flex;align-items:center;gap:12px">
-            <span style="font-size:13px;color:#8b94a5;background:#1e2333;padding:6px 14px;border-radius:20px;border:1px solid #2a2f42">Atualizado: {upd}</span>
-            <span style="font-size:13px;background:#1e2333;border:1px solid #2a2f42;border-radius:20px;padding:6px 14px;display:inline-flex;align-items:center;gap:8px;font-weight:500">
-              <span style="width:8px;height:8px;background:#7cc243;border-radius:50%;display:inline-block"></span>{current_nome()}{role_tag}
+        <div class="topbar" style="background:#181c26;border-bottom:1px solid #2a2f42;padding:0 24px;min-height:60px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,.15)">
+          <div class="topbar-online" style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden">{online_html}</div>
+          <div class="topbar-status" style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+            <span class="topbar-upd" style="font-size:13px;color:#8b94a5;background:#1e2333;padding:6px 14px;border-radius:20px;border:1px solid #2a2f42;white-space:nowrap">Atualizado: {upd}</span>
+            <span style="font-size:13px;background:#1e2333;border:1px solid #2a2f42;border-radius:20px;padding:6px 14px;display:inline-flex;align-items:center;gap:8px;font-weight:500;white-space:nowrap">
+              <span style="width:8px;height:8px;background:#7cc243;border-radius:50%;display:inline-block;flex-shrink:0"></span>{current_nome()}{role_tag}
             </span>
           </div>
         </div>""", unsafe_allow_html=True)

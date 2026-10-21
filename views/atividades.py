@@ -674,28 +674,44 @@ def _render_atividades(store, clientes, role):
     ) or {}).get("peso_clientes") or []
 
     def _rotulos_exclusao():
-        """Opções da lista de exclusão, ordenadas pela janela escolhida
-        (Mensal = 30d, Trimestral = 90d). Função chamada DENTRO do fragment:
-        trocar a janela só re-roda o fragment, e a ordem tem que acompanhar.
-        A exclusão em si vale pras duas janelas; só a ordem e o rótulo mudam.
-        Opções = todas com valor em aberto em 90d (inclui as de 30d), então
-        trocar a janela não descarta uma igreja já selecionada."""
-        _janela = st.session_state.get("atv_peso_janela") or "Mensal"
-        _idx = 1 if _janela == "Mensal" else 2
-        _ord = sorted(_peso_receita, key=lambda t: t[_idx], reverse=True)
-        _tot = sum(t[_idx] for t in _peso_receita) or 1.0
-        # Rótulo: nome · peso (% do valor em aberto da janela) · valor
-        # inteiro. Duas casas porque 22 igrejas ficavam em "0,0%" com uma só.
-        # Sem valor em aberto na janela escolhida, o % seria sempre 0,00% —
-        # melhor dizer isso com palavras.
-        _jan_txt = "no mês" if _janela == "Mensal" else "no trimestre"
+        """Opções da lista de exclusão: nome · % no mês · % no trimestre · R$.
+
+        Antes havia um seletor "Ordenar por: Mensal/Trimestral" que mudava a
+        ordem e o rótulo. Saiu por dois motivos. O primeiro e que ele parecia
+        delimitar o que estava sendo excluido e nao delimitava — a exclusao
+        sempre valeu pras duas janelas, entao escolher "Mensal" e excluir uma
+        igreja mexia no trimestral tambem, sem aviso. O segundo e que o card
+        mostra as DUAS linhas ao mesmo tempo: nao existe "janela atual" pra
+        um seletor acompanhar.
+
+        Os dois pesos no mesmo rotulo resolvem, e sao mesmo diferentes: a
+        Convencao Geral e 51,93% no mes e 74,52% no trimestre, e a
+        Presbiteriana tem o MESMO valor nas duas janelas mas pesa 7,22% e
+        3,29% — porque o denominador muda.
+
+        Ordena pelo trimestral porque ele e superconjunto: toda igreja com
+        peso no mes tambem tem peso no trimestre, e o contrario e falso. A
+        "Igreja Casa" tem R$ 0,00 em 30d e R$ 3.190 em 90d — ordenando pelo
+        mes ela cairia pra 339a posicao e sumiria da vista. E e o mesmo
+        criterio que ja monta a lista de opcoes.
+        """
+        _ord = sorted(_peso_receita, key=lambda t: t[2], reverse=True)
+        _tot30 = sum(t[1] for t in _peso_receita) or 1.0
+        _tot90 = sum(t[2] for t in _peso_receita) or 1.0
+        # Duas casas porque 22 igrejas ficavam em "0,0%" com uma so.
+        _pct = lambda v, tot: f"{v / tot * 100:.2f}%".replace(".", ",")
 
         def _rot(t):
+            # Nome cortado: "Convençãoo Geral Dos Ministros Das Igrejas
+            # Evangélicas Assembléia De Deus Do Brasil" sozinho ja estourava
+            # a largura do campo, antes mesmo dos numeros.
             nome = _nomes_store.get(t[0]) or "ID " + t[0]
-            if t[_idx] <= 0:
-                return f"{nome} · sem peso {_jan_txt}"
-            return (f"{nome} · " + f"{t[_idx] / _tot * 100:.2f}% · ".replace(".", ",")
-                    + f"R$ {t[_idx]:,.0f}".replace(",", "."))
+            if len(nome) > 30:
+                nome = nome[:29].rstrip() + "…"
+            if t[2] <= 0:
+                return f"{nome} · sem peso no período"
+            return (f"{nome} · {_pct(t[1], _tot30)} · {_pct(t[2], _tot90)} · "
+                    + f"R$ {t[2]:,.0f}".replace(",", "."))
 
         return {t[0]: _rot(t) for t in _ord}
 
@@ -1048,31 +1064,30 @@ def _render_atividades(store, clientes, role):
                 st.markdown(cards_html[0], unsafe_allow_html=True)
             for i, _h in enumerate(_cards_analise, start=1):
                 with ind_cols[i]:
-                    # Janela que ordena a lista + a lista. Selectbox (e não
-                    # botões): cabe no notebook sem quebrar em duas linhas.
-                    _c_jan, _c_excl = st.columns([1, 3])
-                    with _c_jan:
-                        st.selectbox(
-                            "Ordenar por", ["Mensal", "Trimestral"], key="atv_peso_janela",
-                            label_visibility="collapsed",
-                        )
-                    with _c_excl:
-                        st.multiselect(
-                            "Excluir da análise por receita",
-                            options=list(_rotulo_excluir.keys()),
-                            format_func=lambda i: _rotulo_excluir.get(i, i),
-                            key="atv_excluir_receita",
-                            # Sem título visível (fica alinhado ao topo da Visão
-                            # Geral); o texto do campo vazio explica pra que serve.
-                            label_visibility="collapsed",
-                            placeholder="Excluir igrejas da análise",
-                            help="Tira a igreja do cálculo de inadimplência mensal e "
-                                 "trimestral por receita. Útil quando um cliente com valor "
-                                 "muito alto distorce o percentual da carteira. Não muda nada "
-                                 "no lote. Ordenada pelo peso de cada igreja (% do valor em "
-                                 "aberto) na janela escolhida ao lado: mensal (30 dias) ou "
-                                 "trimestral (90 dias).",
-                        )
+                    # Sem o seletor "Ordenar por" que ficava ao lado: ele
+                    # parecia delimitar a exclusao e nao delimitava, e o card
+                    # mostra as duas janelas ao mesmo tempo. Agora a lista
+                    # traz os dois pesos no proprio rotulo, e a lista inteira
+                    # ocupa a largura que antes era dividida.
+                    st.multiselect(
+                        "Excluir da análise por receita",
+                        options=list(_rotulo_excluir.keys()),
+                        format_func=lambda i: _rotulo_excluir.get(i, i),
+                        key="atv_excluir_receita",
+                        # Sem título visível (fica alinhado ao topo da Visão
+                        # Geral); o texto do campo vazio explica pra que serve.
+                        label_visibility="collapsed",
+                        placeholder="Excluir igrejas da análise",
+                        # Os dois percentuais do rótulo não vêm rotulados em
+                        # cada linha — seriam 500 repetições de "mês" e "tri".
+                        # A ordem é explicada aqui, uma vez.
+                        help="Tira a igreja do cálculo de inadimplência mensal e "
+                             "trimestral por receita. Útil quando um cliente com valor "
+                             "muito alto distorce o percentual da carteira. Não muda nada "
+                             "no lote.\n\nCada linha mostra: **nome · peso no mês · peso "
+                             "no trimestre · valor em aberto no trimestre**. A lista é "
+                             "ordenada pelo peso no trimestre.",
+                    )
                     st.markdown(_h, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
