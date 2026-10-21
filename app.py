@@ -1,7 +1,10 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="InChurch · Cobranças",
+    # "inChurn", nao "inChurch": trocadilho com churn — o painel existe
+    # pra igreja nao cancelar. A logo na sidebar escreve "inchurch" a um
+    # palmo dali, entao a letra trocada le como intencao, nao como erro.
+    page_title="inChurn",
     page_icon="🏦",
     layout="wide",
     initial_sidebar_state="expanded",
