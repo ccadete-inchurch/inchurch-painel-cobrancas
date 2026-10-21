@@ -16,39 +16,45 @@ def render_sidebar():
     page    = st.session_state.get("page", "atividades")
     logo_sb = f'<img src="{LOGO_SRC}" style="height:30px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:#7cc243">InChurch</span>'
 
-    # CSS: 'Sair' fixed no fundo da sidebar (sem footer de nome/role pra
-    # competir — já aparecem no header top-right).
+    # O 'Sair' fica no rodape da sidebar por FLEX, nao por position:fixed.
+    #
+    # Com fixed ele saia do fluxo e ancorava na JANELA, nao na sidebar — e
+    # cada consequencia disso virou um remendo: largura fixa em 250/200px
+    # (porque width:100% passava a medir a janela), display:none ao recolher
+    # (porque o translateX da sidebar nao levava ele junto), um espacador de
+    # 70px pro ultimo item nao ficar atras dele, e ainda assim, em janela
+    # baixa, ele cobria o menu — que nao rolava, por causa do overflow:hidden
+    # logo acima.
+    #
+    # margin-top:auto numa coluna flex faz o mesmo trabalho sem nenhum dos
+    # quatro: o espaco que sobra empurra o botao pro fim, e quando nao sobra
+    # espaco ele simplesmente segue o ultimo item e rola junto.
     st.sidebar.markdown("""
     <style>
     section[data-testid="stSidebar"],
     section[data-testid="stSidebar"] > div,
-    section[data-testid="stSidebar"] [data-testid="stSidebarContent"],
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
         overflow: hidden !important;
         overscroll-behavior: contain !important;
     }
-    section[data-testid="stSidebar"] [data-testid="stElementContainer"]:last-of-type {
-        position: fixed !important;
-        bottom: 16px !important;
-        left: 0 !important;
-        width: 250px !important;
-        padding: 0 16px !important;
-        z-index: 50 !important;
+    /* A lista de navegacao rola quando a janela e baixa demais pra ela.
+       'auto' nao mostra barra nenhuma enquanto couber, entao em altura
+       normal nada muda. */
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        overflow-y: auto !important;
+        overscroll-behavior: contain !important;
+        height: 100% !important;
     }
-    /* A largura do 'Sair' e fixa porque position:fixed mede 100% contra a
-       JANELA, nao contra a sidebar. Entao ela precisa acompanhar a mao: em
-       tela estreita a sidebar encolhe pra 200px e o botao de 250px
-       transbordava — era o que deixava ele torto no print do Caio. */
-    @media (max-width:1500px){
-      section[data-testid="stSidebar"] [data-testid="stElementContainer"]:last-of-type{
-          width: 200px !important; padding: 0 10px !important;
-      }
+    /* Coluna flex ocupando a altura toda — e o que da ao margin-top:auto o
+       espaco pra distribuir. */
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > [data-testid="stVerticalBlock"] {
+        display: flex !important;
+        flex-direction: column !important;
+        min-height: 100% !important;
     }
-    /* Com a sidebar recolhida o 'Sair' ficaria flutuando sobre o conteudo,
-       porque position:fixed o tira do fluxo e o translateX da sidebar nao o
-       acompanha. */
-    section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stElementContainer"]:last-of-type{
-        display: none !important;
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] [data-testid="stElementContainer"]:last-of-type {
+        margin-top: auto !important;
+        padding-bottom: 8px !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -83,9 +89,9 @@ def render_sidebar():
     # os perfis — as atendentes veem a equipe inteira, não só a si mesmas.
     nav_item("Resultados da Cobrança", "especialista")
 
-    # Spacer pra não esconder último nav atrás do botão Sair (fixed bottom)
-    st.sidebar.markdown('<div style="height:70px"></div>', unsafe_allow_html=True)
-
+    # Sem espacador: ele existia porque o 'Sair' era position:fixed e cobria
+    # o ultimo item. Agora o botao esta no fluxo e o margin-top:auto cuida do
+    # espaco — o espacador so roubaria altura da lista em janela baixa.
     if st.sidebar.button("Sair", width="stretch"):
         # Limpa TODAS as chaves do session_state — garante que o login
         # subsequente faça fresh load do BQ + cache, sem heranças.
