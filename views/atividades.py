@@ -669,9 +669,11 @@ def _render_atividades(store, clientes, role):
     _nomes_store = {
         str(c.get("id")): c.get("nome", "") for c in (store.get("clientes", []) or [])
     }
-    _peso_receita = (fetch_npl_rolling(
-        _npl_atendente, _npl_situacao, dia=_chave_npl
-    ) or {}).get("peso_clientes") or []
+    # Sempre SEM exclusao: e o retrato de referencia. Assim o peso de cada
+    # igreja nao se mexe quando outra e excluida — senao os numeros da lista
+    # dancariam a cada selecao e ninguem conseguiria comparar.
+    _npl_base = fetch_npl_rolling(_npl_atendente, _npl_situacao, dia=_chave_npl) or {}
+    _peso_receita = _npl_base.get("peso_clientes") or []
 
     def _rotulos_exclusao():
         """Opções da lista de exclusão: nome · % no mês · % no trimestre · R$.
@@ -684,10 +686,15 @@ def _render_atividades(store, clientes, role):
         mostra as DUAS linhas ao mesmo tempo: nao existe "janela atual" pra
         um seletor acompanhar.
 
-        Os dois pesos no mesmo rotulo resolvem, e sao mesmo diferentes: a
-        Convencao Geral e 51,93% no mes e 74,52% no trimestre, e a
-        Presbiteriana tem o MESMO valor nas duas janelas mas pesa 7,22% e
-        3,29% — porque o denominador muda.
+        O PERCENTUAL E NA MESMA BASE DO CARD, e isso e o ponto. Antes ele
+        dividia pelo total em ABERTO, e o card divide pelo EMITIDO — duas
+        contas certas, mas incomparaveis: a lista dizia "Convencao 65,91%"
+        ao lado de um card que dizia "Inadimplencia mensal 34,71%", e
+        ninguem entende uma igreja sozinha valendo mais que o total.
+
+        Agora divide pelo mesmo emitido do card. A Convencao sai 22,88% em
+        30d, e le-se direto: "dos 34,71%, 22,88 sao dela". A soma de todas
+        as linhas da exatamente o percentual do card.
 
         Ordena pelo trimestral porque ele e superconjunto: toda igreja com
         peso no mes tambem tem peso no trimestre, e o contrario e falso. A
@@ -696,10 +703,13 @@ def _render_atividades(store, clientes, role):
         criterio que ja monta a lista de opcoes.
         """
         _ord = sorted(_peso_receita, key=lambda t: t[2], reverse=True)
-        _tot30 = sum(t[1] for t in _peso_receita) or 1.0
-        _tot90 = sum(t[2] for t in _peso_receita) or 1.0
+        # Denominador = emitido da janela, igual ao do card. Nao e a soma da
+        # lista: aquela e o total em aberto, que da outra conta.
+        _emi30 = _npl_base.get("d30_emitido") or 0.0
+        _emi90 = _npl_base.get("d90_emitido") or 0.0
         # Duas casas porque 22 igrejas ficavam em "0,0%" com uma so.
-        _pct = lambda v, tot: f"{v / tot * 100:.2f}%".replace(".", ",")
+        _pct = lambda v, emi: (f"{v / emi * 100:.2f}%".replace(".", ",")
+                               if emi else "—")
 
         def _rot(t):
             nome = _nomes_store.get(t[0]) or "ID " + t[0]
@@ -708,7 +718,8 @@ def _render_atividades(store, clientes, role):
             # Centavos: sem eles, igreja de R$ 3.189,60 e de R$ 3.189,04
             # apareciam com o mesmo valor na lista.
             _rs = f"R$ {t[2]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            return f"{nome} · {_pct(t[1], _tot30)} · {_pct(t[2], _tot90)} · {_rs}"
+            return (f"{nome} · {_pct(t[1], _emi30)} 30d · "
+                    f"{_pct(t[2], _emi90)} 90d · {_rs}")
 
         return {t[0]: _rot(t) for t in _ord}
 
@@ -1075,15 +1086,14 @@ def _render_atividades(store, clientes, role):
                         # Geral); o texto do campo vazio explica pra que serve.
                         label_visibility="collapsed",
                         placeholder="Excluir igrejas da análise",
-                        # Os dois percentuais do rótulo não vêm rotulados em
-                        # cada linha — seriam 500 repetições de "mês" e "tri".
-                        # A ordem é explicada aqui, uma vez.
                         help="Tira a igreja do cálculo de inadimplência mensal e "
                              "trimestral por receita. Útil quando um cliente com valor "
                              "muito alto distorce o percentual da carteira. Não muda nada "
-                             "no lote.\n\nCada linha mostra: **nome · peso no mês · peso "
-                             "no trimestre · valor em aberto no trimestre**. A lista é "
-                             "ordenada pelo peso no trimestre.",
+                             "no lote.\n\nCada linha mostra **quanto da inadimplência "
+                             "acima vem daquela igreja**, em 30 e em 90 dias, mais o "
+                             "valor em aberto no trimestre. Somando todas as linhas de "
+                             "uma janela, dá o percentual do card. A lista é ordenada "
+                             "pelo peso em 90 dias.",
                     )
                     st.markdown(_h, unsafe_allow_html=True)
             st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
