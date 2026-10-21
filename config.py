@@ -266,9 +266,10 @@ span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
 .st-key-atv_linha_indicadores [data-testid="stHorizontalBlock"]{
   gap:1rem!important;
 }
-.st-key-atv_linha_indicadores .stMultiSelect{
-  margin-bottom:10px!important;
-}
+/* Nada de margem extra no multiselect: a altura desse bloco e o que posiciona
+   o card da Analise em relacao ao Visao Geral ao lado, e esse alinhamento foi
+   calibrado no olho. O grude em tela estreita era o gap das colunas, resolvido
+   na regra acima — a margem aqui so desalinhava os dois cards. */
 @media (max-width:820px){
   .topbar-upd{display:none!important}
   .topbar{padding:0 14px!important}
