@@ -702,16 +702,13 @@ def _render_atividades(store, clientes, role):
         _pct = lambda v, tot: f"{v / tot * 100:.2f}%".replace(".", ",")
 
         def _rot(t):
-            # Nome cortado: "Convençãoo Geral Dos Ministros Das Igrejas
-            # Evangélicas Assembléia De Deus Do Brasil" sozinho ja estourava
-            # a largura do campo, antes mesmo dos numeros.
             nome = _nomes_store.get(t[0]) or "ID " + t[0]
-            if len(nome) > 30:
-                nome = nome[:29].rstrip() + "…"
             if t[2] <= 0:
                 return f"{nome} · sem peso no período"
-            return (f"{nome} · {_pct(t[1], _tot30)} · {_pct(t[2], _tot90)} · "
-                    + f"R$ {t[2]:,.0f}".replace(",", "."))
+            # Centavos: sem eles, igreja de R$ 3.189,60 e de R$ 3.189,04
+            # apareciam com o mesmo valor na lista.
+            _rs = f"R$ {t[2]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            return f"{nome} · {_pct(t[1], _tot30)} · {_pct(t[2], _tot90)} · {_rs}"
 
         return {t[0]: _rot(t) for t in _ord}
 

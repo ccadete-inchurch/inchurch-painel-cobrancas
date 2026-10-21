@@ -258,6 +258,14 @@ span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
 @media (max-width:1100px){
   .topbar-online{display:none!important}
 }
+/* O multiselect de exclusao fica no topo da coluna da Analise, na mesma
+   altura do card Visao Geral ao lado. Em tela estreita as duas colunas se
+   aproximam e ele encostava no card — o gap das colunas nao vale entre o
+   filtro e o card vizinho, porque sao de colunas diferentes. */
+[data-testid="stHorizontalBlock"] .stMultiSelect{
+  padding-left:4px!important;
+  margin-bottom:10px!important;
+}
 @media (max-width:820px){
   .topbar-upd{display:none!important}
   .topbar{padding:0 14px!important}
