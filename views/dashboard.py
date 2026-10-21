@@ -6,9 +6,8 @@ import pandas as pd
 import streamlit as st
 
 from config import SORT_MAP, STATUS_FILTER_MAP, STATUS_LABELS, PAGE_SIZE
-from auth import get_store, current_role
-from helpers import get_hist, get_hist_unificado, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_ultimo_login, get_effective_atendente, parse_date_br, telefone_wa_link, formatar_telefone, telefones_cliente, telefones_texto, carimbo_dia_cache
-from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_esta_semana, concluir_pendencia
+from helpers import get_hist, get_hist_unificado, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_ultimo_login, get_effective_atendente, parse_date_br, telefone_wa_link, telefones_cliente, telefones_texto, carimbo_dia_cache
+from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_esta_semana
 import re as _re_tel
 
 
@@ -83,7 +82,6 @@ from views.dialog import dialog_editar
 
 
 def _reset_filtros():
-    from config import SORT_MAP as _SM
     st.session_state["fpills"]    = "Todos"
     st.session_state["fordenar"]  = []
     st.session_state["fgrupo"]    = []
@@ -444,7 +442,6 @@ def _render_dashboard(store, clientes, role):
                 # Cor secundária pro 'há Xd' — vermelho intenso só pra muito
                 # atrasado (≥7d); senão usa cinza neutro pra não competir
                 # visualmente com a borda.
-                cor_atraso = "#ef4444" if dias_atraso >= 7 else "#8b94a5"
                 sufixo = "hoje" if dias_atraso == 0 else f"há {dias_atraso}d"
 
                 # Telefones do cliente: 1 icone WhatsApp por numero, cada um
@@ -676,7 +673,7 @@ def _render_dashboard(store, clientes, role):
         _pill_opts.insert(_pill_opts.index("Telefone errado"), "Telefone fixo")
     else:
         _pill_opts.append("Telefone fixo")
-    pill_status = st.pills(
+    st.pills(
         "Status",
         ["Todos"] + _pill_opts,
         default="Todos",

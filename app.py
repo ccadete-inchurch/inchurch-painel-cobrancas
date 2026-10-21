@@ -110,8 +110,9 @@ def main():
     # Roda a cada render — fetch é cacheado (TTL 1h), apply é O(n) idempotente.
     aplicar_grupo_nao_cobrar_no_store()
 
-    tela = st.session_state.get("tela", "principal")
-    if not store["clientes"] or tela == "importar":
+    # `tela == "importar"` saiu da condicao: nada no app escrevia esse valor,
+    # entao o unico caminho pra tela de importar sempre foi a lista vazia.
+    if not store["clientes"]:
         tela_importar()
     else:
         st.session_state["tela"] = "principal"

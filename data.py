@@ -78,8 +78,8 @@ import requests
 import streamlit as st
 from google.cloud import bigquery
 
-from auth import get_store, current_nome
-from helpers import SQL_RESPOSTAS_WHATSAPP, montar_respostas, calc_dias, parse_date_br, get_hist, fmt_tel, fmt_tel_lista, telefones_cliente, hoje_lote, hoje_brt, dias_uteis_entre, carimbo_dia_cache
+from auth import get_store
+from helpers import SQL_RESPOSTAS_WHATSAPP, montar_respostas, calc_dias, parse_date_br, get_hist, telefones_cliente, hoje_lote, hoje_brt, dias_uteis_entre, carimbo_dia_cache
 
 
 # ── Feriados nacionais ────────────────────────────────────────────────────────
@@ -342,9 +342,6 @@ def aplicar_pagamentos_hoje_no_store():
       - 'valor' ajustado pra refletir o saldo após pagamento parcial
       - Adiciona em store['regularizados'] TODOS os que pagaram (parcial+total)
     """
-    from datetime import date as _date
-    from helpers import hoje_lote as _hoje_lote
-
     try:
         pagamentos = fetch_pagamentos_hoje_api()
     except Exception:
@@ -1121,8 +1118,7 @@ def diagnosticar_bq_saude(dia: str | None = None) -> dict:
     Se conn Postgres N8N falha, retorna e_confiavel=True (conservador:
     nao interfere no painel se a propria defesa falhar).
     """
-    from datetime import datetime, timedelta, timezone
-    agora_utc = datetime.now(timezone.utc)
+    from datetime import timezone
 
     conn = _pg_n8n_conn_alive() if "_pg_n8n_conn_alive" in globals() else get_pg_n8n_conn()
     if not conn:
@@ -2716,12 +2712,6 @@ def fetch_meta_clientes_uid(uid: str) -> dict:
 
 # Alias retrocompativel — antes da feature 'tel_fixo', a funcao retornava
 # so o status como string. Mantem chamadas antigas funcionando.
-def fetch_status_clientes_uid(uid: str) -> dict:
-    """Wrapper retrocompativel: retorna {cid: status_str}."""
-    meta = fetch_meta_clientes_uid(uid)
-    return {cid: m.get("status", "") for cid, m in meta.items() if m.get("status")}
-
-
 def registrar_acao_manual(cid: str, atendente: str, atendeu: bool) -> bool:
     """Registra ligacao manual (telefone fixo) no painel_tarefas_diarias.
 
@@ -3973,35 +3963,6 @@ def fetch_ids_em_qualquer_lote_hoje(janela: str = "") -> set:
         return set()
 
 
-@st.cache_data(ttl=120, show_spinner=False)
-def fetch_buckets_hoje_todos() -> dict:
-    """{id_sacado_sac: 'mensagem'|'ligacao'} pra TODOS os clientes com linha
-    hoje, de qualquer atendente. Usado pelo card de Total em 'Todos os
-    clientes' pra contar cada cliente só na tarefa dele do dia (mesma regra
-    já aplicada no contador por atendente desde maio/2026) — sem isso, um
-    cliente de tarefa ligação que também mandou mensagem contava nos dois
-    totais ao mesmo tempo. Cache curto (2min), mesmo padrão de
-    fetch_ids_em_qualquer_lote_hoje.
-    """
-    client = get_bq_client()
-    if not client:
-        return {}
-    try:
-        df = client.query(f"""
-            SELECT id_sacado_sac, dt_entrou_coluna_msg
-            FROM `{_TAREFAS_TABLE}`
-            WHERE data_tarefa = '{hoje_lote()}'
-        """).to_dataframe()
-        if df.empty:
-            return {}
-        return {
-            str(r["id_sacado_sac"]): ("mensagem" if pd.notna(r.get("dt_entrou_coluna_msg")) else "ligacao")
-            for _, r in df.iterrows()
-        }
-    except Exception:
-        return {}
-
-
 def atualizar_tarefas_bq(atendente: str, status_map: dict, clientes: list):
     """Atualiza bools na tabela de tarefas com base no status n8n do dia.
     Usa um único MERGE em vez de 80 UPDATEs individuais.
@@ -4208,69 +4169,6 @@ def carregar_respostas_whatsapp() -> dict:
 
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
-def carregar_divida_fora_do_painel() -> dict:
-    """{cid: (valor, qtd_cobrancas)} de divida EM ABERTO que o painel nao ve.
-
-    O painel le so a splgc-cobrancas_competencia-all. A tabela irma
-    splgc-cobrancas_competencia-hist tem 6.704 cobrancas com
-    fl_status_recb = '0', que e EM ABERTO (nenhuma delas tem
-    dt_liquidacao_recb; as de status '1' tem todas). Essas cobrancas
-    existem, estao vencidas e nao aparecem em lugar nenhum aqui.
-
-    O Caio descobriu pelo Somma Church (4228): o painel mostrava R$
-    1.204,70 e o Superlogica cobrava R$ 2.099,50. A diferenca de R$ 894,80
-    sao 4 cobrancas de 2024 que so existem na hist.
-
-    Tamanho do buraco: 1.143 clientes, R$ 2.125.459,41. Entre os
-    inadimplentes de hoje, 103 clientes e R$ 195.457,65 — o 4177 aparece
-    devendo R$ 1.584 e deve R$ 17.135.
-
-    Por ora isso serve pra uma coisa so: NAO deixar gerar proposta de
-    acordo pra esses clientes. Acordo fechado com valor incompleto quita
-    uma divida que continua existindo. Consertar o saldo do painel e outra
-    conversa — muda numero de 103 devedores, a composicao do lote e o
-    historico.
-
-    7,5 MB por execucao, 1x por dia.
-    """
-    client = get_bq_client()
-    if client is None:
-        return {}
-    try:
-        df = client.query("""
-            WITH aberto_all AS (
-              SELECT CAST(id_sacado_sac AS STRING) cid,
-                     CAST(id_recebimento_recb AS STRING) r
-              FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-all`
-              WHERE CAST(fl_status_recb AS STRING) = '0'
-              GROUP BY 1, 2
-            ), aberto_hist AS (
-              SELECT CAST(id_sacado_sac AS STRING) cid,
-                     CAST(id_recebimento_recb AS STRING) r,
-                     SUM(comp_valor) v
-              FROM `business-intelligence-467516.Splgc.splgc-cobrancas_competencia-hist`
-              WHERE CAST(fl_status_recb AS STRING) = '0'
-              GROUP BY 1, 2
-            )
-            SELECT h.cid, ROUND(SUM(h.v), 2) AS valor, COUNT(*) AS cobrancas
-            FROM aberto_hist h
-            LEFT JOIN aberto_all a ON a.cid = h.cid AND a.r = h.r
-            WHERE a.cid IS NULL
-            GROUP BY 1
-        """).to_dataframe()
-    except Exception as e:
-        # Falhou? Melhor NAO bloquear ninguem do que bloquear todo mundo —
-        # mas o aviso tem que aparecer, porque sem esse dado o painel volta
-        # a poder gerar acordo com valor incompleto.
-        print(f"[WARN] divida fora do painel indisponivel ({str(e)[:80]}) — "
-              f"a trava do acordo nao vai valer nesta sessao", flush=True)
-        return {}
-    return {str(r.cid): (float(r.valor), int(r.cobrancas))
-            for r in df.itertuples(index=False)}
-
-
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_encargos_superlogica(cid: str) -> tuple[list, str]:
     """As cobrancas em aberto do cliente COM os encargos ja calculados pelo
@@ -4456,7 +4354,6 @@ def processar_dados_bigquery():
             }
 
     for c in clientes_dict.values():
-        oldest = c.get("dias_atraso") or 0
         newest = c.get("_min_atraso") or 0
         c["parcelas"] = len([x for x in c["_cobracas"] if x.get("dias_atraso") and x["dias_atraso"] > 0])
         c["_nova_cobranca"] = (c["parcelas"] > 1 and 0 < newest <= 30)

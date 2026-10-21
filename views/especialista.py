@@ -4,7 +4,6 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from auth import current_role
 from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_inadimplentes_fim_periodo, fetch_cids_por_situacao, fetch_contatos_janela, fetch_serie_carteira_mensal
 from helpers import fmt_moeda_plain, hoje_brt, carimbo_dia_cache
 
@@ -982,7 +981,6 @@ def _render_especialista(store, clientes, role):
     # atendente, contando tudo — o pico depois dos vencimentos em massa
     # (dias 15/17) parecia resultado, mas era margem de erro.
     with g_esq:
-        _tem_hoje_no_df = any(d == hoje for d in df_per["data_dt"].dt.date.unique())
         _sub_dia = (
             'Clientes que regularizaram o atraso no dia, com ou sem contato durante o atraso.'
         )
@@ -1269,7 +1267,6 @@ def _render_especialista(store, clientes, role):
             })
             # Taxas na mesma base da tabela: inadimplentes com 5+ dias.
             # Sem contato = base que NÃO foi contatada no mês.
-            _sem_contato = max(d["inad"] - d.get("cont_base", 0), 0)
             if d["inad"]:
                 _taxas.append({"mes": lbl, "serie": "Cobertura (%)",
                                "pct": d["cont"] / d["inad"] * 100})

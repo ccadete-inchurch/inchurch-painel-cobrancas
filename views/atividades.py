@@ -1,12 +1,11 @@
-from datetime import date
 
 import streamlit as st
 
 import time as _time
 
-from helpers import _BRT, get_hist, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, carimbo_curto, get_streak_cooldown_dias, formatar_telefone, telefone_wa_link, telefones_cliente, carimbo_dia_cache
+from helpers import _BRT, get_hist_unificado, fmt_moeda_plain, dias_html, get_painel_dias_lig, get_painel_dias_lig_tentada, get_painel_dias_msg, get_painel_acoes_hoje, hoje_lote, carimbo_curto, get_streak_cooldown_dias, telefone_wa_link, telefones_cliente, carimbo_dia_cache
 from data import calcular_score, recomendar_acao, load_mensagens_from_bq, load_cooldowns_from_painel, gerar_tarefas_do_dia, atualizar_tarefas_bq, get_lote_buckets_bq, fetch_regularizados_do_dia, fetch_ids_em_qualquer_lote_hoje, fetch_npl_rolling, versao_dados_npl, fetch_carteira_count, fetch_inadimplentes_snapshot_ref30d, _EMAIL_GRUPO
-from auth import current_nome, current_role, current_email
+from auth import current_nome, current_email
 from views.dialog import dialog_editar
 
 
@@ -459,7 +458,6 @@ def _render_atividades(store, clientes, role):
     </style>
     """, unsafe_allow_html=True)
 
-    hoje_str = date.today().strftime("%d/%m/%Y")
     nome  = current_nome()  or "usuário"
     email = current_email() or ""
 

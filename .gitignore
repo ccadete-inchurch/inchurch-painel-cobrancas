@@ -28,3 +28,8 @@ Documentacoes/
 .DS_Store
 Thumbs.db
 
+# Testes — rodam local, nao vao pro remoto.
+# O repositorio e publico e o teste_telefones_cliente.py carrega telefone e
+# nome de cliente real. Destrancar nao apaga o historico: quem quiser limpar
+# de verdade precisa reescrever os commits antigos.
+tests/

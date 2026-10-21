@@ -1,19 +1,21 @@
 import streamlit as st
 
-from auth import get_store
 from data import processar_dados_bigquery
 from views.header import render_header
 
 
 def tela_importar():
-    store = get_store()
+    """Tela de estado vazio: o app cai aqui quando o BigQuery nao devolveu
+    cliente nenhum. Oferece recarregar na mao em vez de deixar o painel em
+    branco sem explicacao.
+
+    Nao ha mais botao "Voltar": ele existia guardado por
+    `if store["clientes"] and ...`, e so se chega nesta tela quando a lista
+    esta VAZIA — a condicao nunca podia ser verdadeira.
+    """
     render_header()
 
-    col_a, col_b, _ = st.columns([1, 1, 6])
-    with col_a:
-        if store["clientes"] and st.button("← Voltar"):
-            st.session_state["tela"] = "principal"
-            st.rerun()
+    _, col_b, _ = st.columns([1, 1, 6])
     with col_b:
         if st.button("Sair"):
             for k in ["user_uid", "user_nome", "user_role", "tela"]:
