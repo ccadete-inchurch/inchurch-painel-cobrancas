@@ -609,21 +609,32 @@ span[data-baseweb="tag"] span{color:var(--txt)!important;font-size:12px!importan
   position:absolute!important;top:0;right:24px;height:60px;width:auto;
   display:flex;align-items:center;margin:0!important;z-index:3
 }
+/* Ele mostra o tema pra ONDE o clique leva, nao o atual — entao e um disco
+   invertido em relacao a tela: no escuro, disco claro com o sol; no claro,
+   disco escuro com a lua.
+   A inversao nao precisa de regra por modo: `--txt` e `--bg` ja trocam de
+   lado sozinhos quando os tokens sao reinjetados. No escuro --txt e quase
+   branco e --bg quase preto; no claro e o contrario. */
 [class*="st-key-btn_tema"] button{
-  background:transparent!important;border:1px solid var(--border)!important;
+  background:var(--txt)!important;color:var(--bg)!important;
+  border:1px solid var(--txt)!important;
   border-radius:50%!important;width:34px!important;min-width:34px!important;
   height:34px!important;min-height:34px!important;padding:0!important;
-  color:var(--txt-2)!important;box-shadow:none!important;
+  box-shadow:none!important;
   display:inline-flex!important;align-items:center!important;justify-content:center!important
 }
+/* No hover o disco recua pro cinza intermediario — o mesmo movimento nos
+   dois temas, porque --txt-2 fica entre --txt e --bg em ambos. */
 [class*="st-key-btn_tema"] button:hover{
-  background:var(--surface-2)!important;color:var(--txt)!important;
-  border-color:var(--border-3)!important
+  background:var(--txt-2)!important;border-color:var(--txt-2)!important;
+  color:var(--bg)!important
 }
 /* O rotulo do botao e vazio (so o icone), mas o <p> que o Streamlit cria pra
    ele continua ocupando largura dentro do circulo. */
 [class*="st-key-btn_tema"] button p{display:none!important}
+/* O icone nao herda a cor do botao — o Streamlit pinta o span dele. */
 [class*="st-key-btn_tema"] button [data-testid="stIconMaterial"]{
+  color:var(--bg)!important;
   font-size:18px!important;width:18px!important;height:18px!important
 }
 
