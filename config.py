@@ -147,18 +147,37 @@ _TOKENS_ESCURO = {
     "txt-inv":     "#ffffff",
     "txt-claro":   "#c7cede",
     "cinza-cl":    "#cbd5e1",
+    # Borda de card. No escuro e o proprio surface-2 (o valor de sempre): um
+    # cinza mais CLARO que o card, que e como o olho le relevo num fundo
+    # escuro. No claro isso se inverte e o surface-2 vira quase invisivel
+    # contra o branco (contraste 1.14), dai o token proprio.
+    "border-card": "#1e2333",
 }
 _TOKENS_CLARO = {
-    "bg":        "#f5f6f8",
+    # Um degrau mais fundo que o #f5f6f8 original: card branco sobre fundo a
+    # 96% de luminosidade nao tem pra onde subir, e e isso que deixava tudo
+    # na mesma camada.
+    "bg":        "#eceff4",
     "surface":   "#ffffff",
     "surface-2": "#eef0f4",
     "surface-3": "#f8f9fb",
     "border":    "#d4d9e2",
     "border-2":  "#e5e8ee",
     "txt":       "#1a1d26",
-    "txt-2":     "#5b6472",
-    "txt-3":     "#78818f",
-    "txt-4":     "#9aa2ae",
+    # Os tres cinzas sao mais escuros do que a conta de contraste pediria, e e
+    # de proposito. Texto claro sobre fundo escuro "espalha" na tela e parece
+    # mais forte do que a razao de contraste diz; texto cinza sobre branco nao
+    # tem esse ganho e sai lavado com a mesma razao. Entao o claro vai um
+    # degrau acima do escuro em cada nivel, pra PARECER igual:
+    #   nivel      escuro   claro
+    #   txt-2        6.71    8.12
+    #   txt-3        3.52    5.54
+    #   txt-4        2.25    3.39
+    # (razao contra o card branco; a hierarquia entre os tres continua a
+    # mesma, so deslocada pra cima)
+    "txt-2":     "#48505e",
+    "txt-3":     "#606978",
+    "txt-4":     "#848c9a",
     "brand":     "#4a8a2c",   # escurecido: #7cc243 some no branco
     "ok":        "#15803d",
     "alerta":    "#b45309",
@@ -183,6 +202,36 @@ _TOKENS_CLARO = {
     "txt-inv":     "#ffffff",
     "txt-claro":   "#3a4150",
     "cinza-cl":    "#64748b",
+    "border-card": "#d4d9e2",   # = --border; o surface-2 some no branco
+}
+
+
+# Sombra nao e cor, mas virou token pelo mesmo motivo que as cores viraram:
+# ela esta inline no HTML montado por f-string, e estilo inline vence folha de
+# estilo — nao da pra trocar por fora.
+#
+# A diferenca entre os dois modos aqui nao e de tom, e de MECANISMO. No escuro
+# a profundidade vem do degrau de luminosidade (o card e mais claro que o
+# fundo); a sombra preta sobre fundo quase preto nao faz quase nada, e nao
+# precisa fazer. No claro nao existe esse degrau — um card branco sobre fundo
+# claro so' se descola pela sombra, e ela precisa ser curta, em camadas e
+# levemente azulada pra ler como apoio em vez de mancha cinza.
+#
+# Os valores do escuro sao exatamente os literais que estavam espalhados pelo
+# codigo: este bloco nao mudou o modo escuro, so deu nome ao que ja existia.
+_SOMBRAS_ESCURO = {
+    "sombra":        "0 1px 6px rgba(0,0,0,.15)",     # card em repouso
+    "sombra-hover":  "0 4px 16px rgba(0,0,0,.25)",    # card sob o mouse
+    "sombra-barra":  "0 2px 8px rgba(0,0,0,.15)",     # topbar
+    "sombra-tabela": "0 2px 8px rgba(0,0,0,.1)",      # cabecalho/rodape da tabela
+    "sombra-dialog": "0 16px 48px rgba(0,0,0,.5)",    # modal
+}
+_SOMBRAS_CLARO = {
+    "sombra":        "0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.10)",
+    "sombra-hover":  "0 2px 4px rgba(16,24,40,.06),0 8px 16px rgba(16,24,40,.10)",
+    "sombra-barra":  "0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08)",
+    "sombra-tabela": "0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.07)",
+    "sombra-dialog": "0 20px 48px rgba(16,24,40,.18),0 4px 12px rgba(16,24,40,.08)",
 }
 
 
@@ -348,7 +397,8 @@ def css_tema(claro: bool = False) -> str:
     Injetado DEPOIS do CSS global pra vencer na cascata — os dois definem
     :root, e o ultimo ganha.
     """
-    t = _TOKENS_CLARO if claro else _TOKENS_ESCURO
+    t = {**(_TOKENS_CLARO if claro else _TOKENS_ESCURO),
+         **(_SOMBRAS_CLARO if claro else _SOMBRAS_ESCURO)}
     regras = "".join(f"--{k}:{v};" for k, v in t.items())
     return f"<style>:root{{{regras}}}{_CSS_CLARO if claro else ''}</style>"
 
@@ -433,8 +483,8 @@ section[data-testid="stSidebar"] .stButton>button p{line-height:1.3!important;ma
 }
 
 /* ── Cards de métrica ── */
-.metric-card{background:var(--surface);border:1px solid var(--surface-2);border-radius:14px;padding:20px 22px;box-shadow:0 1px 6px rgba(0,0,0,.15);transition:box-shadow .2s;min-height:130px;display:flex;flex-direction:column;justify-content:space-between}
-.metric-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.metric-card{background:var(--surface);border:1px solid var(--border-card);border-radius:14px;padding:20px 22px;box-shadow:var(--sombra);transition:box-shadow .2s;min-height:130px;display:flex;flex-direction:column;justify-content:space-between}
+.metric-card:hover{box-shadow:var(--sombra-hover)}
 .metric-label{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--txt-2);margin-bottom:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .metric-value{font-family:'DM Sans',sans-serif;font-size:34px;font-weight:700;line-height:1;letter-spacing:0;font-variant-numeric:tabular-nums}
 .metric-sub{font-size:13px;color:var(--txt-3);margin-top:8px;letter-spacing:0.2px}
@@ -471,7 +521,7 @@ span.g-nome,span.g-sobre{white-space:nowrap;display:block}
 .da-max{background:rgba(200,0,0,.18);color:var(--erro-3)}
 
 /* ── Pendência card ── */
-.pend-card{background:var(--surface);border:1px solid var(--surface-2);border-radius:10px;padding:14px 16px;margin-bottom:8px}
+.pend-card{background:var(--surface);border:1px solid var(--border-card);border-radius:10px;padding:14px 16px;margin-bottom:8px}
 
 /* ── Botões globais ── */
 .stButton>button{background:var(--surface-2)!important;color:var(--txt)!important;font-weight:600!important;border:1px solid var(--border)!important;border-radius:8px!important;font-size:15px!important;padding:0.5rem 1.1rem!important;transition:all 0.18s!important;box-shadow:none!important}
@@ -625,9 +675,9 @@ hr{border-color:var(--surface-2)!important;margin:16px 0!important;opacity:1}
 /* ── Dialog ── */
 /* Streamlit 1.59: stDialogContent/div[role=dialog] nao existem mais no DOM.
    O painel e' <section role="dialog"> dentro de [data-testid="stDialog"]. */
-[data-testid="stDialog"] section[role="dialog"]{background:var(--surface)!important;border:1px solid var(--border)!important;border-radius:16px!important;box-shadow:0 16px 48px rgba(0,0,0,.5)!important}
+[data-testid="stDialog"] section[role="dialog"]{background:var(--surface)!important;border:1px solid var(--border)!important;border-radius:16px!important;box-shadow:var(--sombra-dialog)!important}
 [data-testid="stDialog"] [data-testid="stVerticalBlock"]{gap:0.8rem!important}
-.dialog-info{background:var(--surface-3);border:1px solid var(--surface-2);border-radius:10px;padding:14px 16px;margin-bottom:4px}
+.dialog-info{background:var(--surface-3);border:1px solid var(--border-card);border-radius:10px;padding:14px 16px;margin-bottom:4px}
 .dialog-info-label{font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:var(--txt-2);margin-bottom:6px;font-weight:700}
 .dialog-info-value{font-size:14px;color:var(--txt);font-weight:600}
 </style>

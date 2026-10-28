@@ -172,7 +172,7 @@ def _render_cliente(_store, clientes):
 
     if df_evol.empty:
         st.markdown(
-            '<div style="background:var(--surface);border:1px solid var(--surface-2);border-radius:10px;'
+            '<div style="background:var(--surface);border:1px solid var(--border-card);border-radius:10px;'
             'padding:30px;text-align:center;color:var(--txt-3);font-size:13px">'
             'Sem dados de saldo para esse cliente.</div>',
             unsafe_allow_html=True,
@@ -302,7 +302,7 @@ def _render_cliente(_store, clientes):
 
         if not cobracas:
             st.markdown(
-                '<div style="background:var(--surface);border:1px solid var(--surface-2);border-radius:10px;'
+                '<div style="background:var(--surface);border:1px solid var(--border-card);border-radius:10px;'
                 'padding:24px;text-align:center;color:var(--txt-3);font-size:13px">'
                 'Sem cobranças em atraso.</div>',
                 unsafe_allow_html=True,
@@ -369,7 +369,7 @@ def _render_cliente(_store, clientes):
 
         # Bloco único com border, grid 2×3 dentro (3 linhas de 2 campos)
         bloco_html = (
-            '<div style="background:var(--surface);border:1px solid var(--surface-2);border-radius:10px;'
+            '<div style="background:var(--surface);border:1px solid var(--border-card);border-radius:10px;'
             'padding:4px 6px;display:flex;flex-direction:column">'
             f'<div style="display:flex">{_fld("Status", status_val)}{_fld("Especialista", atendente)}</div>'
             '<div style="height:1px;background:var(--surface-2);margin:0 8px"></div>'
@@ -382,7 +382,7 @@ def _render_cliente(_store, clientes):
 
         if h.get("notes"):
             st.markdown(
-                f'<div style="padding:10px 14px;background:var(--surface);border:1px solid var(--surface-2);border-radius:8px;margin-top:8px">'
+                f'<div style="padding:10px 14px;background:var(--surface);border:1px solid var(--border-card);border-radius:8px;margin-top:8px">'
                 f'<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--txt-3);margin-bottom:4px">Observações</div>'
                 f'<div style="font-size:13px;color:var(--txt-2);line-height:1.5">{h["notes"]}</div>'
                 f'</div>',

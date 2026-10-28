@@ -614,7 +614,7 @@ def _dialog_editar(eid, from_fixados: bool = False):
         # Fundo var(--surface-3) (mesmo do .dialog-info) — antes estava var(--surface-2)
         # mais claro, destoava do resto do dialog.
         return (
-            f'<div style="background:var(--surface-3);border:1px solid var(--surface-2);border-radius:8px;'
+            f'<div style="background:var(--surface-3);border:1px solid var(--border-card);border-radius:8px;'
             f'padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;'
             f'justify-content:space-between;gap:12px;font-size:14px">'
             f'<div style="display:flex;align-items:baseline;gap:10px;min-width:0">'

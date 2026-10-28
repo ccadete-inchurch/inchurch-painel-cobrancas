@@ -171,7 +171,7 @@ def render_header():
         # agora" da esquerda, que e decorativa e pode perder o ultimo nome
         # sem prejuizo. As classes servem as regras responsivas do config.py.
         st.markdown(f"""
-        <div class="topbar" style="background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;min-height:60px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,.15)">
+        <div class="topbar" style="background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;min-height:60px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px;box-shadow:var(--sombra-barra)">
           <div class="topbar-online" style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden">{online_html}</div>
           <div class="topbar-status" style="display:flex;align-items:center;gap:12px;flex-shrink:0">
             <span class="topbar-upd" style="font-size:13px;color:var(--txt-2);background:var(--surface-2);padding:6px 14px;border-radius:20px;border:1px solid var(--border);white-space:nowrap">Atualizado: {upd}</span>

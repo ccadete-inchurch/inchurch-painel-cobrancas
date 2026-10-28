@@ -760,7 +760,7 @@ def _render_dashboard(store, clientes, role):
     st.markdown(
         f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
         f'<span style="font-size:14px;color:var(--txt-3)"><b style="color:var(--txt);font-size:15px">{total_f}</b> clientes encontrados</span>'
-        f'<span style="font-size:11px;color:var(--txt-4);background:var(--surface);border:1px solid var(--surface-2);padding:4px 10px;border-radius:6px">Ordenado por: <b style="color:var(--txt-2)">{sort_active}</b></span>'
+        f'<span style="font-size:11px;color:var(--txt-4);background:var(--surface);border:1px solid var(--border-card);padding:4px 10px;border-radius:6px">Ordenado por: <b style="color:var(--txt-2)">{sort_active}</b></span>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -784,7 +784,7 @@ def _render_dashboard(store, clientes, role):
     st.markdown(
         '<div style="background:var(--surface-2);border:1px solid var(--border);'
         'border-radius:12px 12px 0 0;padding:0;margin-bottom:0;'
-        'box-shadow:0 2px 8px rgba(0,0,0,.1)">',
+        'box-shadow:var(--sombra-tabela)">',
         unsafe_allow_html=True,
     )
     hdr_cols = st.columns(col_w, vertical_alignment="center")
@@ -972,7 +972,7 @@ def _render_dashboard(store, clientes, role):
         st.markdown(
             f'<div style="background:var(--surface-2);border:1px solid var(--border);border-top:none;'
             f'border-radius:0 0 12px 12px;padding:12px 16px;display:flex;'
-            f'justify-content:space-between;font-size:13px;color:var(--txt-2);font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,.1)">'
+            f'justify-content:space-between;font-size:13px;color:var(--txt-2);font-weight:500;box-shadow:var(--sombra-tabela)">'
             f'<span>Mostrando {(page-1)*PAGE_SIZE+1}–{min(page*PAGE_SIZE,total_f)} de {total_f}</span>'
             f'<span>Página {page} de {total_pg}</span></div>',
             unsafe_allow_html=True,
