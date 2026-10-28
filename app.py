@@ -10,7 +10,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from config import css_tema, CSS
+from config import CSS
+import tema
 from auth import is_logged, current_role
 from data import get_store, carregar_cache_local, processar_dados_bigquery, load_historico_from_bq, load_mensagens_from_bq, load_cooldowns_from_painel, load_ultimo_contato_painel, load_ultimo_login_painel, load_atendente_atual_painel, load_grupo_atendente_map, aplicar_pagamentos_hoje_no_store, aplicar_grupo_nao_cobrar_no_store, precisa_processar_bq
 from views import (
@@ -20,10 +21,6 @@ from views import (
 )
 
 st.markdown(CSS, unsafe_allow_html=True)
-# Os tokens vem DEPOIS do CSS global: os dois definem :root e o ultimo
-# vence na cascata, entao trocar o tema e so reinjetar este bloco.
-st.markdown(css_tema(st.session_state.get("tema_claro", False)),
-            unsafe_allow_html=True)
 
 
 def tela_principal():
@@ -49,12 +46,19 @@ def tela_principal():
 
 
 def main():
+    logado = is_logged()
+
+    # Tokens do tema sempre; o alinhamento com o tema interno do Streamlit (o
+    # que pinta placeholder, calendario, dropdown, slider, X do dialog) so
+    # depois do login, porque ele reescreve a URL. Ver tema.py.
+    tema.aplicar(sincronizar=logado)
+
     # Checa login ANTES de renderizar sidebar. Sem isso, ao clicar 'Sair da conta'
     # a sidebar (com botoes de nav) renderiza brevemente durante o rerun apos
     # logout, causando flash de estilo (o CSS do login pega temporariamente os
     # botoes da sidebar). Chamando render_sidebar so quando logado, sidebar nunca
     # aparece na tela de login.
-    if not is_logged():
+    if not logado:
         tela_login()
         return
 

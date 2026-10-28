@@ -1,6 +1,7 @@
 import streamlit as st
 
-from config import LOGO_SRC, VERSAO_CURTA
+import tema
+from config import logo_src, VERSAO_CURTA
 from auth import is_logged
 
 
@@ -13,8 +14,12 @@ def render_sidebar():
         """, unsafe_allow_html=True)
         return
 
-    page    = st.session_state.get("page", "atividades")
-    logo_sb = f'<img src="{LOGO_SRC}" style="height:30px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:var(--brand)">InChurch</span>'
+    page  = st.session_state.get("page", "atividades")
+    claro = tema.esta_claro()
+    # A arte muda com o tema: a do painel tem "inchurch" em branco e sumiria
+    # no fundo claro, sobrando so os quadradinhos verdes.
+    _src    = logo_src(claro)
+    logo_sb = f'<img src="{_src}" style="height:30px;object-fit:contain">' if _src else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:var(--brand)">InChurch</span>'
 
     # O 'Sair' fica no rodape da sidebar por FLEX, nao por position:fixed.
     #
@@ -101,13 +106,15 @@ def render_sidebar():
     # Alternador de tema. Todas as telas leem os tokens de config.css_tema(),
     # menos a de login — que e pre-auth e carrega as cores de marca do Google.
     # O rotulo diz pra onde o clique leva, nao o estado atual.
-    _claro = st.session_state.get("tema_claro", False)
-    if st.sidebar.button("Modo escuro" if _claro else "Modo claro",
+    #
+    # O clique recarrega a pagina uma vez: e o reload que faz o Streamlit
+    # remontar a sessao com a secao [theme.light]/[theme.dark] certa, pros
+    # widgets dele (calendario, dropdown, slider) virem junto. Ver tema.py.
+    if st.sidebar.button("Modo escuro" if claro else "Modo claro",
                          key="btn_tema", width="stretch",
-                         icon=":material/dark_mode:" if _claro
+                         icon=":material/dark_mode:" if claro
                               else ":material/light_mode:"):
-        st.session_state["tema_claro"] = not _claro
-        st.rerun()
+        tema.alternar()
 
     # Sem espacador: ele existia porque o 'Sair' era position:fixed e cobria
     # o ultimo item. Agora o botao esta no fluxo e o margin-top:auto cuida do

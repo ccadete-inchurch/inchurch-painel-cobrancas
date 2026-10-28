@@ -79,13 +79,25 @@ STATUS_FILTER_MAP = {
 }
 
 # ── Logo ──────────────────────────────────────────────────────────────────────
-_logo_path = Path(__file__).parent / "inchurch_logo.png"
-if _logo_path.exists():
-    with open(_logo_path, "rb") as _f:
-        LOGO_B64 = base64.b64encode(_f.read()).decode()
-    LOGO_SRC = f"data:image/png;base64,{LOGO_B64}"
-else:
-    LOGO_SRC = ""
+# Sao duas artes da mesma marca, nao duas versoes da mesma imagem: a do painel
+# tem a palavra "inchurch" em BRANCO (feita pro fundo escuro) e no modo claro
+# ela simplesmente desaparece, sobrando os quadradinhos verdes soltos. A da
+# proposta tem a palavra em cinza-escuro — e a mesma que vai no PDF do acordo,
+# entao nao e um asset novo pra manter.
+def _b64(nome):
+    p = Path(__file__).parent / nome
+    if not p.exists():
+        return ""
+    return "data:image/png;base64," + base64.b64encode(p.read_bytes()).decode()
+
+
+LOGO_SRC       = _b64("inchurch_logo.png")           # texto branco  → escuro
+LOGO_SRC_CLARO = _b64("inchurch_logo_proposta.png")  # texto cinza   → claro
+
+
+def logo_src(claro: bool = False) -> str:
+    """A arte certa pro tema. Cai na do painel se a outra sumir do disco."""
+    return (LOGO_SRC_CLARO or LOGO_SRC) if claro else LOGO_SRC
 
 # ── Tema ──────────────────────────────────────────────────────────────────────
 # As cores do painel sempre foram hexadecimais escritos a mao dentro das
@@ -93,10 +105,8 @@ else:
 # variavel. Estilo inline vence qualquer folha de estilo, entao nao havia
 # como trocar de tema por fora: cada elemento carregava a propria cor.
 #
-# Estes tokens sao o comeco de uma camada de estilo. A tela do Lote do Dia ja
-# os usa; as outras seguem com os valores literais ate serem convertidas, e
-# por isso ficam escuras mesmo no modo claro. E proposital: converter tudo de
-# uma vez seriam 650 pontos sem ninguem conseguindo ver o resultado.
+# Todas as telas ja leem estes tokens — menos a de login, que roda antes do
+# session_state do tema existir e carrega as cores de marca do Google.
 #
 # Os valores do modo claro NAO sao o escuro invertido. Verde #7cc243 tem
 # contraste bom sobre #181c26 e fica lavado sobre branco, entao vira #4a8a2c;
@@ -338,6 +348,36 @@ section[data-testid="stSidebar"] .stButton>button[kind="primary"]:hover{
 /* ── Inputs ── */
 .stTextInput input,.stTextArea textarea{background:var(--surface)!important;color:var(--txt)!important;border:1px solid var(--surface-2)!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
 .stTextInput input:focus,.stTextArea textarea:focus{border-color:var(--brand)!important;box-shadow:0 0 0 2px rgba(124,194,67,.15)!important}
+/* <<fix-base>> (marcador: amostra_tema.py corta daqui ate <</fix-base>> pra
+   mostrar como fica SEM estas regras — nao remover) */
+/* O .streamlit/config.toml fixa base="dark", e o Streamlit usa isso pra
+   escolher sozinho o cinza de tres coisas que nunca passam pelo nosso CSS:
+   o texto do placeholder, o texto de campo desabilitado e o icone do X do
+   dialog. Como o base nao muda junto com o tema, no modo claro esses tres
+   saem no cinza-claro de fundo escuro e somem no branco. Aqui eles passam a
+   ler os tokens — vale pros dois temas, so que no escuro ja estava passavel.
+
+   O -webkit-text-fill-color nao e redundante: em campo :disabled o Chrome
+   ignora 'color' e usa ele. So com os dois o "Ultimo Contato" aparece. */
+.stTextInput input::placeholder,.stTextArea textarea::placeholder,
+input::placeholder,textarea::placeholder{color:var(--txt-3)!important;opacity:1!important}
+input:disabled,textarea:disabled,
+.stTextInput input:disabled,.stDateInput input:disabled{
+  color:var(--txt-2)!important;-webkit-text-fill-color:var(--txt-2)!important;opacity:1!important
+}
+/* Placeholder do selectbox ("Apenas para decisoes manuais") — baseweb nao usa
+   ::placeholder aqui, e um div proprio. */
+div[data-baseweb="select"] [class*="placeholder"]{color:var(--txt-3)!important}
+/* O X do dialog nao tem testid: e button[aria-label="Close"] com um svg de
+   10x10 dentro. */
+[data-testid="stDialog"] button[aria-label="Close"]{
+  background:transparent!important;border:none!important;
+  color:var(--txt-2)!important;opacity:1!important
+}
+[data-testid="stDialog"] button[aria-label="Close"]:hover{color:var(--txt)!important}
+[data-testid="stDialog"] button[aria-label="Close"] svg,
+[data-testid="stDialog"] button[aria-label="Close"] svg path{fill:currentColor!important}
+/* <</fix-base>> */
 /* stNumberInput faltava nesta lista: os dois campos de desconto da proposta
    saiam na fonte do user-agent, do lado de "PARCELAMENTO" que e selectbox e
    pegava a regra. Sao os unicos number_input do app. */

@@ -416,7 +416,7 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     # Botão "Detalhes" grudado no rodapé do card (visualmente integrado).
     # Streamlit não permite st.button dentro de markdown HTML, então usa
     # st.button externo + CSS (no _render_atividades) que reduz o tamanho.
-    if st.button("Detalhes ›", key=f"atv_{c['id']}_{idx}", width="stretch"):
+    if st.button("Detalhes ›", key=f"atv_det_{c['id']}_{idx}", width="stretch"):
         dialog_editar(c["id"])
 
 
@@ -425,35 +425,47 @@ def _render_atividades(store, clientes, role):
     if _detectar_virada_dia():
         return
 
-    # CSS: faz o botão "Detalhes" parecer continuação do card.
-    # - Mesma cor de fundo e borda
-    # - Cantos superiores zerados, inferiores arredondados (encaixa no card)
-    # - Sem borda superior (visualmente une com o card que tem bottom-radius:0)
-    # - Fonte menor e discreta
+    # CSS: faz o botão "Detalhes" parecer continuação do card — mesma cor de
+    # fundo e borda, cantos de cima zerados e sem borda superior, pra encaixar
+    # no card (que tem bottom-radius:0).
+    #
+    # Duas coisas que pareciam detalhe e nao eram:
+    #
+    # O seletor era .stButton > button[kind="secondary"], que pega TODO botao
+    # secundario da tela — e perdia, sem !important, pro .stButton>button do
+    # config.py, que marca background/border/radius/font com !important. So
+    # margin sobrevivia. Resultado: o botao nunca teve esse visual; ficava com
+    # o fundo --surface-2, que no escuro passa por preto e no claro vira cinza
+    # sobre card branco. Agora a regra e presa a key (st-key-atv_det_) e leva
+    # !important — da pra ganhar sem vazar pros outros botoes da pagina.
+    #
+    # E o fundo e --surface de proposito, o mesmo do card, nao --surface-2: a
+    # ideia e ser o rodape do card, nao um botao em cima dele.
     st.markdown("""
     <style>
-    .stButton > button[kind="secondary"] {
-        background-color: var(--surface);
-        border: 1px solid var(--border);
-        border-top: none;
-        border-top-left-radius: 0;
-        border-top-right-radius: 0;
-        border-bottom-left-radius: 12px;
-        border-bottom-right-radius: 12px;
-        color: var(--txt-2);
-        font-size: 12px;
-        font-weight: 500;
-        padding-top: 8px;
-        padding-bottom: 8px;
-        margin-top: 0;
-        margin-bottom: 10px;
-        transition: background-color 0.15s, color 0.15s;
+    [class*="st-key-atv_det_"] button {
+        background: var(--surface) !important;
+        border: 1px solid var(--border) !important;
+        border-top: none !important;
+        border-top-left-radius: 0 !important;
+        border-top-right-radius: 0 !important;
+        border-bottom-left-radius: 12px !important;
+        border-bottom-right-radius: 12px !important;
+        color: var(--txt-2) !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+        margin-top: 0 !important;
+        margin-bottom: 10px !important;
+        box-shadow: none !important;
+        transition: background 0.15s, color 0.15s !important;
     }
-    .stButton > button[kind="secondary"]:hover {
-        background-color: var(--border-2);
-        color: var(--txt);
-        border-color: var(--border);
-        border-top: none;
+    [class*="st-key-atv_det_"] button:hover {
+        background: var(--surface-2) !important;
+        color: var(--txt) !important;
+        border-color: var(--border) !important;
+        border-top: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
