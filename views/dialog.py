@@ -101,20 +101,20 @@ def _render_acordo(eid, cliente, itens):
     # ── o calculo aberto ─────────────────────────────────────────────────
     with st.expander(f"Ver o cálculo das {len(prop_a.detalhe)} cobranças"):
         cab = ('<table style="width:100%;font-size:12px;border-collapse:collapse">'
-               '<tr style="color:#8b94a5;text-align:right">'
+               '<tr style="color:var(--txt-2);text-align:right">'
                '<th style="text-align:left;padding:4px 0">Cobrança</th>'
                '<th>Vencimento</th><th>Atraso</th><th>Valor original</th>'
                '<th>Multa</th><th>Juros</th><th>Atualização</th><th>Atualizado</th></tr>')
         corpo = "".join(
-            '<tr style="text-align:right;border-top:1px solid #1e2333">'
-            '<td style="text-align:left;padding:4px 0;color:#8b94a5">'
+            '<tr style="text-align:right;border-top:1px solid var(--surface-2)">'
+            '<td style="text-align:left;padding:4px 0;color:var(--txt-2)">'
             + str(d.get("id_recebimento") or "—") + '</td>'
-            '<td style="color:#8b94a5">' + str(d.get("vencimento") or "—") + '</td>'
-            '<td style="color:#8b94a5">' + str(d.get("dias", 0)) + 'd</td>'
+            '<td style="color:var(--txt-2)">' + str(d.get("vencimento") or "—") + '</td>'
+            '<td style="color:var(--txt-2)">' + str(d.get("dias", 0)) + 'd</td>'
             '<td>' + _m(d.get("principal", 0)) + '</td>'
-            '<td style="color:#8b94a5">' + _m(d.get("multa", 0)) + '</td>'
-            '<td style="color:#8b94a5">' + _m(d.get("juros", 0)) + '</td>'
-            '<td style="color:#8b94a5">' + _m(d.get("correcao", 0)) + '</td>'
+            '<td style="color:var(--txt-2)">' + _m(d.get("multa", 0)) + '</td>'
+            '<td style="color:var(--txt-2)">' + _m(d.get("juros", 0)) + '</td>'
+            '<td style="color:var(--txt-2)">' + _m(d.get("correcao", 0)) + '</td>'
             '<td style="font-weight:700">' + _m(d.get("total", 0)) + '</td></tr>'
             for d in prop_a.detalhe)
         st.markdown(cab + corpo + "</table>", unsafe_allow_html=True)
@@ -131,39 +131,39 @@ def _render_acordo(eid, cliente, itens):
         # o respiro precisa sair de DENTRO dela pra sobrar espaco antes do
         # Exportar. Com spacer solto a Opcao A continuava encostando no botao.
         return (
-            '<div style="border:1px solid ' + ("#7cc243" if verde else "#2a2f42") + ';'
-            'border-radius:8px;padding:12px 14px;background:#13161f;'
+            '<div style="border:1px solid ' + ("var(--brand)" if verde else "var(--border)") + ';'
+            'border-radius:8px;padding:12px 14px;background:var(--surface-3);'
             'height:calc(100% - 14px);margin-bottom:14px">'
             '<div style="font-size:11px;font-weight:700;letter-spacing:1px;'
-            'text-transform:uppercase;color:' + ("#7cc243" if verde else "#8b94a5")
+            'text-transform:uppercase;color:' + ("var(--brand)" if verde else "var(--txt-2)")
             + ';margin-bottom:8px">' + titulo + '</div>' + corpo
-            + '<div style="border-top:1px solid #1e2333;margin-top:8px;padding-top:8px;'
+            + '<div style="border-top:1px solid var(--surface-2);margin-top:8px;padding-top:8px;'
               'display:flex;justify-content:space-between;align-items:baseline">'
-              '<span style="color:#8b94a5;font-size:11px;text-transform:uppercase;'
+              '<span style="color:var(--txt-2);font-size:11px;text-transform:uppercase;'
               'letter-spacing:1px">' + destaque_rot + '</span>'
-              '<span style="color:' + ("#7cc243" if verde else "#e8eaf0") + ';'
+              '<span style="color:' + ("var(--brand)" if verde else "var(--txt)") + ';'
               'font-weight:800;font-size:18px;font-variant-numeric:tabular-nums">'
             + destaque_val + '</span></div></div>')
 
-    linhas_a = [("Valor original", _m(prop_a.principal), "#8b94a5"),
-                ("Multa (2%)", _m(prop_a.multa), "#8b94a5"),
-                ("Juros (1% ao mês)", _m(prop_a.juros), "#8b94a5")]
+    linhas_a = [("Valor original", _m(prop_a.principal), "var(--txt-2)"),
+                ("Multa (2%)", _m(prop_a.multa), "var(--txt-2)"),
+                ("Juros (1% ao mês)", _m(prop_a.juros), "var(--txt-2)")]
     if prop_a.correcao > 0:
-        linhas_a.append(("Atualização", _m(prop_a.correcao), "#8b94a5"))
-    linhas_a.append(("Total atualizado", _m(prop_a.atualizado), "#e8eaf0"))
+        linhas_a.append(("Atualização", _m(prop_a.correcao), "var(--txt-2)"))
+    linhas_a.append(("Total atualizado", _m(prop_a.atualizado), "var(--txt)"))
     if prop_a.desconto > 0:
         linhas_a.append((f"Desconto ({pct_acordo(prop_a.pct_desconto)}%)",
-                         "- " + _m(prop_a.desconto), "#7cc243"))
+                         "- " + _m(prop_a.desconto), "var(--brand)"))
 
     # "Sem acrescimo por parcelar" respondia a pergunta errada. A que a
     # igreja faz e "esse valor ja tem os juros?" — e tem: os do atraso.
-    linhas_b = [("Valor original", _m(prop_b.principal), "#8b94a5"),
-                ("Multa e juros do atraso", _m(prop_b.encargos), "#8b94a5"),
-                ("Total atualizado", _m(prop_b.atualizado), "#e8eaf0")]
+    linhas_b = [("Valor original", _m(prop_b.principal), "var(--txt-2)"),
+                ("Multa e juros do atraso", _m(prop_b.encargos), "var(--txt-2)"),
+                ("Total atualizado", _m(prop_b.atualizado), "var(--txt)")]
     if prop_b.desconto > 0:
         linhas_b.append((f"Desconto ({pct_acordo(prop_b.pct_desconto)}%)",
-                         "- " + _m(prop_b.desconto), "#7cc243"))
-    linhas_b.append((f"Dividido em {parc} parcelas iguais", "", "#8b94a5"))
+                         "- " + _m(prop_b.desconto), "var(--brand)"))
+    linhas_b.append((f"Dividido em {parc} parcelas iguais", "", "var(--txt-2)"))
 
     o1, o2 = st.columns(2)
     with o1:
@@ -305,26 +305,26 @@ def _dialog_editar(eid, from_fixados: bool = False):
         text-overflow:ellipsis !important;
     }
     [data-testid="stDialog"] button[kind="primary"]{
-        background-color:#4a8a2c !important;
-        border:1px solid #4a8a2c !important;
-        color:#ffffff !important;
+        background-color:var(--brand) !important;
+        border:1px solid var(--brand) !important;
+        color:var(--txt-inv) !important;
     }
     [data-testid="stDialog"] button[kind="primary"]:hover{
-        background-color:#3d731f !important;
-        border-color:#3d731f !important;
+        background-color:var(--brand) !important;
+        border-color:var(--brand) !important;
     }
     [data-testid="stDialog"] [data-testid="stExpander"] details{
         border:none !important;
         background:transparent !important;
     }
     [data-testid="stDialog"] [data-testid="stExpander"] details summary{
-        color:#8b94a5 !important;
+        color:var(--txt-2) !important;
         font-size:13px !important;
         padding:6px 0 !important;
         background:transparent !important;
     }
     [data-testid="stDialog"] [data-testid="stExpander"] details summary:hover{
-        color:#e8eaf0 !important;
+        color:var(--txt) !important;
     }
     [data-testid="stDialog"] [data-testid="stExpander"] details > div{
         padding:6px 0 0 0 !important;
@@ -355,7 +355,7 @@ def _dialog_editar(eid, from_fixados: bool = False):
            passava despercebido. */
         font-size:14.5px !important;
         font-weight:500 !important;
-        color:#c7cede !important;
+        color:var(--txt-claro) !important;
         line-height:1.2 !important;
     }
     [data-testid="stDialog"] [class*="st-key-btn_acordo_on_"] button,
@@ -374,7 +374,7 @@ def _dialog_editar(eid, from_fixados: bool = False):
     [data-testid="stDialog"] [class*="st-key-btn_voltar_"] button:hover,
     [data-testid="stDialog"] [class*="st-key-btn_voltar_"] button:hover p,
     [data-testid="stDialog"] [class*="st-key-btn_voltar_"] button:hover [data-testid="stIconMaterial"]{
-        color:#e8eaf0 !important;
+        color:var(--txt) !important;
         background:transparent !important;
     }
     /* o icone do Material vem com tamanho proprio e destoava da setinha do
@@ -488,7 +488,7 @@ def _dialog_editar(eid, from_fixados: bool = False):
         # Texto puro em azul — sem retângulo de fundo (econômico em espaço
         # vertical e visualmente discreto). Só aparece pra admin.
         st.markdown(
-            '<div style="color:#5fa3ff;font-size:13px;font-weight:500;'
+            '<div style="color:var(--info);font-size:13px;font-weight:500;'
             'margin:0 0 10px 0">👁 Modo visualização</div>',
             unsafe_allow_html=True,
         )
@@ -496,13 +496,13 @@ def _dialog_editar(eid, from_fixados: bool = False):
     # Cabeçalho informativo
     c1, c2, c3, c4, c5 = st.columns([1.9, 1.05, 1.0, 1.1, 1.25])
     with c1:
-        inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if cliente.get("_inativo") else ""
-        st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Cliente</div><div class="dialog-info-value" style="font-size:16px">{cliente["nome"]}{inativo_badge}</div><div style="font-size:12px;color:#8b94a5;margin-top:3px">{cliente.get("cnpj","—")}</div></div>', unsafe_allow_html=True)
+        inativo_badge = '<span style="background:var(--txt-3);color:var(--txt-inv);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if cliente.get("_inativo") else ""
+        st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Cliente</div><div class="dialog-info-value" style="font-size:16px">{cliente["nome"]}{inativo_badge}</div><div style="font-size:12px;color:var(--txt-2);margin-top:3px">{cliente.get("cnpj","—")}</div></div>', unsafe_allow_html=True)
     with c2:
         parcelas = cliente.get("parcelas", len(cliente.get("_cobracas", [])))
-        st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Saldo em aberto</div><div class="dialog-info-value" style="font-size:16px;color:#7cc243">{fmt_moeda_plain(cliente["valor"])}</div><div style="font-size:12px;color:#8b94a5;margin-top:3px">{parcelas} parcela{"s" if parcelas != 1 else ""} em atraso</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Saldo em aberto</div><div class="dialog-info-value" style="font-size:16px;color:var(--brand)">{fmt_moeda_plain(cliente["valor"])}</div><div style="font-size:12px;color:var(--txt-2);margin-top:3px">{parcelas} parcela{"s" if parcelas != 1 else ""} em atraso</div></div>', unsafe_allow_html=True)
     with c3:
-        st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Vencimento</div><div class="dialog-info-value" style="font-size:16px">{cliente.get("vencimento","—")}</div><div style="font-size:12px;color:#8b94a5;margin-top:3px">{dias_html(cliente.get("dias_atraso"))}</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="dialog-info"><div class="dialog-info-label">Vencimento</div><div class="dialog-info-value" style="font-size:16px">{cliente.get("vencimento","—")}</div><div style="font-size:12px;color:var(--txt-2);margin-top:3px">{dias_html(cliente.get("dias_atraso"))}</div></div>', unsafe_allow_html=True)
     with c4:
         # Ultimo login da igreja no PAINEL DE CONTROLE. Nao e' acesso de membro
         # no app/site — esse e' consumo de conteudo e misturaria os vieses.
@@ -524,7 +524,7 @@ def _dialog_editar(eid, from_fixados: bool = False):
         st.markdown(
             f'<div class="dialog-info"><div class="dialog-info-label">Último login painel</div>'
             f'<div class="dialog-info-value" style="font-size:16px">{_ul_valor}</div>'
-            f'<div style="font-size:12px;color:#8b94a5;margin-top:3px">{_ul_sub}</div></div>',
+            f'<div style="font-size:12px;color:var(--txt-2);margin-top:3px">{_ul_sub}</div></div>',
             unsafe_allow_html=True,
         )
     with c5:
@@ -537,7 +537,7 @@ def _dialog_editar(eid, from_fixados: bool = False):
         _itens = telefones_cliente(_raw)
         # bons antes: o destaque nunca pode ser um numero furado
         tels = [f for _b, f, p in _itens if not p]
-        tels += [f'<span style="color:#ef4444" title="cadastro incompleto — {p}">{f}</span>'
+        tels += [f'<span style="color:var(--erro)" title="cadastro incompleto — {p}">{f}</span>'
                  for _b, f, p in _itens if p]
         if not tels:
             tel_principal_html = "—"
@@ -552,7 +552,7 @@ def _dialog_editar(eid, from_fixados: bool = False):
             f'<div class="dialog-info">'
             f'<div class="dialog-info-label">Telefone{"s" if len(tels) > 1 else ""}</div>'
             f'<div class="dialog-info-value" style="font-size:16px">{tel_principal_html}</div>'
-            f'<div style="font-size:12px;color:#8b94a5;margin-top:3px">{tel_extras_html}</div>'
+            f'<div style="font-size:12px;color:var(--txt-2);margin-top:3px">{tel_extras_html}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -569,7 +569,7 @@ def _dialog_editar(eid, from_fixados: bool = False):
     # opcoes lado a lado sem rolar de volta. Voltam intactos no "Voltar".
     if _modo_proposta:
         st.markdown(
-            '<div style="font-size:13px;font-weight:700;color:#8b94a5;'
+            '<div style="font-size:13px;font-weight:700;color:var(--txt-2);'
             'letter-spacing:1.2px;text-transform:uppercase;'
             'margin:14px 0 22px 0">Proposta de Acordo</div>',
             unsafe_allow_html=True)
@@ -601,7 +601,7 @@ def _dialog_editar(eid, from_fixados: bool = False):
     # Streamlit executa o conteudo de um expander em toda renderizacao —
     # com a consulta a API la dentro, abrir qualquer cliente custava 1s.
     st.markdown(
-        '<div style="font-size:13px;font-weight:700;color:#8b94a5;letter-spacing:1.2px;'
+        '<div style="font-size:13px;font-weight:700;color:var(--txt-2);letter-spacing:1.2px;'
         'text-transform:uppercase;margin:14px 0 10px 0">Cobranças Inadimplentes</div>',
         unsafe_allow_html=True,
     )
@@ -611,22 +611,22 @@ def _dialog_editar(eid, from_fixados: bool = False):
         # card de 2 linhas. Cliente com 18 parcelas (caso real visto) cabe
         # sem dialog gigante. min-width fixo no "Atraso" e badge garante
         # que valores diferentes (23d vs 112d) não desalinhem visualmente.
-        # Fundo #13161f (mesmo do .dialog-info) — antes estava #1e2333
+        # Fundo var(--surface-3) (mesmo do .dialog-info) — antes estava var(--surface-2)
         # mais claro, destoava do resto do dialog.
         return (
-            f'<div style="background:#13161f;border:1px solid #1e2333;border-radius:8px;'
+            f'<div style="background:var(--surface-3);border:1px solid var(--surface-2);border-radius:8px;'
             f'padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;'
             f'justify-content:space-between;gap:12px;font-size:14px">'
             f'<div style="display:flex;align-items:baseline;gap:10px;min-width:0">'
-            f'<span style="font-weight:700;color:#e8eaf0;font-variant-numeric:tabular-nums">'
+            f'<span style="font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums">'
             f'{fmt_moeda_plain(cob["valor"])}</span>'
-            f'<span style="color:#8b94a5;font-size:12px">Vence {cob["vencimento"]}</span>'
+            f'<span style="color:var(--txt-2);font-size:12px">Vence {cob["vencimento"]}</span>'
             f'</div>'
             f'<div style="display:flex;align-items:center;gap:12px;flex-shrink:0">'
-            f'<span style="color:#e8eaf0;font-variant-numeric:tabular-nums;'
+            f'<span style="color:var(--txt);font-variant-numeric:tabular-nums;'
             f'min-width:85px;text-align:right">'
-            f'<span style="color:#8b94a5">Atraso:</span> <strong>{cob["dias_atraso"]}d</strong></span>'
-            f'<span style="background:#ff5555;color:#fff;padding:3px 8px;'
+            f'<span style="color:var(--txt-2)">Atraso:</span> <strong>{cob["dias_atraso"]}d</strong></span>'
+            f'<span style="background:var(--erro-2);color:var(--txt-inv);padding:3px 8px;'
             f'border-radius:4px;font-size:11px;font-weight:600;'
             f'min-width:95px;text-align:center;display:inline-block">INADIMPLENTE</span>'
             f'</div>'
@@ -756,7 +756,7 @@ def _dialog_editar(eid, from_fixados: bool = False):
                 f'<div style="background:rgba(251,191,36,.12);'
                 f'border:1px solid rgba(251,191,36,.35);border-radius:6px;'
                 f'padding:8px 12px;margin:-6px 0 10px 0;font-size:12px;'
-                f'color:#fbbf24;line-height:1.5">'
+                f'color:var(--alerta);line-height:1.5">'
                 f'Este cliente tem celular no cadastro: '
                 f'<b>{" · ".join(_cels)}</b>. Ainda é só telefone fixo?'
                 f'</div>', unsafe_allow_html=True)
@@ -776,13 +776,13 @@ def _dialog_editar(eid, from_fixados: bool = False):
             display: none !important;
         }
         [data-testid="stDialog"] div[data-testid="stColumn"]:has(div[data-naoatend]) button {
-            background-color: #ff5555 !important;
-            border-color: #ff5555 !important;
-            color: #ffffff !important;
+            background-color: var(--erro-2) !important;
+            border-color: var(--erro-2) !important;
+            color: var(--txt-inv) !important;
         }
         [data-testid="stDialog"] div[data-testid="stColumn"]:has(div[data-naoatend]) button:hover {
-            background-color: #d94040 !important;
-            border-color: #d94040 !important;
+            background-color: var(--erro-2) !important;
+            border-color: var(--erro-2) !important;
         }
         </style>
         """, unsafe_allow_html=True)
@@ -883,7 +883,7 @@ def _dialog_editar(eid, from_fixados: bool = False):
 
     # Linha "Editado por" só faz sentido em modo edição
     if not somente_leitura:
-        st.markdown(f'<div style="font-size:12px;color:#8b94a5;margin-top:6px;font-weight:500">Editado por: <span style="color:#e8eaf0;font-weight:700">{current_nome()}</span></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:12px;color:var(--txt-2);margin-top:6px;font-weight:500">Editado por: <span style="color:var(--txt);font-weight:700">{current_nome()}</span></div>', unsafe_allow_html=True)
 
     # Detecta se cliente está fixado (promise vencida OU retorno vencido)
     # pra exibir o botão Concluir junto com Salvar/Cancelar.

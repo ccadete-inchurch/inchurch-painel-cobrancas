@@ -13,7 +13,7 @@ import re as _re_tel
 
 # Ícones monocromáticos pros cards de fixado (mesmo padrão da Atividades)
 _ICON_FIX_PHONE = (
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" '
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="var(--txt-3)" '
     'style="flex-shrink:0;vertical-align:middle">'
     '<path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 '
     '2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 '
@@ -21,7 +21,7 @@ _ICON_FIX_PHONE = (
     '</svg>'
 )
 _ICON_FIX_GROUP = (
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" '
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="var(--txt-3)" '
     'style="flex-shrink:0;vertical-align:middle">'
     '<path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 '
     '3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 '
@@ -31,14 +31,14 @@ _ICON_FIX_GROUP = (
     '</svg>'
 )
 _ICON_FIX_PERSON = (
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" '
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="var(--txt-3)" '
     'style="flex-shrink:0;vertical-align:middle">'
     '<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 '
     '2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>'
     '</svg>'
 )
 _ICON_FIX_WHATSAPP = (
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" '
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="var(--txt-3)" '
     'style="flex-shrink:0;vertical-align:middle">'
     '<path d="M17.5 14.4c-.3-.1-1.7-.8-2-.9-.3-.1-.5-.1-.7.1-.2.3-.7.9-.9 '
     '1.1-.2.2-.3.2-.6.1-1.8-.9-3-1.6-4.2-3.6-.3-.5.3-.5.9-1.6.1-.2.1-.4 '
@@ -257,11 +257,11 @@ def _render_dashboard(store, clientes, role):
 
     s1, s2, s3, s4, s5, s6 = st.columns(6)
     for col, label, val, cor, sub in [
-        (s1, "Total Clientes",       total,       "#e8eaf0", "inadimplentes"),
-        (s2, "Não Contactados",     pending,     "#ef4444", "pendentes"),
-        (s3, "Contactados",         contacted,   "#f59e0b", "em acompanhamento"),
-        (s4, "Promessas",           promise,     "#f97316", "prometeu pagar"),
-        (s5, "Negociando",          negotiating, "#4f7cff", "em negociação"),
+        (s1, "Total Clientes",       total,       "var(--txt)", "inadimplentes"),
+        (s2, "Não Contactados",     pending,     "var(--erro)", "pendentes"),
+        (s3, "Contactados",         contacted,   "var(--alerta)", "em acompanhamento"),
+        (s4, "Promessas",           promise,     "var(--laranja-3)", "prometeu pagar"),
+        (s5, "Negociando",          negotiating, "var(--azul-2)", "em negociação"),
     ]:
         with col:
             st.markdown(
@@ -274,7 +274,7 @@ def _render_dashboard(store, clientes, role):
     # 6º card: variação no mês (layout vertical com sub-linhas)
     with s6:
         sinal = "+" if saldo_mes >= 0 else ""
-        cor_saldo = "#ef4444" if saldo_mes > 0 else ("#22c55e" if saldo_mes < 0 else "#e8eaf0")
+        cor_saldo = "var(--erro)" if saldo_mes > 0 else ("var(--ok)" if saldo_mes < 0 else "var(--txt)")
 
         # Métricas do DIA — JANELA ÚNICA do snapshot de referência (sex em
         # segundas, ontem em dias normais) até agora. Antes havia incoerência:
@@ -319,18 +319,18 @@ def _render_dashboard(store, clientes, role):
         def _fmt_full(n, kind):
             """Com seta + número + label ('↑ 8 novos' / '↓ 59 reg.')"""
             seta = "↑" if kind == "novos" else "↓"
-            cor = "#ef4444" if kind == "novos" else "#22c55e"
+            cor = "var(--erro)" if kind == "novos" else "var(--ok)"
             label = "reg." if kind == "reg" else "novos"
             if n is None:
-                return f'<span style="color:#6b7280;font-weight:700">{seta} —</span> <span style="color:#8b94a5">{label}</span>'
-            return f'<span style="color:{cor};font-weight:700">{seta} {n}</span> <span style="color:#8b94a5">{label}</span>'
+                return f'<span style="color:var(--txt-3);font-weight:700">{seta} —</span> <span style="color:var(--txt-2)">{label}</span>'
+            return f'<span style="color:{cor};font-weight:700">{seta} {n}</span> <span style="color:var(--txt-2)">{label}</span>'
 
         def _fmt_short(n, kind):
             """Seta + número colorido ('↑ 8' / '↓ 59')"""
             seta = "↑" if kind == "novos" else "↓"
-            cor = "#ef4444" if kind == "novos" else "#22c55e"
+            cor = "var(--erro)" if kind == "novos" else "var(--ok)"
             if n is None:
-                return f'<span style="color:#6b7280;font-weight:700">{seta} —</span>'
+                return f'<span style="color:var(--txt-3);font-weight:700">{seta} —</span>'
             return f'<span style="color:{cor};font-weight:700">{seta} {n}</span>'
 
         # Tooltips — curtos e diretos
@@ -363,15 +363,15 @@ def _render_dashboard(store, clientes, role):
             f'<span class="metric-value" style="color:{cor_saldo};font-size:42px">{sinal}{saldo_mes:,}</span>'
             f'</div>'
             f'<div title="{_tt_mes}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-            f'<span style="color:#8b94a5">Mês: </span>'
+            f'<span style="color:var(--txt-2)">Mês: </span>'
             f'{_fmt_full(novos_mes, "novos")} · {_fmt_full(reg_mes, "reg")}'
             f'</div>'
-            f'<div title="{_tt_sem}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid #2a2f42;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-            f'<span style="color:#8b94a5">Semana: </span>'
+            f'<div title="{_tt_sem}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+            f'<span style="color:var(--txt-2)">Semana: </span>'
             f'{_fmt_short(novos_semana_n, "novos")} · {_fmt_short(reg_semana_n, "reg")}'
             f'</div>'
             f'<div title="{_tt_hoje}" class="metric-sub" style="cursor:help;font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-            f'<span style="color:#8b94a5">{_label_hoje}: </span>'
+            f'<span style="color:var(--txt-2)">{_label_hoje}: </span>'
             f'{_fmt_short(novos_hoje_n, "novos")} · {_fmt_short(regs_hoje_n, "reg")}'
             f'</div>'
             f'</div>',
@@ -399,10 +399,10 @@ def _render_dashboard(store, clientes, role):
         # Header — título + badge da contagem
         st.markdown(
             f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">'
-            f'<span style="font-weight:800;font-size:24px;color:#e8eaf0;'
+            f'<span style="font-weight:800;font-size:24px;color:var(--txt);'
             f'text-transform:uppercase;letter-spacing:1.5px;white-space:nowrap">'
             f'Clientes Fixados</span>'
-            f'<span style="background:#ef4444;color:white;font-size:22px;padding:7px 18px;'
+            f'<span style="background:var(--erro);color:white;font-size:22px;padding:7px 18px;'
             f'border-radius:20px;font-weight:800;letter-spacing:0.3px;line-height:1">'
             f'{len(pendencias)}</span>'
             f'</div>',
@@ -411,7 +411,7 @@ def _render_dashboard(store, clientes, role):
 
         if not pendencias:
             st.markdown(
-                '<div style="color:#6b7280;font-size:13px;padding:14px 0">'
+                '<div style="color:var(--txt-3);font-size:13px;padding:14px 0">'
                 'Nenhum fixado nesse filtro.</div>',
                 unsafe_allow_html=True,
             )
@@ -438,7 +438,7 @@ def _render_dashboard(store, clientes, role):
             from config import STATUS_COLORS
             for i, (c, _h, tipo, msg, dias_atraso) in enumerate(pend_pag):
                 status_c = _h.get("status", "pending")
-                cor_borda = STATUS_COLORS.get(status_c, "#8b94a5")
+                cor_borda = STATUS_COLORS.get(status_c, "var(--txt-2)")
                 # Cor secundária pro 'há Xd' — vermelho intenso só pra muito
                 # atrasado (≥7d); senão usa cinza neutro pra não competir
                 # visualmente com a borda.
@@ -467,7 +467,7 @@ def _render_dashboard(store, clientes, role):
                     # em vermelho e sem icone de WhatsApp; os bons vem antes,
                     # pra que o destaque nunca seja um numero furado.
                     _ps = [f'{_wa_por_tel(_b)}{_f}' for _b, _f, _p in _itens_fix if not _p]
-                    _ps += [f'<span style="color:#ef4444" title="cadastro '
+                    _ps += [f'<span style="color:var(--erro)" title="cadastro '
                             f'incompleto — {_p}">{_f}</span>'
                             for _b, _f, _p in _itens_fix if _p]
                     if len(_ps) == 1:
@@ -475,13 +475,13 @@ def _render_dashboard(store, clientes, role):
                     else:
                         conteudo = (
                             f'{_ps[0]} '
-                            f'<span style="color:#6b7280;font-size:10px;font-weight:500">'
+                            f'<span style="color:var(--txt-3);font-size:10px;font-weight:500">'
                             f'· {" · ".join(_ps[1:])}</span>'
                         )
                     tel_html = (
                         f'<div style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:12px">'
                         f'{_ICON_FIX_PHONE}'
-                        f'<span style="color:#9ca3af;margin-left:2px">{conteudo}</span>'
+                        f'<span style="color:var(--txt-2);margin-left:2px">{conteudo}</span>'
                         f'</div>'
                     )
 
@@ -491,7 +491,7 @@ def _render_dashboard(store, clientes, role):
                     # Ícone de pessoa (mesmo SVG da tela Atividades) + nome
                     origem_tag = (
                         f'<div style="display:flex;align-items:center;gap:5px;'
-                        f'margin-top:4px;font-size:11px;color:#9ca3af;font-weight:500">'
+                        f'margin-top:4px;font-size:11px;color:var(--txt-2);font-weight:500">'
                         f'{_ICON_FIX_PERSON}<span>{" / ".join(origens)}</span>'
                         f'</div>'
                     )
@@ -515,7 +515,7 @@ def _render_dashboard(store, clientes, role):
                 if role != "admin" and c.get("_grupo"):
                     grupo_html = (
                         f'<div style="display:flex;align-items:center;gap:5px;'
-                        f'margin-top:4px;font-size:11px;color:#9ca3af">'
+                        f'margin-top:4px;font-size:11px;color:var(--txt-2)">'
                         f'{_ICON_FIX_GROUP}<span>{_g_display}</span>'
                         f'</div>'
                     )
@@ -524,19 +524,19 @@ def _render_dashboard(store, clientes, role):
                 tags_inline = ""
                 if c.get("_tem_acordo"):
                     tags_inline += (
-                        '<span style="background:#4f7cff;color:#fff;font-size:9px;'
+                        '<span style="background:var(--azul-2);color:var(--txt-inv);font-size:9px;'
                         'font-weight:700;padding:2px 6px;border-radius:4px;'
                         'flex-shrink:0">ACORDO</span>'
                     )
                 if c.get("_inativo"):
                     tags_inline += (
-                        '<span style="background:#6b7280;color:#fff;font-size:9px;'
+                        '<span style="background:var(--txt-3);color:var(--txt-inv);font-size:9px;'
                         'font-weight:700;padding:2px 6px;border-radius:4px;'
                         'flex-shrink:0;margin-left:4px">INATIVO</span>'
                     )
                 if _h.get("tel_fixo"):
                     tags_inline += (
-                        '<span style="background:rgba(236,72,153,.18);color:#ec4899;'
+                        '<span style="background:rgba(236,72,153,.18);color:var(--rosa);'
                         'border:1px solid rgba(236,72,153,.4);'
                         'font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;'
                         'flex-shrink:0;margin-left:4px">TELEFONE FIXO</span>'
@@ -556,7 +556,7 @@ def _render_dashboard(store, clientes, role):
                         f'<div class="pend-card" style="border-left:4px solid {cor_borda}">'
                         f'{nome_row}'
                         f'<div style="margin-top:7px">{msg_badge}</div>'
-                        f'<div style="font-size:15px;color:#ef4444;margin-top:7px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
+                        f'<div style="font-size:15px;color:var(--erro);margin-top:7px;font-weight:700">{fmt_moeda_plain(c["valor"])}</div>'
                         f'{tel_html}'
                         f'{grupo_html}'
                         f'{origem_tag}'
@@ -582,7 +582,7 @@ def _render_dashboard(store, clientes, role):
                         st.rerun()
                 with pc3:
                     st.markdown(
-                        f'<div style="text-align:center;color:#6b7280;font-size:13px;font-weight:600">'
+                        f'<div style="text-align:center;color:var(--txt-3);font-size:13px;font-weight:600">'
                         f'{page_fix} / {total_pg_fix}'
                         f'</div>',
                         unsafe_allow_html=True,
@@ -759,8 +759,8 @@ def _render_dashboard(store, clientes, role):
     sort_active = " · ".join(ordenar) if ordenar else "padrão"
     st.markdown(
         f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-        f'<span style="font-size:14px;color:#6b7280"><b style="color:#e8eaf0;font-size:15px">{total_f}</b> clientes encontrados</span>'
-        f'<span style="font-size:11px;color:#4b5563;background:#181c26;border:1px solid #1e2333;padding:4px 10px;border-radius:6px">Ordenado por: <b style="color:#8b94a5">{sort_active}</b></span>'
+        f'<span style="font-size:14px;color:var(--txt-3)"><b style="color:var(--txt);font-size:15px">{total_f}</b> clientes encontrados</span>'
+        f'<span style="font-size:11px;color:var(--txt-4);background:var(--surface);border:1px solid var(--surface-2);padding:4px 10px;border-radius:6px">Ordenado por: <b style="color:var(--txt-2)">{sort_active}</b></span>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -782,7 +782,7 @@ def _render_dashboard(store, clientes, role):
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
     # Fundo escuro aplicado via container CSS abaixo.
     st.markdown(
-        '<div style="background:#1e2333;border:1px solid #2a2f42;'
+        '<div style="background:var(--surface-2);border:1px solid var(--border);'
         'border-radius:12px 12px 0 0;padding:0;margin-bottom:0;'
         'box-shadow:0 2px 8px rgba(0,0,0,.1)">',
         unsafe_allow_html=True,
@@ -792,7 +792,7 @@ def _render_dashboard(store, clientes, role):
         with hcol:
             st.markdown(
                 f'<div style="padding:14px 14px;font-size:12px;text-transform:uppercase;'
-                f'letter-spacing:1.2px;color:#8b94a5;font-weight:700;white-space:nowrap;'
+                f'letter-spacing:1.2px;color:var(--txt-2);font-weight:700;white-space:nowrap;'
                 f'overflow:hidden;text-overflow:ellipsis">{htxt}</div>',
                 unsafe_allow_html=True,
             )
@@ -800,8 +800,8 @@ def _render_dashboard(store, clientes, role):
 
     if df_page.empty:
         st.markdown(
-            '<div style="background:#181c26;border:1px solid #2a2f42;border-top:none;'
-            'border-radius:0 0 12px 12px;padding:60px;text-align:center;color:#6b7280;font-size:14px">'
+            '<div style="background:var(--surface);border:1px solid var(--border);border-top:none;'
+            'border-radius:0 0 12px 12px;padding:60px;text-align:center;color:var(--txt-3);font-size:14px">'
             'Nenhum resultado — ajuste os filtros</div>',
             unsafe_allow_html=True,
         )
@@ -814,11 +814,11 @@ def _render_dashboard(store, clientes, role):
                 '<span class="tag-novo">NOVO</span>'                 if row.get("_novo")          else "",
                 '<span class="tag-upd">ATUALIZADO</span>'           if row.get("_atualizado")    else "",
                 '<span class="tag-nova-cob">+ Nova cobrança</span>' if row.get("_nova_cobranca") else "",
-                '<span style="background:#4f7cff;color:#fff;font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">ACORDO</span>'  if row.get("_tem_acordo") else "",
-                '<span style="background:#6b7280;color:#fff;font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">INATIVO</span>' if row.get("_inativo")    else "",
-                '<span style="background:rgba(236,72,153,.18);color:#ec4899;border:1px solid rgba(236,72,153,.4);font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">FIXO</span>' if row.get("_tel_fixo") else "",
+                '<span style="background:var(--azul-2);color:var(--txt-inv);font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">ACORDO</span>'  if row.get("_tem_acordo") else "",
+                '<span style="background:var(--txt-3);color:var(--txt-inv);font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">INATIVO</span>' if row.get("_inativo")    else "",
+                '<span style="background:rgba(236,72,153,.18);color:var(--rosa);border:1px solid rgba(236,72,153,.4);font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">FIXO</span>' if row.get("_tel_fixo") else "",
             ])
-            obs_icon  = ' <span style="color:#5fa3ff;font-size:12px;font-weight:700">●</span>' if str(row["_notes"] or "") else ""
+            obs_icon  = ' <span style="color:var(--info);font-size:12px;font-weight:700">●</span>' if str(row["_notes"] or "") else ""
             row_bl    = "border-left:4px solid rgba(239,68,68,.6);" if is_top else ""
             row_bg    = "background:rgba(239,68,68,.04);"           if is_top else ""
 
@@ -833,14 +833,14 @@ def _render_dashboard(store, clientes, role):
                 _at = str(row["_atendente"] or "")
                 _gr = str(row.get("_grupo") or "")
                 atend_tag = (
-                    f'<span style="font-size:11px;color:#8b94a5;margin-left:6px;'
+                    f'<span style="font-size:11px;color:var(--txt-2);margin-left:6px;'
                     f'font-weight:500">· {_at}</span>'
                 ) if _at and _at != _gr else ""
                 st.markdown(
                     f'<div style="padding:12px 12px;{row_bg}{row_bl}">'
                     f'<div style="margin-bottom:3px">{tags}</div>'
-                    f'<div style="font-weight:600;font-size:clamp(15px,0.95vw,18px);color:#e8eaf0;line-height:1.3">{row["nome"]}{obs_icon}</div>'
-                    f'<div style="color:#8b94a5;font-size:15px;margin-top:2px;font-weight:500">{row.get("cnpj","")}{atend_tag}</div>'
+                    f'<div style="font-weight:600;font-size:clamp(15px,0.95vw,18px);color:var(--txt);line-height:1.3">{row["nome"]}{obs_icon}</div>'
+                    f'<div style="color:var(--txt-2);font-size:15px;margin-top:2px;font-weight:500">{row.get("cnpj","")}{atend_tag}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -851,7 +851,7 @@ def _render_dashboard(store, clientes, role):
                 _sc  = int(row.get("_score") or 0)
                 _pct = float(row.get("_score_pct") or 0)  # 0..1, percentil na base
                 if _pct >= 0.90:
-                    cor_sc = "#f59e0b"  # top 10% — laranja
+                    cor_sc = "var(--alerta)"  # top 10% — laranja
                 else:
                     _ratio = _pct / 0.90  # 0..1 dentro dos 90% inferiores
                     _r1, _g1, _b1 = 0x6b, 0x72, 0x80  # cinza (low percentile)
@@ -863,7 +863,7 @@ def _render_dashboard(store, clientes, role):
                 st.markdown(
                     f'<div style="padding:12px 6px;text-align:center;white-space:nowrap">'
                     f'<span style="color:{cor_sc};font-weight:800;font-size:15px">{_sc}</span>'
-                    f'<span style="color:#6b7280;font-size:10px;margin-left:3px">pts</span>'
+                    f'<span style="color:var(--txt-3);font-size:10px;margin-left:3px">pts</span>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -873,11 +873,11 @@ def _render_dashboard(store, clientes, role):
                 st.markdown(f'<div style="padding:12px 12px;font-size:14px">{dias_html(row.get("dias_atraso"))}</div>', unsafe_allow_html=True)
             with rcols[4]:
                 m = int(row.get("_meses_atraso") or 0)
-                cor_m = "#ef4444" if m >= 9 else ("#f97316" if m >= 5 else "#f59e0b")
+                cor_m = "var(--erro)" if m >= 9 else ("var(--laranja-3)" if m >= 5 else "var(--alerta)")
                 st.markdown(
                     f'<div style="padding:12px 12px">'
                     f'<span style="color:{cor_m};font-weight:700;font-size:16px">{m}</span>'
-                    f'<span style="color:#8b94a5;font-size:14px">/12</span>'
+                    f'<span style="color:var(--txt-2);font-size:14px">/12</span>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -918,11 +918,11 @@ def _render_dashboard(store, clientes, role):
                     # pra discar, mas precisa aparecer pra ser corrigido.
                     tel_display = "".join(_linha_tel(t, f) for t, f in _pairs)
                     tel_display += "".join(
-                        f'<div style="white-space:nowrap;color:#ef4444" '
+                        f'<div style="white-space:nowrap;color:var(--erro)" '
                         f'title="cadastro incompleto — {p}">{f}</div>'
                         for f, p in _ruins
                     )
-                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5;line-height:1.6">{tel_display}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:var(--txt-2);line-height:1.6">{tel_display}</div>', unsafe_allow_html=True)
             with rcols[6]:
                 _g_row = row.get("_grupo") or ""
                 # Celula vazia vira "—", nao "Sem especialista": o rotulo longo
@@ -937,10 +937,10 @@ def _render_dashboard(store, clientes, role):
                     f'<span class="g-nome">{_g_p[0]}</span>'
                     f'<span class="g-sobre">{_g_p[1]}</span>'
                 ) if len(_g_p) == 2 else f'<span class="g-nome">{_g_row_display}</span>' 
-                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5;'
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:var(--txt-2);'
                             f'line-height:1.35;overflow:hidden">{_g_row_display}</div>', unsafe_allow_html=True)
             with rcols[7]:
-                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:#8b94a5;white-space:nowrap">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:12px 12px;font-size:14px;color:var(--txt-2);white-space:nowrap">{row["_lastContact"] or "—"}</div>', unsafe_allow_html=True)
             with rcols[8]:
                 # Mesma escala do badge de Atraso (.da-30/60/90/max), pra
                 # "180d" significar a mesma temperatura nas duas colunas.
@@ -949,15 +949,15 @@ def _render_dashboard(store, clientes, role):
                 _lg = row.get("_ultimoLogin") or "—"
                 _lg_ord = row.get("_ultimoLoginOrdem")
                 if _lg_ord != _lg_ord or _lg_ord is None:   # NaN = sem vinculo
-                    _lg_cor = "#6b7280"
+                    _lg_cor = "var(--txt-3)"
                 elif _lg_ord <= 30:
-                    _lg_cor = "#8b94a5"
+                    _lg_cor = "var(--txt-2)"
                 elif _lg_ord <= 90:
-                    _lg_cor = "#ffb84d"
+                    _lg_cor = "var(--laranja-2)"
                 elif _lg_ord <= 180:
-                    _lg_cor = "#ff9800"
+                    _lg_cor = "var(--laranja)"
                 else:
-                    _lg_cor = "#ff5555"
+                    _lg_cor = "var(--erro-2)"
                 st.markdown(
                     f'<div style="padding:12px 12px;font-size:16px;font-weight:700;color:{_lg_cor}">{_lg}</div>',
                     unsafe_allow_html=True,
@@ -967,12 +967,12 @@ def _render_dashboard(store, clientes, role):
                     dialog_editar(row["id"])
 
             if ridx < n_rows - 1:
-                st.markdown('<div style="height:0.5px;background:#2a2f42;margin:0"></div>', unsafe_allow_html=True)
+                st.markdown('<div style="height:0.5px;background:var(--border);margin:0"></div>', unsafe_allow_html=True)
 
         st.markdown(
-            f'<div style="background:#1e2333;border:1px solid #2a2f42;border-top:none;'
+            f'<div style="background:var(--surface-2);border:1px solid var(--border);border-top:none;'
             f'border-radius:0 0 12px 12px;padding:12px 16px;display:flex;'
-            f'justify-content:space-between;font-size:13px;color:#8b94a5;font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,.1)">'
+            f'justify-content:space-between;font-size:13px;color:var(--txt-2);font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,.1)">'
             f'<span>Mostrando {(page-1)*PAGE_SIZE+1}–{min(page*PAGE_SIZE,total_f)} de {total_f}</span>'
             f'<span>Página {page} de {total_pg}</span></div>',
             unsafe_allow_html=True,
@@ -986,7 +986,7 @@ def _render_dashboard(store, clientes, role):
                 st.session_state["page_num"] = page - 1
                 st.rerun()
         with pc2:
-            st.markdown(f'<div style="text-align:center;color:#6b7280;font-size:12px;padding-top:6px">Página {page} de {total_pg}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="text-align:center;color:var(--txt-3);font-size:12px;padding-top:6px">Página {page} de {total_pg}</div>', unsafe_allow_html=True)
         with pc3:
             if st.button("Próxima →", disabled=(page >= total_pg), width="stretch"):
                 st.session_state["page_num"] = page + 1

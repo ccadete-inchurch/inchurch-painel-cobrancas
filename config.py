@@ -87,11 +87,121 @@ if _logo_path.exists():
 else:
     LOGO_SRC = ""
 
+# ── Tema ──────────────────────────────────────────────────────────────────────
+# As cores do painel sempre foram hexadecimais escritos a mao dentro das
+# f-strings que montam o HTML — 580 deles, em 11 arquivos, sem nenhuma
+# variavel. Estilo inline vence qualquer folha de estilo, entao nao havia
+# como trocar de tema por fora: cada elemento carregava a propria cor.
+#
+# Estes tokens sao o comeco de uma camada de estilo. A tela do Lote do Dia ja
+# os usa; as outras seguem com os valores literais ate serem convertidas, e
+# por isso ficam escuras mesmo no modo claro. E proposital: converter tudo de
+# uma vez seriam 650 pontos sem ninguem conseguindo ver o resultado.
+#
+# Os valores do modo claro NAO sao o escuro invertido. Verde #7cc243 tem
+# contraste bom sobre #181c26 e fica lavado sobre branco, entao vira #4a8a2c;
+# o mesmo vale pro ambar e pro azul. Trocar so o fundo deixaria texto
+# ilegivel.
+_TOKENS_ESCURO = {
+    "bg":        "#0f1117",   # fundo da pagina
+    "surface":   "#181c26",   # card
+    "surface-2": "#1e2333",   # card dentro de card / divisor
+    "surface-3": "#13161f",   # fundo de linha
+    "border":    "#2a2f42",
+    "border-2":  "#1f2433",
+    "txt":       "#e8eaf0",   # texto principal
+    "txt-2":     "#9ca3af",   # secundario
+    "txt-3":     "#6b7280",   # apagado
+    "txt-4":     "#4b5563",   # mais apagado ainda
+    "brand":     "#7cc243",   # verde da marca
+    "ok":        "#22c55e",
+    "alerta":    "#f59e0b",
+    "erro":      "#ef4444",
+    "erro-2":    "#ff5555",
+    "info":      "#5fa3ff",
+    "roxo":      "#a78bfa",
+    "rosa":      "#fb7185",
+    "laranja":     "#ff9800",
+    "laranja-2":   "#ffb84d",
+    "laranja-3":   "#f97316",
+    "amarelo":     "#fcd34d",
+    "amarelo-2":   "#fde68a",
+    "azul-2":      "#4f7cff",
+    "erro-3":      "#ff4444",
+    "erro-4":      "#ff6b6b",
+    "brand-2":     "#8fd44e",
+    "brand-3":     "#a3d672",
+    "brand-esc":   "#3e7a1f",
+    "brand-esc2":  "#2d5a14",
+    "border-3":    "#3d4460",
+    "txt-inv":     "#ffffff",
+    "txt-claro":   "#c7cede",
+    "cinza-cl":    "#cbd5e1",
+}
+_TOKENS_CLARO = {
+    "bg":        "#f5f6f8",
+    "surface":   "#ffffff",
+    "surface-2": "#eef0f4",
+    "surface-3": "#f8f9fb",
+    "border":    "#d4d9e2",
+    "border-2":  "#e5e8ee",
+    "txt":       "#1a1d26",
+    "txt-2":     "#5b6472",
+    "txt-3":     "#78818f",
+    "txt-4":     "#9aa2ae",
+    "brand":     "#4a8a2c",   # escurecido: #7cc243 some no branco
+    "ok":        "#15803d",
+    "alerta":    "#b45309",
+    "erro":      "#dc2626",
+    "erro-2":    "#dc2626",
+    "info":      "#1d4ed8",
+    "roxo":      "#6d28d9",
+    "rosa":      "#be123c",
+    "laranja":     "#c2410c",
+    "laranja-2":   "#ea580c",
+    "laranja-3":   "#c2410c",
+    "amarelo":     "#a16207",
+    "amarelo-2":   "#ca8a04",
+    "azul-2":      "#1e40af",
+    "erro-3":      "#dc2626",
+    "erro-4":      "#e11d48",
+    "brand-2":     "#3f7a24",
+    "brand-3":     "#4a8a2c",
+    "brand-esc":   "#2d5a14",
+    "brand-esc2":  "#1e3d0d",
+    "border-3":    "#c3c9d4",
+    "txt-inv":     "#ffffff",
+    "txt-claro":   "#3a4150",
+    "cinza-cl":    "#64748b",
+}
+
+
+def css_tema(claro: bool = False) -> str:
+    """Bloco <style> com os tokens do tema escolhido.
+
+    Injetado DEPOIS do CSS global pra vencer na cascata — os dois definem
+    :root, e o ultimo ganha.
+    """
+    t = _TOKENS_CLARO if claro else _TOKENS_ESCURO
+    regras = "".join(f"--{k}:{v};" for k, v in t.items())
+    extra = ""
+    if claro:
+        # O fundo e as superficies do proprio Streamlit nao leem nossos
+        # tokens — precisam ser ditos na mao.
+        extra = (
+            "html,body,[class*='css'],.stApp{background:var(--bg)!important;"
+            "color:var(--txt)!important}"
+            "section[data-testid='stSidebar']{background:var(--surface)!important;"
+            "border-right:1px solid var(--border)!important}"
+        )
+    return f"<style>:root{{{regras}}}{extra}</style>"
+
+
 # ── CSS global ────────────────────────────────────────────────────────────────
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap');
-html,body,[class*="css"]{font-family:'DM Sans',sans-serif!important;background:#0f1117!important;color:#e8eaf0!important;font-size:20px!important}
+html,body,[class*="css"]{font-family:'DM Sans',sans-serif!important;background:var(--bg)!important;color:var(--txt)!important;font-size:20px!important}
 #MainMenu,footer,header{visibility:hidden}
 /* ...MENOS o botao de reabrir a sidebar, que o Streamlit renderiza dentro
    do <header>. Esconder o header inteiro deixava a sidebar fechar e nunca
@@ -121,7 +231,7 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif!important;background:#
    Agora as regras de largura e transform sao presas a aria-expanded="true",
    e o estado "false" tem as suas. Sem isso o !important da largura vence o
    colapso do Streamlit e a sidebar fecha pela metade. */
-section[data-testid="stSidebar"]{background:#13161f!important;border-right:1px solid #1e2333!important;position:relative!important;z-index:100!important;transition:width .2s ease,transform .2s ease!important}
+section[data-testid="stSidebar"]{background:var(--surface-3)!important;border-right:1px solid var(--surface-2)!important;position:relative!important;z-index:100!important;transition:width .2s ease,transform .2s ease!important}
 section[data-testid="stSidebar"][aria-expanded="true"]{min-width:250px!important;width:250px!important;transform:translateX(0)!important;display:block!important;visibility:visible!important;opacity:1!important}
 section[data-testid="stSidebar"][aria-expanded="true"] > div:first-child{width:250px!important;padding:0!important;display:block!important}
 section[data-testid="stSidebar"][aria-expanded="false"]{min-width:0!important;width:0!important;transform:translateX(-250px)!important;overflow:visible!important;border-right:none!important}
@@ -138,14 +248,14 @@ section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]{display
 
 /* Botões da sidebar */
 section[data-testid="stSidebar"] .stButton>button{
-  background:transparent!important;color:#8b94a5!important;border:none!important;
+  background:transparent!important;color:var(--txt-2)!important;border:none!important;
   border-radius:8px!important;font-size:13px!important;font-weight:500!important;
   padding:10px 16px!important;text-align:left!important;justify-content:flex-start!important;
   width:100%!important;transition:all 0.18s!important;box-shadow:none!important;
   letter-spacing:0.2px!important
 }
 section[data-testid="stSidebar"] .stButton>button:hover{
-  background:rgba(124,194,67,.1)!important;color:#7cc243!important;transform:none!important
+  background:rgba(124,194,67,.1)!important;color:var(--brand)!important;transform:none!important
 }
 /* O gap padrao de 1rem entre blocos, vezes 6 itens, custa ~96px de altura e
    empurrava a navegacao contra o 'Sair' fixo do rodape. 0.15rem resolvia a
@@ -167,23 +277,23 @@ section[data-testid="stSidebar"] .stButton>button p{line-height:1.3!important;ma
 }
 
 /* ── Cards de métrica ── */
-.metric-card{background:#181c26;border:1px solid #1e2333;border-radius:14px;padding:20px 22px;box-shadow:0 1px 6px rgba(0,0,0,.15);transition:box-shadow .2s;min-height:130px;display:flex;flex-direction:column;justify-content:space-between}
+.metric-card{background:var(--surface);border:1px solid var(--surface-2);border-radius:14px;padding:20px 22px;box-shadow:0 1px 6px rgba(0,0,0,.15);transition:box-shadow .2s;min-height:130px;display:flex;flex-direction:column;justify-content:space-between}
 .metric-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.25)}
-.metric-label{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:#8b94a5;margin-bottom:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.metric-label{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--txt-2);margin-bottom:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .metric-value{font-family:'DM Sans',sans-serif;font-size:34px;font-weight:700;line-height:1;letter-spacing:0;font-variant-numeric:tabular-nums}
-.metric-sub{font-size:13px;color:#6b7280;margin-top:8px;letter-spacing:0.2px}
+.metric-sub{font-size:13px;color:var(--txt-3);margin-top:8px;letter-spacing:0.2px}
 
 /* ── Badges ── */
 .badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600}
-.badge-pending{background:rgba(239,68,68,.12);color:#ff5555}
-.badge-contacted{background:rgba(245,158,11,.12);color:#ffb84d}
-.badge-promise{background:rgba(249,115,22,.12);color:#ff9800}
-.badge-negotiating{background:rgba(79,124,255,.12);color:#5fa3ff}
-.badge-paid{background:rgba(34,197,94,.12);color:#2dd36f}
-.tag-novo{white-space:nowrap;background:rgba(34,197,94,.15);color:#2dd36f;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
-.tag-upd{white-space:nowrap;background:rgba(245,158,11,.15);color:#ffb84d;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
-.top-badge{white-space:nowrap;background:rgba(239,68,68,.18);color:#ff6b6b;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
-.tag-nova-cob{white-space:nowrap;background:rgba(79,124,255,.18);color:#5fa3ff;font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.badge-pending{background:rgba(239,68,68,.12);color:var(--erro-2)}
+.badge-contacted{background:rgba(245,158,11,.12);color:var(--laranja-2)}
+.badge-promise{background:rgba(249,115,22,.12);color:var(--laranja)}
+.badge-negotiating{background:rgba(79,124,255,.12);color:var(--info)}
+.badge-paid{background:rgba(34,197,94,.12);color:var(--ok)}
+.tag-novo{white-space:nowrap;background:rgba(34,197,94,.15);color:var(--ok);font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.tag-upd{white-space:nowrap;background:rgba(245,158,11,.15);color:var(--laranja-2);font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.top-badge{white-space:nowrap;background:rgba(239,68,68,.18);color:var(--erro-4);font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.tag-nova-cob{white-space:nowrap;background:rgba(79,124,255,.18);color:var(--info);font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
 
 /* ── Atraso chips ── */
 /* Botao de editar da tabela: a coluna e' estreita (~32px) e o padding padrao
@@ -198,49 +308,49 @@ section[data-testid="stSidebar"] .stButton>button p{line-height:1.3!important;ma
    notebook de 1920 nao disparava o breakpoint e ficava numa linha so'. */
 span.g-nome,span.g-sobre{white-space:nowrap;display:block}
 .da{padding:2px 7px;border-radius:6px;font-size:14px;font-weight:700;display:inline-block}
-.da-ok{background:rgba(45,211,111,.12);color:#2dd36f}
-.da-30{background:rgba(255,184,77,.12);color:#ffb84d}
-.da-60{background:rgba(255,152,0,.12);color:#ff9800}
-.da-90{background:rgba(255,85,85,.12);color:#ff5555}
-.da-max{background:rgba(200,0,0,.18);color:#ff4444}
+.da-ok{background:rgba(45,211,111,.12);color:var(--ok)}
+.da-30{background:rgba(255,184,77,.12);color:var(--laranja-2)}
+.da-60{background:rgba(255,152,0,.12);color:var(--laranja)}
+.da-90{background:rgba(255,85,85,.12);color:var(--erro-2)}
+.da-max{background:rgba(200,0,0,.18);color:var(--erro-3)}
 
 /* ── Pendência card ── */
-.pend-card{background:#181c26;border:1px solid #1e2333;border-radius:10px;padding:14px 16px;margin-bottom:8px}
+.pend-card{background:var(--surface);border:1px solid var(--surface-2);border-radius:10px;padding:14px 16px;margin-bottom:8px}
 
 /* ── Botões globais ── */
-.stButton>button{background:#1e2333!important;color:#e8eaf0!important;font-weight:600!important;border:1px solid #2a2f42!important;border-radius:8px!important;font-size:15px!important;padding:0.5rem 1.1rem!important;transition:all 0.18s!important;box-shadow:none!important}
-.stButton>button:hover{background:#2a2f42!important;border-color:#3d4460!important;transform:none!important;box-shadow:none!important}
-button[kind="primary"]{background:#7cc243!important;color:#0f1117!important;border:none!important;font-weight:700!important}
-button[kind="primary"]:hover{background:#8fd44e!important}
+.stButton>button{background:var(--surface-2)!important;color:var(--txt)!important;font-weight:600!important;border:1px solid var(--border)!important;border-radius:8px!important;font-size:15px!important;padding:0.5rem 1.1rem!important;transition:all 0.18s!important;box-shadow:none!important}
+.stButton>button:hover{background:var(--border)!important;border-color:var(--border-3)!important;transform:none!important;box-shadow:none!important}
+button[kind="primary"]{background:var(--brand)!important;color:var(--bg)!important;border:none!important;font-weight:700!important}
+button[kind="primary"]:hover{background:var(--brand-2)!important}
 
 /* Sidebar nav ativa: override do primary global (verde solido) — na
    sidebar queremos fundo verde translucido + texto verde (mesma
    linguagem do hover, so que persistente). Sinaliza pagina atual sem
    competir com CTAs primary de outras telas. */
 section[data-testid="stSidebar"] .stButton>button[kind="primary"]{
-  background:rgba(124,194,67,.12)!important;color:#7cc243!important;
+  background:rgba(124,194,67,.12)!important;color:var(--brand)!important;
   border:none!important;font-weight:600!important
 }
 section[data-testid="stSidebar"] .stButton>button[kind="primary"]:hover{
-  background:rgba(124,194,67,.18)!important;color:#7cc243!important
+  background:rgba(124,194,67,.18)!important;color:var(--brand)!important
 }
 
 /* ── Inputs ── */
-.stTextInput input,.stTextArea textarea{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
-.stTextInput input:focus,.stTextArea textarea:focus{border-color:#7cc243!important;box-shadow:0 0 0 2px rgba(124,194,67,.15)!important}
+.stTextInput input,.stTextArea textarea{background:var(--surface)!important;color:var(--txt)!important;border:1px solid var(--surface-2)!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
+.stTextInput input:focus,.stTextArea textarea:focus{border-color:var(--brand)!important;box-shadow:0 0 0 2px rgba(124,194,67,.15)!important}
 /* stNumberInput faltava nesta lista: os dois campos de desconto da proposta
    saiam na fonte do user-agent, do lado de "PARCELAMENTO" que e selectbox e
    pegava a regra. Sao os unicos number_input do app. */
-.stTextInput label,.stTextArea label,.stSelectbox label,.stMultiSelect label,.stDateInput label,.stNumberInput label{color:#6b7280!important;font-size:13px!important;text-transform:uppercase!important;letter-spacing:0.8px!important;font-weight:600!important}
-div[data-baseweb="select"]>div{background:#181c26!important;border-color:#1e2333!important;border-radius:8px!important}
-div[data-baseweb="select"] span{color:#e8eaf0!important;font-size:12px!important}
-div[data-baseweb="popover"],div[data-baseweb="menu"]{background:#181c26!important;border:1px solid #2a2f42!important;border-radius:10px!important}
-div[data-baseweb="menu"] li{color:#e8eaf0!important;font-size:13px!important}
-div[data-baseweb="menu"] li:hover{background:#1e2333!important}
+.stTextInput label,.stTextArea label,.stSelectbox label,.stMultiSelect label,.stDateInput label,.stNumberInput label{color:var(--txt-3)!important;font-size:13px!important;text-transform:uppercase!important;letter-spacing:0.8px!important;font-weight:600!important}
+div[data-baseweb="select"]>div{background:var(--surface)!important;border-color:var(--surface-2)!important;border-radius:8px!important}
+div[data-baseweb="select"] span{color:var(--txt)!important;font-size:12px!important}
+div[data-baseweb="popover"],div[data-baseweb="menu"]{background:var(--surface)!important;border:1px solid var(--border)!important;border-radius:10px!important}
+div[data-baseweb="menu"] li{color:var(--txt)!important;font-size:13px!important}
+div[data-baseweb="menu"] li:hover{background:var(--surface-2)!important}
 /* Chips do multiselect: mesma paleta dos selects, pra Grupo e
    Ordenar nao destoarem da fileira de filtros. */
-span[data-baseweb="tag"]{background:#2a2f42!important;border-radius:6px!important}
-span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
+span[data-baseweb="tag"]{background:var(--border)!important;border-radius:6px!important}
+span[data-baseweb="tag"] span{color:var(--txt)!important;font-size:12px!important}
 
 /* Em tela estreita o gap padrao de 1rem entre as 10 colunas da tabela custa
    ~144px — mais da metade do que a sidebar inteira ocupa. Apertar o gap e o
@@ -284,20 +394,20 @@ span[data-baseweb="tag"] span{color:#e8eaf0!important;font-size:12px!important}
   section[data-testid="stSidebar"][aria-expanded="true"] > div:first-child{width:200px!important}
   section[data-testid="stSidebar"][aria-expanded="false"]{transform:translateX(-200px)!important}
 }
-.stDateInput input{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
+.stDateInput input{background:var(--surface)!important;color:var(--txt)!important;border:1px solid var(--surface-2)!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
 
 /* ── Expander ── */
-.streamlit-expanderHeader{background:#181c26!important;color:#e8eaf0!important;border:1px solid #1e2333!important;border-radius:10px!important;font-size:13px!important;font-weight:600!important}
-.streamlit-expanderContent{background:#13161f!important;border:1px solid #1e2333!important;border-top:none!important}
-hr{border-color:#1e2333!important;margin:16px 0!important;opacity:1}
+.streamlit-expanderHeader{background:var(--surface)!important;color:var(--txt)!important;border:1px solid var(--surface-2)!important;border-radius:10px!important;font-size:13px!important;font-weight:600!important}
+.streamlit-expanderContent{background:var(--surface-3)!important;border:1px solid var(--surface-2)!important;border-top:none!important}
+hr{border-color:var(--surface-2)!important;margin:16px 0!important;opacity:1}
 
 /* ── Dialog ── */
 /* Streamlit 1.59: stDialogContent/div[role=dialog] nao existem mais no DOM.
    O painel e' <section role="dialog"> dentro de [data-testid="stDialog"]. */
-[data-testid="stDialog"] section[role="dialog"]{background:#181c26!important;border:1px solid #2a2f42!important;border-radius:16px!important;box-shadow:0 16px 48px rgba(0,0,0,.5)!important}
+[data-testid="stDialog"] section[role="dialog"]{background:var(--surface)!important;border:1px solid var(--border)!important;border-radius:16px!important;box-shadow:0 16px 48px rgba(0,0,0,.5)!important}
 [data-testid="stDialog"] [data-testid="stVerticalBlock"]{gap:0.8rem!important}
-.dialog-info{background:#13161f;border:1px solid #1e2333;border-radius:10px;padding:14px 16px;margin-bottom:4px}
-.dialog-info-label{font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:#8b94a5;margin-bottom:6px;font-weight:700}
-.dialog-info-value{font-size:14px;color:#e8eaf0;font-weight:600}
+.dialog-info{background:var(--surface-3);border:1px solid var(--surface-2);border-radius:10px;padding:14px 16px;margin-bottom:4px}
+.dialog-info-label{font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:var(--txt-2);margin-bottom:6px;font-weight:700}
+.dialog-info-value{font-size:14px;color:var(--txt);font-weight:600}
 </style>
 """

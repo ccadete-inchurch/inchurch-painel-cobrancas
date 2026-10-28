@@ -16,7 +16,7 @@ _FETCH_DAYS_DEFAULT = 60
 def _render_proximas(_store, clientes):
     st.markdown(
         '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:36px;'
-        'font-weight:800;color:#e8eaf0;margin-top:24px;margin-bottom:24px;letter-spacing:-1px;line-height:1.1">'
+        'font-weight:800;color:var(--txt);margin-top:24px;margin-bottom:24px;letter-spacing:-1px;line-height:1.1">'
         'A Vencer</div>',
         unsafe_allow_html=True,
     )
@@ -224,12 +224,12 @@ def _render_proximas(_store, clientes):
     m1, m2, m3, m4 = st.columns(4)
     # Mesmo padrão visual da tela Pagamentos: padding, font-sizes, peso.
     for col, label, val, sub, cor in [
-        (m1, "Total a Receber",   fmt_moeda_plain(total_valor), sub_total,       "#2dd36f"),
-        (m2, "Vence em 7 dias",   fmt_moeda_plain(valor_7d),    sub_7d,          "#f59e0b"),
-        (m3, "Clientes",          _fmt_n(n_clientes),              sub_clientes,    "#e8eaf0"),
+        (m1, "Total a Receber",   fmt_moeda_plain(total_valor), sub_total,       "var(--ok)"),
+        (m2, "Vence em 7 dias",   fmt_moeda_plain(valor_7d),    sub_7d,          "var(--alerta)"),
+        (m3, "Clientes",          _fmt_n(n_clientes),              sub_clientes,    "var(--txt)"),
         (m4, "Já Inadimplentes",
              f'{_fmt_n(n_ja_inad)} ({pct_ja_inad_str}%)',
-             f"{fmt_moeda_plain(vencido_ja_inad)} vencido · {fmt_moeda_plain(valor_ja_inad)} a vencer", "#f87171"),
+             f"{fmt_moeda_plain(vencido_ja_inad)} vencido · {fmt_moeda_plain(valor_ja_inad)} a vencer", "var(--erro)"),
     ]:
         with col:
             st.markdown(
@@ -257,19 +257,19 @@ def _render_proximas(_store, clientes):
 
     hdr_cells = "".join(
         f'<div style="flex:{w};padding:14px 14px;font-size:12px;text-transform:uppercase;'
-        f'letter-spacing:1.2px;color:#8b94a5;font-weight:700;white-space:nowrap;min-width:0">{h}</div>'
+        f'letter-spacing:1.2px;color:var(--txt-2);font-weight:700;white-space:nowrap;min-width:0">{h}</div>'
         for w, h in zip(col_w, hdrs)
     )
     st.markdown(
-        f'<div style="display:flex;gap:1rem;background:#1e2333;border:1px solid #2a2f42;'
+        f'<div style="display:flex;gap:1rem;background:var(--surface-2);border:1px solid var(--border);'
         f'border-radius:12px 12px 0 0;overflow:hidden">{hdr_cells}</div>',
         unsafe_allow_html=True,
     )
 
     if not rows:
         st.markdown(
-            '<div style="background:#181c26;border:1px solid #2a2f42;border-top:none;'
-            'border-radius:0 0 12px 12px;padding:60px;text-align:center;color:#6b7280;font-size:14px">'
+            '<div style="background:var(--surface);border:1px solid var(--border);border-top:none;'
+            'border-radius:0 0 12px 12px;padding:60px;text-align:center;color:var(--txt-3);font-size:14px">'
             'Nenhum resultado — ajuste os filtros</div>',
             unsafe_allow_html=True,
         )
@@ -278,32 +278,32 @@ def _render_proximas(_store, clientes):
     n = len(rows_page)
     for i, row in enumerate(rows_page):
         d = row["dias_restantes"]
-        cor_d = "#ef4444" if d <= 7 else ("#f59e0b" if d <= 15 else "#2dd36f")
+        cor_d = "var(--erro)" if d <= 7 else ("var(--alerta)" if d <= 15 else "var(--ok)")
         # Vencimento é só data (sem hora) — "Hoje" em vez de "0d"; horas seria
         # precisão falsa, o cliente pode pagar até o fim do dia.
         d_lbl = "HOJE" if d == 0 else f"{d}d"
         # HOJE: fundo vermelho bem suave + texto vermelho, pra destacar dos
         # 1-7d (só borda) sem gritar. O preenchido forte chamava atenção demais.
         _selo_css = (
-            "background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.5);color:#ef4444;letter-spacing:0.5px;"
+            "background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.5);color:var(--erro);letter-spacing:0.5px;"
             if d == 0 else f"border:1px solid {cor_d};color:{cor_d};"
         )
 
         rcols = st.columns(col_w)
         with rcols[0]:
-            inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("inativo") else ""
+            inativo_badge = '<span style="background:var(--txt-3);color:var(--txt-inv);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("inativo") else ""
             st.markdown(
                 f'<div style="padding:12px 14px">'
                 f'<div style="margin-bottom:2px">{inativo_badge}</div>'
-                f'<div style="font-weight:600;font-size:16px;color:#e8eaf0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{row["nome"]}</div>'
-                f'<div style="font-size:13px;color:#6b7280;margin-top:2px">{row["cnpj"]}</div>'
+                f'<div style="font-weight:600;font-size:16px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{row["nome"]}</div>'
+                f'<div style="font-size:13px;color:var(--txt-3);margin-top:2px">{row["cnpj"]}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
         with rcols[1]:
             st.markdown(f'<div style="padding:12px 14px;font-size:15px;font-weight:600">{fmt_moeda(row["valor"])}</div>', unsafe_allow_html=True)
         with rcols[2]:
-            st.markdown(f'<div style="padding:12px 14px;font-size:15px;color:#8b94a5">{row["vencimento"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:15px;color:var(--txt-2)">{row["vencimento"]}</div>', unsafe_allow_html=True)
         with rcols[3]:
             st.markdown(
                 f'<div style="padding:12px 14px">'
@@ -313,14 +313,14 @@ def _render_proximas(_store, clientes):
                 unsafe_allow_html=True,
             )
         with rcols[4]:
-            st.markdown(f'<div style="padding:12px 14px;font-size:14px;color:#8b94a5">{row["grupo"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:14px;color:var(--txt-2)">{row["grupo"]}</div>', unsafe_allow_html=True)
 
         if i < n - 1:
-            st.markdown('<div style="height:0.5px;background:#2a2f42;margin:0"></div>', unsafe_allow_html=True)
+            st.markdown('<div style="height:0.5px;background:var(--border);margin:0"></div>', unsafe_allow_html=True)
 
     st.markdown(
-        f'<div style="background:#1e2333;border:1px solid #2a2f42;border-top:none;'
-        f'border-radius:0 0 12px 12px;padding:10px 16px;display:flex;justify-content:space-between;font-size:12px;color:#6b7280">'
+        f'<div style="background:var(--surface-2);border:1px solid var(--border);border-top:none;'
+        f'border-radius:0 0 12px 12px;padding:10px 16px;display:flex;justify-content:space-between;font-size:12px;color:var(--txt-3)">'
         f'<span>Mostrando {(page-1)*PAGE_SIZE+1}–{min(page*PAGE_SIZE, total_f)} de {total_f} cobranças</span>'
         f'<span>Página {page} de {total_pg}</span></div>',
         unsafe_allow_html=True,
@@ -334,7 +334,7 @@ def _render_proximas(_store, clientes):
                 st.session_state["proximas_page"] = page - 1
                 st.rerun()
         with pc2:
-            st.markdown(f'<div style="text-align:center;color:#6b7280;font-size:12px;padding-top:6px">Página {page} de {total_pg}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="text-align:center;color:var(--txt-3);font-size:12px;padding-top:6px">Página {page} de {total_pg}</div>', unsafe_allow_html=True)
         with pc3:
             if st.button("Próxima →", key="prox_next", disabled=(page >= total_pg), width="stretch"):
                 st.session_state["proximas_page"] = page + 1

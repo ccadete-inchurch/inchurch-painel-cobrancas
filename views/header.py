@@ -80,21 +80,21 @@ def _banner_bq_stale():
     chips_html = "".join(
         f'<span style="display:inline-block;background:rgba(245,158,11,.14);'
         f'border:1px solid rgba(245,158,11,.35);border-radius:20px;'
-        f'padding:3px 10px;font-size:11.5px;color:#fcd34d;margin:6px 6px 0 0">{c}</span>'
+        f'padding:3px 10px;font-size:11.5px;color:var(--amarelo);margin:6px 6px 0 0">{c}</span>'
         for c in chips
     )
     st.markdown(
         # Faixa lateral âmbar em vez de borda inteira: menos "alarme", mais
         # aviso. O texto antigo vinha sem acentos e em termos técnicos
         # ("time travel", "pipelines criticos"), que ninguém fora do BI lê.
-        f'<div style="background:rgba(245,158,11,.08);border-left:3px solid #f59e0b;'
+        f'<div style="background:rgba(245,158,11,.08);border-left:3px solid var(--alerta);'
         f'border-radius:6px;padding:12px 16px;margin:0 24px 14px;'
         f'display:flex;align-items:flex-start;gap:12px">'
         f'<span style="font-size:16px;line-height:1.3;flex-shrink:0">⚠️</span>'
         f'<div style="flex:1;min-width:0">'
-        f'<div style="font-size:13.5px;font-weight:700;color:#fbbf24;'
+        f'<div style="font-size:13.5px;font-weight:700;color:var(--alerta);'
         f'letter-spacing:.2px">{titulo}</div>'
-        f'<div style="font-size:12.5px;color:#fde68a;line-height:1.5;margin-top:3px">{linha}</div>'
+        f'<div style="font-size:12.5px;color:var(--amarelo-2);line-height:1.5;margin-top:3px">{linha}</div>'
         f'<div>{chips_html}</div>'
         f'</div>'
         f'</div>',
@@ -112,7 +112,7 @@ def render_header():
         _r       = current_role()
         _r_label = _ROLE_DISPLAY.get(_r, _r.upper() if _r else "")
         role_tag = (
-            f'<span style="background:rgba(124,194,67,.2);color:#7cc243;font-size:11px;'
+            f'<span style="background:rgba(124,194,67,.2);color:var(--brand);font-size:11px;'
             f'padding:3px 10px;border-radius:12px;font-weight:700;margin-left:8px;'
             f'letter-spacing:.5px">{_r_label}</span>'
         ) if _r_label else ""
@@ -129,14 +129,14 @@ def render_header():
         online_html = ""
         if outros_online:
             # Mesmo estilo das pills "Atualizado" e badge do usuário (border
-            # cinza #2a2f42, padding 6px 14px, font 13px) — só o bullet fica
+            # cinza var(--border), padding 6px 14px, font 13px) — só o bullet fica
             # verde como indicador de presença.
             online_html = "".join(
                 f'<span style="display:inline-flex;align-items:center;gap:8px;'
-                f'background:#1e2333;border:1px solid #2a2f42;border-radius:20px;'
-                f'padding:6px 14px;font-size:13px;color:#e8eaf0;font-weight:500;'
+                f'background:var(--surface-2);border:1px solid var(--border);border-radius:20px;'
+                f'padding:6px 14px;font-size:13px;color:var(--txt);font-weight:500;'
                 f'white-space:nowrap;flex-shrink:0">'
-                f'<span style="width:8px;height:8px;background:#7cc243;border-radius:50%;display:inline-block;flex-shrink:0"></span>'
+                f'<span style="width:8px;height:8px;background:var(--brand);border-radius:50%;display:inline-block;flex-shrink:0"></span>'
                 f'{u["nome"].split()[0] if u["nome"] else u["email"]}'
                 f'</span>'
                 for u in outros_online[:4]  # cap pra não estourar o header
@@ -155,12 +155,12 @@ def render_header():
         # agora" da esquerda, que e decorativa e pode perder o ultimo nome
         # sem prejuizo. As classes servem as regras responsivas do config.py.
         st.markdown(f"""
-        <div class="topbar" style="background:#181c26;border-bottom:1px solid #2a2f42;padding:0 24px;min-height:60px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,.15)">
+        <div class="topbar" style="background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;min-height:60px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,.15)">
           <div class="topbar-online" style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden">{online_html}</div>
           <div class="topbar-status" style="display:flex;align-items:center;gap:12px;flex-shrink:0">
-            <span class="topbar-upd" style="font-size:13px;color:#8b94a5;background:#1e2333;padding:6px 14px;border-radius:20px;border:1px solid #2a2f42;white-space:nowrap">Atualizado: {upd}</span>
-            <span style="font-size:13px;background:#1e2333;border:1px solid #2a2f42;border-radius:20px;padding:6px 14px;display:inline-flex;align-items:center;gap:8px;font-weight:500;white-space:nowrap">
-              <span style="width:8px;height:8px;background:#7cc243;border-radius:50%;display:inline-block;flex-shrink:0"></span>{current_nome()}{role_tag}
+            <span class="topbar-upd" style="font-size:13px;color:var(--txt-2);background:var(--surface-2);padding:6px 14px;border-radius:20px;border:1px solid var(--border);white-space:nowrap">Atualizado: {upd}</span>
+            <span style="font-size:13px;background:var(--surface-2);border:1px solid var(--border);border-radius:20px;padding:6px 14px;display:inline-flex;align-items:center;gap:8px;font-weight:500;white-space:nowrap">
+              <span style="width:8px;height:8px;background:var(--brand);border-radius:50%;display:inline-block;flex-shrink:0"></span>{current_nome()}{role_tag}
             </span>
           </div>
         </div>""", unsafe_allow_html=True)

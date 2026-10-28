@@ -13,14 +13,14 @@ from helpers import fmt_moeda_plain, hoje_brt, carimbo_dia_cache
 # Ordem: Priscila e Ana primeiro (vão receber as 2 primeiras cores pelo
 # sort alfabético do Altair), depois Sem especialista.
 _CHART_PALETTE = [
-    "#7cc243",  # verde InChurch
-    "#3e7a1f",  # verde escuro (variação da marca)
-    "#4b5563",  # cinza forte (Sem especialista)
-    "#a3d672",  # verde claro
-    "#6b7280",  # cinza médio
-    "#2d5a14",  # verde profundo
-    "#9ca3af",  # cinza claro
-    "#dc2626",  # vermelho — só se passar dos 7 atendentes
+    "var(--brand)",  # verde InChurch
+    "var(--brand-esc)",  # verde escuro (variação da marca)
+    "var(--txt-4)",  # cinza forte (Sem especialista)
+    "var(--brand-3)",  # verde claro
+    "var(--txt-3)",  # cinza médio
+    "var(--brand-esc2)",  # verde profundo
+    "var(--txt-2)",  # cinza claro
+    "var(--erro)",  # vermelho — só se passar dos 7 atendentes
 ]
 
 
@@ -154,7 +154,7 @@ def _legenda_html(itens):
             f'<span style="display:inline-flex;align-items:center;gap:6px;'
             f'margin-right:16px">{simbolo}<span>{rotulo}</span></span>'
         )
-    return (f'<div style="font-size:12px;color:#9ca3af;margin-bottom:6px">'
+    return (f'<div style="font-size:12px;color:var(--txt-2);margin-bottom:6px">'
             f'{"".join(partes)}</div>')
 
 
@@ -165,20 +165,20 @@ def _altair_theme():
             "background": "transparent",
             "view": {"stroke": "transparent"},
             "axis": {
-                "labelColor": "#9ca3af",
-                "titleColor": "#e8eaf0",
-                "gridColor": "#2a2f42",
-                "domainColor": "#2a2f42",
-                "tickColor": "#2a2f42",
+                "labelColor": "var(--txt-2)",
+                "titleColor": "var(--txt)",
+                "gridColor": "var(--border)",
+                "domainColor": "var(--border)",
+                "tickColor": "var(--border)",
                 "labelFontSize": 12,
                 "titleFontSize": 13,
                 "titleFontWeight": 600,
             },
             "legend": {
-                "labelColor": "#9ca3af",
-                "titleColor": "#e8eaf0",
+                "labelColor": "var(--txt-2)",
+                "titleColor": "var(--txt)",
             },
-            "title": {"color": "#e8eaf0", "fontSize": 16, "fontWeight": 700},
+            "title": {"color": "var(--txt)", "fontSize": 16, "fontWeight": 700},
         }
     }
 
@@ -194,7 +194,7 @@ def _render_especialista(store, clientes, role):
     # ── Header ────────────────────────────────────────────────────────────
     st.markdown(
         '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:36px;'
-        'font-weight:800;color:#e8eaf0;margin-top:24px;margin-bottom:24px;letter-spacing:-1px;line-height:1.1">'
+        'font-weight:800;color:var(--txt);margin-top:24px;margin-bottom:24px;letter-spacing:-1px;line-height:1.1">'
         'Desempenho</div>',
         unsafe_allow_html=True,
     )
@@ -542,19 +542,19 @@ def _render_especialista(store, clientes, role):
     with c1:
         st.markdown(
             _card_fmt("Inadimplentes", f"{_card_inad_valor:,}".replace(",", "."),
-                      _card_inad_sub, "#ef4444", _tt_inad),
+                      _card_inad_sub, "var(--erro)", _tt_inad),
             unsafe_allow_html=True,
         )
     with c2:
         st.markdown(
             _card_fmt("Contatados", f"{total_contatados:,}".replace(",", "."),
-                      f"cobertura {_pct_br(cobertura_equipe)}", "#e8eaf0", _tt_cont),
+                      f"cobertura {_pct_br(cobertura_equipe)}", "var(--txt)", _tt_cont),
             unsafe_allow_html=True,
         )
     with c3:
         st.markdown(
             _card_fmt("Regularizações", f"{total_reg:,}".replace(",", "."),
-                      f"{_pct_br(pct_reg_com)} com contato", "#22c55e", _tt_reg),
+                      f"{_pct_br(pct_reg_com)} com contato", "var(--ok)", _tt_reg),
             unsafe_allow_html=True,
         )
     with c4:
@@ -562,13 +562,13 @@ def _render_especialista(store, clientes, role):
             # Título curto: "RESULTADO DO CONTATO" não cabia na largura do
             # card e o CSS corta com reticências. A fórmula fica no tooltip.
             _card_fmt("Resultado", _pct_br(resultado_equipe),
-                      "do contato", "#22c55e", _tt_res),
+                      "do contato", "var(--ok)", _tt_res),
             unsafe_allow_html=True,
         )
     with c5:
         st.markdown(
             _card_fmt("Valor Recuperado", fmt_moeda_plain(total_valor),
-                      "no período", "#5fa3ff", _tt_val),
+                      "no período", "var(--info)", _tt_val),
             unsafe_allow_html=True,
         )
 
@@ -583,7 +583,7 @@ def _render_especialista(store, clientes, role):
 
     # ── Tabela ranking detalhado ──────────────────────────────────────────
     st.markdown(
-        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+        '<div style="font-size:14px;font-weight:700;color:var(--txt-2);'
         'text-transform:uppercase;letter-spacing:1.5px;'
         'margin-bottom:12px">Ranking Detalhado</div>',
         unsafe_allow_html=True,
@@ -757,7 +757,7 @@ def _render_especialista(store, clientes, role):
             # cada linha. Antes o navegador partia no meio ("POSI/ÇÃO",
             # "CONTATADO/S", "REGULARIZAÇÕ/ES") em monitores menores.
             f'<div{title_attr} style="cursor:{cursor};padding:8px 0;font-size:10.5px;'
-            f'text-transform:uppercase;letter-spacing:0.6px;color:#8b94a5;font-weight:700;'
+            f'text-transform:uppercase;letter-spacing:0.6px;color:var(--txt-2);font-weight:700;'
             f'white-space:nowrap;line-height:1.3">{h}</div>',
             unsafe_allow_html=True,
         )
@@ -766,39 +766,39 @@ def _render_especialista(store, clientes, role):
         rcols = st.columns(_col_widths)
         # Posição numérica (1, 2, 3...) em vez das medalhas de emoji.
         rcols[0].markdown(
-            f'<div style="padding:10px 0;font-size:16px;color:#e8eaf0;font-weight:700">{row["rank"]}</div>',
+            f'<div style="padding:10px 0;font-size:16px;color:var(--txt);font-weight:700">{row["rank"]}</div>',
             unsafe_allow_html=True,
         )
         rcols[1].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{row["atendente"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:var(--txt);font-weight:600">{row["atendente"]}</div>',
             unsafe_allow_html=True,
         )
         # Carteira inadimplente de hoje — contexto pra ler o resto da linha.
         rcols[2].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#9ca3af">{row["carteira_atual"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:var(--txt-2)">{row["carteira_atual"]}</div>',
             unsafe_allow_html=True,
         )
         # Contatados — base dos dois percentuais mais à direita.
         _contatados = int(row.get("ef_contatados", 0) or 0) or int(row.get("cob_contactados", 0) or 0)
         rcols[3].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#e8eaf0;font-weight:600">{_contatados}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:var(--txt);font-weight:600">{_contatados}</div>',
             unsafe_allow_html=True,
         )
         # Regularizações separadas por origem. As colunas de pagamento
         # (clientes com pag., pag. via contato, pag. espontâneos) saíram: ~97%
         # de quem paga regulariza, então repetiam estas duas.
         rcols[4].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">'
+            f'<div style="padding:10px 0;font-size:14px;color:var(--ok);font-weight:600">'
             f'{int(row.get("reg_via_contato", 0) or 0)}</div>',
             unsafe_allow_html=True,
         )
         rcols[5].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#9ca3af;font-weight:600">'
+            f'<div style="padding:10px 0;font-size:14px;color:var(--txt-2);font-weight:600">'
             f'{int(row.get("reg_sem_contato", 0) or 0)}</div>',
             unsafe_allow_html=True,
         )
         rcols[6].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#22c55e;font-weight:600">{row["regularizacoes"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:var(--ok);font-weight:600">{row["regularizacoes"]}</div>',
             unsafe_allow_html=True,
         )
         # Resultado do contato — critério de ordenação do ranking.
@@ -809,7 +809,7 @@ def _render_especialista(store, clientes, role):
         )
         rcols[7].markdown(
             f'<div title="{_res_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
-            f'color:#22c55e;font-weight:700">{_res:.2f}%</div>',
+            f'color:var(--ok);font-weight:700">{_res:.2f}%</div>',
             unsafe_allow_html=True,
         )
         # % da carteira regularizada — informativo (inclui quem pagou sozinho).
@@ -820,7 +820,7 @@ def _render_especialista(store, clientes, role):
         )
         rcols[8].markdown(
             f'<div title="{_pct_cart_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
-            f'color:#9ca3af;font-weight:600">{_pct_cart:.2f}%</div>',
+            f'color:var(--txt-2);font-weight:600">{_pct_cart:.2f}%</div>',
             unsafe_allow_html=True,
         )
         # Eficácia REAL — faixas ajustadas (cobrança é trabalho difícil,
@@ -828,7 +828,7 @@ def _render_especialista(store, clientes, role):
         # Tooltip mostra a fração explícita pra transparência: X de Y
         # contatados regularizaram. Antes só dava pra ver o percentual.
         _ef = row["eficacia"]
-        _ef_cor = "#22c55e" if _ef >= 30 else ("#f59e0b" if _ef >= 15 else "#ef4444")
+        _ef_cor = "var(--ok)" if _ef >= 30 else ("var(--alerta)" if _ef >= 15 else "var(--erro)")
         _ef_reg = int(row.get("ef_regularizaram", 0) or 0)
         _ef_cont = int(row.get("ef_contatados", 0) or 0)
         _ef_tip = f"{_ef_reg} regularizações com contato ÷ {_ef_cont} contatados no mês"
@@ -849,11 +849,11 @@ def _render_especialista(store, clientes, role):
         )
         rcols[10].markdown(
             f'<div title="{_cob_tip}" style="cursor:help;padding:10px 0;font-size:14px;'
-            f'color:#9ca3af;font-weight:600">{_cob_txt}</div>',
+            f'color:var(--txt-2);font-weight:600">{_cob_txt}</div>',
             unsafe_allow_html=True,
         )
         rcols[11].markdown(
-            f'<div style="padding:10px 0;font-size:14px;color:#5fa3ff;font-weight:600">{row["valor_fmt"]}</div>',
+            f'<div style="padding:10px 0;font-size:14px;color:var(--info);font-weight:600">{row["valor_fmt"]}</div>',
             unsafe_allow_html=True,
         )
 
@@ -904,10 +904,10 @@ def _render_especialista(store, clientes, role):
     # Cada atendente vira um ponto. Quadrante superior direito = star
     # (alto volume + alta eficácia). Inferior esquerdo = precisa apoio.
     st.markdown(
-        '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+        '<div style="font-size:14px;font-weight:700;color:var(--txt-2);'
         'text-transform:uppercase;letter-spacing:1.5px;'
         'margin-top:8px;margin-bottom:4px">Matriz de Desempenho</div>'
-        '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
+        '<div style="font-size:11px;color:var(--txt-2);margin-bottom:12px">'
         'Regularizações com contato × Eficácia por especialista.'
         '</div>',
         unsafe_allow_html=True,
@@ -945,7 +945,7 @@ def _render_especialista(store, clientes, role):
     )
     labels = base_scatter.mark_text(
         align="left", baseline="middle", dx=14, dy=-2,
-        fontSize=12, fontWeight="bold", color="#e8eaf0",
+        fontSize=12, fontWeight="bold", color="var(--txt)",
     ).encode(text="atendente:N")
 
     # Linhas de quadrantes — médias da equipe (vertical = eficácia, horizontal
@@ -954,16 +954,16 @@ def _render_especialista(store, clientes, role):
     _avg_ef = float(agg_esp["eficacia_real"].mean()) if not agg_esp.empty else 0
     _avg_vol = float(agg_esp["reg_com_contato"].mean()) if not agg_esp.empty else 0
     vline = alt.Chart(pd.DataFrame({"x": [_avg_ef]})).mark_rule(
-        color="#cbd5e1", strokeDash=[6, 4], opacity=0.45, strokeWidth=1.5,
+        color="var(--cinza-cl)", strokeDash=[6, 4], opacity=0.45, strokeWidth=1.5,
     ).encode(x="x:Q")
     hline = alt.Chart(pd.DataFrame({"y": [_avg_vol]})).mark_rule(
-        color="#cbd5e1", strokeDash=[6, 4], opacity=0.45, strokeWidth=1.5,
+        color="var(--cinza-cl)", strokeDash=[6, 4], opacity=0.45, strokeWidth=1.5,
     ).encode(y="y:Q")
 
     chart_matriz = (vline + hline + pontos + labels).properties(height=320)
     st.altair_chart(chart_matriz, use_container_width=True)
     st.markdown(
-        f'<div style="font-size:11px;color:#6b7280;margin-top:-8px">'
+        f'<div style="font-size:11px;color:var(--txt-3);margin-top:-8px">'
         f'Linhas pontilhadas = média da equipe (eficácia {_avg_ef:.2f}%, '
         f'regularizações com contato {_avg_vol:.0f}).'
         f'</div>',
@@ -985,13 +985,13 @@ def _render_especialista(store, clientes, role):
             'Clientes que regularizaram o atraso no dia, com ou sem contato durante o atraso.'
         )
         st.markdown(
-            '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+            '<div style="font-size:14px;font-weight:700;color:var(--txt-2);'
             'text-transform:uppercase;letter-spacing:1.5px;'
             'margin-top:24px;margin-bottom:4px">Regularizações por Dia</div>'
-            f'<div style="font-size:11px;color:#8b94a5;margin-bottom:8px">{_sub_dia}</div>'
-            + _legenda_html([("Com contato", "#22c55e", "barra"),
-                             ("Sem contato", "#9ca3af", "barra"),
-                             ("Total do dia", "#e8eaf0", "linha")]),
+            f'<div style="font-size:11px;color:var(--txt-2);margin-bottom:8px">{_sub_dia}</div>'
+            + _legenda_html([("Com contato", "var(--ok)", "barra"),
+                             ("Sem contato", "var(--txt-2)", "barra"),
+                             ("Total do dia", "var(--txt)", "linha")]),
             unsafe_allow_html=True,
         )
         _dd = df_per.copy()
@@ -1032,7 +1032,7 @@ def _render_especialista(store, clientes, role):
                 color=alt.Color(
                     "serie:N", title=None,
                     scale=alt.Scale(domain=["Com contato", "Sem contato", "Total do dia"],
-                                    range=["#22c55e", "#9ca3af", "#e8eaf0"]),
+                                    range=["var(--ok)", "var(--txt-2)", "var(--txt)"]),
                     legend=None,
                 ),
                 opacity=alt.condition(alt.datum.eh_hoje, alt.value(0.45), alt.value(1.0)),
@@ -1067,7 +1067,7 @@ def _render_especialista(store, clientes, role):
     # ── Distribuição da Carteira (Donut) ──────────────────────────────────
     with g_dir:
         st.markdown(
-            '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+            '<div style="font-size:14px;font-weight:700;color:var(--txt-2);'
             'text-transform:uppercase;letter-spacing:1.5px;'
             'margin-top:24px;margin-bottom:12px">Distribuição da Carteira</div>',
             unsafe_allow_html=True,
@@ -1096,7 +1096,7 @@ def _render_especialista(store, clientes, role):
             # Cor do número interno por fatia: escuro na fatia verde clara,
             # branco na verde escura (mesma ordem que a escala das fatias usa).
             _dom_cart = sorted(carteira_agg["atendente"].unique())
-            _cor_interna = ["#0f1117" if c in ("#7cc243", "#a3d672") else "#ffffff"
+            _cor_interna = ["var(--bg)" if c in ("var(--brand)", "var(--brand-3)") else "var(--txt-inv)"
                             for c in _CHART_PALETTE[:len(_dom_cart)]]
             _base_donut = alt.Chart(carteira_agg).encode(
                 theta=alt.Theta("clientes:Q", title="Clientes", stack=True),
@@ -1113,14 +1113,14 @@ def _render_especialista(store, clientes, role):
                 ],
             )
             _centro = alt.Chart(pd.DataFrame({"t": [f"{_tot_cart:,}".replace(",", ".")]})).mark_text(
-                fontSize=34, fontWeight=800, color="#e8eaf0", dy=-8,
+                fontSize=34, fontWeight=800, color="var(--txt)", dy=-8,
             ).encode(text="t:N")
             _centro_sub = alt.Chart(pd.DataFrame({"t": ["CLIENTES"]})).mark_text(
-                fontSize=14, fontWeight=700, color="#8b94a5", dy=18,
+                fontSize=14, fontWeight=700, color="var(--txt-2)", dy=18,
             ).encode(text="t:N")
             chart_donut = (
                 _base_donut.mark_arc(innerRadius=62, outerRadius=122,
-                                     stroke="#0f1117", strokeWidth=3)
+                                     stroke="var(--bg)", strokeWidth=3)
                 # Quantidade no meio da fatia
                 + _base_donut.mark_text(radius=92, fontSize=20, fontWeight=800)
                 .encode(
@@ -1130,7 +1130,7 @@ def _render_especialista(store, clientes, role):
                 )
                 # Percentual do lado de fora
                 + _base_donut.mark_text(radius=152, fontSize=15, fontWeight=700)
-                .encode(text="pct_lbl:N", color=alt.value("#cbd5e1"))
+                .encode(text="pct_lbl:N", color=alt.value("var(--cinza-cl)"))
                 + _centro + _centro_sub
             ).resolve_scale(color="independent").properties(height=320)
             st.altair_chart(chart_donut, use_container_width=True)
@@ -1285,15 +1285,15 @@ def _render_especialista(store, clientes, role):
         g_vol, g_tx = st.columns(2)
         with g_vol:
             st.markdown(
-                '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+                '<div style="font-size:14px;font-weight:700;color:var(--txt-2);'
                 'text-transform:uppercase;letter-spacing:1.5px;'
                 'margin-bottom:4px">Regularizações por Mês</div>'
-                '<div style="font-size:11px;color:#8b94a5;margin-bottom:8px">'
+                '<div style="font-size:11px;color:var(--txt-2);margin-bottom:8px">'
                 'Clientes que regularizaram o atraso no mês, com ou sem contato durante o atraso.'
                 '</div>'
-                + _legenda_html([("Com contato", "#22c55e", "barra"),
-                                 ("Sem contato", "#9ca3af", "barra"),
-                                 ("% da carteira", "#e8eaf0", "linha")]),
+                + _legenda_html([("Com contato", "var(--ok)", "barra"),
+                                 ("Sem contato", "var(--txt-2)", "barra"),
+                                 ("% da carteira", "var(--txt)", "linha")]),
                 unsafe_allow_html=True,
             )
             _df_vol = pd.DataFrame(_vol)
@@ -1303,7 +1303,7 @@ def _render_especialista(store, clientes, role):
                     color=alt.Color(
                         "serie:N", title=None,
                         scale=alt.Scale(domain=["Com contato", "Sem contato", "% da carteira"],
-                                        range=["#22c55e", "#9ca3af", "#e8eaf0"]),
+                                        range=["var(--ok)", "var(--txt-2)", "var(--txt)"]),
                         legend=None,
                     ),
                     tooltip=[
@@ -1313,7 +1313,7 @@ def _render_especialista(store, clientes, role):
                     ],
             )
             _rot_vol = _base_vol.mark_text(dy=12, fontSize=11, fontWeight=700).encode(
-                text=alt.Text("clientes:Q"), color=alt.value("#0f1117")
+                text=alt.Text("clientes:Q"), color=alt.value("var(--bg)")
             )
             # Linha pontilhada = % da carteira do mês (Reg. total ÷
             # inadimplentes com 5+ dias no mês), no eixo da direita.
@@ -1349,15 +1349,15 @@ def _render_especialista(store, clientes, role):
 
         with g_tx:
             st.markdown(
-                '<div style="font-size:14px;font-weight:700;color:#8b94a5;'
+                '<div style="font-size:14px;font-weight:700;color:var(--txt-2);'
                 'text-transform:uppercase;letter-spacing:1.5px;'
                 'margin-bottom:4px">Taxas Mensais</div>'
-                '<div style="font-size:11px;color:#8b94a5;margin-bottom:12px">'
+                '<div style="font-size:11px;color:var(--txt-2);margin-bottom:12px">'
                 'Cobertura = contatados ÷ carteira do mês.<br>'
                 'Eficácia = regularizações com contato ÷ contatados no mês.'
                 '</div>'
-                + _legenda_html([("Cobertura", "#9ca3af", "linha_cheia"),
-                                 ("Eficácia do contato", "#22c55e", "linha_cheia")]),
+                + _legenda_html([("Cobertura", "var(--txt-2)", "linha_cheia"),
+                                 ("Eficácia do contato", "var(--ok)", "linha_cheia")]),
                 unsafe_allow_html=True,
             )
             _ordem_tx = ["Cobertura (%)", "Eficácia do contato (%)"]
@@ -1366,7 +1366,7 @@ def _render_especialista(store, clientes, role):
             _df_tx["pct_lbl"] = _df_tx["pct"].map(lambda v: f"{v:.2f}%".replace(".", ","))
             _cor_tx = alt.Color(
                 "serie:N", title=None, sort=_ordem_tx,
-                scale=alt.Scale(domain=_ordem_tx, range=["#9ca3af", "#22c55e"]),
+                scale=alt.Scale(domain=_ordem_tx, range=["var(--txt-2)", "var(--ok)"]),
                 legend=None,
             )
             base_tx = alt.Chart(_df_tx).encode(
@@ -1387,7 +1387,7 @@ def _render_especialista(store, clientes, role):
             )
             chart_tx = (
                 base_tx.mark_line(strokeWidth=2.5, interpolate="monotone")
-                + base_tx.mark_circle(size=80, stroke="#0f1117", strokeWidth=2)
+                + base_tx.mark_circle(size=80, stroke="var(--bg)", strokeWidth=2)
                 + _valores_tx
             ).properties(height=320)
             st.altair_chart(chart_tx, use_container_width=True)

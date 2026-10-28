@@ -88,7 +88,7 @@ def _build_regularizados_fresh(store) -> list:
 def _render_historico(store):
     st.markdown(
         '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:36px;'
-        'font-weight:800;color:#e8eaf0;margin-top:24px;margin-bottom:24px;letter-spacing:-1px;line-height:1.1">'
+        'font-weight:800;color:var(--txt);margin-top:24px;margin-bottom:24px;letter-spacing:-1px;line-height:1.1">'
         'Pagamentos em Atraso</div>',
         unsafe_allow_html=True,
     )
@@ -337,9 +337,9 @@ def _render_historico(store):
         f'{n_reg} {"cliente quitou" if n_reg == 1 else "clientes quitaram"} todo o atraso'
     )
     cards = [
-        (m1, f"Pagamentos em Atraso · {periodo}", fmt_moeda_plain(v_periodo), _sub_pag,  _tooltip_pag,  "#2dd36f"),
-        (m2, f"Regularizações · {periodo}", fmt_moeda_plain(v_reg),     _sub_reg,  _tooltip_reg,  "#2dd36f"),
-        (m3, "Taxa de Regularização",       f"{taxa_reg:.2f}%",         _sub_taxa, _tooltip_taxa, "#5fa3ff"),
+        (m1, f"Pagamentos em Atraso · {periodo}", fmt_moeda_plain(v_periodo), _sub_pag,  _tooltip_pag,  "var(--ok)"),
+        (m2, f"Regularizações · {periodo}", fmt_moeda_plain(v_reg),     _sub_reg,  _tooltip_reg,  "var(--ok)"),
+        (m3, "Taxa de Regularização",       f"{taxa_reg:.2f}%",         _sub_taxa, _tooltip_taxa, "var(--info)"),
     ]
     for col, label, valor_str, sub, tooltip, cor_valor in cards:
         with col:
@@ -365,19 +365,19 @@ def _render_historico(store):
 
     hdr_cells = "".join(
         f'<div style="flex:{w};padding:14px 14px;font-size:12px;text-transform:uppercase;'
-        f'letter-spacing:1.2px;color:#8b94a5;font-weight:700;white-space:nowrap">{h}</div>'
+        f'letter-spacing:1.2px;color:var(--txt-2);font-weight:700;white-space:nowrap">{h}</div>'
         for w, h in zip(col_w, hdrs)
     )
     st.markdown(
-        f'<div style="display:flex;gap:1rem;background:#1e2333;border:1px solid #2a2f42;'
+        f'<div style="display:flex;gap:1rem;background:var(--surface-2);border:1px solid var(--border);'
         f'border-radius:12px 12px 0 0;overflow:hidden">{hdr_cells}</div>',
         unsafe_allow_html=True,
     )
 
     if df.empty:
         st.markdown(
-            '<div style="background:#181c26;border:1px solid #2a2f42;border-top:none;'
-            'border-radius:0 0 12px 12px;padding:60px;text-align:center;color:#6b7280;font-size:14px">'
+            '<div style="background:var(--surface);border:1px solid var(--border);border-top:none;'
+            'border-radius:0 0 12px 12px;padding:60px;text-align:center;color:var(--txt-3);font-size:14px">'
             'Nenhum resultado.</div>',
             unsafe_allow_html=True,
         )
@@ -394,7 +394,7 @@ def _render_historico(store):
     # trabalhado no lote E pagou hoje.
 
     for i, row in enumerate(rows):
-        inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("inativo") else ""
+        inativo_badge = '<span style="background:var(--txt-3);color:var(--txt-inv);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:4px">INATIVO</span>' if row.get("inativo") else ""
         # Badge "REGULARIZADO" — mesma regra dos cards (_eh_reg): o pagamento
         # zerou tudo que estava vencido NAQUELE dia (evento), com o overlay da
         # API pros últimos 10 dias. Antes olhava se o cliente estava na
@@ -415,7 +415,7 @@ def _render_historico(store):
         )
         # Selo sempre verde: diz o que aconteceu NAQUELE pagamento. Quem deve
         # de novo hoje ganha o fundo da linha em cinza (lá embaixo).
-        _reg_cor = "background:rgba(45,211,111,.18);color:#2dd36f;"
+        _reg_cor = "background:rgba(45,211,111,.18);color:var(--ok);"
         reg_badge = (
             f'<span style="{_reg_cor}'
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
@@ -431,13 +431,13 @@ def _render_historico(store):
             )
             reg_badge += (
                 f'<span title="{_deve_tip}" style="cursor:help;border:1px solid rgba(248,113,113,.35);'
-                'color:#f87171;font-size:10px;font-weight:700;padding:1px 7px;'
+                'color:var(--erro);font-size:10px;font-weight:700;padding:1px 7px;'
                 'border-radius:4px;margin-right:4px">↻ DEVE DE NOVO</span>'
             )
         # Badge PAGAMENTO PARCIAL (azul) — pagou algo mas não zerou a dívida.
         # Mutuamente exclusivo com REGULARIZADO.
         parcial_badge = (
-            '<span style="background:rgba(95,163,255,.18);color:#5fa3ff;'
+            '<span style="background:rgba(95,163,255,.18);color:var(--info);'
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
             'margin-right:4px">PAGAMENTO PARCIAL</span>' if not eh_regularizado else ""
         )
@@ -446,7 +446,7 @@ def _render_historico(store):
         if _cli_atual and not eh_regularizado:
             if _cli_atual.get("_tem_acordo"):
                 acordo_badge = (
-                    '<span style="background:rgba(245,158,11,.2);color:#f59e0b;'
+                    '<span style="background:rgba(245,158,11,.2);color:var(--alerta);'
                     'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
                     'margin-right:4px">ACORDO</span>'
                 )
@@ -474,33 +474,33 @@ def _render_historico(store):
             st.markdown(
                 f'<div style="padding:12px 14px;{cli_bg}{cli_bl}">'
                 f'{badges_line}'
-                f'<div style="font-size:14px;font-weight:600;color:#e8eaf0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{row.get("nome","—")}</div>'
+                f'<div style="font-size:14px;font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{row.get("nome","—")}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
         with rcols[1]:
-            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{row.get("data","—")}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:var(--txt-2)">{row.get("data","—")}</div>', unsafe_allow_html=True)
         with rcols[2]:
-            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{row.get("cnpj","—")}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:var(--txt-2)">{row.get("cnpj","—")}</div>', unsafe_allow_html=True)
         with rcols[3]:
             # fmt_moeda_plain (não fmt_moeda) — fmt_moeda colore valores altos
             # em vermelho/âmbar como ALERTA (desenhado pra dívidas em
             # Inadimplência). Aqui é PAGAMENTO recebido → tudo verde.
             # "· N boletos" só quando o cliente pagou mais de um no mesmo dia
             _nb = int(row.get("n_boletos") or 1)
-            _nb_html = (f'<div style="font-size:11px;color:#8b94a5;font-weight:500;margin-top:2px">'
+            _nb_html = (f'<div style="font-size:11px;color:var(--txt-2);font-weight:500;margin-top:2px">'
                         f'{_nb} boletos</div>') if _nb > 1 else ""
-            st.markdown(f'<div style="padding:12px 14px;font-size:14px;font-weight:600;color:#2dd36f">{fmt_moeda_plain(row.get("valor",0))}{_nb_html}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:14px;font-weight:600;color:var(--ok)">{fmt_moeda_plain(row.get("valor",0))}{_nb_html}</div>', unsafe_allow_html=True)
         with rcols[4]:
             _at_txt = str(row.get("atendente") or "—")
-            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:#8b94a5">{_at_txt}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="padding:12px 14px;font-size:13px;color:var(--txt-2)">{_at_txt}</div>', unsafe_allow_html=True)
 
         if i < n - 1:
-            st.markdown('<div style="height:0.5px;background:#2a2f42;margin:0"></div>', unsafe_allow_html=True)
+            st.markdown('<div style="height:0.5px;background:var(--border);margin:0"></div>', unsafe_allow_html=True)
 
     st.markdown(
-        f'<div style="background:#1e2333;border:1px solid #2a2f42;border-top:none;'
-        f'border-radius:0 0 12px 12px;padding:10px 16px;display:flex;justify-content:space-between;font-size:12px;color:#6b7280">'
+        f'<div style="background:var(--surface-2);border:1px solid var(--border);border-top:none;'
+        f'border-radius:0 0 12px 12px;padding:10px 16px;display:flex;justify-content:space-between;font-size:12px;color:var(--txt-3)">'
         # Linhas = cliente por dia; quem pagou em dias diferentes aparece
         # mais de uma vez, por isso o total de clientes (o dos cards) ao lado.
         f'<span>Mostrando {(page-1)*PAGE_SIZE+1}–{min(page*PAGE_SIZE, total_f)} de {total_f} pagamentos '
@@ -517,7 +517,7 @@ def _render_historico(store):
                 st.session_state["reg_page"] = page - 1
                 st.rerun()
         with pc2:
-            st.markdown(f'<div style="text-align:center;color:#6b7280;font-size:12px;padding-top:6px">Página {page} de {total_pg}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="text-align:center;color:var(--txt-3);font-size:12px;padding-top:6px">Página {page} de {total_pg}</div>', unsafe_allow_html=True)
         with pc3:
             if st.button("Próxima →", key="reg_next", disabled=(page >= total_pg), width="stretch"):
                 st.session_state["reg_page"] = page + 1

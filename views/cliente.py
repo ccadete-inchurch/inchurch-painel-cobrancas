@@ -17,13 +17,13 @@ _MESES_PT = {1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
 _CARD_LABEL_CSS = "font-size:13px;letter-spacing:1.2px"
 _CARD_SUB_CSS   = "font-size:13px;margin-top:6px"
 _CARD_VALUE_CSS = "font-size:22px;font-weight:800;margin-top:6px;line-height:1.1;font-variant-numeric:tabular-nums"
-_SECTION_TITLE_CSS = "font-size:18px;font-weight:700;color:#e8eaf0;margin-bottom:14px;letter-spacing:-0.3px"
+_SECTION_TITLE_CSS = "font-size:18px;font-weight:700;color:var(--txt);margin-bottom:14px;letter-spacing:-0.3px"
 
 
 def _render_cliente(_store, clientes):
     st.markdown(
         '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:36px;'
-        'font-weight:800;color:#e8eaf0;margin-top:24px;margin-bottom:24px;letter-spacing:-1px;line-height:1.1">'
+        'font-weight:800;color:var(--txt);margin-top:24px;margin-bottom:24px;letter-spacing:-1px;line-height:1.1">'
         'Ficha do Cliente</div>',
         unsafe_allow_html=True,
     )
@@ -56,7 +56,7 @@ def _render_cliente(_store, clientes):
         ]
     if not pool:
         with f2:
-            st.markdown('<div style="padding-top:30px;color:#6b7280;font-size:13px">Nenhum cliente encontrado.</div>', unsafe_allow_html=True)
+            st.markdown('<div style="padding-top:30px;color:var(--txt-3);font-size:13px">Nenhum cliente encontrado.</div>', unsafe_allow_html=True)
         return
 
     # Dropdown: nome só, MAS quando há mais de um cliente com o mesmo nome
@@ -97,28 +97,28 @@ def _render_cliente(_store, clientes):
     # ── Cards de métricas ─────────────────────────────────────────────────────
     parcelas = cliente.get("parcelas", 0)
     c1, c2, c3, c4 = st.columns(4)
-    inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle">INATIVO</span>' if cliente.get("_inativo") else ""
+    inativo_badge = '<span style="background:var(--txt-3);color:var(--txt-inv);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle">INATIVO</span>' if cliente.get("_inativo") else ""
 
     # Maior Atraso na mesma escala do badge de Atraso da Inadimplência
     # (.da-30/60/90/max em config.py), só a cor do texto, sem fundo.
     _dias = cliente.get("dias_atraso")
     if not _dias:
-        _cor_atraso = "#e8eaf0"
+        _cor_atraso = "var(--txt)"
     elif _dias <= 30:
-        _cor_atraso = "#ffb84d"
+        _cor_atraso = "var(--laranja-2)"
     elif _dias <= 60:
-        _cor_atraso = "#ff9800"
+        _cor_atraso = "var(--laranja)"
     elif _dias <= 90:
-        _cor_atraso = "#ff5555"
+        _cor_atraso = "var(--erro-2)"
     else:
-        _cor_atraso = "#ff4444"
+        _cor_atraso = "var(--erro-3)"
 
     # Nome: até 2 linhas com reticências + tooltip com o nome inteiro. Com
     # nowrap numa coluna flex o texto não encolhia (min-width:auto) e nome
     # longo sumia do card.
     _nome_html = html.escape(str(cliente["nome"]))
     _nome_css = (
-        "font-size:16px;color:#e8eaf0;min-width:0;overflow:hidden;"
+        "font-size:16px;color:var(--txt);min-width:0;overflow:hidden;"
         "display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;"
         "word-break:break-word;line-height:1.25"
     )
@@ -133,17 +133,17 @@ def _render_cliente(_store, clientes):
         ),
         (
             c2, "Saldo em Aberto",
-            f'<div style="{_CARD_VALUE_CSS};color:#ef4444">{fmt_moeda_plain(cliente["valor"])}</div>',
+            f'<div style="{_CARD_VALUE_CSS};color:var(--erro)">{fmt_moeda_plain(cliente["valor"])}</div>',
             f'{parcelas} parcela{"s" if parcelas != 1 else ""} em atraso',
         ),
         (
             c3, "Maior Atraso",
-            f'<div style="{_CARD_VALUE_CSS};color:{_cor_atraso}">{cliente.get("dias_atraso") or "—"}<span style="font-size:14px;color:#8b94a5;margin-left:4px;font-weight:600">dias</span></div>',
+            f'<div style="{_CARD_VALUE_CSS};color:{_cor_atraso}">{cliente.get("dias_atraso") or "—"}<span style="font-size:14px;color:var(--txt-2);margin-left:4px;font-weight:600">dias</span></div>',
             cliente.get("vencimento", "—"),
         ),
         (
             c4, "Carteira",
-            f'<div style="{_CARD_VALUE_CSS};font-size:16px;color:#e8eaf0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{cliente.get("_grupo", "—")}</div>',
+            f'<div style="{_CARD_VALUE_CSS};font-size:16px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{cliente.get("_grupo", "—")}</div>',
             # nao confia no campo ja formatado: o cache local guarda o
             # formato antigo ate o BigQuery ser reprocessado
             telefones_texto(cliente.get("telefones") or cliente.get("telefone")),
@@ -172,8 +172,8 @@ def _render_cliente(_store, clientes):
 
     if df_evol.empty:
         st.markdown(
-            '<div style="background:#181c26;border:1px solid #1e2333;border-radius:10px;'
-            'padding:30px;text-align:center;color:#6b7280;font-size:13px">'
+            '<div style="background:var(--surface);border:1px solid var(--surface-2);border-radius:10px;'
+            'padding:30px;text-align:center;color:var(--txt-3);font-size:13px">'
             'Sem dados de saldo para esse cliente.</div>',
             unsafe_allow_html=True,
         )
@@ -192,9 +192,9 @@ def _render_cliente(_store, clientes):
             axis=alt.Axis(
                 format="%b/%y",
                 labelAngle=0,
-                labelColor="#8b94a5",
-                tickColor="#2a2f42",
-                domainColor="#2a2f42",
+                labelColor="var(--txt-2)",
+                tickColor="var(--border)",
+                domainColor="var(--border)",
                 grid=False,
             ),
         )
@@ -203,10 +203,10 @@ def _render_cliente(_store, clientes):
             title=None,
             axis=alt.Axis(
                 labelExpr="'R$ ' + format(datum.value, ',.0f')",
-                labelColor="#8b94a5",
-                tickColor="#2a2f42",
-                domainColor="#2a2f42",
-                gridColor="#1e2333",
+                labelColor="var(--txt-2)",
+                tickColor="var(--border)",
+                domainColor="var(--border)",
+                gridColor="var(--surface-2)",
                 gridOpacity=0.5,
             ),
         )
@@ -228,15 +228,15 @@ def _render_cliente(_store, clientes):
                 x1=1, x2=1, y1=1, y2=0,
             ),
         )
-        linha = base.mark_line(color="#ef4444", strokeWidth=2.5, interpolate="monotone")
-        pontos = base.mark_circle(color="#ef4444", size=70, stroke="#0f1117", strokeWidth=2)
+        linha = base.mark_line(color="var(--erro)", strokeWidth=2.5, interpolate="monotone")
+        pontos = base.mark_circle(color="var(--erro)", size=70, stroke="var(--bg)", strokeWidth=2)
 
         chart = (area + linha + pontos).properties(
             height=280,
             padding={"left": 0, "top": 10, "right": 10, "bottom": 0},
         ).configure_view(
-            stroke=None, fill="#181c26",
-        ).configure(background="#181c26")
+            stroke=None, fill="var(--surface)",
+        ).configure(background="var(--surface)")
 
         st.altair_chart(chart, use_container_width=True)
 
@@ -258,19 +258,19 @@ def _render_cliente(_store, clientes):
                 while i > 0 and saldos[i - 1] > 0:
                     i -= 1
                 tendencia = f"Devendo desde {_mes_pt(meses_dt[i])} · {fmt_moeda_plain(atual)} hoje"
-                cor_t = "#ef4444"
+                cor_t = "var(--erro)"
             elif abs(dif) < 0.01:
                 tendencia = f"sem variação vs 3 meses atrás · {fmt_moeda_plain(atual)}"
-                cor_t = "#8b94a5"
+                cor_t = "var(--txt-2)"
             else:
                 sinal = "+" if dif > 0 else "−"
                 tendencia = (
                     f"vs 3 meses atrás: {sinal}{fmt_moeda_plain(abs(dif))} "
                     f"({fmt_moeda_plain(antes)} → {fmt_moeda_plain(atual)})"
                 )
-                cor_t = "#ef4444" if dif > 0 else "#2dd36f"
+                cor_t = "var(--erro)" if dif > 0 else "var(--ok)"
             st.markdown(
-                f'<div style="font-size:12px;color:#6b7280;margin-top:8px;text-align:right">'
+                f'<div style="font-size:12px;color:var(--txt-3);margin-top:8px;text-align:right">'
                 f'Tendência: <span style="color:{cor_t};font-weight:700">{tendencia}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
@@ -296,23 +296,23 @@ def _render_cliente(_store, clientes):
         )
         st.markdown(
             f'<div style="{_SECTION_TITLE_CSS}">Cobranças em Aberto'
-            f'<span style="font-size:13px;color:#8b94a5;font-weight:500">{resumo}</span></div>',
+            f'<span style="font-size:13px;color:var(--txt-2);font-weight:500">{resumo}</span></div>',
             unsafe_allow_html=True,
         )
 
         if not cobracas:
             st.markdown(
-                '<div style="background:#181c26;border:1px solid #1e2333;border-radius:10px;'
-                'padding:24px;text-align:center;color:#6b7280;font-size:13px">'
+                '<div style="background:var(--surface);border:1px solid var(--surface-2);border-radius:10px;'
+                'padding:24px;text-align:center;color:var(--txt-3);font-size:13px">'
                 'Sem cobranças em atraso.</div>',
                 unsafe_allow_html=True,
             )
         else:
             # Tabela: cabeçalho + linhas em flex (mesmo padrão da tela Pagamentos)
             hdr_html = (
-                '<div style="display:flex;background:#1e2333;border:1px solid #2a2f42;'
+                '<div style="display:flex;background:var(--surface-2);border:1px solid var(--border);'
                 'border-radius:8px 8px 0 0;padding:8px 12px;font-size:11px;'
-                'text-transform:uppercase;letter-spacing:1px;color:#8b94a5;font-weight:700">'
+                'text-transform:uppercase;letter-spacing:1px;color:var(--txt-2);font-weight:700">'
                 '<div style="flex:1.2">Valor</div>'
                 '<div style="flex:1">Vencimento</div>'
                 '<div style="flex:0.8;text-align:right">Atraso</div>'
@@ -322,12 +322,12 @@ def _render_cliente(_store, clientes):
             for i, cob in enumerate(cobracas):
                 last = (i == len(cobracas) - 1)
                 radius = "border-radius:0 0 8px 8px;" if last else ""
-                border = "border:1px solid #2a2f42;border-top:none;"
+                border = "border:1px solid var(--border);border-top:none;"
                 rows_html.append(
-                    f'<div style="display:flex;align-items:center;background:#181c26;'
+                    f'<div style="display:flex;align-items:center;background:var(--surface);'
                     f'{border}{radius}padding:8px 12px;font-size:13px">'
-                    f'<div style="flex:1.2;color:#e8eaf0;font-weight:600">{fmt_moeda_plain(cob["valor"])}</div>'
-                    f'<div style="flex:1;color:#8b94a5">{cob["vencimento"]}</div>'
+                    f'<div style="flex:1.2;color:var(--txt);font-weight:600">{fmt_moeda_plain(cob["valor"])}</div>'
+                    f'<div style="flex:1;color:var(--txt-2)">{cob["vencimento"]}</div>'
                     f'<div style="flex:0.8;text-align:right">{dias_html(cob["dias_atraso"])}</div>'
                     f'</div>'
                 )
@@ -338,7 +338,7 @@ def _render_cliente(_store, clientes):
         st.markdown(f'<div style="{_SECTION_TITLE_CSS}">Histórico de Contato</div>', unsafe_allow_html=True)
 
         s   = get_effective_status(cid)
-        cor = STATUS_COLORS.get(s, "#6b7280")
+        cor = STATUS_COLORS.get(s, "var(--txt-3)")
         ult_contato = get_effective_lastContact(cid) or "—"
         atendente   = get_effective_atendente(cid) or "—"
         retorno     = h.get("retorno", "—") or "—"
@@ -348,8 +348,8 @@ def _render_cliente(_store, clientes):
             return (
                 f'<div style="padding:8px 12px;flex:1;min-width:0">'
                 f'<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;'
-                f'color:#6b7280;margin-bottom:2px">{label}</div>'
-                f'<div style="font-size:13px;color:#e8eaf0;font-weight:500;'
+                f'color:var(--txt-3);margin-bottom:2px">{label}</div>'
+                f'<div style="font-size:13px;color:var(--txt);font-weight:500;'
                 f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{valor_html}</div>'
                 f'</div>'
             )
@@ -361,20 +361,20 @@ def _render_cliente(_store, clientes):
         # login desde o inicio do log (piso, ex. "+853d") e sem tenant ("—").
         _lg = get_ultimo_login(cid)
         if _lg["estado"] == "com_login":
-            _login_val = f'{_lg["data"]} <span style="color:#8b94a5">· {_lg["curto"]}</span>'
+            _login_val = f'{_lg["data"]} <span style="color:var(--txt-2)">· {_lg["curto"]}</span>'
         elif _lg["estado"] == "sem_login":
-            _login_val = f'sem login <span style="color:#8b94a5">· {_lg["curto"]}</span>'
+            _login_val = f'sem login <span style="color:var(--txt-2)">· {_lg["curto"]}</span>'
         else:
             _login_val = "—"
 
         # Bloco único com border, grid 2×3 dentro (3 linhas de 2 campos)
         bloco_html = (
-            '<div style="background:#181c26;border:1px solid #1e2333;border-radius:10px;'
+            '<div style="background:var(--surface);border:1px solid var(--surface-2);border-radius:10px;'
             'padding:4px 6px;display:flex;flex-direction:column">'
             f'<div style="display:flex">{_fld("Status", status_val)}{_fld("Especialista", atendente)}</div>'
-            '<div style="height:1px;background:#1e2333;margin:0 8px"></div>'
+            '<div style="height:1px;background:var(--surface-2);margin:0 8px"></div>'
             f'<div style="display:flex">{_fld("Último contato", ult_contato)}{_fld("Retorno agendado", retorno)}</div>'
-            '<div style="height:1px;background:#1e2333;margin:0 8px"></div>'
+            '<div style="height:1px;background:var(--surface-2);margin:0 8px"></div>'
             f'<div style="display:flex">{_fld("Prometeu pagar", promessa)}{_fld("Último login painel", _login_val)}</div>'
             '</div>'
         )
@@ -382,9 +382,9 @@ def _render_cliente(_store, clientes):
 
         if h.get("notes"):
             st.markdown(
-                f'<div style="padding:10px 14px;background:#181c26;border:1px solid #1e2333;border-radius:8px;margin-top:8px">'
-                f'<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:4px">Observações</div>'
-                f'<div style="font-size:13px;color:#8b94a5;line-height:1.5">{h["notes"]}</div>'
+                f'<div style="padding:10px 14px;background:var(--surface);border:1px solid var(--surface-2);border-radius:8px;margin-top:8px">'
+                f'<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--txt-3);margin-bottom:4px">Observações</div>'
+                f'<div style="font-size:13px;color:var(--txt-2);line-height:1.5">{h["notes"]}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -426,22 +426,22 @@ def _render_cliente(_store, clientes):
         data  = hist_dict.get(mes)
 
         if data is None:
-            bg    = "#181c26"
-            borda = "#1e2333"
-            cor   = "#4b5563"
+            bg    = "var(--surface)"
+            borda = "var(--surface-2)"
+            cor   = "var(--txt-4)"
             icone = "—"
             sub   = "sem registro"
         elif data["parcelas_atraso"] > 0:
             bg    = "rgba(239,68,68,.10)"
-            borda = "#ef4444"
-            cor   = "#ff5555"
+            borda = "var(--erro)"
+            cor   = "var(--erro-2)"
             icone = "●"
             n     = int(data["parcelas_atraso"])
             sub   = f"{n} em atraso"
         else:
             bg    = "rgba(34,197,94,.10)"
-            borda = "#22c55e"
-            cor   = "#2dd36f"
+            borda = "var(--ok)"
+            cor   = "var(--ok)"
             icone = "●"
             n     = int(data["parcelas_pagas"])
             sub   = f"{n} pago{'s' if n != 1 else ''}"
@@ -449,7 +449,7 @@ def _render_cliente(_store, clientes):
         cells.append(
             f'<div style="flex:1;background:{bg};border:1px solid {borda};border-radius:8px;'
             f'padding:10px 6px;text-align:center;min-width:0">'
-            f'<div style="font-size:11px;color:#8b94a5;font-weight:600;white-space:nowrap">{label}</div>'
+            f'<div style="font-size:11px;color:var(--txt-2);font-weight:600;white-space:nowrap">{label}</div>'
             f'<div style="font-size:16px;color:{cor};margin:4px 0 2px">{icone}</div>'
             f'<div style="font-size:10px;color:{cor};font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{sub}</div>'
             f'</div>'
@@ -462,10 +462,10 @@ def _render_cliente(_store, clientes):
 
     # Legenda
     st.markdown(
-        '<div style="display:flex;gap:16px;margin-top:10px;font-size:11px;color:#6b7280">'
-        '<span><span style="color:#2dd36f;font-weight:700">●</span> Pagou em dia</span>'
-        '<span><span style="color:#ff5555;font-weight:700">●</span> Em atraso</span>'
-        '<span><span style="color:#4b5563;font-weight:700">—</span> Sem registro</span>'
+        '<div style="display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--txt-3)">'
+        '<span><span style="color:var(--ok);font-weight:700">●</span> Pagou em dia</span>'
+        '<span><span style="color:var(--erro-2);font-weight:700">●</span> Em atraso</span>'
+        '<span><span style="color:var(--txt-4);font-weight:700">—</span> Sem registro</span>'
         '</div>',
         unsafe_allow_html=True,
     )

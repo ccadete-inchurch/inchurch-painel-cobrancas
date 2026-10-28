@@ -48,26 +48,26 @@ def _atualizar_dados_periodicos(store_clientes):
 
 def _score_cor(score: int) -> str:
     if score >= 150:
-        return "#ff5555"
+        return "var(--erro-2)"
     if score >= 80:
-        return "#f59e0b"
-    return "#5fa3ff"
+        return "var(--alerta)"
+    return "var(--info)"
 
 
 _ICON_PERSON = (
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#4b5563" style="flex-shrink:0;vertical-align:middle">'
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="var(--txt-4)" style="flex-shrink:0;vertical-align:middle">'
     '<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>'
     '</svg>'
 )
 _ICON_PHONE = (
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" style="flex-shrink:0;vertical-align:middle">'
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="var(--txt-3)" style="flex-shrink:0;vertical-align:middle">'
     '<path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>'
     '</svg>'
 )
 # Icone WhatsApp (mesmo SVG usado no card Fixados). Vira o link clicavel
 # do lado do numero — atendente clica no icone, nao no numero em si.
 _ICON_WHATSAPP = (
-    '<svg width="12" height="12" viewBox="0 0 24 24" fill="#6b7280" '
+    '<svg width="12" height="12" viewBox="0 0 24 24" fill="var(--txt-3)" '
     'style="flex-shrink:0;vertical-align:middle;transition:fill .15s">'
     '<path d="M17.5 14.4c-.3-.1-1.7-.8-2-.9-.3-.1-.5-.1-.7.1-.2.3-.7.9-.9 '
     '1.1-.2.2-.3.2-.6.1-1.8-.9-3-1.6-4.2-3.6-.3-.5.3-.5.9-1.6.1-.2.1-.4 '
@@ -79,7 +79,7 @@ _ICON_WHATSAPP = (
     '</svg>'
 )
 _ICON_GROUP = (
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="#6b7280" style="flex-shrink:0;vertical-align:middle">'
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="var(--txt-3)" style="flex-shrink:0;vertical-align:middle">'
     '<path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>'
     '</svg>'
 )
@@ -116,8 +116,8 @@ def _tels_html(c) -> str:
         return (
             f'<a href="https://wa.me/{wa_num}" target="_blank" '
             f'style="text-decoration:none;margin-right:4px;display:inline-flex;vertical-align:middle" '
-            f'onmouseover="this.querySelector(\'svg\').setAttribute(\'fill\',\'#25d366\')" '
-            f'onmouseout="this.querySelector(\'svg\').setAttribute(\'fill\',\'#6b7280\')">'
+            f'onmouseover="this.querySelector(\'svg\').setAttribute(\'fill\',\'var(--brand)\')" '
+            f'onmouseout="this.querySelector(\'svg\').setAttribute(\'fill\',\'var(--txt-3)\')">'
             f'{_ICON_WHATSAPP}</a>'
         )
 
@@ -129,7 +129,7 @@ def _tels_html(c) -> str:
         return f'{_wa_icon(t)}{fmt}'
 
     def _ruim(fmt: str, motivo: str) -> str:
-        return (f'<span style="color:#ef4444" title="cadastro incompleto — '
+        return (f'<span style="color:var(--erro)" title="cadastro incompleto — '
                 f'{motivo}">{fmt}</span>')
 
     # bons primeiro: o primeiro da lista e o que fica em destaque, e nao
@@ -145,7 +145,7 @@ def _tels_html(c) -> str:
     # com seu proprio icone WA clicavel
     return (
         f'{_partes[0]} '
-        f'<span style="color:#6b7280;font-size:10px;font-weight:500">'
+        f'<span style="color:var(--txt-3);font-size:10px;font-weight:500">'
         f'· {" · ".join(_partes[1:])}</span>'
     )
 
@@ -296,8 +296,8 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     # Ambos os tipos de regularizado renderizam o mesmo layout simplificado
     # (sem score, sem botão Detalhes). Distinção visual fica no motivo.
     _regularizado = bool(c.get("_regularizado_hoje")) or bool(c.get("_regularizado_antes_hoje"))
-    inativo_badge = '<span style="background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
-    acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if _eh_acordo and not _regularizado else ""
+    inativo_badge = '<span style="background:var(--txt-3);color:var(--txt-inv);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
+    acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:var(--alerta);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if _eh_acordo and not _regularizado else ""
     # Badge "TELEFONE FIXO" — cliente marcado pela atendente como so atende
     # em telefone fixo. N8N nao detecta atividade automatica; atendente usa
     # botoes manuais (Atendeu / Nao atendeu) no dialog pra registrar.
@@ -305,7 +305,7 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     # sinal do N8N (que nao vem) e usar os botoes manuais no dialog.
     _eh_tel_fixo  = bool(c.get("_tel_fixo"))
     tel_fixo_badge = (
-        '<span style="background:rgba(236,72,153,.18);color:#ec4899;'
+        '<span style="background:rgba(236,72,153,.18);color:var(--rosa);'
         'border:1px solid rgba(236,72,153,.4);'
         'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
         'margin-left:6px;vertical-align:middle">TELEFONE FIXO</span>'
@@ -327,18 +327,18 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
         else f"EM {_dt_parcial}"
     )
     parcial_badge = (
-        f'<span style="background:rgba(124,194,67,.18);color:#7cc243;font-size:10px;'
+        f'<span style="background:rgba(124,194,67,.18);color:var(--brand);font-size:10px;'
         f'font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;'
         f'border:1px solid rgba(124,194,67,.35);'
         f'vertical-align:middle">PAGOU {fmt_moeda_plain(_vl_parcial)} {_quando_parcial}</span>'
     ) if _eh_parcial else ""
     motivo_txt, motivo_style = _motivo(bucket, acoes, c)
     _motivo_css = {
-        "red":    "color:#ff5555;background:rgba(239,68,68,.08);border-left:2px solid #ff5555;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
-        "blue":   "color:#7cc243;background:rgba(124,194,67,.08);border-left:2px solid #7cc243;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
-        "purple": "color:#a78bfa;background:rgba(167,139,250,.08);border-left:2px solid #a78bfa;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
-        "lig":    "color:#5fa3ff;background:rgba(95,163,255,.08);border-left:2px solid #5fa3ff;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
-        "msg":    "color:#f59e0b;background:rgba(245,158,11,.08);border-left:2px solid #f59e0b;padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "red":    "color:var(--erro-2);background:rgba(239,68,68,.08);border-left:2px solid var(--erro-2);padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "blue":   "color:var(--brand);background:rgba(124,194,67,.08);border-left:2px solid var(--brand);padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "purple": "color:var(--roxo);background:rgba(167,139,250,.08);border-left:2px solid var(--roxo);padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "lig":    "color:var(--info);background:rgba(95,163,255,.08);border-left:2px solid var(--info);padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "msg":    "color:var(--alerta);background:rgba(245,158,11,.08);border-left:2px solid var(--alerta);padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
     }
     motivo_html = (
         f'<div style="font-size:11px;font-weight:600;margin-bottom:8px;{_motivo_css.get(motivo_style, "")}">{motivo_txt}</div>'
@@ -351,16 +351,16 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
         # depende mais do BQ Splgc (que é replicado 1x/dia).
         _vl_pago = float(c.get("_valor_pago_hoje") or 0)
         valor_html = (
-            f'<div style="font-size:14px;color:#7cc243;font-weight:700;margin-bottom:10px">'
+            f'<div style="font-size:14px;color:var(--brand);font-weight:700;margin-bottom:10px">'
             f'Pago: {fmt_moeda_plain(_vl_pago)}</div>'
         ) if _vl_pago > 0 else ""
         st.markdown(
-            f'<div style="{_op_style}background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
-            f'padding:14px 16px;margin-bottom:10px;border-top:2px solid #7cc243">'
+            f'<div style="{_op_style}background:var(--surface);border:1px solid var(--border);border-radius:12px;'
+            f'padding:14px 16px;margin-bottom:10px;border-top:2px solid var(--brand)">'
             f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
-            f'<div style="font-weight:700;font-size:17px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
+            f'<div style="font-weight:700;font-size:17px;color:var(--txt);line-height:1.3;flex:1;margin-right:8px">'
             f'{c["nome"]}'
-            f'<div style="font-size:11px;color:#9ca3af;font-weight:400;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
+            f'<div style="font-size:11px;color:var(--txt-2);font-weight:400;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
             f'<span>{c.get("cnpj","—")} · {_sl_tag}</span>'
             f'{inativo_badge}'
             f'</div>'
@@ -368,12 +368,12 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
             f'</div>'
             f'{motivo_html}'
             f'{valor_html}'
-            f'<div style="font-size:12px;color:#6b7280">'
+            f'<div style="font-size:12px;color:var(--txt-3)">'
             f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">'
-            f'{_ICON_PHONE}<span style="color:#9ca3af">{_tels_html(c)}</span>'
+            f'{_ICON_PHONE}<span style="color:var(--txt-2)">{_tels_html(c)}</span>'
             f'</div>'
             f'<div style="display:flex;align-items:center;gap:5px">'
-            f'{_ICON_GROUP}<span style="color:#9ca3af">{c.get("_grupo","—")}</span>'
+            f'{_ICON_GROUP}<span style="color:var(--txt-2)">{c.get("_grupo","—")}</span>'
             f'</div>'
             f'</div>'
             f'</div>',
@@ -382,32 +382,32 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
         return  # sem botão "Detalhes" — não há histórico editável
 
     st.markdown(
-        f'<div style="{_op_style}background:#181c26;border:1px solid #2a2f42;border-radius:12px;'
+        f'<div style="{_op_style}background:var(--surface);border:1px solid var(--border);border-radius:12px;'
         f'padding:14px 16px;margin-bottom:0;border-top:2px solid {cor}99;'
         f'border-bottom-left-radius:0;border-bottom-right-radius:0">'
         f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
-        f'<div style="font-weight:700;font-size:17px;color:#e8eaf0;line-height:1.3;flex:1;margin-right:8px">'
+        f'<div style="font-weight:700;font-size:17px;color:var(--txt);line-height:1.3;flex:1;margin-right:8px">'
         f'{c["nome"]}'
-        f'<div style="font-size:11px;color:#9ca3af;font-weight:400;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
+        f'<div style="font-size:11px;color:var(--txt-2);font-weight:400;margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">'
         f'<span>{c.get("cnpj","—")} · {_sl_tag}</span>'
         f'{inativo_badge}{acordo_badge}{tel_fixo_badge}{parcial_badge}'
         f'</div>'
         f'</div>'
         f'<div style="text-align:right;flex-shrink:0">'
         f'<div style="font-size:20px;font-weight:800;color:{cor};line-height:1">{score}</div>'
-        f'<div style="font-size:14px;color:#6b7280">pts</div>'
+        f'<div style="font-size:14px;color:var(--txt-3)">pts</div>'
         f'</div></div>'
         f'{motivo_html}'
         f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-        f'<span style="font-size:13px;font-weight:600;color:#e8eaf0">{fmt_moeda_plain(c["valor"])}</span>'
+        f'<span style="font-size:13px;font-weight:600;color:var(--txt)">{fmt_moeda_plain(c["valor"])}</span>'
         f'{dias_html(c.get("dias_atraso"))}'
         f'</div>'
-        f'<div style="font-size:12px;color:#6b7280">'
+        f'<div style="font-size:12px;color:var(--txt-3)">'
         f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">'
-        f'{_ICON_PHONE}<span style="color:#9ca3af">{_tels_html(c)}</span>'
+        f'{_ICON_PHONE}<span style="color:var(--txt-2)">{_tels_html(c)}</span>'
         f'</div>'
         f'<div style="display:flex;align-items:center;gap:5px">'
-        f'{_ICON_GROUP}<span style="color:#9ca3af">{c.get("_grupo","—")}</span>'
+        f'{_ICON_GROUP}<span style="color:var(--txt-2)">{c.get("_grupo","—")}</span>'
         f'</div>'
         f'</div>'
         f'</div>',
@@ -433,14 +433,14 @@ def _render_atividades(store, clientes, role):
     st.markdown("""
     <style>
     .stButton > button[kind="secondary"] {
-        background-color: #181c26;
-        border: 1px solid #2a2f42;
+        background-color: var(--surface);
+        border: 1px solid var(--border);
         border-top: none;
         border-top-left-radius: 0;
         border-top-right-radius: 0;
         border-bottom-left-radius: 12px;
         border-bottom-right-radius: 12px;
-        color: #9ca3af;
+        color: var(--txt-2);
         font-size: 12px;
         font-weight: 500;
         padding-top: 8px;
@@ -450,9 +450,9 @@ def _render_atividades(store, clientes, role):
         transition: background-color 0.15s, color 0.15s;
     }
     .stButton > button[kind="secondary"]:hover {
-        background-color: #1f2433;
-        color: #e8eaf0;
-        border-color: #3a3f55;
+        background-color: var(--border-2);
+        color: var(--txt);
+        border-color: var(--border);
         border-top: none;
     }
     </style>
@@ -494,9 +494,9 @@ def _render_atividades(store, clientes, role):
             with st.container(border=True):
                 st.markdown(
                     '<div style="display:flex;align-items:center;gap:6px;'
-                    'font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;'
+                    'font-size:11px;font-weight:700;color:var(--txt-2);text-transform:uppercase;'
                     'letter-spacing:0.7px;margin-bottom:8px">'
-                    '<svg width="13" height="13" viewBox="0 0 24 24" fill="#9ca3af">'
+                    '<svg width="13" height="13" viewBox="0 0 24 24" fill="var(--txt-2)">'
                     '<path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>'
                     '</svg>'
                     'Painel Administrativo</div>',
@@ -565,8 +565,8 @@ def _render_atividades(store, clientes, role):
 
     def _delta_html(v: float) -> str:
         if abs(v) < 0.005:
-            return '<span style="color:#9ca3af;font-size:11px">— 0,00 p.p.</span>'
-        arrow, color = ("▼", "#22c55e") if v < 0 else ("▲", "#fb7185")
+            return '<span style="color:var(--txt-2);font-size:11px">— 0,00 p.p.</span>'
+        arrow, color = ("▼", "var(--ok)") if v < 0 else ("▲", "var(--rosa)")
         val = f"{abs(v):.2f}".replace(".", ",")
         return (
             f'<span style="color:{color};font-size:11px;font-weight:600">'
@@ -579,11 +579,11 @@ def _render_atividades(store, clientes, role):
 
     # ─── Card ANALISE POR RECEITA — renderizado ao lado do card VISAO GERAL.
     _sublabel_css = (
-        "font-size:11px;font-weight:700;color:#9ca3af;"
+        "font-size:11px;font-weight:700;color:var(--txt-2);"
         "text-transform:uppercase;letter-spacing:1.2px;margin-bottom:12px"
     )
     # Divisor identico ao do card operacional pra separacao visual
-    _divisor_a = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
+    _divisor_a = '<div style="height:1px;background:var(--border);margin:10px -18px"></div>'
 
     def _linha_analise(pct: float, palavra: str, delta_pp: float, rs: float | None = None):
         """Linha: percentual grande + delta + label. Rs opcional a direita."""
@@ -593,16 +593,16 @@ def _render_atividades(store, clientes, role):
         if rs is not None:
             _rs_fmt = _fmt_rs(rs)
             _direita = (
-                f'<span style="margin-left:auto;font-size:14px;color:#f87171;'
+                f'<span style="margin-left:auto;font-size:14px;color:var(--erro);'
                 f'font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums">'
                 f'R$ {_rs_fmt}</span>'
             )
         return (
             f'<div style="display:flex;align-items:baseline;gap:8px">'
-            f'<span style="font-size:22px;font-weight:800;color:#e8eaf0;line-height:1;'
+            f'<span style="font-size:22px;font-weight:800;color:var(--txt);line-height:1;'
             f'letter-spacing:-0.4px;font-variant-numeric:tabular-nums">{pct_str}%</span>'
             f'{_delta}'
-            f'<span style="font-size:11px;color:#9ca3af;font-weight:700;'
+            f'<span style="font-size:11px;color:var(--txt-2);font-weight:700;'
             f'letter-spacing:1px;text-transform:uppercase">{palavra}</span>'
             f'{_direita}'
             f'</div>'
@@ -638,7 +638,7 @@ def _render_atividades(store, clientes, role):
             _rolling.get("d90_aberto"),
         ))
         _nota_excl = (
-            f' <span style="text-transform:none;letter-spacing:0;color:#f59e0b;'
+            f' <span style="text-transform:none;letter-spacing:0;color:var(--alerta);'
             f'font-weight:600">· {n_excluidos} '
             f'{"igreja excluída" if n_excluidos == 1 else "igrejas excluídas"}</span>'
             if n_excluidos else ""
@@ -655,7 +655,7 @@ def _render_atividades(store, clientes, role):
     # do card Visao Geral (feedback do user: nao precisa ter mesma
     # altura que o operacional).
     _card_wrapper = (
-        'background:#181c26;border:1px solid #2a2f42;'
+        'background:var(--surface);border:1px solid var(--border);'
         'border-radius:10px;padding:14px 18px;'
         'display:flex;flex-direction:column;align-self:flex-start'
     )
@@ -739,7 +739,7 @@ def _render_atividades(store, clientes, role):
     # 1. Bem-vindo
     st.markdown(
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:52px;'
-        f'font-weight:800;color:#e8eaf0;margin-top:32px;margin-bottom:28px;letter-spacing:-1.5px;line-height:1.1">'
+        f'font-weight:800;color:var(--txt);margin-top:32px;margin-bottom:28px;letter-spacing:-1.5px;line-height:1.1">'
         f'Bem-vindo(a), {nome}!</div>',
         unsafe_allow_html=True,
     )
@@ -907,26 +907,26 @@ def _render_atividades(store, clientes, role):
 
         # SVG icons inline (vermelho alerta, verde check, azul relógio)
         _ico_inad = (
-            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" '
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--erro)" '
             'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" '
             'style="flex-shrink:0"><circle cx="12" cy="12" r="9"></circle>'
             '<line x1="12" y1="8" x2="12" y2="13"></line>'
             '<line x1="12" y1="16" x2="12.01" y2="16"></line></svg>'
         )
         _ico_reg = (
-            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7cc243" '
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" '
             'stroke-width="3" stroke-linecap="round" stroke-linejoin="round" '
             'style="flex-shrink:0"><polyline points="20 6 9 17 4 12"></polyline></svg>'
         )
         _ico_pag = (
-            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5fa3ff" '
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--info)" '
             'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" '
             'style="flex-shrink:0"><circle cx="12" cy="12" r="9"></circle>'
             '<path d="M12 6v6l4 2"></path></svg>'
         )
         # Ícone people/users pra linha CLIENTES (carteira total)
         _ico_cli = (
-            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" '
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--txt-2)" '
             'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" '
             'style="flex-shrink:0">'
             '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>'
@@ -944,10 +944,10 @@ def _render_atividades(store, clientes, role):
         def _delta_qty_html(delta: int) -> str:
             if delta == 0:
                 return (
-                    '<span style="color:#9ca3af;font-size:13px;'
+                    '<span style="color:var(--txt-2);font-size:13px;'
                     'font-weight:600;white-space:nowrap">— 0</span>'
                 )
-            arrow, color = ("▼", "#22c55e") if delta < 0 else ("▲", "#fb7185")
+            arrow, color = ("▼", "var(--ok)") if delta < 0 else ("▲", "var(--rosa)")
             return (
                 f'<span style="color:{color};font-size:14px;'
                 f'font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums">'
@@ -976,16 +976,16 @@ def _render_atividades(store, clientes, role):
                 return (
                     f'<div style="display:flex;align-items:center;gap:8px">'
                     f'{ico}'
-                    f'<span style="font-size:26px;font-weight:800;color:#e8eaf0;line-height:1;'
+                    f'<span style="font-size:26px;font-weight:800;color:var(--txt);line-height:1;'
                     f'font-variant-numeric:tabular-nums">{count}</span>'
                     f'{extra_apos_count}'
-                    f'<span style="font-size:13px;color:#9ca3af;font-weight:700;'
+                    f'<span style="font-size:13px;color:var(--txt-2);font-weight:700;'
                     f'letter-spacing:1.2px;text-transform:uppercase">{palavra}</span>'
                     f'{_direita}'
                     f'</div>'
                 )
 
-            _divisor = '<div style="height:1px;background:#2a2f42;margin:10px -18px"></div>'
+            _divisor = '<div style="height:1px;background:var(--border);margin:10px -18px"></div>'
             # 'CARTEIRA' em vez de 'CLIENTES' pra diferenciar do card
             # INADIMPLENTES logo abaixo (fetch_carteira_count conta TODOS os
             # clientes do escopo, nao so os inadimplentes — evita confusao).
@@ -993,13 +993,13 @@ def _render_atividades(store, clientes, role):
             _inad_extra = _delta_qty_html(inad_delta) if inad_delta is not None else ""
             # Sub-header no topo do card (bate com os cards de analise ao lado)
             _sub_header = (
-                '<div style="font-size:11px;font-weight:700;color:#9ca3af;'
+                '<div style="font-size:11px;font-weight:700;color:var(--txt-2);'
                 'text-transform:uppercase;letter-spacing:1.2px;margin-bottom:12px">'
                 'Visão geral</div>'
             )
 
             return (
-                f'<div style="background:#181c26;border:1px solid #2a2f42;'
+                f'<div style="background:var(--surface);border:1px solid var(--border);'
                 f'border-radius:10px;padding:14px 18px;min-height:240px;'
                 f'display:flex;flex-direction:column">'
                 f'{_sub_header}'
@@ -1007,9 +1007,9 @@ def _render_atividades(store, clientes, role):
                 f'{_divisor}'
                 f'{_linha(_ico_inad, inad_n, _inad_palavra, "", "", _inad_extra)}'
                 f'{_divisor}'
-                f'{_linha(_ico_reg, reg_n, _reg_palavra, _reg_v_fmt, "#7cc243")}'
+                f'{_linha(_ico_reg, reg_n, _reg_palavra, _reg_v_fmt, "var(--brand)")}'
                 f'{_divisor}'
-                f'{_linha(_ico_pag, parc_n, _parc_palavra, _parc_v_fmt, "#5fa3ff")}'
+                f'{_linha(_ico_pag, parc_n, _parc_palavra, _parc_v_fmt, "var(--info)")}'
                 f'</div>'
             )
 
@@ -1252,27 +1252,27 @@ def _render_atividades(store, clientes, role):
             pct = min(int(n_msg / meta_msg * 100), 100)
             st.markdown(
                 f'<div class="metric-card"><div class="metric-label" style="{_label_style}">Mensagens Enviadas</div>'
-                f'<div class="metric-value" style="color:#5fa3ff;font-size:32px">{n_msg}<span style="font-size:18px;color:#6b7280">/{meta_msg}</span></div>'
-                f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
-                f'<div style="background:#5fa3ff;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+                f'<div class="metric-value" style="color:var(--info);font-size:32px">{n_msg}<span style="font-size:18px;color:var(--txt-3)">/{meta_msg}</span></div>'
+                f'<div style="background:var(--surface-2);border-radius:4px;height:6px;margin-top:10px">'
+                f'<div style="background:var(--info);width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
                 unsafe_allow_html=True,
             )
         with m2:
             pct = min(int(n_lig / meta_lig * 100), 100)
             st.markdown(
                 f'<div class="metric-card"><div class="metric-label" style="{_label_style}">Ligações Realizadas</div>'
-                f'<div class="metric-value" style="color:#f59e0b;font-size:32px">{n_lig}<span style="font-size:18px;color:#6b7280">/{meta_lig}</span></div>'
-                f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
-                f'<div style="background:#f59e0b;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+                f'<div class="metric-value" style="color:var(--alerta);font-size:32px">{n_lig}<span style="font-size:18px;color:var(--txt-3)">/{meta_lig}</span></div>'
+                f'<div style="background:var(--surface-2);border-radius:4px;height:6px;margin-top:10px">'
+                f'<div style="background:var(--alerta);width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
                 unsafe_allow_html=True,
             )
         with m3:
             pct = min(int(n_atend / meta_atend * 100), 100)
             st.markdown(
                 f'<div class="metric-card"><div class="metric-label" style="{_label_style}">Ligações Atendidas</div>'
-                f'<div class="metric-value" style="color:#7cc243;font-size:32px">{n_atend}<span style="font-size:18px;color:#6b7280">/{meta_atend}</span></div>'
-                f'<div style="background:#1e2333;border-radius:4px;height:6px;margin-top:10px">'
-                f'<div style="background:#7cc243;width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+                f'<div class="metric-value" style="color:var(--brand);font-size:32px">{n_atend}<span style="font-size:18px;color:var(--txt-3)">/{meta_atend}</span></div>'
+                f'<div style="background:var(--surface-2);border-radius:4px;height:6px;margin-top:10px">'
+                f'<div style="background:var(--brand);width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
                 unsafe_allow_html=True,
             )
 
@@ -1447,36 +1447,36 @@ def _render_atividades(store, clientes, role):
                     f'style="flex-shrink:0;margin-left:{ml}px;margin-right:{mr}px">'
                     f'<path d="{path}"/></svg>')
 
-        _fire  = _svg("M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z", "#7cc243", 17)
-        _phone = _svg("M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z", "#f59e0b", 16)
-        _env   = _svg("M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z", "#e8eaf0", 15)
-        _retry = _svg("M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z", "#a78bfa", 16)
-        _check = _svg("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z", "#7cc243", 16)
+        _fire  = _svg("M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z", "var(--brand)", 17)
+        _phone = _svg("M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z", "var(--alerta)", 16)
+        _env   = _svg("M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z", "var(--txt)", 15)
+        _retry = _svg("M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z", "var(--roxo)", 16)
+        _check = _svg("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z", "var(--brand)", 16)
 
         colunas = [
-            (f'{_fire}URGENTE',           acordos,    "#ff5555"),
-            (f'{_env}MENSAGEM',           so_msg,     "#5fa3ff"),
-            (f'{_phone}LIGAÇÃO',          ligacao,    "#f59e0b"),
-            (f'{_retry}TENTAR NOVAMENTE', tentar_nov, "#a78bfa"),
-            (f'{_check}CONCLUÍDA',        concluida,  "#7cc243"),
+            (f'{_fire}URGENTE',           acordos,    "var(--erro-2)"),
+            (f'{_env}MENSAGEM',           so_msg,     "var(--info)"),
+            (f'{_phone}LIGAÇÃO',          ligacao,    "var(--alerta)"),
+            (f'{_retry}TENTAR NOVAMENTE', tentar_nov, "var(--roxo)"),
+            (f'{_check}CONCLUÍDA',        concluida,  "var(--brand)"),
         ]
 
         cols = st.columns(len(colunas))
         for col, (titulo, itens, cor) in zip(cols, colunas):
             with col:
                 st.markdown(
-                    f'<div style="background:#1e2333;border-radius:10px 10px 0 0;padding:10px 12px;'
+                    f'<div style="background:var(--surface-2);border-radius:10px 10px 0 0;padding:10px 12px;'
                     f'margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-                    f'<span style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;color:#e8eaf0;letter-spacing:0.3px">{titulo}</span>'
-                    f'<span style="background:#2a2f42;color:#e8eaf0;font-size:14px;font-weight:800;'
+                    f'<span style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;color:var(--txt);letter-spacing:0.3px">{titulo}</span>'
+                    f'<span style="background:var(--border);color:var(--txt);font-size:14px;font-weight:800;'
                     f'padding:2px 8px;border-radius:10px">{len(itens)}</span>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
                 if not itens:
                     st.markdown(
-                        '<div style="background:#181c26;border:1px solid #2a2f42;border-radius:10px;'
-                        'padding:20px;text-align:center;color:#4b5563;font-size:11px">Nenhum cliente</div>',
+                        '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;'
+                        'padding:20px;text-align:center;color:var(--txt-4);font-size:11px">Nenhum cliente</div>',
                         unsafe_allow_html=True,
                     )
                 else:

@@ -14,7 +14,7 @@ def render_sidebar():
         return
 
     page    = st.session_state.get("page", "atividades")
-    logo_sb = f'<img src="{LOGO_SRC}" style="height:30px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:#7cc243">InChurch</span>'
+    logo_sb = f'<img src="{LOGO_SRC}" style="height:30px;object-fit:contain">' if LOGO_SRC else '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:var(--brand)">InChurch</span>'
 
     # O 'Sair' fica no rodape da sidebar por FLEX, nao por position:fixed.
     #
@@ -52,21 +52,26 @@ def render_sidebar():
         flex-direction: column !important;
         min-height: 100% !important;
     }
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] [data-testid="stElementContainer"]:last-of-type {
+    /* O empurrao vai no PENULTIMO (o botao de tema), nao no ultimo: assim o
+       tema e o Sair descem juntos como um rodape. Posto no ultimo, o tema
+       ficaria colado no menu e so o Sair iria pro fundo. */
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] [data-testid="stElementContainer"]:nth-last-of-type(2) {
         margin-top: auto !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] [data-testid="stElementContainer"]:last-of-type {
         padding-bottom: 8px !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
     st.sidebar.markdown(f"""
-    <div style="padding:18px 16px 14px;border-bottom:1px solid #1e2333;margin-bottom:14px">
-        <div style="font-size:10px;color:#6b7280;font-weight:500;letter-spacing:0.5px;margin-bottom:4px">v{VERSAO_CURTA}</div>
+    <div style="padding:18px 16px 14px;border-bottom:1px solid var(--surface-2);margin-bottom:14px">
+        <div style="font-size:10px;color:var(--txt-3);font-weight:500;letter-spacing:0.5px;margin-bottom:4px">v{VERSAO_CURTA}</div>
         {logo_sb}
         <!-- letter-spacing 1.5px custava 25px so de espacamento e fazia
              "PAINEL DE COBRANCAS" quebrar em duas linhas na sidebar de
              200px. 0.8px e nowrap resolvem sem encolher a fonte. -->
-        <div style="font-size:12px;color:#8b94a5;margin-top:6px;text-transform:uppercase;letter-spacing:0.8px;font-weight:600;white-space:nowrap">Painel de Cobranças</div>
+        <div style="font-size:12px;color:var(--txt-2);margin-top:6px;text-transform:uppercase;letter-spacing:0.8px;font-weight:600;white-space:nowrap">Painel de Cobranças</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -92,6 +97,17 @@ def render_sidebar():
     # Liberada pra todos os perfis — as atendentes veem a equipe inteira,
     # nao so a si mesmas.
     nav_item("Desempenho",           "especialista")
+
+    # Alternador de tema. Todas as telas leem os tokens de config.css_tema(),
+    # menos a de login — que e pre-auth e carrega as cores de marca do Google.
+    # O rotulo diz pra onde o clique leva, nao o estado atual.
+    _claro = st.session_state.get("tema_claro", False)
+    if st.sidebar.button("Modo escuro" if _claro else "Modo claro",
+                         key="btn_tema", width="stretch",
+                         icon=":material/dark_mode:" if _claro
+                              else ":material/light_mode:"):
+        st.session_state["tema_claro"] = not _claro
+        st.rerun()
 
     # Sem espacador: ele existia porque o 'Sair' era position:fixed e cobria
     # o ultimo item. Agora o botao esta no fluxo e o margin-top:auto cuida do
