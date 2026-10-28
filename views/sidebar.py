@@ -1,6 +1,5 @@
 import streamlit as st
 
-import tema
 from config import logo_src, VERSAO_CURTA
 from auth import is_logged
 
@@ -15,7 +14,7 @@ def render_sidebar():
         return
 
     page  = st.session_state.get("page", "atividades")
-    claro = tema.esta_claro()
+    claro = st.session_state.get("tema_claro", False)
     # A arte muda com o tema: a do painel tem "inchurch" em branco e sumiria
     # no fundo claro, sobrando so os quadradinhos verdes.
     _src    = logo_src(claro)
@@ -107,14 +106,17 @@ def render_sidebar():
     # menos a de login — que e pre-auth e carrega as cores de marca do Google.
     # O rotulo diz pra onde o clique leva, nao o estado atual.
     #
-    # O clique recarrega a pagina uma vez: e o reload que faz o Streamlit
-    # remontar a sessao com a secao [theme.light]/[theme.dark] certa, pros
-    # widgets dele (calendario, dropdown, slider) virem junto. Ver tema.py.
+    # Troca so os nossos tokens. Os widgets do proprio Streamlit seguem o
+    # base="dark" do config.toml; o que o modo claro precisa deles esta
+    # coberto pelo bloco <<fix-base>> do config.py. Ja tentamos deixar o
+    # Streamlit trocar junto e o preco foi alto demais — o porque esta no
+    # .streamlit/config.toml.
     if st.sidebar.button("Modo escuro" if claro else "Modo claro",
                          key="btn_tema", width="stretch",
                          icon=":material/dark_mode:" if claro
                               else ":material/light_mode:"):
-        tema.alternar()
+        st.session_state["tema_claro"] = not claro
+        st.rerun()
 
     # Sem espacador: ele existia porque o 'Sair' era position:fixed e cobria
     # o ultimo item. Agora o botao esta no fluxo e o margin-top:auto cuida do

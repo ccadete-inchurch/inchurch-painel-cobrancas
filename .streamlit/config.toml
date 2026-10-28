@@ -1,80 +1,24 @@
-# NAO EDITAR NA MAO — gerado a partir dos tokens de config.py
-# (_TOKENS_CLARO / _TOKENS_ESCURO). Mexeu num token? Rode o gerador de novo,
-# senao o Streamlit pinta os widgets dele com a paleta velha.
+# base="dark" NAO E' DECORATIVO — nao tirar sem ler isto.
 #
-# Nao existe `base` aqui, e e de proposito. Com `base` fixo o Streamlit
-# escolhe o cinza de placeholder, campo desabilitado, calendario, dropdown,
-# slider e tooltip pensando num fundo so — e no outro modo esses widgets
-# saem ilegiveis. Sem `base`, ele decide entre as duas secoes abaixo, e quem
-# decide por ele e o tema.py: o botao da sidebar grava a escolha no
-# localStorage que o proprio Streamlit le.
+# Ele e' o que garante que o painel abre escuro pra todo mundo, sempre.
 #
-# A ordem de resolucao dele e: tema forcado por config > escolha gravada >
-# preferencia do sistema. Como gravamos a escolha, o Windows da pessoa nao
-# interfere.
+# Ja tentamos tirar (commit 2b4188c, revertido no mesmo dia): a ideia era
+# trocar por [theme.light] + [theme.dark], que deixaria o Streamlit pintar os
+# widgets DELE (placeholder, calendario, dropdown, slider, X do dialog) com a
+# nossa paleta nos dois modos, em vez de so' no escuro.
+#
+# O que quebrou: sem `base`, a ordem de resolucao do Streamlit vira
+# "escolha gravada no navegador > preferencia do sistema". Quando a gravacao
+# nao acontece — e ela depende de um localStorage que o JS pode nao alcancar
+# —, ele cai no tema do WINDOWS da pessoa. Numa maquina com Windows claro, o
+# painel no modo escuro apareceu com os cards escuros sobre fundo claro.
+#
+# Ou seja: tirar esta linha nao mexe so' no modo claro, mexe no escuro de
+# quem usa Windows claro. Se for tentar de novo, a gravacao tem que ser
+# comprovada ANTES de o `base` sair, nao depois.
+#
+# Enquanto isso o modo claro e' feito por CSS (bloco <<fix-base>> em
+# config.py), que cobre os widgets criticos e nao depende de navegador.
 
-[theme.light]
-backgroundColor = "#f5f6f8"
-secondaryBackgroundColor = "#eef0f4"
-textColor = "#1a1d26"
-borderColor = "#d4d9e2"
-primaryColor = "#4a8a2c"
-linkColor = "#1d4ed8"
-codeBackgroundColor = "#f8f9fb"
-codeTextColor = "#1a1d26"
-dataframeHeaderBackgroundColor = "#eef0f4"
-dataframeBorderColor = "#d4d9e2"
-grayColor = "#78818f"
-grayTextColor = "#5b6472"
-greenColor = "#15803d"
-greenTextColor = "#15803d"
-redColor = "#dc2626"
-redTextColor = "#dc2626"
-orangeColor = "#c2410c"
-orangeTextColor = "#c2410c"
-yellowColor = "#a16207"
-yellowTextColor = "#a16207"
-blueColor = "#1d4ed8"
-blueTextColor = "#1d4ed8"
-violetColor = "#6d28d9"
-violetTextColor = "#6d28d9"
-
-[theme.light.sidebar]
-backgroundColor = "#f8f9fb"
-secondaryBackgroundColor = "#eef0f4"
-textColor = "#5b6472"
-borderColor = "#d4d9e2"
-primaryColor = "#4a8a2c"
-
-[theme.dark]
-backgroundColor = "#0f1117"
-secondaryBackgroundColor = "#1e2333"
-textColor = "#e8eaf0"
-borderColor = "#2a2f42"
-primaryColor = "#7cc243"
-linkColor = "#5fa3ff"
-codeBackgroundColor = "#13161f"
-codeTextColor = "#e8eaf0"
-dataframeHeaderBackgroundColor = "#1e2333"
-dataframeBorderColor = "#2a2f42"
-grayColor = "#6b7280"
-grayTextColor = "#9ca3af"
-greenColor = "#22c55e"
-greenTextColor = "#22c55e"
-redColor = "#ef4444"
-redTextColor = "#ef4444"
-orangeColor = "#ff9800"
-orangeTextColor = "#ff9800"
-yellowColor = "#fcd34d"
-yellowTextColor = "#fcd34d"
-blueColor = "#5fa3ff"
-blueTextColor = "#5fa3ff"
-violetColor = "#a78bfa"
-violetTextColor = "#a78bfa"
-
-[theme.dark.sidebar]
-backgroundColor = "#13161f"
-secondaryBackgroundColor = "#1e2333"
-textColor = "#9ca3af"
-borderColor = "#2a2f42"
-primaryColor = "#7cc243"
+[theme]
+base = "dark"
