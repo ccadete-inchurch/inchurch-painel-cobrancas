@@ -56,13 +56,12 @@ def render_sidebar():
         flex-direction: column !important;
         min-height: 100% !important;
     }
-    /* O empurrao vai no PENULTIMO (o botao de tema), nao no ultimo: assim o
-       tema e o Sair descem juntos como um rodape. Posto no ultimo, o tema
-       ficaria colado no menu e so o Sair iria pro fundo. */
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] [data-testid="stElementContainer"]:nth-last-of-type(2) {
-        margin-top: auto !important;
-    }
+    /* O empurrao vai no ULTIMO elemento, que hoje e o 'Sair' sozinho. Enquanto
+       o botao de tema morava aqui, ele ia no PENULTIMO pros dois descerem
+       juntos como um rodape; o tema foi pra topbar e deixar :nth-last-of-type(2)
+       jogaria o "Desempenho" pro fundo da sidebar. */
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] [data-testid="stElementContainer"]:last-of-type {
+        margin-top: auto !important;
         padding-bottom: 8px !important;
     }
     </style>
@@ -102,21 +101,9 @@ def render_sidebar():
     # nao so a si mesmas.
     nav_item("Desempenho",           "especialista")
 
-    # Alternador de tema. Todas as telas leem os tokens de config.css_tema(),
-    # menos a de login — que e pre-auth e carrega as cores de marca do Google.
-    # O rotulo diz pra onde o clique leva, nao o estado atual.
-    #
-    # Troca so os nossos tokens. Os widgets do proprio Streamlit seguem o
-    # base="dark" do config.toml; o que o modo claro precisa deles esta
-    # coberto pelo bloco <<fix-base>> do config.py. Ja tentamos deixar o
-    # Streamlit trocar junto e o preco foi alto demais — o porque esta no
-    # .streamlit/config.toml.
-    if st.sidebar.button("Modo escuro" if claro else "Modo claro",
-                         key="btn_tema", width="stretch",
-                         icon=":material/dark_mode:" if claro
-                              else ":material/light_mode:"):
-        st.session_state["tema_claro"] = not claro
-        st.rerun()
+    # O alternador de tema foi pra topbar (views/header.py): virou um
+    # botao redondo de sol/lua no canto, em vez de um item de menu de
+    # largura inteira competindo com a navegacao.
 
     # Sem espacador: ele existia porque o 'Sair' era position:fixed e cobria
     # o ultimo item. Agora o botao esta no fluxo e o margin-top:auto cuida do

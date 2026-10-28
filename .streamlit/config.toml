@@ -17,8 +17,19 @@
 # quem usa Windows claro. Se for tentar de novo, a gravacao tem que ser
 # comprovada ANTES de o `base` sair, nao depois.
 #
-# Enquanto isso o modo claro e' feito por CSS (bloco <<fix-base>> em
-# config.py), que cobre os widgets criticos e nao depende de navegador.
+# Enquanto isso o modo claro e' feito por CSS, que nao depende de navegador
+# nenhum. Sao dois blocos em config.py, e vale saber a diferenca:
+#
+#   <<fix-base>>, dentro do CSS global  — vale nos DOIS temas. Placeholder,
+#       campo desabilitado e X do dialog, que no escuro tambem estavam ruins.
+#   _CSS_CLARO, injetado por css_tema() — vale SO no claro. E a superficie que
+#       o Streamlit desenha quando o widget abre: o calendario dentro do
+#       popover, a lista do dropdown, o tooltip, a caixa do selectbox.
+#
+# O que continua fora do alcance do CSS: a marca do dia escolhido no
+# calendario. O Streamlit a pinta com !important numa cor derivada do tema
+# escuro, e no DOM o unico sinal de "este dia esta selecionado" e o texto do
+# aria-label, que muda com o idioma do navegador.
 
 [theme]
 base = "dark"

@@ -186,6 +186,162 @@ _TOKENS_CLARO = {
 }
 
 
+# Regras que entram SO no modo claro.
+#
+# Trocar de tema aqui e reinjetar os tokens, e os widgets do proprio Streamlit
+# nao leem token nenhum: eles sao pintados com a paleta do base="dark" do
+# .streamlit/config.toml, que e global e nao muda com o clique. No escuro isso
+# coincide com o painel e ninguem nota. No claro, o que sobra escuro aparece —
+# e aparece principalmente quando o widget ABRE, porque e ai que o Streamlit
+# desenha superficie propria: o calendario dentro do popover, a lista do
+# dropdown, o tooltip.
+#
+# Por que aqui e nao no CSS global: la as regras valeriam nos DOIS temas e, no
+# escuro, trocariam o cinza do Streamlit pelo nosso — mexendo num modo que esta
+# certo. Entram so quando claro=True.
+_CSS_CLARO = """
+/* O fundo e a sidebar do Streamlit nao leem nossos tokens. */
+html,body,[class*="css"],.stApp{background:var(--bg)!important;color:var(--txt)!important}
+section[data-testid="stSidebar"]{background:var(--surface)!important;border-right:1px solid var(--border)!important}
+
+/* ── Calendario do date_input ──
+   O baseweb monta o popover em tres camadas: Body (que leva o
+   data-baseweb="popover" e e a unica que o CSS global alcancava), Arrow e
+   Inner. Quem pinta o fundo e o INNER — um div sem atributo nenhum, filho
+   direto do Body, com backgroundColor=backgroundTertiary. Clarear so o Body
+   nao adiantava: o Inner ficava por cima, e era ele o retangulo preto.
+   Dai o seletor ser estrutural (`> div`): o Inner nao tem gancho proprio. */
+div[data-baseweb="popover"] > div{background-color:var(--surface)!important}
+
+/* O calendario em si fica transparente pra deixar o Inner (agora claro)
+   aparecer, e so' o texto passa a ler os tokens.
+
+   O `*` nao e preguica: o baseweb gera no build os nomes de classe das camadas
+   internas, entao nao existe gancho estavel pra cada uma. E ele e seguro aqui
+   porque pseudo-elemento nao casa com `*` — e e justamente neles que vivem a
+   pilula do dia escolhido (::before) e a borda do dia em foco (::after). Zerar
+   o fundo das camadas nao apaga a selecao. */
+div[data-baseweb="calendar"],
+div[data-baseweb="calendar"] *{background-color:transparent!important;color:var(--txt)!important}
+div[data-baseweb="calendar"] svg{fill:currentColor!important}
+/* Dia fora do min/max volta a parecer indisponivel. Se um dia o baseweb parar
+   de marcar aria-disabled, esta regra apenas nao casa com nada. */
+div[data-baseweb="calendar"] [aria-disabled="true"]{color:var(--txt-4)!important}
+/* A faixa preta nas celulas vazias do inicio do mes (os dias que sobram da
+   semana anterior) e o ::before, que o `*` acima de proposito nao alcanca.
+   :empty acerta so elas: dia de verdade carrega um <div> com o numero dentro,
+   celula vaga nao tem filho nenhum. */
+div[data-baseweb="calendar"] [role="gridcell"]:empty::before{background-color:transparent!important}
+/* O circulo preto no hover e o ::after do baseweb: um disco que existe atras
+   de TODO dia e so' aparece em alguns estados (hover, dia escolhido). A cor
+   dele e `calendarBackground` — com base="dark", o fundo preto. No tema
+   escuro ele some contra o calendario e ninguem ve; no claro virou um circulo
+   preto. O anel vermelho de 2px em volta nao e defeito: e o mesmo hover que o
+   modo escuro sempre teve, agora visivel.
+
+   A excecao e o dia escolhido, que precisa continuar com o preenchimento
+   solido. O unico lugar do DOM que diz "este dia esta selecionado" e o
+   aria-label — e aqui ele e confiavel: este bundle do baseweb so embarca o
+   ingles, e as tres variantes ("Selected.", "Selected start date.",
+   "Selected end date.") comecam com Selected. Se isso mudar, o dia escolhido
+   perde o preenchimento e fica so' com o anel: degrada, nao quebra. */
+div[data-baseweb="calendar"] [role="gridcell"]:not([aria-label^="Selected"])::after{
+  background-color:var(--surface)!important
+}
+
+/* ── Lista suspensa do baseweb ──
+   E o "Past Week / Past Month..." do calendario de periodo. A regra do CSS
+   global nunca pegou nela: diz `div[data-baseweb="menu"]`, e o elemento e um
+   UL. Por isso a lista continuava preta mesmo com o popover ja claro. */
+[data-baseweb="menu"]{background-color:var(--surface)!important;border:1px solid var(--border)!important}
+[data-baseweb="menu"] li{color:var(--txt)!important;background-color:transparent!important}
+[data-baseweb="menu"] li:hover,
+[data-baseweb="menu"] li[aria-selected="true"]{background-color:var(--surface-2)!important}
+
+/* ── Moldura dos campos de texto e de data ──
+   O CSS global pinta o <input>, mas quem desenha a borda e o fundo e a Root do
+   baseweb POR FORA dele. Era o contorno preto sobrando no Buscar, no Ultimo
+   Contato (desabilitado) e nos dois campos de data. */
+div[data-baseweb="input"],div[data-baseweb="base-input"]{
+  background-color:var(--surface)!important;border-color:var(--border)!important
+}
+/* A marca do dia escolhido fica como o Streamlit faz: um ::before com
+   !important numa cor derivada do tema escuro (cinza translucido a 15%), que
+   sobre branco vira uma pilula discreta. Nao da pra separar o dia selecionado
+   dos outros por CSS — o unico sinal disso no DOM e o TEXTO do aria-label, que
+   muda com o idioma do navegador. */
+
+/* ── Dropdown do selectbox e do multiselect ──
+   Em 1.59 ele deixou de ser popover do baseweb (que a regra global clareia) e
+   virou react-aria — por isso escapava. O container e o testid abaixo, e o
+   realce de hover nao mora no fundo da opcao: mora num filho marcado com
+   data-item-hl. */
+[data-testid="stSelectboxVirtualDropdown"]{
+  background:var(--surface)!important;border:1px solid var(--border)!important;
+  border-radius:10px!important
+}
+[data-testid="stSelectboxVirtualDropdown"],
+[data-testid="stSelectboxVirtualDropdown"] *{color:var(--txt)!important}
+[data-testid="stSelectboxVirtualDropdown"] [data-hovered] [data-item-hl],
+[data-testid="stSelectboxVirtualDropdown"] [data-focused] [data-item-hl]{
+  background-color:var(--surface-2)!important
+}
+[data-testid="stSelectboxVirtualDropdown"] [data-disabled]{color:var(--txt-4)!important}
+
+/* ── Caixa FECHADA do selectbox ──
+   Tambem virou react-aria, e a regra global div[data-baseweb="select"] nao a
+   alcanca mais (o multiselect continua baseweb e segue pegando aquela). Sem
+   gancho proprio, o ancoradouro e estrutural: a caixa e a div que contem o
+   input. */
+[data-testid="stSelectbox"] div:has(> input){
+  background:var(--surface)!important;border-color:var(--border)!important
+}
+[data-testid="stSelectbox"] input{color:var(--txt)!important}
+[data-testid="stSelectbox"] div:has(> input) svg{color:var(--txt-2)!important;fill:currentColor!important}
+
+/* Tooltip do help= (o "?" ao lado dos rotulos). */
+[data-testid="stTooltipContent"]{
+  background:var(--surface)!important;color:var(--txt)!important;
+  border:1px solid var(--border)!important
+}
+
+/* ── Widgets do dialog ──
+   Nao sao filtros, mas e onde a atendente trabalha, e todos pintam superficie
+   propria com a paleta escura.
+
+   Checkbox: a caixinha e um div sem testid, irmao do stWidgetLabel dentro do
+   <label> — dai o :not([data-testid]). O :not([data-selected]) NAO e enfeite:
+   marcada, a caixa fica com o fundo primary e o "v" branco por cima; sem essa
+   guarda a regra pintaria a caixa de branco e o "v" sumiria. O data-selected
+   quem poe e o react-aria, no proprio <label>. */
+[data-testid="stCheckbox"] label:not([data-selected]) > div:not([data-testid]){
+  background-color:var(--surface)!important;border-color:var(--border)!important
+}
+/* Number input: a caixa e secondaryBg (o #262730 do tema escuro) — era o
+   retangulo preto do campo de desconto. */
+[data-testid="stNumberInputContainer"]{
+  background-color:var(--surface)!important;border-color:var(--border)!important
+}
+[data-testid="stNumberInputField"]{color:var(--txt)!important}
+[data-testid="stNumberInputStepUp"],
+[data-testid="stNumberInputStepDown"]{color:var(--txt-2)!important}
+/* Expander. As regras .streamlit-expanderHeader/Content do CSS global sao de
+   uma versao antiga e nao casam com nada em 1.59: hoje ele e
+   <details>/<summary> + stExpanderDetails.
+   Fechado, o Streamlit nao pinta fundo nenhum — so borda. ABERTO, o summary
+   ganha `bgMix`, que com base="dark" e rgb(26,28,36): era a faixa preta que
+   aparecia por cima do rotulo depois do clique. */
+[data-testid="stExpander"] details{
+  background-color:var(--surface)!important;border-color:var(--border)!important
+}
+[data-testid="stExpander"] summary{color:var(--txt)!important}
+[data-testid="stExpander"] details[open] > summary{background-color:var(--surface-2)!important}
+[data-testid="stExpanderDetails"]{
+  background-color:var(--surface)!important;border-top-color:var(--border)!important
+}
+"""
+
+
 def css_tema(claro: bool = False) -> str:
     """Bloco <style> com os tokens do tema escolhido.
 
@@ -194,17 +350,7 @@ def css_tema(claro: bool = False) -> str:
     """
     t = _TOKENS_CLARO if claro else _TOKENS_ESCURO
     regras = "".join(f"--{k}:{v};" for k, v in t.items())
-    extra = ""
-    if claro:
-        # O fundo e as superficies do proprio Streamlit nao leem nossos
-        # tokens — precisam ser ditos na mao.
-        extra = (
-            "html,body,[class*='css'],.stApp{background:var(--bg)!important;"
-            "color:var(--txt)!important}"
-            "section[data-testid='stSidebar']{background:var(--surface)!important;"
-            "border-right:1px solid var(--border)!important}"
-        )
-    return f"<style>:root{{{regras}}}{extra}</style>"
+    return f"<style>:root{{{regras}}}{_CSS_CLARO if claro else ''}</style>"
 
 
 # ── CSS global ────────────────────────────────────────────────────────────────
@@ -399,6 +545,38 @@ span[data-baseweb="tag"] span{color:var(--txt)!important;font-size:12px!importan
   [data-testid="stHorizontalBlock"]{gap:0.35rem!important}
 }
 
+/* ── Botão de tema (sol/lua) na topbar ──
+   A barra e uma string de HTML montada no header.py, e widget do Streamlit nao
+   entra dentro de string. Entao os dois vao no mesmo container
+   (st-key-topbar_wrap) e o botao e ancorado por cima dela: position:relative no
+   container, absolute nele. O height:60px casa com o min-height da barra e e o
+   que centraliza o botao na vertical, sem numero magico de top.
+   O padding-right na barra reserva o canto — sem ele o pill com o nome de quem
+   esta logado passaria por baixo do botao. */
+[class*="st-key-topbar_wrap"]{position:relative}
+.topbar{padding-right:76px!important}
+[class*="st-key-topbar_wrap"] [class*="st-key-btn_tema"]{
+  position:absolute!important;top:0;right:24px;height:60px;width:auto;
+  display:flex;align-items:center;margin:0!important;z-index:3
+}
+[class*="st-key-btn_tema"] button{
+  background:transparent!important;border:1px solid var(--border)!important;
+  border-radius:50%!important;width:34px!important;min-width:34px!important;
+  height:34px!important;min-height:34px!important;padding:0!important;
+  color:var(--txt-2)!important;box-shadow:none!important;
+  display:inline-flex!important;align-items:center!important;justify-content:center!important
+}
+[class*="st-key-btn_tema"] button:hover{
+  background:var(--surface-2)!important;color:var(--txt)!important;
+  border-color:var(--border-3)!important
+}
+/* O rotulo do botao e vazio (so o icone), mas o <p> que o Streamlit cria pra
+   ele continua ocupando largura dentro do circulo. */
+[class*="st-key-btn_tema"] button p{display:none!important}
+[class*="st-key-btn_tema"] button [data-testid="stIconMaterial"]{
+  font-size:18px!important;width:18px!important;height:18px!important
+}
+
 /* Topbar em tela estreita. O nowrap do proprio header impede a quebra, mas
    nao cria espaco: abaixo de certa largura os pills simplesmente nao cabem
    lado a lado. Entao eles somem por ordem de dispensabilidade — primeiro
@@ -422,7 +600,10 @@ span[data-baseweb="tag"] span{color:var(--txt)!important;font-size:12px!importan
    na regra acima — a margem aqui so desalinhava os dois cards. */
 @media (max-width:820px){
   .topbar-upd{display:none!important}
-  .topbar{padding:0 14px!important}
+  /* O padding-right continua reservado, so menor: o botao de tema nao sai da
+     barra em largura nenhuma, e sem a reserva ele cairia sobre o nome. */
+  .topbar{padding:0 14px!important;padding-right:62px!important}
+  [class*="st-key-topbar_wrap"] [class*="st-key-btn_tema"]{right:14px}
 }
 
 /* Sidebar em tela estreita: 250px fixos comem ~18% de um notebook de 1366.

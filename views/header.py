@@ -102,6 +102,22 @@ def _banner_bq_stale():
     )
 
 
+def _botao_tema():
+    """Sol/lua no canto direito da topbar.
+
+    O rotulo e vazio de proposito: o icone ja diz tudo e o texto estouraria o
+    circulo. Quem explica o clique e o `help`. O icone mostra pra ONDE o
+    clique leva, nao o estado atual — sol quando esta escuro, lua quando esta
+    claro.
+    """
+    claro = st.session_state.get("tema_claro", False)
+    if st.button("", key="btn_tema",
+                 icon=":material/dark_mode:" if claro else ":material/light_mode:",
+                 help="Mudar para o modo escuro" if claro else "Mudar para o modo claro"):
+        st.session_state["tema_claro"] = not claro
+        st.rerun()
+
+
 def render_header():
     # Fragment auto-refresh a cada 30s — pinga a sessão atual e re-renderiza
     # a lista de "online agora" sem precisar reload da página.
@@ -165,5 +181,13 @@ def render_header():
           </div>
         </div>""", unsafe_allow_html=True)
 
-    _header_dynamic()
+    # Os dois no mesmo container porque o botao de tema e ancorado POR CIMA da
+    # barra — o CSS do config.py precisa de um pai comum pra isso.
+    #
+    # E o botao fica FORA do fragmento: dentro dele o st.rerun() teria escopo
+    # de fragmento, e os tokens do tema sao injetados no app.py, fora daqui.
+    # A cor so mudaria na interacao seguinte.
+    with st.container(key="topbar_wrap"):
+        _header_dynamic()
+        _botao_tema()
     _banner_bq_stale()
