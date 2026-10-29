@@ -821,7 +821,13 @@ def _render_dashboard(store, clientes, role):
         # "Destacar" troca de direcao com o tema: no escuro e clarear, no
         # claro e escurecer. Por isso os dois extremos trocam de lado.
         _sc_claro = st.session_state.get("tema_claro", False)
-        _sc_lo = token("txt-4" if _sc_claro else "txt-3", _sc_claro)  # percentil baixo, recua
+        # O piso do claro sobe de txt-4 (3.39 de contraste) pra txt-3 (5.54):
+        # no escuro o cinza baixo ainda e legivel porque o fundo e escuro e o
+        # texto so precisa se afastar dele; no claro, cinza claro sobre branco
+        # some de vez.
+        # Os dois temas usam txt-3 aqui, mas por motivos diferentes: no escuro
+        # ele e o #6b7280 que sempre foi o piso; no claro e o degrau que faltava.
+        _sc_lo = token("txt-3", _sc_claro)                            # percentil baixo, recua
         _sc_hi = token("txt", _sc_claro)                              # percentil alto, destaca
         for ridx, (_, row) in enumerate(df_page.iterrows()):
             is_top = row["id"] in top10
@@ -868,7 +874,16 @@ def _render_dashboard(store, clientes, role):
                 _pct = float(row.get("_score_pct") or 0)  # 0..1, percentil na base
                 if _pct >= 0.90:
                     cor_sc = "var(--alerta)"  # top 10% — laranja
+                    # No claro a cor sozinha nao basta pro top 10% saltar: a
+                    # coluna inteira e texto escuro sobre branco, e laranja
+                    # escuro nao le como destaque. Entao ele ganha um chip —
+                    # vira a unica coisa com preenchimento na coluna, e
+                    # destaca por FORMA, nao so por cor. No escuro o laranja
+                    # claro ja salta contra o fundo, e o chip so poluiria.
+                    _chip = ("background:rgba(var(--alerta-v),calc(.18 * var(--tint-k)));"
+                             "padding:2px 8px;border-radius:6px;" if _sc_claro else "")
                 else:
+                    _chip = ""
                     _ratio = _pct / 0.90  # 0..1 dentro dos 90% inferiores
                     _r1, _g1, _b1 = (int(_sc_lo[i:i + 2], 16) for i in (1, 3, 5))
                     _r2, _g2, _b2 = (int(_sc_hi[i:i + 2], 16) for i in (1, 3, 5))
@@ -878,7 +893,7 @@ def _render_dashboard(store, clientes, role):
                     cor_sc = f"#{_r:02x}{_g:02x}{_b:02x}"
                 st.markdown(
                     f'<div style="padding:12px 6px;text-align:center;white-space:nowrap">'
-                    f'<span style="color:{cor_sc};font-weight:800;font-size:15px">{_sc}</span>'
+                    f'<span style="{_chip}color:{cor_sc};font-weight:800;font-size:15px">{_sc}</span>'
                     f'<span style="color:var(--txt-3);font-size:10px;margin-left:3px">pts</span>'
                     f'</div>',
                     unsafe_allow_html=True,
