@@ -78,8 +78,8 @@ def _banner_bq_stale():
         return
     titulo, linha, chips = _texto_bq_stale(diag)
     chips_html = "".join(
-        f'<span style="display:inline-block;background:rgba(245,158,11,.14);'
-        f'border:1px solid rgba(245,158,11,.35);border-radius:20px;'
+        f'<span style="display:inline-block;background:rgba(var(--alerta-v),calc(.14 * var(--tint-k)));'
+        f'border:1px solid rgba(var(--alerta-v),.35);border-radius:20px;'
         f'padding:3px 10px;font-size:11.5px;color:var(--amarelo);margin:6px 6px 0 0">{c}</span>'
         for c in chips
     )
@@ -87,7 +87,7 @@ def _banner_bq_stale():
         # Faixa lateral âmbar em vez de borda inteira: menos "alarme", mais
         # aviso. O texto antigo vinha sem acentos e em termos técnicos
         # ("time travel", "pipelines criticos"), que ninguém fora do BI lê.
-        f'<div style="background:rgba(245,158,11,.08);border-left:3px solid var(--alerta);'
+        f'<div style="background:rgba(var(--alerta-v),calc(.08 * var(--tint-k)));border-left:3px solid var(--alerta);'
         f'border-radius:6px;padding:12px 16px;margin:0 24px 14px;'
         f'display:flex;align-items:flex-start;gap:12px">'
         f'<span style="font-size:16px;line-height:1.3;flex-shrink:0">⚠️</span>'
@@ -128,7 +128,7 @@ def render_header():
         _r       = current_role()
         _r_label = _ROLE_DISPLAY.get(_r, _r.upper() if _r else "")
         role_tag = (
-            f'<span style="background:rgba(124,194,67,.2);color:var(--brand);font-size:11px;'
+            f'<span style="background:rgba(var(--brand-v),calc(.2 * var(--tint-k)));color:var(--brand);font-size:11px;'
             f'padding:3px 10px;border-radius:12px;font-weight:700;margin-left:8px;'
             f'letter-spacing:.5px">{_r_label}</span>'
         ) if _r_label else ""

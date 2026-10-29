@@ -222,8 +222,8 @@ def _render_cliente(_store, clientes):
             color=alt.Gradient(
                 gradient="linear",
                 stops=[
-                    alt.GradientStop(color="rgba(239,68,68,0.0)", offset=0),
-                    alt.GradientStop(color="rgba(239,68,68,0.25)", offset=1),
+                    alt.GradientStop(color="rgba(var(--erro-v),calc(0.0 * var(--tint-k)))", offset=0),
+                    alt.GradientStop(color="rgba(var(--erro-v),calc(0.25 * var(--tint-k)))", offset=1),
                 ],
                 x1=1, x2=1, y1=1, y2=0,
             ),
@@ -432,14 +432,14 @@ def _render_cliente(_store, clientes):
             icone = "—"
             sub   = "sem registro"
         elif data["parcelas_atraso"] > 0:
-            bg    = "rgba(239,68,68,.10)"
+            bg    = "rgba(var(--erro-v),calc(.10 * var(--tint-k)))"
             borda = "var(--erro)"
             cor   = "var(--erro-2)"
             icone = "●"
             n     = int(data["parcelas_atraso"])
             sub   = f"{n} em atraso"
         else:
-            bg    = "rgba(34,197,94,.10)"
+            bg    = "rgba(var(--ok-v),calc(.10 * var(--tint-k)))"
             borda = "var(--ok)"
             cor   = "var(--ok)"
             icone = "●"

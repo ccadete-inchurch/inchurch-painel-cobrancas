@@ -285,7 +285,7 @@ def _render_proximas(_store, clientes):
         # HOJE: fundo vermelho bem suave + texto vermelho, pra destacar dos
         # 1-7d (só borda) sem gritar. O preenchido forte chamava atenção demais.
         _selo_css = (
-            "background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.5);color:var(--erro);letter-spacing:0.5px;"
+            "background:rgba(var(--erro-v),calc(.15 * var(--tint-k)));border:1px solid rgba(var(--erro-v),.5);color:var(--erro);letter-spacing:0.5px;"
             if d == 0 else f"border:1px solid {cor_d};color:{cor_d};"
         )
 

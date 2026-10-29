@@ -152,6 +152,12 @@ _TOKENS_ESCURO = {
     # escuro. No claro isso se inverte e o surface-2 vira quase invisivel
     # contra o branco (contraste 1.14), dai o token proprio.
     "border-card": "#1e2333",
+    # Multiplicador do alfa dos tints. Ver comentario em _VIVO.
+    "tint-k":      "1",
+    # Neutros em RGB, pra tint cinza. Ao contrario das cores vivas, estes
+    # PRECISAM trocar: no escuro o veu neutro e claro, no claro e escuro.
+    "txt-2-rgb":   "156,163,175",
+    "txt-4-rgb":   "75,85,99",
 }
 _TOKENS_CLARO = {
     # Um degrau mais fundo que o #f5f6f8 original: card branco sobre fundo a
@@ -211,6 +217,13 @@ _TOKENS_CLARO = {
     "txt-claro":   "#3a4150",
     "cinza-cl":    "#64748b",
     "border-card": "#d4d9e2",   # = --border; o surface-2 some no branco
+    # 1.7 porque um veu colorido se comporta diferente nos dois fundos: sobre
+    # escuro, 12% de uma cor viva LEVANTA a luminancia e aparece; sobre
+    # branco, os mesmos 12% mal abaixam e viram lavagem. O alfa de cada lugar
+    # continua escrito la, so que multiplicado por este fator.
+    "tint-k":      "1.7",
+    "txt-2-rgb":   "91,100,114",
+    "txt-4-rgb":   "26,29,38",
 }
 
 
@@ -227,6 +240,34 @@ _TOKENS_CLARO = {
 #
 # Os valores do escuro sao exatamente os literais que estavam espalhados pelo
 # codigo: este bloco nao mudou o modo escuro, so deu nome ao que ja existia.
+# Cores VIVAS, em componentes RGB soltos, pra servirem de base de tint:
+# `rgba(var(--alerta-v), .12)`. Elas sao IGUAIS nos dois temas, e isso e o
+# ponto — a cor de texto (--alerta) precisa escurecer no claro pra se ler
+# sobre branco, mas um PREENCHIMENTO nao: uma barra ambar viva sobre branco
+# le bem, e a versao escurecida (#b45309) sai marrom e sem brilho. Separar as
+# duas e o que permite cada uma seguir a sua regra.
+#
+# Os valores sao os mesmos que estavam escritos na mao nos 67 rgba() do
+# codigo — a conversao nao inventou cor nenhuma.
+_VIVO = {
+    "brand-v":    "124,194,67",
+    "alerta-v":   "245,158,11",
+    "erro-v":     "239,68,68",
+    "erro-2-v":   "255,85,85",
+    "erro-3-v":   "200,0,0",
+    "erro-4-v":   "248,113,113",
+    "ok-v":       "34,197,94",
+    "ok-2-v":     "45,211,111",
+    "info-v":     "95,163,255",
+    "roxo-v":     "167,139,250",
+    "rosa-v":     "236,72,153",
+    "laranja-v":  "255,152,0",
+    "laranja-2-v": "255,184,77",
+    "laranja-3-v": "249,115,22",
+    "azul-2-v":   "79,124,255",
+    "amarelo-v":  "251,191,36",
+}
+
 _SOMBRAS_ESCURO = {
     "sombra":        "0 1px 6px rgba(0,0,0,.15)",     # card em repouso
     "sombra-hover":  "0 4px 16px rgba(0,0,0,.25)",    # card sob o mouse
@@ -417,7 +458,8 @@ def css_tema(claro: bool = False) -> str:
     :root, e o ultimo ganha.
     """
     t = {**(_TOKENS_CLARO if claro else _TOKENS_ESCURO),
-         **(_SOMBRAS_CLARO if claro else _SOMBRAS_ESCURO)}
+         **(_SOMBRAS_CLARO if claro else _SOMBRAS_ESCURO),
+         **_VIVO}
     regras = "".join(f"--{k}:{v};" for k, v in t.items())
     return f"<style>:root{{{regras}}}{_CSS_CLARO if claro else ''}</style>"
 
@@ -480,7 +522,7 @@ section[data-testid="stSidebar"] .stButton>button{
   letter-spacing:0.2px!important
 }
 section[data-testid="stSidebar"] .stButton>button:hover{
-  background:rgba(124,194,67,.1)!important;color:var(--brand)!important;transform:none!important
+  background:rgba(var(--brand-v),calc(.1 * var(--tint-k)))!important;color:var(--brand)!important;transform:none!important
 }
 /* O gap padrao de 1rem entre blocos, vezes 6 itens, custa ~96px de altura e
    empurrava a navegacao contra o 'Sair' fixo do rodape. 0.15rem resolvia a
@@ -510,15 +552,15 @@ section[data-testid="stSidebar"] .stButton>button p{line-height:1.3!important;ma
 
 /* ── Badges ── */
 .badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600}
-.badge-pending{background:rgba(239,68,68,.12);color:var(--erro-2)}
-.badge-contacted{background:rgba(245,158,11,.12);color:var(--laranja-2)}
-.badge-promise{background:rgba(249,115,22,.12);color:var(--laranja)}
-.badge-negotiating{background:rgba(79,124,255,.12);color:var(--info)}
-.badge-paid{background:rgba(34,197,94,.12);color:var(--ok)}
-.tag-novo{white-space:nowrap;background:rgba(34,197,94,.15);color:var(--ok);font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
-.tag-upd{white-space:nowrap;background:rgba(245,158,11,.15);color:var(--laranja-2);font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
-.top-badge{white-space:nowrap;background:rgba(239,68,68,.18);color:var(--erro-4);font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
-.tag-nova-cob{white-space:nowrap;background:rgba(79,124,255,.18);color:var(--info);font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.badge-pending{background:rgba(var(--erro-v),calc(.12 * var(--tint-k)));color:var(--erro-2)}
+.badge-contacted{background:rgba(var(--alerta-v),calc(.12 * var(--tint-k)));color:var(--laranja-2)}
+.badge-promise{background:rgba(var(--laranja-3-v),calc(.12 * var(--tint-k)));color:var(--laranja)}
+.badge-negotiating{background:rgba(var(--azul-2-v),calc(.12 * var(--tint-k)));color:var(--info)}
+.badge-paid{background:rgba(var(--ok-v),calc(.12 * var(--tint-k)));color:var(--ok)}
+.tag-novo{white-space:nowrap;background:rgba(var(--ok-v),calc(.15 * var(--tint-k)));color:var(--ok);font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.tag-upd{white-space:nowrap;background:rgba(var(--alerta-v),calc(.15 * var(--tint-k)));color:var(--laranja-2);font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.top-badge{white-space:nowrap;background:rgba(var(--erro-v),calc(.18 * var(--tint-k)));color:var(--erro-4);font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
+.tag-nova-cob{white-space:nowrap;background:rgba(var(--azul-2-v),calc(.18 * var(--tint-k)));color:var(--info);font-size:9px;padding:2px 5px;border-radius:5px;font-weight:700;margin-right:3px}
 
 /* ── Atraso chips ── */
 /* Botao de editar da tabela: a coluna e' estreita (~32px) e o padding padrao
@@ -533,11 +575,11 @@ section[data-testid="stSidebar"] .stButton>button p{line-height:1.3!important;ma
    notebook de 1920 nao disparava o breakpoint e ficava numa linha so'. */
 span.g-nome,span.g-sobre{white-space:nowrap;display:block}
 .da{padding:2px 7px;border-radius:6px;font-size:14px;font-weight:700;display:inline-block}
-.da-ok{background:rgba(45,211,111,.12);color:var(--ok)}
-.da-30{background:rgba(255,184,77,.12);color:var(--laranja-2)}
-.da-60{background:rgba(255,152,0,.12);color:var(--laranja)}
-.da-90{background:rgba(255,85,85,.12);color:var(--erro-2)}
-.da-max{background:rgba(200,0,0,.18);color:var(--erro-3)}
+.da-ok{background:rgba(var(--ok-2-v),calc(.12 * var(--tint-k)));color:var(--ok)}
+.da-30{background:rgba(var(--laranja-2-v),calc(.12 * var(--tint-k)));color:var(--laranja-2)}
+.da-60{background:rgba(var(--laranja-v),calc(.12 * var(--tint-k)));color:var(--laranja)}
+.da-90{background:rgba(var(--erro-2-v),calc(.12 * var(--tint-k)));color:var(--erro-2)}
+.da-max{background:rgba(var(--erro-3-v),calc(.18 * var(--tint-k)));color:var(--erro-3)}
 
 /* ── Pendência card ── */
 .pend-card{background:var(--surface);border:1px solid var(--border-card);border-radius:10px;padding:14px 16px;margin-bottom:8px}
@@ -560,16 +602,16 @@ button[kind="primary"]:hover{background:var(--brand-2)!important}
    linguagem do hover, so que persistente). Sinaliza pagina atual sem
    competir com CTAs primary de outras telas. */
 section[data-testid="stSidebar"] .stButton>button[kind="primary"]{
-  background:rgba(124,194,67,.12)!important;color:var(--brand)!important;
+  background:rgba(var(--brand-v),calc(.12 * var(--tint-k)))!important;color:var(--brand)!important;
   border:none!important;font-weight:600!important
 }
 section[data-testid="stSidebar"] .stButton>button[kind="primary"]:hover{
-  background:rgba(124,194,67,.18)!important;color:var(--brand)!important
+  background:rgba(var(--brand-v),calc(.18 * var(--tint-k)))!important;color:var(--brand)!important
 }
 
 /* ── Inputs ── */
 .stTextInput input,.stTextArea textarea{background:var(--surface)!important;color:var(--txt)!important;border:1px solid var(--surface-2)!important;border-radius:8px!important;font-size:15px!important;padding:0.6rem 0.9rem!important}
-.stTextInput input:focus,.stTextArea textarea:focus{border-color:var(--brand)!important;box-shadow:0 0 0 2px rgba(124,194,67,.15)!important}
+.stTextInput input:focus,.stTextArea textarea:focus{border-color:var(--brand)!important;box-shadow:0 0 0 2px rgba(var(--brand-v),calc(.15 * var(--tint-k)))!important}
 /* <<fix-base>> (marcador: amostra_tema.py corta daqui ate <</fix-base>> pra
    mostrar como fica SEM estas regras — nao remover) */
 /* O .streamlit/config.toml fixa base="dark", e o Streamlit usa isso pra

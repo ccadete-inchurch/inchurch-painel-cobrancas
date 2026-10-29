@@ -69,15 +69,22 @@ def _eh_fixo(tel: str) -> bool:
 
 
 def _hex_to_rgba(hex_color: str, alpha: float = 0.15) -> str:
-    """Converte cor hex (#rrggbb) pra rgba pra background tintado de badge."""
+    """Converte cor hex (#rrggbb) pra rgba pra background tintado de badge.
+
+    O alfa sai multiplicado pelo --tint-k, igual aos tints escritos no CSS:
+    um veu de 15% aparece sobre fundo escuro e vira lavagem sobre branco.
+    Este e o unico tint montado em tempo de execucao — a cor vem do status do
+    cliente, entao nao da pra tokenizar como os outros.
+    """
     h = hex_color.lstrip("#")
+    _a = f"calc({alpha} * var(--tint-k))"
     if len(h) != 6:
-        return f"rgba(107,114,128,{alpha})"
+        return f"rgba(var(--txt-4-rgb),{_a})"
     try:
         r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-        return f"rgba({r},{g},{b},{alpha})"
+        return f"rgba({r},{g},{b},{_a})"
     except ValueError:
-        return f"rgba(107,114,128,{alpha})"
+        return f"rgba(var(--txt-4-rgb),{_a})"
 from views.dialog import dialog_editar
 
 
@@ -536,8 +543,8 @@ def _render_dashboard(store, clientes, role):
                     )
                 if _h.get("tel_fixo"):
                     tags_inline += (
-                        '<span style="background:rgba(236,72,153,.18);color:var(--rosa);'
-                        'border:1px solid rgba(236,72,153,.4);'
+                        '<span style="background:rgba(var(--rosa-v),calc(.18 * var(--tint-k)));color:var(--rosa);'
+                        'border:1px solid rgba(var(--rosa-v),.4);'
                         'font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;'
                         'flex-shrink:0;margin-left:4px">TELEFONE FIXO</span>'
                     )
@@ -825,11 +832,11 @@ def _render_dashboard(store, clientes, role):
                 '<span class="tag-nova-cob">+ Nova cobrança</span>' if row.get("_nova_cobranca") else "",
                 '<span style="background:var(--azul-2);color:var(--txt-inv);font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">ACORDO</span>'  if row.get("_tem_acordo") else "",
                 '<span style="background:var(--txt-3);color:var(--txt-inv);font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">INATIVO</span>' if row.get("_inativo")    else "",
-                '<span style="background:rgba(236,72,153,.18);color:var(--rosa);border:1px solid rgba(236,72,153,.4);font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">FIXO</span>' if row.get("_tel_fixo") else "",
+                '<span style="background:rgba(var(--rosa-v),calc(.18 * var(--tint-k)));color:var(--rosa);border:1px solid rgba(var(--rosa-v),.4);font-size:9px;font-weight:700;white-space:nowrap;padding:2px 5px;border-radius:4px;margin-right:3px">FIXO</span>' if row.get("_tel_fixo") else "",
             ])
             obs_icon  = ' <span style="color:var(--info);font-size:12px;font-weight:700">●</span>' if str(row["_notes"] or "") else ""
-            row_bl    = "border-left:4px solid rgba(239,68,68,.6);" if is_top else ""
-            row_bg    = "background:rgba(239,68,68,.04);"           if is_top else ""
+            row_bl    = "border-left:4px solid rgba(var(--erro-v),.6);" if is_top else ""
+            row_bg    = "background:rgba(var(--erro-v),calc(.04 * var(--tint-k)));"           if is_top else ""
 
             rcols = st.columns(col_w, vertical_alignment="center")
             with rcols[0]:

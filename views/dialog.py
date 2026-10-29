@@ -753,8 +753,8 @@ def _dialog_editar(eid, from_fixados: bool = False):
                  if not p and aceita_whatsapp(b)]
         if _cels:
             st.markdown(
-                f'<div style="background:rgba(251,191,36,.12);'
-                f'border:1px solid rgba(251,191,36,.35);border-radius:6px;'
+                f'<div style="background:rgba(var(--amarelo-v),calc(.12 * var(--tint-k)));'
+                f'border:1px solid rgba(var(--amarelo-v),.35);border-radius:6px;'
                 f'padding:8px 12px;margin:-6px 0 10px 0;font-size:12px;'
                 f'color:var(--alerta);line-height:1.5">'
                 f'Este cliente tem celular no cadastro: '

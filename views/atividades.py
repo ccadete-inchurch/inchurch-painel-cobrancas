@@ -297,7 +297,7 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     # (sem score, sem botão Detalhes). Distinção visual fica no motivo.
     _regularizado = bool(c.get("_regularizado_hoje")) or bool(c.get("_regularizado_antes_hoje"))
     inativo_badge = '<span style="background:var(--txt-3);color:var(--txt-inv);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">INATIVO</span>' if c.get("_inativo") else ""
-    acordo_badge  = '<span style="background:rgba(245,158,11,.2);color:var(--alerta);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if _eh_acordo and not _regularizado else ""
+    acordo_badge  = '<span style="background:rgba(var(--alerta-v),calc(.2 * var(--tint-k)));color:var(--alerta);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle">ACORDO VENCIDO</span>' if _eh_acordo and not _regularizado else ""
     # Badge "TELEFONE FIXO" — cliente marcado pela atendente como so atende
     # em telefone fixo. N8N nao detecta atividade automatica; atendente usa
     # botoes manuais (Atendeu / Nao atendeu) no dialog pra registrar.
@@ -305,8 +305,8 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
     # sinal do N8N (que nao vem) e usar os botoes manuais no dialog.
     _eh_tel_fixo  = bool(c.get("_tel_fixo"))
     tel_fixo_badge = (
-        '<span style="background:rgba(236,72,153,.18);color:var(--rosa);'
-        'border:1px solid rgba(236,72,153,.4);'
+        '<span style="background:rgba(var(--rosa-v),calc(.18 * var(--tint-k)));color:var(--rosa);'
+        'border:1px solid rgba(var(--rosa-v),.4);'
         'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
         'margin-left:6px;vertical-align:middle">TELEFONE FIXO</span>'
     ) if _eh_tel_fixo and not _regularizado else ""
@@ -327,18 +327,18 @@ def _render_card(score, acoes, c, role, idx, bucket=None, opacity=1.0):
         else f"EM {_dt_parcial}"
     )
     parcial_badge = (
-        f'<span style="background:rgba(124,194,67,.18);color:var(--brand);font-size:10px;'
+        f'<span style="background:rgba(var(--brand-v),calc(.18 * var(--tint-k)));color:var(--brand);font-size:10px;'
         f'font-weight:700;padding:2px 7px;border-radius:4px;margin-left:6px;'
-        f'border:1px solid rgba(124,194,67,.35);'
+        f'border:1px solid rgba(var(--brand-v),.35);'
         f'vertical-align:middle">PAGOU {fmt_moeda_plain(_vl_parcial)} {_quando_parcial}</span>'
     ) if _eh_parcial else ""
     motivo_txt, motivo_style = _motivo(bucket, acoes, c)
     _motivo_css = {
-        "red":    "color:var(--erro-2);background:rgba(239,68,68,.08);border-left:2px solid var(--erro-2);padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
-        "blue":   "color:var(--brand);background:rgba(124,194,67,.08);border-left:2px solid var(--brand);padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
-        "purple": "color:var(--roxo);background:rgba(167,139,250,.08);border-left:2px solid var(--roxo);padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
-        "lig":    "color:var(--info);background:rgba(95,163,255,.08);border-left:2px solid var(--info);padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
-        "msg":    "color:var(--alerta);background:rgba(245,158,11,.08);border-left:2px solid var(--alerta);padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "red":    "color:var(--erro-2);background:rgba(var(--erro-v),calc(.08 * var(--tint-k)));border-left:2px solid rgb(var(--erro-2-v));padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "blue":   "color:var(--brand);background:rgba(var(--brand-v),calc(.08 * var(--tint-k)));border-left:2px solid rgb(var(--brand-v));padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "purple": "color:var(--roxo);background:rgba(var(--roxo-v),calc(.08 * var(--tint-k)));border-left:2px solid rgb(var(--roxo-v));padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "lig":    "color:var(--info);background:rgba(var(--info-v),calc(.08 * var(--tint-k)));border-left:2px solid rgb(var(--info-v));padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
+        "msg":    "color:var(--alerta);background:rgba(var(--alerta-v),calc(.08 * var(--tint-k)));border-left:2px solid rgb(var(--alerta-v));padding:4px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.4px",
     }
     motivo_html = (
         f'<div style="font-size:11px;font-weight:600;margin-bottom:8px;{_motivo_css.get(motivo_style, "")}">{motivo_txt}</div>'
@@ -1266,7 +1266,7 @@ def _render_atividades(store, clientes, role):
                 f'<div class="metric-card"><div class="metric-label" style="{_label_style}">Mensagens Enviadas</div>'
                 f'<div class="metric-value" style="color:var(--info);font-size:32px">{n_msg}<span style="font-size:18px;color:var(--txt-3)">/{meta_msg}</span></div>'
                 f'<div style="background:var(--surface-2);border-radius:4px;height:6px;margin-top:10px">'
-                f'<div style="background:var(--info);width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+                f'<div style="background:rgb(var(--info-v));width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
                 unsafe_allow_html=True,
             )
         with m2:
@@ -1275,7 +1275,7 @@ def _render_atividades(store, clientes, role):
                 f'<div class="metric-card"><div class="metric-label" style="{_label_style}">Ligações Realizadas</div>'
                 f'<div class="metric-value" style="color:var(--alerta);font-size:32px">{n_lig}<span style="font-size:18px;color:var(--txt-3)">/{meta_lig}</span></div>'
                 f'<div style="background:var(--surface-2);border-radius:4px;height:6px;margin-top:10px">'
-                f'<div style="background:var(--alerta);width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+                f'<div style="background:rgb(var(--alerta-v));width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
                 unsafe_allow_html=True,
             )
         with m3:
@@ -1284,7 +1284,7 @@ def _render_atividades(store, clientes, role):
                 f'<div class="metric-card"><div class="metric-label" style="{_label_style}">Ligações Atendidas</div>'
                 f'<div class="metric-value" style="color:var(--brand);font-size:32px">{n_atend}<span style="font-size:18px;color:var(--txt-3)">/{meta_atend}</span></div>'
                 f'<div style="background:var(--surface-2);border-radius:4px;height:6px;margin-top:10px">'
-                f'<div style="background:var(--brand);width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
+                f'<div style="background:rgb(var(--brand-v));width:{pct}%;height:6px;border-radius:4px"></div></div></div>',
                 unsafe_allow_html=True,
             )
 

@@ -415,7 +415,7 @@ def _render_historico(store):
         )
         # Selo sempre verde: diz o que aconteceu NAQUELE pagamento. Quem deve
         # de novo hoje ganha o fundo da linha em cinza (lá embaixo).
-        _reg_cor = "background:rgba(45,211,111,.18);color:var(--ok);"
+        _reg_cor = "background:rgba(var(--ok-2-v),calc(.18 * var(--tint-k)));color:var(--ok);"
         reg_badge = (
             f'<span style="{_reg_cor}'
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
@@ -430,14 +430,14 @@ def _render_historico(store):
                 f'há {int(_cli_atual.get("dias_atraso") or 0)} dias'
             )
             reg_badge += (
-                f'<span title="{_deve_tip}" style="cursor:help;border:1px solid rgba(248,113,113,.35);'
+                f'<span title="{_deve_tip}" style="cursor:help;border:1px solid rgba(var(--erro-4-v),.35);'
                 'color:var(--erro);font-size:10px;font-weight:700;padding:1px 7px;'
                 'border-radius:4px;margin-right:4px">↻ DEVE DE NOVO</span>'
             )
         # Badge PAGAMENTO PARCIAL (azul) — pagou algo mas não zerou a dívida.
         # Mutuamente exclusivo com REGULARIZADO.
         parcial_badge = (
-            '<span style="background:rgba(95,163,255,.18);color:var(--info);'
+            '<span style="background:rgba(var(--info-v),calc(.18 * var(--tint-k)));color:var(--info);'
             'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
             'margin-right:4px">PAGAMENTO PARCIAL</span>' if not eh_regularizado else ""
         )
@@ -446,7 +446,7 @@ def _render_historico(store):
         if _cli_atual and not eh_regularizado:
             if _cli_atual.get("_tem_acordo"):
                 acordo_badge = (
-                    '<span style="background:rgba(245,158,11,.2);color:var(--alerta);'
+                    '<span style="background:rgba(var(--alerta-v),calc(.2 * var(--tint-k)));color:var(--alerta);'
                     'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;'
                     'margin-right:4px">ACORDO</span>'
                 )
@@ -460,13 +460,13 @@ def _render_historico(store):
         # Pagamento com data de ontem que só chegou hoje pela API foi ANTES
         # do lote de hoje, então também não conta.
         em_lote_hoje = _rid in ids_lote_hoje and _rdt == hoje_str
-        cli_bg = "background:rgba(45,211,111,.04);" if em_lote_hoje else ""
-        cli_bl = "border-left:4px solid rgba(45,211,111,.6);" if em_lote_hoje else ""
+        cli_bg = "background:rgba(var(--ok-2-v),calc(.04 * var(--tint-k)));" if em_lote_hoje else ""
+        cli_bl = "border-left:4px solid rgba(var(--ok-2-v),.6);" if em_lote_hoje else ""
         # Regularizou naquela data mas deve de novo hoje: fundo cinza (não
         # coincide com o verde, que é só pagamento de hoje).
         if voltou_atrasar:
-            cli_bg = "background:rgba(156,163,175,.08);"
-            cli_bl = "border-left:4px solid rgba(156,163,175,.5);"
+            cli_bg = "background:rgba(var(--txt-2-rgb),calc(.08 * var(--tint-k)));"
+            cli_bl = "border-left:4px solid rgba(var(--txt-2-rgb),.5);"
         rcols = st.columns(col_w)
         with rcols[0]:
             badges_html = f'{reg_badge}{parcial_badge}{acordo_badge}{inativo_badge}'

@@ -574,7 +574,7 @@ def _render_especialista(store, clientes, role):
 
     # Divider entre seções — linha hairline + respiro vertical pra separar
     # blocos visualmente (Cards → Matriz → Gráficos → Tabela).
-    _DIVIDER = '<div style="margin:36px 0 28px;border-top:1px solid rgba(75,85,99,0.5)"></div>'
+    _DIVIDER = '<div style="margin:36px 0 28px;border-top:1px solid rgba(var(--txt-4-rgb),0.5)"></div>'
     st.markdown(_DIVIDER, unsafe_allow_html=True)
 
     if df_per.empty:
