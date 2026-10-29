@@ -173,7 +173,7 @@ _TOKENS_CLARO = {
     # as faixas de cabecalho do Lote do Dia sumiram no fundo. Aqui ele desce
     # pra ficar na mesma relacao que o escuro tem (1.17 contra a pagina, ante
     # os 1.21 de la).
-    "surface-2": "#dde3ed",
+    "surface-2": "#e6eaf2",
     "surface-3": "#f8f9fb",
     "border":    "#d4d9e2",
     "border-2":  "#e5e8ee",
@@ -195,7 +195,10 @@ _TOKENS_CLARO = {
     # #4a8a2c era oliva (hue amarelado). #2e8b2e e verde de verdade e
     # ainda ganha contraste: 4.33 contra os 4.23 de antes.
     "brand":     "#2e8b2e",
-    "ok":        "#12833f",   # mais saturado, 4.83 — ainda acima de 4.5
+    # Mais claro a pedido: estes verdes vivem em numero grande (Total a
+    # receber, Regularizacoes, coluna de valor), e pra texto grande a
+    # regua e 3:1, nao 4.5:1. 4.03 fica folgado nos dois.
+    "ok":        "#14923f",
     "alerta":    "#b86207",
     "erro":      "#d91c1c",   # mais vivo E mais contrastado (5.08)
     "erro-2":    "#e62222",   # realce, 4.55
@@ -208,7 +211,9 @@ _TOKENS_CLARO = {
     "amarelo":     "#a86a04",
     "amarelo-2":   "#ca8a04",
     "azul-2":      "#1e49cc",
-    "erro-3":      "#cf1111",
+    # O topo da escala de atraso NAO pode ser o tom mais escuro dela — era
+    # por isso que "+90d" parecia preto em vez de gritar.
+    "erro-3":      "#e81717",
     "erro-4":      "#e51450",
     "brand-2":     "#3f7a24",
     "brand-3":     "#4a8a2c",
