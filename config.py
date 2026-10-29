@@ -173,7 +173,7 @@ _TOKENS_CLARO = {
     # as faixas de cabecalho do Lote do Dia sumiram no fundo. Aqui ele desce
     # pra ficar na mesma relacao que o escuro tem (1.17 contra a pagina, ante
     # os 1.21 de la).
-    "surface-2": "#d7dee9",
+    "surface-2": "#dde3ed",
     "surface-3": "#f8f9fb",
     "border":    "#d4d9e2",
     "border-2":  "#e5e8ee",
@@ -192,11 +192,13 @@ _TOKENS_CLARO = {
     "txt-2":     "#48505e",
     "txt-3":     "#606978",
     "txt-4":     "#848c9a",
-    "brand":     "#4a8a2c",   # escurecido: #7cc243 some no branco
-    "ok":        "#15803d",
+    # #4a8a2c era oliva (hue amarelado). #2e8b2e e verde de verdade e
+    # ainda ganha contraste: 4.33 contra os 4.23 de antes.
+    "brand":     "#2e8b2e",
+    "ok":        "#12833f",   # mais saturado, 4.83 — ainda acima de 4.5
     "alerta":    "#b45309",
-    "erro":      "#dc2626",
-    "erro-2":    "#dc2626",
+    "erro":      "#d91c1c",   # mais vivo E mais contrastado (5.08)
+    "erro-2":    "#e62222",   # realce, 4.55
     "info":      "#1d4ed8",
     "roxo":      "#6d28d9",
     "rosa":      "#be123c",
@@ -401,6 +403,18 @@ div[data-baseweb="input"],div[data-baseweb="base-input"]{
 }
 [data-testid="stSelectbox"] input{color:var(--txt)!important}
 [data-testid="stSelectbox"] div:has(> input) svg{color:var(--txt-2)!important;fill:currentColor!important}
+
+/* O icone de ajuda em si — a "!" ao lado de "Agendar retorno" e "Telefone
+   fixo". Ele some no claro porque o Streamlit o pinta com fadedText60, que
+   com base="dark" e um branco translucido. */
+[data-testid="stTooltipIcon"]{color:var(--txt-3)!important}
+[data-testid="stTooltipIcon"] svg{fill:currentColor!important;stroke:currentColor!important}
+
+/* Contorno do container do Painel Administrativo. O st.container(border=True)
+   usa o borderColor do Streamlit, que e fadedText10 = branco a 20% — sobre
+   fundo branco ele nao existe. A chave box_admin foi posta no proprio
+   container pra esta regra ter onde se segurar. */
+[class*="st-key-box_admin"]{border-color:var(--border)!important}
 
 /* Tooltip do help= (o "?" ao lado dos rotulos). */
 [data-testid="stTooltipContent"]{
@@ -710,8 +724,8 @@ span[data-baseweb="tag"] span{color:var(--txt)!important;font-size:12px!importan
    lado sozinhos quando os tokens sao reinjetados. No escuro --txt e quase
    branco e --bg quase preto; no claro e o contrario. */
 [class*="st-key-btn_tema"] button{
-  background:var(--txt)!important;color:var(--bg)!important;
-  border:1px solid var(--txt)!important;
+  background:var(--txt-claro)!important;color:var(--bg)!important;
+  border:1px solid var(--txt-claro)!important;
   border-radius:50%!important;width:34px!important;min-width:34px!important;
   height:34px!important;min-height:34px!important;padding:0!important;
   box-shadow:none!important;

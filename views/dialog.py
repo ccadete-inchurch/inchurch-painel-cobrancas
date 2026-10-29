@@ -100,7 +100,7 @@ def _render_acordo(eid, cliente, itens):
 
     # ── o calculo aberto ─────────────────────────────────────────────────
     with st.expander(f"Ver o cálculo das {len(prop_a.detalhe)} cobranças"):
-        cab = ('<table style="width:100%;font-size:12px;border-collapse:collapse">'
+        cab = ('<table style="width:100%;font-size:12px;border-collapse:collapse;color:var(--txt);border:1px solid var(--border);border-radius:8px">'
                '<tr style="color:var(--txt-2);text-align:right">'
                '<th style="text-align:left;padding:4px 0">Cobrança</th>'
                '<th>Vencimento</th><th>Atraso</th><th>Valor original</th>'
