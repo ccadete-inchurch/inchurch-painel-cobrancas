@@ -789,7 +789,7 @@ def _render_dashboard(store, clientes, role):
     # Header usa st.columns (mesmo sistema das células) pra ficar alinhado.
     # Fundo escuro aplicado via container CSS abaixo.
     st.markdown(
-        '<div style="background:var(--surface-2);border:1px solid var(--border);'
+        '<div style="background:var(--faixa);border:1px solid var(--border);'
         'border-radius:12px 12px 0 0;padding:0;margin-bottom:0;'
         'box-shadow:var(--sombra-tabela)">',
         unsafe_allow_html=True,
@@ -1001,7 +1001,7 @@ def _render_dashboard(store, clientes, role):
                 st.markdown('<div style="height:0.5px;background:var(--border);margin:0"></div>', unsafe_allow_html=True)
 
         st.markdown(
-            f'<div style="background:var(--surface-2);border:1px solid var(--border);border-top:none;'
+            f'<div style="background:var(--faixa);border:1px solid var(--border);border-top:none;'
             f'border-radius:0 0 12px 12px;padding:12px 16px;display:flex;'
             f'justify-content:space-between;font-size:13px;color:var(--txt-2);font-weight:500;box-shadow:var(--sombra-tabela)">'
             f'<span>Mostrando {(page-1)*PAGE_SIZE+1}–{min(page*PAGE_SIZE,total_f)} de {total_f}</span>'

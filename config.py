@@ -152,6 +152,12 @@ _TOKENS_ESCURO = {
     # escuro. No claro isso se inverte e o surface-2 vira quase invisivel
     # contra o branco (contraste 1.14), dai o token proprio.
     "border-card": "#1e2333",
+    # Faixa de cabecalho (titulos do kanban, cabecalho da tabela). No
+    # escuro e o proprio surface-2. No claro precisa de token separado: a
+    # faixa quer contraste contra a pagina, e as pilulas da topbar — que
+    # tambem usavam surface-2 — querem ser leves. Um valor so nao atende
+    # os dois, e foi o que fez este tom ir e voltar quatro vezes.
+    "faixa":       "#1e2333",
     # Multiplicador do alfa dos tints. Ver comentario em _VIVO.
     "tint-k":      "1",
     # Neutros em RGB, pra tint cinza. Ao contrario das cores vivas, estes
@@ -224,6 +230,7 @@ _TOKENS_CLARO = {
     "txt-claro":   "#3a4150",
     "cinza-cl":    "#64748b",
     "border-card": "#d4d9e2",   # = --border; o surface-2 some no branco
+    "faixa":       "#e2e7f0",   # 1.08 contra a pagina; a pilula fica em e6eaf2
     # 1.7 porque um veu colorido se comporta diferente nos dois fundos: sobre
     # escuro, 12% de uma cor viva LEVANTA a luminancia e aparece; sobre
     # branco, os mesmos 12% mal abaixam e viram lavagem. O alfa de cada lugar
@@ -414,7 +421,9 @@ div[data-baseweb="input"],div[data-baseweb="base-input"]{
    "como se tivesse uma sombra". No escuro ele funciona (o veu LEVANTA a
    luminancia e vira pilula); no claro o numero ja e colorido e forte, e a
    pilula so suja. Entao no claro fica so o numero. */
-.da-ok,.da-30,.da-60,.da-90,.da-max{background:transparent!important;padding-left:0!important;padding-right:0!important}
+.da-ok,.da-30,.da-60,.da-90{background:transparent!important;padding-left:0!important;padding-right:0!important}
+/* O +90d e a excecao: mantem o chip. Mesma ideia do top 10% do score —
+   sendo o unico com preenchimento na coluna, ele destaca por forma. */
 
 /* ── Rotulo do st.pills ("Status") ──
    Mesma historia do checkbox: rotulo que nao esta na lista do CSS global e
@@ -429,7 +438,10 @@ div[data-baseweb="input"],div[data-baseweb="base-input"]{
    fixo". Ele some no claro porque o Streamlit o pinta com fadedText60, que
    com base="dark" e um branco translucido. */
 [data-testid="stTooltipIcon"]{color:var(--txt-3)!important}
-[data-testid="stTooltipIcon"] svg{fill:currentColor!important;stroke:currentColor!important}
+/* O icone e desenhado a traco (o Streamlit poe stroke:fadedText60 nele, e
+   nenhum fill). Forcar fill enche o circulo e vira uma bolota preta —
+   foi o que aconteceu. Aqui so o traco segue a nossa cor. */
+[data-testid="stTooltipIcon"] svg{fill:none!important;stroke:currentColor!important}
 
 /* Contorno do container do Painel Administrativo. O st.container(border=True)
    usa o borderColor do Streamlit, que e fadedText10 = branco a 20% — sobre

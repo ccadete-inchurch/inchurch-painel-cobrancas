@@ -1477,7 +1477,7 @@ def _render_atividades(store, clientes, role):
         for col, (titulo, itens, cor) in zip(cols, colunas):
             with col:
                 st.markdown(
-                    f'<div style="background:var(--surface-2);border-radius:10px 10px 0 0;padding:10px 12px;'
+                    f'<div style="background:var(--faixa);border-radius:10px 10px 0 0;padding:10px 12px;'
                     f'margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
                     f'<span style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;color:var(--txt);letter-spacing:0.3px">{titulo}</span>'
                     f'<span style="background:var(--border);color:var(--txt);font-size:14px;font-weight:800;'

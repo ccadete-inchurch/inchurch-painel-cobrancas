@@ -106,7 +106,7 @@ def _render_acordo(eid, cliente, itens):
                '<th>Vencimento</th><th>Atraso</th><th>Valor original</th>'
                '<th>Multa</th><th>Juros</th><th>Atualização</th><th>Atualizado</th></tr>')
         corpo = "".join(
-            '<tr style="text-align:right;border-top:1px solid var(--surface-2)">'
+            '<tr style="text-align:right;border-top:1px solid var(--border-card)">'
             '<td style="text-align:left;padding:4px 0;color:var(--txt-2)">'
             + str(d.get("id_recebimento") or "—") + '</td>'
             '<td style="color:var(--txt-2)">' + str(d.get("vencimento") or "—") + '</td>'
@@ -137,7 +137,7 @@ def _render_acordo(eid, cliente, itens):
             '<div style="font-size:11px;font-weight:700;letter-spacing:1px;'
             'text-transform:uppercase;color:' + ("var(--brand)" if verde else "var(--txt-2)")
             + ';margin-bottom:8px">' + titulo + '</div>' + corpo
-            + '<div style="border-top:1px solid var(--surface-2);margin-top:8px;padding-top:8px;'
+            + '<div style="border-top:1px solid var(--border-card);margin-top:8px;padding-top:8px;'
               'display:flex;justify-content:space-between;align-items:baseline">'
               '<span style="color:var(--txt-2);font-size:11px;text-transform:uppercase;'
               'letter-spacing:1px">' + destaque_rot + '</span>'
