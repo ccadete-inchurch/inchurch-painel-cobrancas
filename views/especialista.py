@@ -4,8 +4,28 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from config import token
 from data import _EMAIL_GRUPO, fetch_pagamentos_creditados, fetch_eventos_regularizacao, fetch_cobertura_por_especialista, fetch_inadimplentes_fim_periodo, fetch_cids_por_situacao, fetch_contatos_janela, fetch_serie_carteira_mensal
 from helpers import fmt_moeda_plain, hoje_brt, carimbo_dia_cache
+
+
+def _tinta_sobre(var_cor: str) -> str:
+    """Preto ou branco por cima da fatia, decidido pela luminancia DELA.
+
+    A regra antiga listava quais slots eram claros ("brand e brand-3 levam
+    tinta escura"). Isso so funcionava enquanto os dois temas tivessem a
+    mesma ordem de luminosidade entre os slots — e deixou de funcionar no
+    momento em que o verde claro do modo claro ficou claro de verdade.
+    Calculando, nao ha o que manter em sincronia.
+    """
+    claro = st.session_state.get("tema_claro", False)
+    h = token(var_cor[len("var(--"):-1], claro).lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    f = lambda v: v / 12.92 if v <= .04045 else ((v + .055) / 1.055) ** 2.4  # noqa: E731
+    lum = .2126 * f(r) + .7152 * f(g) + .0722 * f(b)
+    # Tinta escura: no tema escuro o tom escuro disponivel e o --bg; no claro
+    # e o --txt (la o --bg e claro).
+    return ("var(--txt)" if claro else "var(--bg)") if lum > .22 else "var(--txt-inv)"
 
 
 # Paleta categórica — verde InChurch pras atendentes ativas + cinza forte
@@ -1096,8 +1116,7 @@ def _render_especialista(store, clientes, role):
             # Cor do número interno por fatia: escuro na fatia verde clara,
             # branco na verde escura (mesma ordem que a escala das fatias usa).
             _dom_cart = sorted(carteira_agg["atendente"].unique())
-            _cor_interna = ["var(--bg)" if c in ("var(--brand)", "var(--brand-3)") else "var(--txt-inv)"
-                            for c in _CHART_PALETTE[:len(_dom_cart)]]
+            _cor_interna = [_tinta_sobre(c) for c in _CHART_PALETTE[:len(_dom_cart)]]
             _base_donut = alt.Chart(carteira_agg).encode(
                 theta=alt.Theta("clientes:Q", title="Clientes", stack=True),
                 color=alt.Color(

@@ -222,8 +222,14 @@ _TOKENS_CLARO = {
     "erro-3":      "#e81717",
     "erro-4":      "#e51450",
     "brand-2":     "#3f7a24",
-    "brand-3":     "#4a8a2c",
-    "brand-esc":   "#2d5a14",
+    # Os tres abaixo so existem na paleta categorica do Desempenho.
+    # Foram re-derivados COMO CONJUNTO: sozinhos, cada um tinha
+    # contraste, mas juntos a familia perdia metade da amplitude de
+    # luminosidade e brand/brand-3 caiam no MESMO tom (0.36 os dois).
+    # Marca de grafico nao e texto: o que importa ali e distinguir
+    # uma fatia da outra, nao da pagina.
+    "brand-3":     "#5fae38",   # lum 0.45
+    "brand-esc":   "#36701b",   # lum 0.27
     "brand-esc2":  "#1e3d0d",
     "border-3":    "#c3c9d4",
     "txt-inv":     "#ffffff",
@@ -263,7 +269,7 @@ _TOKENS_CLARO = {
 #
 # Os valores sao os mesmos que estavam escritos na mao nos 67 rgba() do
 # codigo — a conversao nao inventou cor nenhuma.
-_VIVO = {
+_VIVO_ESCURO = {
     "brand-v":    "124,194,67",
     "alerta-v":   "245,158,11",
     "erro-v":     "239,68,68",
@@ -281,6 +287,12 @@ _VIVO = {
     "azul-2-v":   "79,124,255",
     "amarelo-v":  "251,191,36",
 }
+# Igual ao de cima, menos o erro-3: 200,0,0 (#c80000) e um vermelho
+# ESCURO, escolhido pra ser veu sobre fundo escuro. Sobre branco ele nao
+# clareia, suja — o veu sai #eeb1b1, um rosa morto, e e isso que faz o
+# chip de +90d parecer "com preto dentro". Aqui ele vira o RGB do proprio
+# --erro-3 claro, que e vivo.
+_VIVO_CLARO = {**_VIVO_ESCURO, "erro-3-v": "232,23,23"}
 
 _SOMBRAS_ESCURO = {
     "sombra":        "0 1px 6px rgba(0,0,0,.15)",     # card em repouso
@@ -532,7 +544,7 @@ def css_tema(claro: bool = False) -> str:
     """
     t = {**(_TOKENS_CLARO if claro else _TOKENS_ESCURO),
          **(_SOMBRAS_CLARO if claro else _SOMBRAS_ESCURO),
-         **_VIVO}
+         **(_VIVO_CLARO if claro else _VIVO_ESCURO)}
     regras = "".join(f"--{k}:{v};" for k, v in t.items())
     return f"<style>:root{{{regras}}}{_CSS_CLARO if claro else ''}</style>"
 
