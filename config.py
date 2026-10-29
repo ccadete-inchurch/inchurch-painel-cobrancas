@@ -298,8 +298,13 @@ _SOMBRAS_CLARO = {
 # escuro, trocariam o cinza do Streamlit pelo nosso — mexendo num modo que esta
 # certo. Entram so quando claro=True.
 _CSS_CLARO = """
-/* O fundo e a sidebar do Streamlit nao leem nossos tokens. */
-html,body,[class*="css"],.stApp{background:var(--bg)!important;color:var(--txt)!important}
+/* O fundo e a sidebar do Streamlit nao leem nossos tokens.
+   O stApp entra por testid alem da classe: ele e a raiz que o Streamlit
+   pinta com bgColor, e e ela que aparece preta nos instantes em que o nosso
+   CSS ainda nao esta no DOM. */
+html,body,[class*="css"],.stApp,
+[data-testid="stApp"],[data-testid="stAppViewContainer"],
+[data-testid="stMain"]{background:var(--bg)!important;color:var(--txt)!important}
 section[data-testid="stSidebar"]{background:var(--surface)!important;border-right:1px solid var(--border)!important}
 
 /* ── Calendario do date_input ──
@@ -421,8 +426,29 @@ div[data-baseweb="input"],div[data-baseweb="base-input"]{
   background-color:var(--surface)!important;border-color:var(--border)!important
 }
 [data-testid="stNumberInputField"]{color:var(--txt)!important}
+/* O + e o - sao glifo, nao texto de leitura: no --txt-2 ficavam pesados
+   demais ao lado do campo. */
 [data-testid="stNumberInputStepUp"],
-[data-testid="stNumberInputStepDown"]{color:var(--txt-2)!important}
+[data-testid="stNumberInputStepDown"]{color:var(--txt-3)!important}
+
+/* ── Rotulo do checkbox ──
+   "Telefone fixo", "Agendar retorno". O rotulo de checkbox nao esta na lista
+   de .stTextInput label/.stSelectbox label/... do CSS global, entao ficava
+   com o bodyText do Streamlit — quase branco, invisivel sobre o dialog
+   claro. Escopado ao checkbox pra nao mexer nos rotulos dos outros widgets,
+   que tem estilo proprio (caixa alta, --txt-3). */
+[data-testid="stCheckbox"] [data-testid="stWidgetLabel"],
+[data-testid="stCheckbox"] [data-testid="stWidgetLabel"] *{color:var(--txt)!important}
+
+/* ── Placeholder do multiselect ──
+   "Excluir igrejas…" na Inadimplencia e o filtro de especialista no
+   Desempenho. O baseweb nao poe atributo nenhum nesse elemento: a regra
+   antiga mirava [class*="placeholder"] e nunca casou com nada, porque quem
+   gera os nomes de classe ali e o styletron, no build. Como nao ha gancho,
+   o alvo e amplo — todo texto em div dentro do select. Os chips nao sao
+   afetados: o texto deles vive em <span>, nao em <div>. */
+div[data-baseweb="select"] div{color:var(--txt-3)!important}
+div[data-baseweb="select"] input{color:var(--txt)!important}
 /* Expander. As regras .streamlit-expanderHeader/Content do CSS global sao de
    uma versao antiga e nao casam com nada em 1.59: hoje ele e
    <details>/<summary> + stExpanderDetails.
