@@ -196,20 +196,20 @@ _TOKENS_CLARO = {
     # ainda ganha contraste: 4.33 contra os 4.23 de antes.
     "brand":     "#2e8b2e",
     "ok":        "#12833f",   # mais saturado, 4.83 — ainda acima de 4.5
-    "alerta":    "#b45309",
+    "alerta":    "#b86207",
     "erro":      "#d91c1c",   # mais vivo E mais contrastado (5.08)
     "erro-2":    "#e62222",   # realce, 4.55
-    "info":      "#1d4ed8",
-    "roxo":      "#6d28d9",
-    "rosa":      "#be123c",
-    "laranja":     "#c2410c",
+    "info":      "#1552e0",
+    "roxo":      "#6f22e8",
+    "rosa":      "#cf1045",
+    "laranja":     "#cf4c0c",
     "laranja-2":   "#ea580c",
-    "laranja-3":   "#c2410c",
-    "amarelo":     "#a16207",
+    "laranja-3":   "#cf4c0c",
+    "amarelo":     "#a86a04",
     "amarelo-2":   "#ca8a04",
-    "azul-2":      "#1e40af",
-    "erro-3":      "#dc2626",
-    "erro-4":      "#e11d48",
+    "azul-2":      "#1e49cc",
+    "erro-3":      "#cf1111",
+    "erro-4":      "#e51450",
     "brand-2":     "#3f7a24",
     "brand-3":     "#4a8a2c",
     "brand-esc":   "#2d5a14",
@@ -403,6 +403,22 @@ div[data-baseweb="input"],div[data-baseweb="base-input"]{
 }
 [data-testid="stSelectbox"] input{color:var(--txt)!important}
 [data-testid="stSelectbox"] div:has(> input) svg{color:var(--txt-2)!important;fill:currentColor!important}
+
+/* ── Chips de atraso ──
+   Com o tint multiplicado, o veu colorido atras do numero virou um halo —
+   "como se tivesse uma sombra". No escuro ele funciona (o veu LEVANTA a
+   luminancia e vira pilula); no claro o numero ja e colorido e forte, e a
+   pilula so suja. Entao no claro fica so o numero. */
+.da-ok,.da-30,.da-60,.da-90,.da-max{background:transparent!important;padding-left:0!important;padding-right:0!important}
+
+/* ── Rotulo do st.pills ("Status") ──
+   Mesma historia do checkbox: rotulo que nao esta na lista do CSS global e
+   fica com o bodyText do Streamlit, quase branco. */
+[data-testid="stButtonGroup"] [data-testid="stWidgetLabel"],
+[data-testid="stButtonGroup"] [data-testid="stWidgetLabel"] *{color:var(--txt-3)!important}
+/* O hover das pills saia num cinza chapado. --surface-2 e o mesmo tom das
+   outras superficies do painel. */
+[data-testid="stButtonGroup"] button:hover{background:var(--surface-2)!important}
 
 /* O icone de ajuda em si — a "!" ao lado de "Agendar retorno" e "Telefone
    fixo". Ele some no claro porque o Streamlit o pinta com fadedText60, que
@@ -632,8 +648,8 @@ span.g-nome,span.g-sobre{white-space:nowrap;display:block}
    segue o base="dark" — no modo claro eles apareciam como retangulos pretos,
    e os icones de olho e lapis da Inadimplencia sumiam dentro deles. Sao 13
    botoes com help no painel. */
-.stButton button{background:var(--surface-2)!important;color:var(--txt)!important;font-weight:600!important;border:1px solid var(--border)!important;border-radius:8px!important;font-size:15px!important;padding:0.5rem 1.1rem!important;transition:all 0.18s!important;box-shadow:none!important}
-.stButton button:hover{background:var(--border)!important;border-color:var(--border-3)!important;transform:none!important;box-shadow:none!important}
+.stButton button,.stDownloadButton button{background:var(--surface-2)!important;color:var(--txt)!important;font-weight:600!important;border:1px solid var(--border)!important;border-radius:8px!important;font-size:15px!important;padding:0.5rem 1.1rem!important;transition:all 0.18s!important;box-shadow:none!important}
+.stButton button:hover,.stDownloadButton button:hover{background:var(--border)!important;border-color:var(--border-3)!important;transform:none!important;box-shadow:none!important}
 button[kind="primary"]{background:var(--brand)!important;color:var(--bg)!important;border:none!important;font-weight:700!important}
 button[kind="primary"]:hover{background:var(--brand-2)!important}
 
