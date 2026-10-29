@@ -159,7 +159,15 @@ _TOKENS_CLARO = {
     # na mesma camada.
     "bg":        "#eceff4",
     "surface":   "#ffffff",
-    "surface-2": "#eef0f4",
+    # A escada INVERTE entre os temas, e e isso que torna este valor delicado.
+    # No escuro o surface-2 e mais CLARO que o card e que a pagina: e assim
+    # que o olho le relevo num fundo escuro. No claro ele tem que ser mais
+    # ESCURO que os dois, senao some. O valor antigo (#eef0f4) ja era fraco e,
+    # quando o --bg desceu pra #eceff4, os dois colidiram — contraste 1.010, e
+    # as faixas de cabecalho do Lote do Dia sumiram no fundo. Aqui ele desce
+    # pra ficar na mesma relacao que o escuro tem (1.17 contra a pagina, ante
+    # os 1.21 de la).
+    "surface-2": "#d7dee9",
     "surface-3": "#f8f9fb",
     "border":    "#d4d9e2",
     "border-2":  "#e5e8ee",
@@ -391,6 +399,17 @@ div[data-baseweb="input"],div[data-baseweb="base-input"]{
 """
 
 
+def token(nome: str, claro: bool = False) -> str:
+    """O valor cru de um token, pra quem precisa da cor em Python.
+
+    Quase todo lugar usa var(--x) e nao precisa disto. A excecao e o
+    gradiente do Score na Inadimplencia, que interpola dois hexes em Python —
+    ali var() nao serve, e os extremos ficavam escritos na mao com as cores do
+    tema escuro.
+    """
+    return (_TOKENS_CLARO if claro else _TOKENS_ESCURO)[nome]
+
+
 def css_tema(claro: bool = False) -> str:
     """Bloco <style> com os tokens do tema escolhido.
 
@@ -524,8 +543,15 @@ span.g-nome,span.g-sobre{white-space:nowrap;display:block}
 .pend-card{background:var(--surface);border:1px solid var(--border-card);border-radius:10px;padding:14px 16px;margin-bottom:8px}
 
 /* ── Botões globais ── */
-.stButton>button{background:var(--surface-2)!important;color:var(--txt)!important;font-weight:600!important;border:1px solid var(--border)!important;border-radius:8px!important;font-size:15px!important;padding:0.5rem 1.1rem!important;transition:all 0.18s!important;box-shadow:none!important}
-.stButton>button:hover{background:var(--border)!important;border-color:var(--border-3)!important;transform:none!important;box-shadow:none!important}
+/* `.stButton button` e nao `.stButton>button` — a diferenca nao e estetica.
+   Quando o botao tem help=, o Streamlit embrulha ele no alvo do tooltip, e
+   ai ele deixa de ser filho DIRETO do .stButton. Com o `>`, esses botoes
+   escapavam da regra inteira e caiam no estilo do proprio Streamlit, que
+   segue o base="dark" — no modo claro eles apareciam como retangulos pretos,
+   e os icones de olho e lapis da Inadimplencia sumiam dentro deles. Sao 13
+   botoes com help no painel. */
+.stButton button{background:var(--surface-2)!important;color:var(--txt)!important;font-weight:600!important;border:1px solid var(--border)!important;border-radius:8px!important;font-size:15px!important;padding:0.5rem 1.1rem!important;transition:all 0.18s!important;box-shadow:none!important}
+.stButton button:hover{background:var(--border)!important;border-color:var(--border-3)!important;transform:none!important;box-shadow:none!important}
 button[kind="primary"]{background:var(--brand)!important;color:var(--bg)!important;border:none!important;font-weight:700!important}
 button[kind="primary"]:hover{background:var(--brand-2)!important}
 

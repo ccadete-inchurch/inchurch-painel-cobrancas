@@ -5,7 +5,7 @@ import re
 import pandas as pd
 import streamlit as st
 
-from config import SORT_MAP, STATUS_FILTER_MAP, STATUS_LABELS, PAGE_SIZE
+from config import SORT_MAP, STATUS_FILTER_MAP, STATUS_LABELS, PAGE_SIZE, token
 from helpers import get_hist, get_hist_unificado, fmt_moeda, fmt_moeda_plain, dias_html, get_effective_status, get_effective_lastContact, get_ultimo_login, get_effective_atendente, parse_date_br, telefone_wa_link, telefones_cliente, telefones_texto, carimbo_dia_cache
 from data import calcular_pendencias, fetch_regularizados_mes_atual, fetch_snapshot_inicio_mes, fetch_snapshot_ontem, fetch_snapshot_inicio_semana, fetch_inadimplentes_uniao_mes, fetch_inadimplentes_uniao_esta_semana
 import re as _re_tel
@@ -807,6 +807,15 @@ def _render_dashboard(store, clientes, role):
         )
     else:
         n_rows = len(df_page)
+        # Extremos do gradiente do Score. Eles estavam escritos na mao com as
+        # cores do tema ESCURO (#6b7280 -> #e8eaf0), entao no modo claro o
+        # percentil alto saia quase branco em cima da linha branca — o score
+        # mais importante era o mais invisivel.
+        # "Destacar" troca de direcao com o tema: no escuro e clarear, no
+        # claro e escurecer. Por isso os dois extremos trocam de lado.
+        _sc_claro = st.session_state.get("tema_claro", False)
+        _sc_lo = token("txt-4" if _sc_claro else "txt-3", _sc_claro)  # percentil baixo, recua
+        _sc_hi = token("txt", _sc_claro)                              # percentil alto, destaca
         for ridx, (_, row) in enumerate(df_page.iterrows()):
             is_top = row["id"] in top10
             tags   = "".join([
@@ -854,8 +863,8 @@ def _render_dashboard(store, clientes, role):
                     cor_sc = "var(--alerta)"  # top 10% — laranja
                 else:
                     _ratio = _pct / 0.90  # 0..1 dentro dos 90% inferiores
-                    _r1, _g1, _b1 = 0x6b, 0x72, 0x80  # cinza (low percentile)
-                    _r2, _g2, _b2 = 0xe8, 0xea, 0xf0  # branco (high percentile)
+                    _r1, _g1, _b1 = (int(_sc_lo[i:i + 2], 16) for i in (1, 3, 5))
+                    _r2, _g2, _b2 = (int(_sc_hi[i:i + 2], 16) for i in (1, 3, 5))
                     _r = int(_r1 + (_r2 - _r1) * _ratio)
                     _g = int(_g1 + (_g2 - _g1) * _ratio)
                     _b = int(_b1 + (_b2 - _b1) * _ratio)
