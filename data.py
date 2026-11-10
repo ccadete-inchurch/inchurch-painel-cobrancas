@@ -1,4 +1,5 @@
 import json
+import threading
 import time
 from datetime import datetime, date, time as _dt_time, timezone, timedelta
 from pathlib import Path
@@ -595,6 +596,39 @@ _LOTE_MAX_INAT_MSG = 15
 # roles/cloudsql.client. Pra rotacionar host/regiao, ajustar aqui + secrets.
 _CLOUDSQL_INSTANCE = "business-intelligence-467516:us-central1:bi-db"
 
+# ── Lock da conexao compartilhada do Postgres N8N ────────────────────────────
+# get_pg_n8n_conn() e @st.cache_resource: UMA conexao pg8000 para TODAS as
+# sessoes do app. E conexao pg8000 NAO e thread-safe, enquanto cada sessao do
+# Streamlit roda na sua propria thread. Sem este lock, duas threads intercalam
+# no mesmo socket, o parser do driver perde o alinhamento do buffer e a query
+# morre com lixo: UnicodeDecodeError em posicao arbitraria, KeyError(b'\x00')
+# ou AttributeError em NoneType. Era a causa do "N8N temporariamente
+# indisponivel" que o painel mostrava — e as 3 tentativas com backoff nao
+# salvavam, porque todas caiam na mesma conexao dessincronizada.
+#
+# Medido em 10/11/2026 (6 threads x 4 queries na mesma conexao): 0 sucessos em
+# 24 tentativas, 16x AttributeError, 7x KeyError, 1x UnicodeDecodeError.
+#
+# RLock (reentrante) porque quem segura o lock chama _pg_n8n_conn_alive(), que
+# o toma de novo no health check. Serializar nao custa: as queries sao curtas.
+_PG_N8N_LOCK = threading.RLock()
+
+
+def _com_lock_pg_n8n(func):
+    """Roda a funcao inteira segurando o _PG_N8N_LOCK.
+
+    Serve pra quem usa a conexao em varios pontos dentro da mesma funcao, onde
+    por um `with` em volta de cada query so poluiria. Como o lock e reentrante,
+    o _pg_n8n_conn_alive() chamado dentro nao trava.
+    """
+    import functools
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        with _PG_N8N_LOCK:
+            return func(*args, **kwargs)
+    return wrapper
+
 
 def _patch_pg8000_decoders_uma_vez():
     """pg8000 decoda PARAMETER_STATUS e nomes de coluna com errors='strict'
@@ -714,27 +748,30 @@ def _pg_n8n_conn_alive():
 
     Agnostico ao driver: pega qualquer Exception no health check (pg8000 e
     psycopg2 lancam classes diferentes). Se falhar, invalida cache e reabre."""
-    conn = get_pg_n8n_conn()
-    if conn is None:
-        return None
+    # O health check abaixo e um SELECT 1 na conexao compartilhada: tem que
+    # correr sob o lock, senao ele mesmo dessincroniza o socket de outra thread.
+    with _PG_N8N_LOCK:
+        conn = get_pg_n8n_conn()
+        if conn is None:
+            return None
 
-    try:
-        # pg8000: conn.closed é bool; psycopg2: int. Ambos truthy quando fechada.
-        if getattr(conn, "closed", False):
-            raise RuntimeError("conn closed")
-        cur = conn.cursor()
         try:
-            cur.execute("SELECT 1")
-            cur.fetchone()
-        finally:
-            cur.close()
-        return conn
-    except Exception:
-        try:
-            get_pg_n8n_conn.clear()
+            # pg8000: conn.closed é bool; psycopg2: int. Ambos truthy quando fechada.
+            if getattr(conn, "closed", False):
+                raise RuntimeError("conn closed")
+            cur = conn.cursor()
+            try:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+            finally:
+                cur.close()
+            return conn
         except Exception:
-            pass
-        return get_pg_n8n_conn()
+            try:
+                get_pg_n8n_conn.clear()
+            except Exception:
+                pass
+            return get_pg_n8n_conn()
 
 
 def _pg_table_ref():
@@ -1099,6 +1136,7 @@ _PIPELINES_CRITICOS_INAD = (
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
+@_com_lock_pg_n8n
 def diagnosticar_bq_saude(dia: str | None = None) -> dict:
     """Diagnostica se pipelines Splgc criticos rodaram hoje.
 
@@ -2958,32 +2996,37 @@ def load_mensagens_from_bq():
         try:
             for tentativa in range(tentativas):
                 if tentativa > 0:
+                    # Backoff FORA do lock: dormir segurando o lock travaria as
+                    # outras sessoes do painel por 1,5s sem necessidade.
                     time.sleep(0.5 * tentativa)  # backoff: 0.5s, 1.0s
-                conn = _pg_n8n_conn_alive()
-                if not conn:
-                    ultimo_erro = "conn indisponivel"
-                    continue
-                try:
-                    cur = conn.cursor()
+                # O lock cobre conexao + execute + fetch de uma vez: e a secao
+                # inteira que toca o socket compartilhado (ver _PG_N8N_LOCK).
+                with _PG_N8N_LOCK:
+                    conn = _pg_n8n_conn_alive()
+                    if not conn:
+                        ultimo_erro = "conn indisponivel"
+                        continue
                     try:
-                        cur.execute(query)
-                        return cur.fetchall(), None
-                    finally:
-                        try: cur.close()
-                        except Exception: pass
-                except Exception as e:
-                    ultimo_erro = str(e)
-                    # Estado suspeito na conn — invalida cache pra proxima
-                    # tentativa reconectar do zero (nao usar conn com estado ruim)
-                    try:
-                        conn.rollback()
-                    except Exception:
-                        pass
-                    try:
-                        get_pg_n8n_conn.clear()
-                    except Exception:
-                        pass
-                    continue
+                        cur = conn.cursor()
+                        try:
+                            cur.execute(query)
+                            return cur.fetchall(), None
+                        finally:
+                            try: cur.close()
+                            except Exception: pass
+                    except Exception as e:
+                        ultimo_erro = str(e)
+                        # Estado suspeito na conn — invalida cache pra proxima
+                        # tentativa reconectar do zero (nao usar conn com estado ruim)
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+                        try:
+                            get_pg_n8n_conn.clear()
+                        except Exception:
+                            pass
+                        continue
             return None, ultimo_erro
         finally:
             st.session_state["_pg_n8n_silent"] = False
