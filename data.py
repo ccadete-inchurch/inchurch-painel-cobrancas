@@ -3068,9 +3068,18 @@ def load_mensagens_from_bq():
         # ESTAO salvas no banco, o painel so nao conseguiu le-las agora. Dizer
         # "nao registradas" faria a atendente reenviar a mensagem e duplicar
         # contato com a igreja.
+        #
+        # E NAO manda atualizar a pagina: na tela de Atividades, que e' onde as
+        # atendentes ficam, o fragment run_every=60 rechama esta funcao sozinho
+        # a cada ~1min (views/atividades.py:36). Mandar recarregar ali e' acao
+        # inutil que ainda faz ela perder os filtros. Mas no login e nas outras
+        # telas o load e' uma vez por sessao (app.py:86) e nao ha retry. Como a
+        # frase nao pode afirmar nenhum dos dois casos, ela fala do que e'
+        # verdade nos dois: resolve no proximo carregamento, qualquer que seja.
         st.info(
             "Não foi possível ler as mensagens do WhatsApp — status e último "
-            "contato podem estar desatualizados. Atualize a página.  \n"
+            "contato podem estar desatualizados. Deve se resolver no próximo "
+            "carregamento.  \n"
             f"Diagnóstico: `{erro}`",
             icon=":material/sync_problem:",
         )
