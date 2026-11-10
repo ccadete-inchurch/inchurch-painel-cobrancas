@@ -3050,16 +3050,29 @@ def load_mensagens_from_bq():
     """
     rows, erro = _fetch_rows_com_retry(query1)
     if rows is None:
-        # As 3 tentativas falharam. O texto fala "Postgres", e nao "N8N",
-        # porque o painel nunca consulta o n8n: ele le o banco onde o n8n
-        # grava. Dizer "N8N" ja mandou a investigacao pro lado errado.
-        # O erro tecnico vai numa segunda linha, em code, pra atendente nao
-        # tropecar nele e o desenvolvedor ainda ter o motivo real.
+        # As 3 tentativas falharam. Tres decisoes deliberadas neste texto:
+        #
+        # 1. Nao nomeia a causa. Ja dizia "N8N indisponivel" e isso mandou a
+        #    investigacao pro lado errado em 10/11/2026 — o n8n estava gravando
+        #    normalmente e quem falhava era o driver pg8000. Trocar por
+        #    "Postgres" repetiria o erro: das quatro origens possiveis do
+        #    `erro` (nosso codigo, driver, rede, servidor), so uma e o banco.
+        #    A frase fala do EFEITO, que e verdade nos quatro casos.
+        # 2. A acao e recarregar, nao avisar alguem: isso aparece num unico
+        #    render e costuma sumir no refresh. Pedir "avise o desenvolvedor"
+        #    gerava alarme falso.
+        # 3. O diagnostico vai rotulado e em linha propria. Assim a atendente
+        #    para na primeira linha e quem for investigar tem o motivo real —
+        #    `Connection refused` e rede, `codec` e driver, `relation` e SQL.
+        # "Nao foi possivel ler", e nunca "nao foram registradas": as mensagens
+        # ESTAO salvas no banco, o painel so nao conseguiu le-las agora. Dizer
+        # "nao registradas" faria a atendente reenviar a mensagem e duplicar
+        # contato com a igreja.
         st.info(
-            "⚠️ Banco de dados (Postgres) indisponível — o status das mensagens "
-            "e o último contato podem estar defasados. O resto do painel está "
-            "normal. Avise o desenvolvedor.  \n"
-            f"`{erro}`"
+            "Não foi possível ler as mensagens do WhatsApp — status e último "
+            "contato podem estar desatualizados. Atualize a página.  \n"
+            f"Diagnóstico: `{erro}`",
+            icon=":material/sync_problem:",
         )
         return
 
