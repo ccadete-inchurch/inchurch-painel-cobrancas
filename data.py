@@ -2957,12 +2957,17 @@ def load_historico_from_bq():
         pass
 
 
-def load_mensagens_from_bq():
+def load_mensagens_from_bq(auto_retry: bool = False):
     """Lê histórico N8N direto do Postgres em historico_msgs (conversa completa).
     Mantém o nome 'from_bq' por compat. Filtra fromme='true' pra pegar só msgs
     do bot/atendente — quando o bot manda "vou te ligar em instantes" + "Obrigado,
     além da ligação", AMBAS são gravadas, e o sistema marca lig_atendida=TRUE.
     Popula _msg_status (últimos 3d), _msg_concluida_dias e _msg_ultimo_contato_dias.
+
+    auto_retry=True diz que quem chamou vai rechamar sozinho em ~1min — hoje
+    so o fragment do kanban (views/atividades.py). Serve unicamente pro texto
+    do aviso de falha: sem isso ele prometeria uma nova tentativa automatica
+    que nao existe no login nem nas outras telas.
     """
     import re
 
@@ -3069,18 +3074,19 @@ def load_mensagens_from_bq():
         # "nao registradas" faria a atendente reenviar a mensagem e duplicar
         # contato com a igreja.
         #
-        # E NAO manda atualizar a pagina: na tela de Atividades, que e' onde as
+        # E NAO manda atualizar a pagina. Na tela de Atividades, onde as
         # atendentes ficam, o fragment run_every=60 rechama esta funcao sozinho
-        # a cada ~1min (views/atividades.py:36). Mandar recarregar ali e' acao
-        # inutil que ainda faz ela perder os filtros. Mas no login e nas outras
-        # telas o load e' uma vez por sessao (app.py:86) e nao ha retry. Como a
-        # frase nao pode afirmar nenhum dos dois casos, ela fala do que e'
-        # verdade nos dois: resolve no proximo carregamento, qualquer que seja.
+        # (views/atividades.py:36): mandar recarregar ali e' acao inutil que
+        # ainda faz ela perder os filtros. No login e nas outras telas o load
+        # e' uma vez por sessao (app.py:86) e nao ha retry — por isso a ultima
+        # frase depende do auto_retry, pra nao prometer o que nao acontece.
         st.info(
-            "Não foi possível ler as mensagens do WhatsApp — status e último "
-            "contato podem estar desatualizados. Deve se resolver no próximo "
-            "carregamento.  \n"
-            f"Diagnóstico: `{erro}`",
+            "Não foi possível ler as mensagens do WhatsApp. Status e último "
+            "contato podem estar desatualizados. "
+            + ("Nova tentativa automática em 1 minuto."
+               if auto_retry else
+               "Deve se resolver no próximo carregamento.")
+            + f"  \nDiagnóstico: `{erro}`",
             icon=":material/sync_problem:",
         )
         return

@@ -33,7 +33,9 @@ def _atualizar_dados_periodicos(store_clientes):
         return
     last_n8n = st.session_state.get("_metricas_ts", 0)
     if _time.time() - last_n8n > 50:
-        load_mensagens_from_bq()
+        # auto_retry=True: o fragment que nos chama tem run_every=60, entao se
+        # a leitura falhar o aviso pode prometer nova tentativa em 1min.
+        load_mensagens_from_bq(auto_retry=True)
         st.session_state["_metricas_ts"] = _time.time()
 
     last_painel = st.session_state.get("_painel_refresh_ts", 0)
