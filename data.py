@@ -3050,8 +3050,17 @@ def load_mensagens_from_bq():
     """
     rows, erro = _fetch_rows_com_retry(query1)
     if rows is None:
-        # 2 tentativas falharam — sinal mais amigavel, sem stack trace tecnico
-        st.info(f"N8N temporariamente indisponivel — status de mensagens pode estar defasado. ({erro})")
+        # As 3 tentativas falharam. O texto fala "Postgres", e nao "N8N",
+        # porque o painel nunca consulta o n8n: ele le o banco onde o n8n
+        # grava. Dizer "N8N" ja mandou a investigacao pro lado errado.
+        # O erro tecnico vai numa segunda linha, em code, pra atendente nao
+        # tropecar nele e o desenvolvedor ainda ter o motivo real.
+        st.info(
+            "⚠️ Banco de dados (Postgres) indisponível — o status das mensagens "
+            "e o último contato podem estar defasados. O resto do painel está "
+            "normal. Avise o desenvolvedor.  \n"
+            f"`{erro}`"
+        )
         return
 
     status_map        = {}
