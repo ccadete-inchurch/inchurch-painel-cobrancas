@@ -31,21 +31,54 @@ def tela_principal():
     clientes = store["clientes"]
     role     = current_role()
 
-    render_header()
     page = st.session_state.get("page", "atividades")
 
-    if page == "dashboard":
-        _render_dashboard(store, clientes, role)
-    elif page == "historico":
-        _render_historico(store)
-    elif page == "cliente":
-        _render_cliente(store, clientes)
-    elif page == "proximas":
-        _render_proximas(store, clientes)
-    elif page == "atividades":
-        _render_atividades(store, clientes, role)
-    elif page == "especialista":
-        _render_especialista(store, clientes, role)
+    # Troca de tela: enquanto a nova carrega, o Streamlit deixa a ANTERIOR
+    # esmaecida no lugar (data-stale="true"). Numa troca de aba isso parece
+    # bug. So' nesta execucao, esconde os elementos velhos da area principal —
+    # a tela nova vai aparecendo no lugar. Numa atualizacao da MESMA tela
+    # (filtro, botao) nao entra: la' o esmaecido e' o feedback certo, indica
+    # que esta' recalculando.
+    #
+    # O <style> vai num st.empty() que e' APAGADO ao fim do run, e essa e' a
+    # diferenca em relacao ao mesmo conserto no painel-health-score (96c5d9e).
+    # Se ele ficasse no DOM, o rerun de FRAGMENT marcaria como stale os
+    # elementos do proprio fragment sem re-executar esta funcao, com a regra
+    # ainda valendo: o kanban e os indicadores (run_every=60) apagariam
+    # inteiros a cada minuto, pelo tempo da consulta ao Postgres, em vez de
+    # esmaecer. No health-score o unico fragment e' a topbar, cujo rerun dura
+    # milissegundos, e por isso lah nao aparece.
+    _troca_tela = st.empty()
+    if st.session_state.get("_tela_desenhada") != page:
+        _troca_tela.markdown(
+            '<style>[data-testid="stMain"] [data-testid="stElementContainer"]'
+            '[data-stale="true"]{display:none!important}</style>',
+            unsafe_allow_html=True,
+        )
+
+    try:
+        render_header()
+
+        if page == "dashboard":
+            _render_dashboard(store, clientes, role)
+        elif page == "historico":
+            _render_historico(store)
+        elif page == "cliente":
+            _render_cliente(store, clientes)
+        elif page == "proximas":
+            _render_proximas(store, clientes)
+        elif page == "atividades":
+            _render_atividades(store, clientes, role)
+        elif page == "especialista":
+            _render_especialista(store, clientes, role)
+    finally:
+        # Vale so' neste run. No finally pra sair do DOM mesmo se a tela
+        # quebrar no meio — senao a regra ficaria valendo pros fragments.
+        _troca_tela.empty()
+
+    # Gravado no FIM, depois da tela desenhar: run interrompido no meio conta
+    # como troca ainda pendente, e a proxima execucao esconde de novo.
+    st.session_state["_tela_desenhada"] = page
 
 
 def main():
